@@ -34,17 +34,52 @@ at load into a layout chosen for GCN 1.0 (wide aligned loads), shared by the dec
 
 ## Cost model
 
-| | decode (per token) | prefill (per token, batched) |
-|---|---|---|
-| work per GPU | about 4.04 GB (3.76 GiB) in the implemented repacks | about 10.9 GFLOP (21.8 GFLOP total) |
-| GPU peak | 264 GB/s -> 15.3 ms | 3.48 TFLOPS -> 3.1 ms |
-| allreduce | 96 x about 42 us = about 4 ms (latency-bound, 15 KB each) | P2P copies: about 80 ms per 512-token chunk; CPU relay retained as a debug path |
-| ceiling | about 52 tok/s before kernel/driver overhead | about 320 tok/s |
-| target | 40-50 tok/s | 150-200 tok/s |
-| llama.cpp today | 12.3 (layer split), about 9 (tensor split) | 36 (layer), 118 (tensor) |
+The [reproducible ceiling audit](../results/engine/ceiling-audit-20261003/README.md) checks the actual
+GGUF tensor directory and `model.rs`/`quant.rs` layouts. Numbers below are **per GPU**; the global
+K projection is replicated. GB is decimal. Dense-equivalent FLOPs count one multiply-add as two
+operations and exclude dequantization, norms, softmax and reductions.
 
-Decode is bandwidth-bound and sync-latency-bound. Prefill is compute-bound: GCN 1.0 has no fp16 math, no integer dot
-and no matrix units, so the GEMM is fp32 FMA, and its efficiency is the whole game.
+| | decode (per token) | ordinary prefill (512-token chunk, empty prefix) |
+|---|---|---|
+| matrix payload | 4,040,294,400 bytes (3.763 GiB): Q4 layers 3,411,148,800 + Q6 head 629,145,600 | weights reused across token columns; one LM-head column per chunk |
+| dense matrix work | 11.92230912 GFLOP | 10.91764224 GFLOP/token, including the amortized final head |
+| attention dot products | context-dependent; 0.470 GFLOP at 1024 visible tokens | 0.117669888 GFLOP/token (QK and PV only) |
+| physical peak at sustained clocks | 263.04 GB/s; weights alone take at least 15.36 ms | 3.4816 TFLOP/s; counted work alone takes at least 3.170 ms/token |
+| ideal bound, omitted overheads | weight-only 65.10 tok/s | counted-compute-only 315.50 tok/s |
+| transport sensitivity | 96 × 42 us = 4.032 ms; adding this assumption to weights gives 51.57 tok/s | 754,974,720 bytes sent in each direction per chunk; about 81 ms at the isolated 9.3 GB/s copy rate |
+| recorded engine, 2026-10-03 | tg128 22.14; separate tg256 21.88; ordinary 128-token chat 23.82–24.25 tok/s | pp512 160.87; repeat 161.05 tok/s |
+| experiment goals | beat the measured baseline first; 40–50 remains an unvalidated stretch goal | first test 175–190 tok/s; 200 requires almost the whole graph to match the best FFN GEMM |
+| recorded llama.cpp reference | 12.3 (layer split), about 9 (tensor split) | 36 (layer), 118 (tensor) |
+
+**51.57 and 315.50 tok/s are not practical performance predictions.** The old “52 tok/s ceiling” combined
+ideal bandwidth with a fixed historical hop measurement, while omitting attention and all kernel
+inefficiency. In the recorded final-token profile, GPU segment work takes 41.74–41.77 ms and accumulated
+semaphore gaps take 2.65–2.75 ms. These are one-token timestamp samples, not run-wide averages; even
+eliminating every measured gap saves only about 6% of that sample. Kernel work is the main opportunity.
+
+For prefill, the best isolated FFN GEMM reaches about 2.2 TFLOP/s. Applying that rate to all counted
+pp512 work gives **199.36 tok/s before transport and other overheads**. That is an optimistic sensitivity
+calculation, because other shapes and attention do not necessarily reach the same rate. GCN 1.0 has
+no fp16 arithmetic, integer dot product or matrix units; dequantization and fp32 GEMM efficiency matter.
+
+Memory traffic grows with context. At 8K, unique live K/V payload is 288 MiB per GPU (160 MiB sliding,
+128 MiB global); at 32K it is 672 MiB. The present attention kernels request shared K/V separately for
+each query head: logical f16 payload requests are 1.3125 GiB and 4.3125 GiB, respectively, before cache
+reuse. Unique-cache bytes are a lower bound, not actual DRAM traffic. Long-context throughput requires
+its own measurement; a short-context decode target cannot be carried over unchanged.
+
+Optimize in this order, retaining changes only with correctness and sustained-clock measurements:
+
+1. Q4 FFN projections: 2,654,208,000 bytes per GPU per decode token, **65.7%** of matrix payload.
+   Compare per-shape kernel timings and count both original and repacked bytes. A reported 180 GB/s
+   of original Q4 is 200 GB/s of repacked payload, or 76.0% of the physical bus peak.
+2. Attention projections and the Q6 head: the head alone is **15.6%** of matrix payload, and the
+   narrow attention projections have substantially lower measured bandwidth than FFN. Favor launch,
+   occupancy and data-reuse improvements supported by the profile.
+3. Small-batch verification and drafter overhead: improve accepted tokens per second on the same
+   prompts, with output/rollback checks; larger draft counts alone have already been slower.
+4. Prefill GEMM/attention and repeated-history work: optimize the complete prompt path and validate
+   sliding-window wrap. Prefix caching changes cache lifetime and needs separate correctness coverage.
 
 ## Memory per GPU (5888 MiB VRAM)
 
@@ -98,7 +133,8 @@ Prefill processes the prompt in chunks of up to 512 tokens through the same laye
 - **Attention:** causal, with the 1024 window on sliding layers, over the chunk plus the cached prefix (tiled,
   flash-attention style, fp32).
 - **Allreduce:** the same push-and-signal, with `N x 3840` f32 partials. Overlapping the transfer with the next
-  layer's work can come later; it's about 3%.
+  layer's work can come later. The isolated-copy estimate is about 2.5% of the recorded 3.18-second
+  pp512 run, but copy throughput and semaphore gaps must be measured in the complete graph.
 - **KV writes:** the whole chunk. The sliding-layer ring must hold window + chunk (1536) so a chunk's queries still see
   their full 1024-key window.
 - **Small batches:** a multi-column mat-vec (N = 2..8, weights read once, every column accumulated) is better than a
@@ -132,8 +168,10 @@ whole verification batch in addition to the 1024-token window.
 
 - **Splitting the drafter:** it reads the target's KV heads, which are split across the GPUs, so it should be split the
   same way (Q heads `8g..8g+7` against local KV heads). That's 8 extra hops per draft token, about 0.35 ms.
-- **Gain target:** 1.5-2x on tg, depending on acceptance. A four-token verification costs about 44 GFLOP per
-  GPU. The original 18 ms estimate assumed much higher small-batch compute throughput: the implemented
+- **Gain target:** 1.5-2x on tg, depending on acceptance; still unvalidated on typical chat. A four-token
+  verification costs **47.68923648 GFLOP per GPU in matrix work alone**, because all four positions need
+  the full LM head (ordinary prefill only computes the chunk's final head). The old 44 GFLOP estimate
+  omitted these heads. The original 18 ms estimate assumed much higher small-batch compute throughput: the implemented
   transformer-chat measurement takes about 84 ms per verification and 4 ms per draft proposal. Small-batch
   kernel throughput is still the main optimization needed for the gain target.
 - **Before starting:**
@@ -167,18 +205,21 @@ M3 and M5 have working implementations, but their performance thresholds remain 
   - **Done when** greedy output matches, and tg is measured against llama.cpp's 12.3 tok/s with a per-segment
     timestamp breakdown.
 - **M3: decode performance.**
-  - Repacked Q4_0 layout and a GCN-tuned mat-vec at >= 180 GB/s per GPU (measure with a micro-benchmark first).
+  - Repacked Q4_0 layout and a GCN-tuned mat-vec at >= 180 GB/s of original Q4 payload per GPU
+    (= 200 GB/s repacked payload; measure with a micro-benchmark first).
   - Fuse the partial sum + residual + norm.
   - Look at the hop latency (CPU C-states / PM QoS, IRQ affinity).
-  - **Done when** the microbenchmark sustains >=180 GB/s per GPU, activation checks still pass, and tg128 reaches
-    40-50 tok/s with clocks recorded.
+  - **Stretch acceptance target, not a predicted ceiling:** the microbenchmark sustains >=180 GB/s of
+    original Q4 per GPU, activation checks still pass, and tg128 reaches 40-50 tok/s with clocks recorded.
+    Current measured improvements remain useful even while this original stretch target is open.
 - **M4: prefill.** GEMM, batched attention, chunked prefill with batched allreduce, multi-column mat-vec for small N.
   **Done when** sequential and chunked execution agree across sliding-cache wrap, verification columns agree,
   and pp512 sustains >=150 tok/s (llama.cpp tensor split: 118).
 - **M5: MTP speculative decoding** (above). **Done when** acceptance and rollback preserve the target continuation,
   and a recorded typical-chat benchmark shows >=1.5x M3's tg.
-- **Later, optional:** an OpenAI-style HTTP endpoint, long-context tuning (global-layer attention at 32K reads about
-  0.5 GiB per token per GPU).
+- **Later:** long-context tuning. Global-layer K/V at 32K contains 0.5 GiB of unique payload per GPU;
+  the current eight local query heads request 4 GiB of logical f16 payload before cache reuse.
+  The OpenAI-style HTTP endpoint is implemented; see `server.md`.
 
 ## Open questions and risks
 

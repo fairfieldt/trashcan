@@ -1,0 +1,272 @@
+{
+  "units": {
+    "GB": "10^9 bytes",
+    "GiB": "2^30 bytes",
+    "FMA": "two dense-equivalent FLOPs"
+  },
+  "assumptions": [
+    "one token/sequence, two GPUs, global K replicated",
+    "Q4 repack: 20 bytes/32 weights; Q6 head: 5 bytes/4 weights",
+    "ordinary prefill computes one LM-head column per chunk; verification computes every column",
+    "attention counts QK and PV only, excluding online softmax rescaling, exp and reductions",
+    "hardware rooflines exclude dequantization instructions, norms, activation traffic, cache misses, driver work and synchronization",
+    "hop scenario is illustrative; transfer and semaphore latency can overlap GPU work",
+    "KV byte counts are logical f16 payloads; reuse/transactions require profiling"
+  ],
+  "hardware_per_gpu": {
+    "core_mhz": 850,
+    "memory_mhz": 1370,
+    "bandwidth_B_s": 263040000000.0,
+    "fp32_FLOP_s": 3481600000000.0
+  },
+  "model": {
+    "tensor_count": 667,
+    "parameter_count": 11907350576,
+    "gguf_tensor_payload_bytes": 6960054464,
+    "original_matrix_bytes": 6956974080,
+    "q4_parameters_per_gpu": 5457838080,
+    "q4_repacked_bytes_per_gpu": 3411148800,
+    "head_parameters_per_gpu": 503316480,
+    "head_repacked_bytes_per_gpu": 629145600,
+    "decode_matrix_bytes_per_gpu": 4040294400,
+    "decode_matrix_flops_per_gpu": 11922309120,
+    "four_column_verification_matrix_flops_per_gpu": 47689236480,
+    "matrices": [
+      {
+        "matrix": "sliding.attn_q",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          3840,
+          4096
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 7864320,
+        "original_q4_bytes_per_gpu_all_layers": 176947200,
+        "repacked_bytes_per_gpu_all_layers": 196608000,
+        "dense_flops_per_gpu_per_token_all_layers": 629145600
+      },
+      {
+        "matrix": "sliding.attn_k",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          3840,
+          2048
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 3932160,
+        "original_q4_bytes_per_gpu_all_layers": 88473600,
+        "repacked_bytes_per_gpu_all_layers": 98304000,
+        "dense_flops_per_gpu_per_token_all_layers": 314572800
+      },
+      {
+        "matrix": "sliding.attn_output",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          4096,
+          3840
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 7864320,
+        "original_q4_bytes_per_gpu_all_layers": 176947200,
+        "repacked_bytes_per_gpu_all_layers": 196608000,
+        "dense_flops_per_gpu_per_token_all_layers": 629145600
+      },
+      {
+        "matrix": "sliding.ffn_gate",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          3840,
+          15360
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 29491200,
+        "original_q4_bytes_per_gpu_all_layers": 663552000,
+        "repacked_bytes_per_gpu_all_layers": 737280000,
+        "dense_flops_per_gpu_per_token_all_layers": 2359296000
+      },
+      {
+        "matrix": "sliding.ffn_up",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          3840,
+          15360
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 29491200,
+        "original_q4_bytes_per_gpu_all_layers": 663552000,
+        "repacked_bytes_per_gpu_all_layers": 737280000,
+        "dense_flops_per_gpu_per_token_all_layers": 2359296000
+      },
+      {
+        "matrix": "sliding.ffn_down",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          15360,
+          3840
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 29491200,
+        "original_q4_bytes_per_gpu_all_layers": 663552000,
+        "repacked_bytes_per_gpu_all_layers": 737280000,
+        "dense_flops_per_gpu_per_token_all_layers": 2359296000
+      },
+      {
+        "matrix": "sliding.attn_v",
+        "layer_count": 40,
+        "full_shape_K_N": [
+          3840,
+          2048
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 3932160,
+        "original_q4_bytes_per_gpu_all_layers": 88473600,
+        "repacked_bytes_per_gpu_all_layers": 98304000,
+        "dense_flops_per_gpu_per_token_all_layers": 314572800
+      },
+      {
+        "matrix": "global.attn_q",
+        "layer_count": 8,
+        "full_shape_K_N": [
+          3840,
+          8192
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 15728640,
+        "original_q4_bytes_per_gpu_all_layers": 70778880,
+        "repacked_bytes_per_gpu_all_layers": 78643200,
+        "dense_flops_per_gpu_per_token_all_layers": 251658240
+      },
+      {
+        "matrix": "global.attn_k",
+        "layer_count": 8,
+        "full_shape_K_N": [
+          3840,
+          512
+        ],
+        "replicated": true,
+        "parameters_per_gpu_per_layer": 1966080,
+        "original_q4_bytes_per_gpu_all_layers": 8847360,
+        "repacked_bytes_per_gpu_all_layers": 9830400,
+        "dense_flops_per_gpu_per_token_all_layers": 31457280
+      },
+      {
+        "matrix": "global.attn_output",
+        "layer_count": 8,
+        "full_shape_K_N": [
+          8192,
+          3840
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 15728640,
+        "original_q4_bytes_per_gpu_all_layers": 70778880,
+        "repacked_bytes_per_gpu_all_layers": 78643200,
+        "dense_flops_per_gpu_per_token_all_layers": 251658240
+      },
+      {
+        "matrix": "global.ffn_gate",
+        "layer_count": 8,
+        "full_shape_K_N": [
+          3840,
+          15360
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 29491200,
+        "original_q4_bytes_per_gpu_all_layers": 132710400,
+        "repacked_bytes_per_gpu_all_layers": 147456000,
+        "dense_flops_per_gpu_per_token_all_layers": 471859200
+      },
+      {
+        "matrix": "global.ffn_up",
+        "layer_count": 8,
+        "full_shape_K_N": [
+          3840,
+          15360
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 29491200,
+        "original_q4_bytes_per_gpu_all_layers": 132710400,
+        "repacked_bytes_per_gpu_all_layers": 147456000,
+        "dense_flops_per_gpu_per_token_all_layers": 471859200
+      },
+      {
+        "matrix": "global.ffn_down",
+        "layer_count": 8,
+        "full_shape_K_N": [
+          15360,
+          3840
+        ],
+        "replicated": false,
+        "parameters_per_gpu_per_layer": 29491200,
+        "original_q4_bytes_per_gpu_all_layers": 132710400,
+        "repacked_bytes_per_gpu_all_layers": 147456000,
+        "dense_flops_per_gpu_per_token_all_layers": 471859200
+      }
+    ]
+  },
+  "decode_rooflines": {
+    "weight_only_ms": 15.360000000000001,
+    "weight_only_tok_s": 65.10416666666667,
+    "hop_us_assumption": 42,
+    "96_hops_ms": 4.032,
+    "weight_plus_hops_scenario_tok_s": 51.56765676567657,
+    "contexts": [
+      {
+        "visible_tokens": 512,
+        "unique_KV_f16_bytes_per_gpu": 92274688,
+        "logical_KV_f16_bytes_requested_by_query_heads_per_gpu": 234881024,
+        "attention_dot_product_flops_per_gpu": 234881024,
+        "ideal_unique_payload_bandwidth_tok_s": 63.65047852770465,
+        "illustrative_payload_plus_hops_tok_s": 50.65137420752166
+      },
+      {
+        "visible_tokens": 1024,
+        "unique_KV_f16_bytes_per_gpu": 184549376,
+        "logical_KV_f16_bytes_requested_by_query_heads_per_gpu": 469762048,
+        "attention_dot_product_flops_per_gpu": 469762048,
+        "ideal_unique_payload_bandwidth_tok_s": 62.26029030806937,
+        "illustrative_payload_plus_hops_tok_s": 49.767085197762526
+      },
+      {
+        "visible_tokens": 8192,
+        "unique_KV_f16_bytes_per_gpu": 301989888,
+        "logical_KV_f16_bytes_requested_by_query_heads_per_gpu": 1409286144,
+        "attention_dot_product_flops_per_gpu": 1409286144,
+        "ideal_unique_payload_bandwidth_tok_s": 60.57641152766458,
+        "illustrative_payload_plus_hops_tok_s": 48.68531179068699
+      },
+      {
+        "visible_tokens": 32768,
+        "unique_KV_f16_bytes_per_gpu": 704643072,
+        "logical_KV_f16_bytes_requested_by_query_heads_per_gpu": 4630511616,
+        "attention_dot_product_flops_per_gpu": 4630511616,
+        "ideal_unique_payload_bandwidth_tok_s": 55.43592545786028,
+        "illustrative_payload_plus_hops_tok_s": 45.308643804476205
+      }
+    ]
+  },
+  "prefill_per_gpu": {
+    "batch": 512,
+    "prefix_tokens": 0,
+    "layer_matrix_flops": 5588826193920,
+    "one_head_flops": 1006632960,
+    "attention_dot_product_flops": 60246982656,
+    "counted_flops": 5650079809536,
+    "counted_flops_per_token": 11035312128.0,
+    "ideal_counted_compute_tok_s": 315.4962867942905,
+    "at_2p2_TFLOP_s_counted_work_tok_s": 199.36001578223778,
+    "P2P_bytes_sent_per_gpu": 754974720
+  },
+  "source_provenance": {
+    "kind": "engine_sources_unavailable"
+  },
+  "source_sha256": {},
+  "audit_script_sha256": "fe922761f4afe6efd30a9cd672182528cd778ecaf2d95fec0ed6062944f63d8b",
+  "gguf_header_validation": {
+    "path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+    "file_bytes": 6975879296,
+    "validated_tensor_count": 667,
+    "header_bytes": 15823468,
+    "header_sha256": "ed3965be40f10df4adc4d4cbc1e50129da78576a10660f1363f3378310566f01",
+    "weights_read": false
+  }
+}

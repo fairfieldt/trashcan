@@ -9,7 +9,7 @@ models are listed in `../homelab/modelstore/manifest.yaml` and copied to `~/mode
 |---|---|
 | CPU | Xeon E5-2697 v2 (Ivy Bridge-EP), 12C/24T, 2.7 GHz, AVX only (no AVX2/FMA/F16C) |
 | RAM | 64 GB DDR3 (62 GiB usable), 78 GB swap |
-| OS | Debian 13, kernel 6.12.111+deb13-amd64 |
+| OS | Debian 13, active kernel `6.12.111-p2p` (confirmed 2026-10-03); stock `6.12.111+deb13-amd64` remains installed |
 | GPU driver | amdgpu with `radeon.si_support=0 amdgpu.si_support=1`; patched `amdgpu.ko` in `/lib/modules/$(uname -r)/updates/` |
 | Vulkan | RADV (Mesa 25.0.7-2+deb13u1), Vulkan 1.3.305 |
 
@@ -26,8 +26,19 @@ models are listed in `../homelab/modelstore/manifest.yaml` and copied to `~/mode
 Both GPUs hang directly off CPU root ports, so there's no PCIe switch between them. Any GPU-to-GPU path
 goes through the CPU root complex. With a 256 MB BAR, only 256 MB of each card's VRAM is CPU/peer visible.
 
-Per-card nominal: 2048 shaders, 850 MHz core, 1370 MHz GDDR5 on a 384-bit bus, so about 264 GB/s
-and 3.5 TFLOPS fp32.
+Apple specifies 2048 shaders, a 384-bit memory bus, 264 GB/s and 3.5 TFLOP/s per D700
+([Mac Pro technical specifications](https://support.apple.com/en-la/112025)). At the measured
+850 MHz core / 1370 MHz memory clocks, the clock-derived physical peaks are **3.4816 TFLOP/s fp32**
+(`2048 × 2 × 850 MHz`, counting FMA as two operations) and **263.04 GB/s**
+(`1370 MHz × 4 transfers × 384/8 bytes`). Apple's figures are rounded nominal specifications.
+GB/s here is decimal; GiB means `2^30` bytes.
+
+Two cards provide 6.9632 TFLOP/s and 526.08 GB/s only when useful work runs concurrently on both.
+Layer-split single-sequence decode visits the cards sequentially, so it cannot use the combined
+bandwidth as its weight-streaming denominator. Tensor parallelism enables concurrency but adds
+replicated work and synchronization. These figures are hardware upper bounds, not sustainable
+kernel or application performance; they omit dequantization, reductions, instructions other than
+FMA, and transport overhead.
 
 What ggml-vulkan reports:
 
@@ -78,6 +89,21 @@ The machine also logged a corrected ECC error on CPU0 channel 0 DIMM 0 during te
 |---|---|
 | tg256 | 8.59 |
 
-That's about 56 GB/s of effective weight streaming against a 264 GB/s per-card peak. The layer-split
-ceiling from bandwidth alone is about 38 tok/s, so the single-GPU kernels have a lot of headroom
-before TP even matters.
+The GGUF's matrix payload is 6,956,974,080 bytes: this corresponds to **59.76 GB/s** of original-weight
+payload at 8.59 tok/s, rather than 56 GB/s (which mixed binary file size with decimal bandwidth).
+The layer-split weight-only bound is **37.81 tok/s** at 263.04 GB/s, before attention and all other work.
+The complete file is 6,975,879,296 bytes, including metadata and non-matrix tensors.
+
+The later warmed engine measurements in
+[`performance-20261003`](../results/engine/performance-20261003/README.md) reach **22.14 tok/s** for
+tg128 after pp512 and **160.87 tok/s** for pp512. Its implemented repacks stream a minimum of
+4,040,294,400 matrix bytes per GPU per decode token; the equivalent effective rate is 89.47 GB/s
+per GPU over the complete forward, not a measured DRAM counter. The FFN microbenchmarks reach
+153.00–160.41 GB/s of original Q4 payload, or **170.00–178.23 GB/s of the actual repacked payload**.
+Do not compare original Q4 byte rates directly with the physical bus limit: the repack expands
+18-byte blocks to 20 bytes. Clocks in those runs reach 850/1370 under sustained load.
+
+[`engine-plan.md`](engine-plan.md#cost-model) and the reproducible
+[`ceiling audit`](../results/engine/ceiling-audit-20261003/README.md) separate exact tensor costs,
+ideal rooflines, recorded throughput, and unvalidated optimization targets. The audit checked all
+667 tensor names, dimensions and types directly from incite's GGUF header without executing a model.
