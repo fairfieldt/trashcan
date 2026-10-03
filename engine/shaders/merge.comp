@@ -1,14 +1,33 @@
 #version 460
 #include "common.glsl"
 layout(local_size_x=256) in;
-shared float vals[256];shared uint ids[256],chosen;
+shared float vals[4];
+shared uint ids[4],lists[4],chosen;
 void main(){
-uint lane=gl_LocalInvocationID.x,t=gl_WorkGroupID.y;if(t>=batch())return;
+uint lane=gl_LocalInvocationID.x,t=gl_WorkGroupID.y;
+if(t>=batch())return;
+// topk emits at most 128 sorted lists. Keep only each list's current head
+// in registers, advancing the winning list instead of rescanning all k ranks.
+uint cursor=lane*p.k,end=cursor+p.k;
+float value=-1e30;uint token=0xffffffffu;
+if(cursor<p.n){value=a_f.v[(t*p.n+cursor)*2];token=a_u.v[(t*p.n+cursor)*2+1];}
 for(uint rank=0;rank<p.k;rank++){
-    float best=-1e30;uint at=0xffffffffu;
-    for(uint j=lane;j<p.n;j+=256){float v=a_f.v[(t*p.n+j)*2];uint id=a_u.v[(t*p.n+j)*2+1];
-        uint old=at==0xffffffffu?0xffffffffu:a_u.v[(t*p.n+at)*2+1];if(v>best||(v==best&&id<old)){best=v;at=j;}}
-    vals[lane]=best;ids[lane]=at;barrier();
-    for(uint step=128;step>0;step/=2){if(lane<step){uint a=ids[lane],b=ids[lane+step];uint aid=a==0xffffffffu?0xffffffffu:a_u.v[(t*p.n+a)*2+1],bid=b==0xffffffffu?0xffffffffu:a_u.v[(t*p.n+b)*2+1];if(vals[lane+step]>vals[lane]||(vals[lane+step]==vals[lane]&&bid<aid)){vals[lane]=vals[lane+step];ids[lane]=b;}}barrier();}
-    if(lane==0){chosen=ids[0];c_f.v[(t*p.k+rank)*2]=vals[0];c_u.v[(t*p.k+rank)*2+1]=a_u.v[(t*p.n+chosen)*2+1];a_f.v[(t*p.n+chosen)*2]=-1e30;}memoryBarrierBuffer();barrier();
+    float wave_best=subgroupMax(value);
+    uint wave_id=subgroupMin(value==wave_best?token:0xffffffffu);
+    uint wave_list=subgroupMin(value==wave_best&&token==wave_id?lane:0xffffffffu);
+    if(gl_SubgroupInvocationID==0){vals[gl_SubgroupID]=wave_best;ids[gl_SubgroupID]=wave_id;lists[gl_SubgroupID]=wave_list;}
+    barrier();
+    if(lane==0){
+        uint wave=0;
+        for(uint i=1;i<4;i++)if(vals[i]>vals[wave]||(vals[i]==vals[wave]&&ids[i]<ids[wave]))wave=i;
+        c_f.v[(t*p.k+rank)*2]=vals[wave];
+        c_u.v[(t*p.k+rank)*2+1]=ids[wave];
+        chosen=lists[wave];
+    }
+    barrier();
+    if(lane==chosen){
+        cursor++;
+        if(cursor<end){value=a_f.v[(t*p.n+cursor)*2];token=a_u.v[(t*p.n+cursor)*2+1];}
+        else {value=-1e30;token=0xffffffffu;}
+    }
 }}

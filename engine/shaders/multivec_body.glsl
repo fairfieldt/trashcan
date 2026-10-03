@@ -7,7 +7,7 @@ if(first>=p.n||t>=nb)return;vec4 sums[ROWS];[[unroll]]for(uint r=0;r<ROWS;r++)su
 if(p.kind==0){uint part=lane%4;
 for(uint b=lane/4;b<p.k/32;b+=16){vec4 lo[ROWS],hi[ROWS];float d[ROWS];
 [[unroll]]for(uint r=0;r<ROWS;r++){uint block=(first+r)*(p.k/32)+b,v=ww.words[p.stride+block*4+part];d[r]=uintBitsToFloat(ww.words[block]);
-lo[r]=vec4(ivec4(uvec4(v,v>>8,v>>16,v>>24)&15u)-8);hi[r]=vec4(ivec4(uvec4(v>>4,v>>12,v>>20,v>>28)&15u)-8);}
+lo[r]=q4_lo(v);hi[r]=q4_hi(v);}
 [[unroll]]for(uint z=0;z<4;z++)if(t+z<nb){uint x=(t+z)*(p.k/4)+b*8+part;vec4 a=b_v4.v[x],c=b_v4.v[x+4];
 [[unroll]]for(uint r=0;r<ROWS;r++)sums[r][z]=fma(dot(lo[r],a)+dot(hi[r],c),d[r],sums[r][z]);}}
 }else{
@@ -26,8 +26,8 @@ if(p.kind==0){
 uint part=lane%4;
 for(uint b=lane/4;b<p.k/32;b+=16){uint block=row*(p.k/32)+b;
 float scale=uintBitsToFloat(ww.words[block]);uint qs=ww.words[p.stride+block*4+part];
-vec4 lo=vec4(ivec4(uvec4(qs,qs>>8,qs>>16,qs>>24)&15u)-8);
-vec4 hi=vec4(ivec4(uvec4(qs>>4,qs>>12,qs>>20,qs>>28)&15u)-8);
+vec4 lo=q4_lo(qs);
+vec4 hi=q4_hi(qs);
 [[unroll]]for(uint z=0;z<COLS;z++)if(t+z<nb){uint x=(t+z)*(p.k/4)+b*8+part;
 sums[z]=fma(dot(lo,b_v4.v[x])+dot(hi,b_v4.v[x+4]),scale,sums[z]);}
 }

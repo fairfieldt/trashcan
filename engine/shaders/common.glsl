@@ -48,6 +48,16 @@ uint position() { return params_u.v[0]; }
 uint batch() { return p.r3!=0 ? p.r3 : params_u.v[1]; }
 float half_b(uint i) { return unpackHalf2x16(uint(b_h.v[i])).x; }
 float half_c(uint i) { return unpackHalf2x16(uint(c_h.v[i])).x; }
+// Flip each nibble's sign bit so signed extraction directly yields q-8.
+// GCN can then use signed bitfield extracts without eight separate subtractions.
+vec4 q4_lo(uint bits) {
+    int v=int(bits^0x88888888u);
+    return vec4(bitfieldExtract(v,0,4),bitfieldExtract(v,8,4),bitfieldExtract(v,16,4),bitfieldExtract(v,24,4));
+}
+vec4 q4_hi(uint bits) {
+    int v=int(bits^0x88888888u);
+    return vec4(bitfieldExtract(v,4,4),bitfieldExtract(v,12,4),bitfieldExtract(v,20,4),bitfieldExtract(v,28,4));
+}
 float q4(uint64_t ptr,uint block,uint j) {
     uint v=ww.words[p.stride+block*4+(j%16)/4];
     uint q=(v>>(((j%4)*8)+(j/16)*4))&15;
