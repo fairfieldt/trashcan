@@ -1,0 +1,14 @@
+#version 460
+#include "common.glsl"
+layout(local_size_x=256) in;
+shared float vals[256];shared uint ids[256],chosen;
+void main(){
+uint lane=gl_LocalInvocationID.x,t=gl_WorkGroupID.y;if(t>=batch())return;
+for(uint rank=0;rank<p.k;rank++){
+    float best=-1e30;uint at=0xffffffffu;
+    for(uint j=lane;j<p.n;j+=256){float v=a_f.v[(t*p.n+j)*2];uint id=a_u.v[(t*p.n+j)*2+1];
+        uint old=at==0xffffffffu?0xffffffffu:a_u.v[(t*p.n+at)*2+1];if(v>best||(v==best&&id<old)){best=v;at=j;}}
+    vals[lane]=best;ids[lane]=at;barrier();
+    for(uint step=128;step>0;step/=2){if(lane<step){uint a=ids[lane],b=ids[lane+step];uint aid=a==0xffffffffu?0xffffffffu:a_u.v[(t*p.n+a)*2+1],bid=b==0xffffffffu?0xffffffffu:a_u.v[(t*p.n+b)*2+1];if(vals[lane+step]>vals[lane]||(vals[lane+step]==vals[lane]&&bid<aid)){vals[lane]=vals[lane+step];ids[lane]=b;}}barrier();}
+    if(lane==0){chosen=ids[0];c_f.v[(t*p.k+rank)*2]=vals[0];c_u.v[(t*p.k+rank)*2+1]=a_u.v[(t*p.n+chosen)*2+1];a_f.v[(t*p.n+chosen)*2]=-1e30;}memoryBarrierBuffer();barrier();
+}}

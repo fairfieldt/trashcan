@@ -1,0 +1,3 @@
+PASS: ordinary and MTP greedy output is identical (chat)
+PASS: ordinary and MTP greedy output is identical (chat-photosynthesis)
+PASS: ordinary and MTP greedy output is identical (chat-csv)

@@ -1,6 +1,10 @@
 # Engine validation and measurements
 
 These are recorded outputs from incite. Model weights and build binaries are not stored here.
+
+- `performance-20261003/` contains the latest kernel/server tuning comparisons, warmed microbenchmarks,
+  seven-draft selector measurements, repeated decode runs, reference/cache checks and Responses tests.
+  Its README explains which source hashes belong to each measurement phase.
 Run instructions and acceptance status are in `docs/implementation.md`.
 
 - `summary.json` collects measured performance and validation status.

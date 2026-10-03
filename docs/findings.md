@@ -2,6 +2,37 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-03: measured kernel and server improvements
+
+Raw comparisons, source/binary hashes, clocks and validation logs are in
+`results/engine/performance-20261003/`; its README describes the measurement limits and reproduction.
+
+- Signed Q4 nibble extraction raises warmed original-weight bandwidth by 5.4% for FFN gate, 8.1% for
+  FFN down, 8.2% for attention Q and 12.1% for attention output. The gate reaches about 153 GB/s per GPU.
+- Wave reductions and a merge that advances sorted list heads cut one-column top-64 selection from
+  about 2.20 to 0.51 ms per GPU, a 4.3× speedup, while preserving token-ID tie order.
+- tg128 improves from 21.33 to 22.14 tok/s (+3.8%). A separate tg256 run confirms 21.26 to 21.88
+  (+2.9%). pp512 stays near 161 tok/s. All six ordinary/MTP chat outputs equal the baseline text.
+- The HTTP server caches one-candidate target graphs for greedy requests. End-to-end latency falls
+  7.4–9.0% for ordinary replies and 8.7–9.2% with MTP on the three 128-token prompts. The Responses
+  integration suite passes in both modes, including alternating greedy/stochastic requests.
+- The final Q4 selector uses two four-column tiles at batches 5–8, improving the kernel by another
+  20–67%. Batch 8 reaches 0.546 ms versus the original 0.945 ms. A seven-draft transformer chat rises
+  from 14.36 to 20.91 tok/s (+45.6%), with identical output, 91/259 accepted proposals and 37 rounds;
+  verification falls from 211.42 to 136.13 ms/round. Three drafts remain the default and are faster
+  on this prompt (29.05 tok/s).
+- Six reference paths pass all 132 tensors, logits and ten greedy tokens; worst relative activation
+  error is 0.000982. The 1700-token / batch-512 cache-wrap and rollback check passes. The final selector
+  separately passes the batch-8 reference and every verification column, with zero logit error in the
+  80-token check. CPU tests, fixtures, P2P stress and local Clippy pass. Sustained clocks are 850/1370,
+  with maximum recorded temperatures 86/84 C across the microbenchmark/full-validation log.
+
+The warmed microbenchmark needed a reusable command-buffer execution helper: the one-shot `Device::run`
+frees its command buffer. An early harness reused freed buffers and triggered a driver reset; the
+recorded comparisons were rerun after correcting that lifetime. Original cold microbenchmarks are
+excluded from the reported bandwidth comparison. M3's bandwidth/decode targets and M5's typical-chat
+gain target remain open.
+
 ## 2026-10-02 (implementation): independent Rust/Vulkan engine
 
 The target forward pass, tokenizer, chat, sampling, prefill and native BF16 MTP assistant are implemented.

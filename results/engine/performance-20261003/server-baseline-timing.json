@@ -1,0 +1,20 @@
+[
+  {
+    "prompt": "chat",
+    "seconds": 6.260938882998744,
+    "output_tokens": 128,
+    "text_matches_baseline": false
+  },
+  {
+    "prompt": "chat-photosynthesis",
+    "seconds": 6.206192589997954,
+    "output_tokens": 128,
+    "text_matches_baseline": false
+  },
+  {
+    "prompt": "chat-csv",
+    "seconds": 6.18607495499964,
+    "output_tokens": 128,
+    "text_matches_baseline": false
+  }
+]

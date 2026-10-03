@@ -9,6 +9,14 @@ speculative gain (M5) remain performance work; their original targets are retain
 
 ## Recorded acceptance
 
+The 2026-10-03 tuning run raises tg128 from 21.33 to 22.14 tok/s and reduces one-column top-64
+selection from about 2.20 ms to 0.51 ms per GPU. Prefill remains about 161 tok/s. Current measurements
+and validation are retained in `results/engine/performance-20261003/`; the acceptance table below
+preserves the original implementation measurements. M3 and M5 remain open.
+The final small-batch selector also improves eight-column Q4 verification to about 0.546 ms versus
+the original 0.945 ms in the FFN microbenchmark. Its seven-draft chat comparison and focused validation
+are recorded separately from the main benchmark table; the default remains three drafts.
+
 Incite, two D700s, kernel `6.12.111-p2p`, Mesa 25.0.7. Timed commands used the user-authorized temporary
 CPU latency request of 0. Raw outputs, clocks, source/binary hashes and JSON timings are under
 `results/engine/delivered-benchmark/`; `results/engine/summary.json` collects the measurements.
