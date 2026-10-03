@@ -405,7 +405,7 @@ impl Engine {
             let shader = if kind == 0 && n > 8 {
                 "gemm"
             } else if cols > 1 {
-                if cols <= 4 {
+                if cols <= 4 || kind == 0 {
                     "multivec4"
                 } else {
                     "multivec"
@@ -428,6 +428,8 @@ impl Engine {
                 } as u32,
                 if shader == "gemm" {
                     cols.div_ceil(64)
+                } else if shader == "multivec4" {
+                    cols.div_ceil(4)
                 } else {
                     cols.div_ceil(8)
                 } as u32,

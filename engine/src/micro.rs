@@ -25,10 +25,8 @@ pub fn bench(
     );
     let shader = kernel.unwrap_or(if batch == 1 {
         "matvecq4"
-    } else if batch <= 4 {
-        "multivec4"
     } else if batch <= 8 {
-        "multivec"
+        "multivec4"
     } else {
         "gemm"
     });
