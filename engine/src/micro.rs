@@ -132,7 +132,7 @@ pub fn bench(
         d.finish(cmd)?;
         let warmup = Instant::now();
         while warmup.elapsed() < Duration::from_millis(warmup_ms) {
-            d.run(cmd)?;
+            d.run_reusable(cmd)?;
         }
         d.run(cmd)?;
         let mut ts = [0u64; 2];
@@ -277,7 +277,7 @@ pub fn selection(iterations: u32, batch: usize) -> Result<()> {
                 d.finish(cmd)?;
                 let warmup = Instant::now();
                 while warmup.elapsed() < Duration::from_millis(500) {
-                    d.run(cmd)?;
+                    d.run_reusable(cmd)?;
                 }
                 d.run(cmd)?;
                 let mut ts = [0u64; 2];

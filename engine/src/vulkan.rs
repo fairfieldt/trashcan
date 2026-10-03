@@ -777,6 +777,14 @@ impl Device {
         Ok(())
     }
     pub fn run(&self, cmd: vk::CommandBuffer) -> Result<()> {
+        self.run_reusable(cmd)?;
+        unsafe {
+            self.dev.free_command_buffers(self.pool, &[cmd]);
+        }
+        Ok(())
+    }
+    /// Wait for completion without freeing the command buffer; benchmarks can resubmit it.
+    pub fn run_reusable(&self, cmd: vk::CommandBuffer) -> Result<()> {
         let fence = unsafe {
             self.dev
                 .create_fence(&vk::FenceCreateInfo::default(), None)?
@@ -785,7 +793,6 @@ impl Device {
         unsafe {
             self.dev.wait_for_fences(&[fence], true, 60_000_000_000)?;
             self.dev.destroy_fence(fence, None);
-            self.dev.free_command_buffers(self.pool, &[cmd]);
         }
         Ok(())
     }
