@@ -39,6 +39,19 @@ enum Cmd {
         batch: usize,
         #[arg(long)]
         kernel: Option<String>,
+        /// Q4 projection to measure with the same tensor-parallel shard as the engine.
+        #[arg(long, default_value = "blk.0.ffn_gate.weight")]
+        tensor: String,
+        /// Sustain GPU load before collecting timestamps (D700 clocks ramp from idle).
+        #[arg(long, default_value_t = 500)]
+        warmup_ms: u64,
+    },
+    /// Measure GPU candidate selection and check ranks/ties against a CPU sort.
+    TopkBench {
+        #[arg(long, default_value_t = 20)]
+        iterations: u32,
+        #[arg(long, default_value_t = 1)]
+        batch: usize,
     },
     /// Stress P2P receiver cache visibility on both GPUs.
     P2pTest {
@@ -291,7 +304,17 @@ fn main() -> Result<()> {
             iterations,
             batch,
             kernel,
-        } => micro::bench(&model, iterations, batch, kernel.as_deref()),
+            tensor,
+            warmup_ms,
+        } => micro::bench(
+            &model,
+            iterations,
+            batch,
+            kernel.as_deref(),
+            &tensor,
+            warmup_ms,
+        ),
+        Cmd::TopkBench { iterations, batch } => micro::selection(iterations, batch),
         Cmd::P2pTest { rounds, elements } => visibility::test(rounds, elements),
         Cmd::Render {
             model,

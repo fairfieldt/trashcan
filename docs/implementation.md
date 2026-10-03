@@ -103,6 +103,8 @@ python3 tools/compare_activations.py results/engine/check results/reference-vulk
 
 ```sh
 target/release/trashcan matvec-bench "$model" --iterations 100
+target/release/trashcan matvec-bench "$model" --tensor blk.0.ffn_down.weight --iterations 1000
+target/release/trashcan topk-bench --batch 8
 target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --profile results/engine/bench.tsv
 target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --draft "$assistant"
 ```
@@ -121,6 +123,12 @@ user, and closes the request when it exits. Display-manager settings remain as c
 each chat output is identical, and records clocks, hardware and source hashes.
 It uses the authorized temporary latency request by default; set `TRASHCAN_CPU_LATENCY=0` to measure
 without it. The third argument selects the result directory.
+
+`matvec-bench` warms each GPU for 500 ms before measuring, so an idle D700 has time to ramp its clocks.
+`--warmup-ms` changes that duration. `--tensor` selects a Q4 projection with the engine's row/column
+sharding; the default is layer 0's FFN gate. Every column uses a different nonuniform input, and three
+output rows are checked against a CPU dot product. `topk-bench` checks GPU selection against a CPU sort
+at ranks 1, 8 and 64, including tied scores, an incomplete final chunk, softcap and suppressed token IDs.
 
 ## Weight formats and GPU schedule
 
