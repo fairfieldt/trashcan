@@ -1,0 +1,15 @@
+#version 460
+#include "common.glsl"
+// Four vocabulary rows per wave share one activation-vector load.
+layout(local_size_x=256) in;
+void main(){uint lane=gl_SubgroupInvocationID,first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
+vec4 sums=vec4(0);
+for(uint i=lane;i<p.k/4;i+=64){vec4 x=b_v4.v[i];
+[[unroll]]for(uint r=0;r<4;r++){uint row=first+r;
+if(p.kind==1){uint qs=ww.words[p.stride+row*(p.k/4)+i];ivec4 q=ivec4(qs<<24,qs<<16,qs<<8,qs)>>24;
+sums[r]=fma(dot(vec4(q),x),uintBitsToFloat(ww.words[row*(p.k/16)+i/4]),sums[r]);}
+else {uvec4 bits=uvec4(wh4.halves4[row*(p.k/4)+i])<<16;sums[r]+=dot(uintBitsToFloat(bits),x);}
+
+}}
+sums=subgroupAdd(sums);if(lane==0){[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[first+r]=sums[r];}
+}

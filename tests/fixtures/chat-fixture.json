@@ -1,0 +1,75 @@
+[
+  {
+    "name": "user thinking on",
+    "thinking": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello there"
+      }
+    ],
+    "rendered": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nHello there<turn|>\n<|turn>model\n"
+  },
+  {
+    "name": "system and user",
+    "thinking": true,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are terse."
+      },
+      {
+        "role": "user",
+        "content": "Hello there"
+      }
+    ],
+    "rendered": "<|turn>system\n<|think|>\nYou are terse.<turn|>\n<|turn>user\nHello there<turn|>\n<|turn>model\n"
+  },
+  {
+    "name": "multi-turn",
+    "thinking": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hi"
+      },
+      {
+        "role": "assistant",
+        "content": "Hello! How can I help?"
+      },
+      {
+        "role": "user",
+        "content": "Tell me a fact."
+      }
+    ],
+    "rendered": "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nHi<turn|>\n<|turn>model\nHello! How can I help?<turn|>\n<|turn>user\nTell me a fact.<turn|>\n<|turn>model\n"
+  },
+  {
+    "name": "thinking off",
+    "thinking": false,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Hello there"
+      }
+    ],
+    "rendered": "<|turn>user\nHello there<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+    "ids": [
+      2,
+      105,
+      2364,
+      107,
+      9259,
+      993,
+      106,
+      107,
+      105,
+      4368,
+      107,
+      100,
+      45518,
+      107,
+      101
+    ]
+  }
+]

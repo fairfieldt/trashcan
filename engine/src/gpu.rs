@@ -16,16 +16,26 @@ pub const REQUIRED_EXTENSIONS: [&CStr; 6] = [
 ];
 
 pub struct Instance {
-    pub entry: ash::Entry,
+    pub _entry: ash::Entry,
     pub instance: ash::Instance,
 }
 
 impl Instance {
     pub fn new() -> Result<Self> {
         let entry = unsafe { ash::Entry::load() }.context("loading the Vulkan loader")?;
-        let app = vk::ApplicationInfo::default().application_name(c"trashcan").api_version(vk::API_VERSION_1_3);
-        let instance = unsafe { entry.create_instance(&vk::InstanceCreateInfo::default().application_info(&app), None)? };
-        Ok(Instance { entry, instance })
+        let app = vk::ApplicationInfo::default()
+            .application_name(c"trashcan")
+            .api_version(vk::API_VERSION_1_3);
+        let instance = unsafe {
+            entry.create_instance(
+                &vk::InstanceCreateInfo::default().application_info(&app),
+                None,
+            )?
+        };
+        Ok(Instance {
+            _entry: entry,
+            instance,
+        })
     }
 
     /// The discrete AMD GPUs, ordered by PCI bus number so indices are stable across runs.
@@ -41,27 +51,43 @@ impl Instance {
         Ok(gpus.into_iter().map(|g| g.1).collect())
     }
 
-    fn pci(&self, pd: vk::PhysicalDevice) -> Result<vk::PhysicalDevicePCIBusInfoPropertiesEXT<'static>> {
+    fn pci(
+        &self,
+        pd: vk::PhysicalDevice,
+    ) -> Result<vk::PhysicalDevicePCIBusInfoPropertiesEXT<'static>> {
         let mut pci = vk::PhysicalDevicePCIBusInfoPropertiesEXT::default();
         let mut p2 = vk::PhysicalDeviceProperties2::default().push_next(&mut pci);
         unsafe { self.instance.get_physical_device_properties2(pd, &mut p2) };
-        Ok(vk::PhysicalDevicePCIBusInfoPropertiesEXT { p_next: std::ptr::null_mut(), ..pci })
+        Ok(vk::PhysicalDevicePCIBusInfoPropertiesEXT {
+            p_next: std::ptr::null_mut(),
+            ..pci
+        })
     }
 
     pub fn extensions(&self, pd: vk::PhysicalDevice) -> Result<Vec<String>> {
         let exts = unsafe { self.instance.enumerate_device_extension_properties(pd)? };
-        Ok(exts.iter().filter_map(|e| e.extension_name_as_c_str().ok()).map(|n| n.to_string_lossy().into_owned()).collect())
+        Ok(exts
+            .iter()
+            .filter_map(|e| e.extension_name_as_c_str().ok())
+            .map(|n| n.to_string_lossy().into_owned())
+            .collect())
     }
 
     /// Queue family with compute and without graphics (the async compute engines), else any compute family.
     pub fn compute_family(&self, pd: vk::PhysicalDevice) -> Result<(u32, u32)> {
-        let fams = unsafe { self.instance.get_physical_device_queue_family_properties(pd) };
+        let fams = unsafe {
+            self.instance
+                .get_physical_device_queue_family_properties(pd)
+        };
         let pick = |want_no_gfx: bool| {
             fams.iter().enumerate().find(|(_, f)| {
-                f.queue_flags.contains(vk::QueueFlags::COMPUTE) && (!want_no_gfx || !f.queue_flags.contains(vk::QueueFlags::GRAPHICS))
+                f.queue_flags.contains(vk::QueueFlags::COMPUTE)
+                    && (!want_no_gfx || !f.queue_flags.contains(vk::QueueFlags::GRAPHICS))
             })
         };
-        let (i, f) = pick(true).or_else(|| pick(false)).context("no compute queue family")?;
+        let (i, f) = pick(true)
+            .or_else(|| pick(false))
+            .context("no compute queue family")?;
         Ok((i as u32, f.queue_count))
     }
 }
@@ -114,7 +140,10 @@ pub fn report() -> Result<()> {
         let mut f11 = vk::PhysicalDeviceVulkan11Features::default();
         let mut f12 = vk::PhysicalDeviceVulkan12Features::default();
         let mut f13 = vk::PhysicalDeviceVulkan13Features::default();
-        let mut f2 = vk::PhysicalDeviceFeatures2::default().push_next(&mut f11).push_next(&mut f12).push_next(&mut f13);
+        let mut f2 = vk::PhysicalDeviceFeatures2::default()
+            .push_next(&mut f11)
+            .push_next(&mut f12)
+            .push_next(&mut f13);
         unsafe { vi.get_physical_device_features2(pd, &mut f2) };
         let f = f2.features;
 
@@ -131,7 +160,9 @@ pub fn report() -> Result<()> {
             vk::api_version_patch(p.api_version)
         );
 
-        let cus = amd.shader_engine_count * amd.shader_arrays_per_engine_count * amd.compute_units_per_shader_array;
+        let cus = amd.shader_engine_count
+            * amd.shader_arrays_per_engine_count
+            * amd.compute_units_per_shader_array;
         println!(
             "  shape: {} shader engines x {} arrays x {} CUs = {} CUs, {} SIMDs/CU, wave{} , {} wave slots/SIMD, {} VGPRs/SIMD, {} SGPRs/SIMD",
             amd.shader_engine_count,
@@ -164,10 +195,19 @@ pub fn report() -> Result<()> {
             println!("  heap {i}: {:.0} MiB {:?}", mib(h.size), h.flags);
         }
         for (i, t) in mem.memory_types_as_slice().iter().enumerate() {
-            println!("  memory type {i}: heap {} {:?}", t.heap_index, t.property_flags);
+            println!(
+                "  memory type {i}: heap {} {:?}",
+                t.heap_index, t.property_flags
+            );
         }
-        for (i, q) in unsafe { vi.get_physical_device_queue_family_properties(pd) }.iter().enumerate() {
-            println!("  queue family {i}: {} x {:?}", q.queue_count, q.queue_flags);
+        for (i, q) in unsafe { vi.get_physical_device_queue_family_properties(pd) }
+            .iter()
+            .enumerate()
+        {
+            println!(
+                "  queue family {i}: {} x {:?}",
+                q.queue_count, q.queue_flags
+            );
         }
 
         let mut ok = true;
@@ -189,27 +229,40 @@ pub fn report() -> Result<()> {
             ok &= v == vk::TRUE;
             println!("  [{}] {n}", check(v == vk::TRUE));
         }
-        println!("  [info] shaderFloat16 = {}, shaderInt8 = {} (not required)", f12.shader_float16, f12.shader_int8);
+        println!(
+            "  [info] shaderFloat16 = {}, shaderInt8 = {} (not required)",
+            f12.shader_float16, f12.shader_int8
+        );
         ok &= sub.subgroup_size == 64;
         all_ok &= ok;
 
         // Create a device with everything enabled, to prove the combination works.
         let (qfam, qcount) = inst.compute_family(pd)?;
         let prios = vec![1.0f32; qcount as usize];
-        let qci = [vk::DeviceQueueCreateInfo::default().queue_family_index(qfam).queue_priorities(&prios)];
+        let qci = [vk::DeviceQueueCreateInfo::default()
+            .queue_family_index(qfam)
+            .queue_priorities(&prios)];
         let ext_ptrs: Vec<_> = REQUIRED_EXTENSIONS.iter().map(|e| e.as_ptr()).collect();
-        let mut e11 = vk::PhysicalDeviceVulkan11Features::default().storage_buffer16_bit_access(true);
+        let mut e11 =
+            vk::PhysicalDeviceVulkan11Features::default().storage_buffer16_bit_access(true);
         let mut e12 = vk::PhysicalDeviceVulkan12Features::default()
             .timeline_semaphore(true)
             .vulkan_memory_model(true)
             .buffer_device_address(true);
         let mut e13 = vk::PhysicalDeviceVulkan13Features::default().subgroup_size_control(true);
         let mut ef = vk::PhysicalDeviceFeatures2::default()
-            .features(vk::PhysicalDeviceFeatures::default().shader_int16(true).shader_int64(true))
+            .features(
+                vk::PhysicalDeviceFeatures::default()
+                    .shader_int16(true)
+                    .shader_int64(true),
+            )
             .push_next(&mut e11)
             .push_next(&mut e12)
             .push_next(&mut e13);
-        let dci = vk::DeviceCreateInfo::default().queue_create_infos(&qci).enabled_extension_names(&ext_ptrs).push_next(&mut ef);
+        let dci = vk::DeviceCreateInfo::default()
+            .queue_create_infos(&qci)
+            .enabled_extension_names(&ext_ptrs)
+            .push_next(&mut ef);
         match unsafe { vi.create_device(pd, &dci, None) } {
             Ok(dev) => {
                 println!("  device created: queue family {qfam} with {qcount} queues");
@@ -226,6 +279,13 @@ pub fn report() -> Result<()> {
         all_ok = false;
         println!("expected 2 GPUs, found {}", gpus.len());
     }
-    println!("{}", if all_ok { "all requirements met" } else { "requirements NOT met" });
+    println!(
+        "{}",
+        if all_ok {
+            "all requirements met"
+        } else {
+            "requirements NOT met"
+        }
+    );
     Ok(())
 }

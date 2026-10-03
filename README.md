@@ -8,7 +8,8 @@ written in Rust on raw Vulkan, with tensor parallelism across the two GPUs. llam
 - `docs/engine-plan.md`: the Rust engine design (TP layout, schedule, prefill, MTP, milestones)
 - `docs/engine-spec.md`: implementation reference: exact math, constants, formats, tokenizer, validation assets, GPU facts, conventions
 - `docs/findings.md`: measurements and bugs, newest first
-- `engine/`: the engine (`cargo build --release` on incite; `trashcan devices`, `trashcan info MODEL`)
+- `engine/`: the Rust/Vulkan engine: decode, chunked prefill, tokenizer, chat and optional MTP
+- `docs/implementation.md`: build/run commands, validation recipes and measured implementation status
 - `bench/xgpu/`: cross-GPU sync and copy microbenchmark
 - `kernel/`: custom kernel build (D700 fixes + PCI P2P)
 - `scripts/`: incite helpers (`sync.sh` pushes the workspace and pulls `results/`)
@@ -17,3 +18,13 @@ written in Rust on raw Vulkan, with tensor parallelism across the two GPUs. llam
 - `reference/llama.cpp-patches/`: our local llama.cpp patches from the investigation
 - `results/`: benchmark outputs, model inventory, reference activations (`reference-vulkan/` is the correctness target)
 - `llama.cpp/`: upstream clone used as reference (own git repo, not tracked here; PR branches fetched as local refs)
+
+Build on incite with `export PATH=$HOME/.cargo/bin:$PATH; cargo build --release` (requires `glslc`).
+Run `scripts/test-engine.sh` for the reference checks and P2P stress test. A basic chat command is:
+
+```sh
+target/release/trashcan chat ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf "Hello there" --temperature 0
+```
+
+Add `--draft ~/models/gemma-4-12b-assistant/model.safetensors` for the matched assistant. The functional paths
+are implemented. M1, M2 and M4 pass; decode and MTP performance targets in M3/M5 remain open.

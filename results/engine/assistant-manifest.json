@@ -1,0 +1,14 @@
+{
+  "repo": "google/gemma-4-12B-it-qat-q4_0-unquantized-assistant",
+  "revision": "18934064dd4c5c6cc3621f6381e7d377fc8cb7bd",
+  "files": {
+    "config.json": {
+      "bytes": 2386,
+      "sha256": "7638c1d42f9fa73fe44b1a10604766b928b8985263f15775cd1a286a5a12799c"
+    },
+    "model.safetensors": {
+      "bytes": 845719296,
+      "sha256": "67f1420cf24aa5065089aaed175223f7c245ccfda16111b6c56765afd7280db6"
+    }
+  }
+}

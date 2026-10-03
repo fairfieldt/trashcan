@@ -1,0 +1,19 @@
+#version 460
+#include "common.glsl"
+layout(local_size_x=256) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x*4+gl_SubgroupID;
+if(row>=p.n)return;
+float sum=0;
+if(p.kind==1){
+    for(uint i=lane;i<p.k/4;i+=64){uint idx=row*(p.k/4)+i;uint v=ww.words[p.stride+idx];
+        ivec4 qs=ivec4(v<<24,v<<16,v<<8,v)>>24;
+        float scale=uintBitsToFloat(ww.words[row*(p.k/16)+i/4]);
+        sum=fma(dot(vec4(qs),b_v4.v[i]),scale,sum);
+    }
+
+}else{
+    for(uint i=lane;i<p.k/4;i+=64){uvec4 bits=uvec4(wh4.halves4[row*(p.k/4)+i])<<16;sum+=dot(uintBitsToFloat(bits),b_v4.v[i]);}
+}
+float v=subgroupAdd(sum);if(lane==0)c_f.v[row]=v;
+}

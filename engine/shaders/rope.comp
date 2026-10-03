@@ -1,0 +1,19 @@
+#version 460
+#include "common.glsl"
+layout(local_size_x=256) in;
+void main(){
+    uint i=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y;if(i>=p.n || t>=batch())return;
+    uint j=i%p.dim,h=i/p.dim,base=t*p.n+h*p.dim;
+    float x=a_f.v[base+j];
+    if(p.flags==0 && j<p.dim/2){
+        float y=a_f.v[base+j+p.dim/2];
+        float theta=float(position()+t)*pow(uintBitsToFloat(p.r0),-2.0*float(j)/float(p.dim));
+        if(p.b!=0)theta/=b_f.v[j];
+        float co=cos(theta),si=sin(theta);
+        c_f.v[base+j]=x*co-y*si; c_f.v[base+j+p.dim/2]=x*si+y*co;
+    }
+    if(p.d!=0){
+        uint slot=(position()+t)%p.cap;
+        d_h.v[slot*p.n+i]=uint16_t(packHalf2x16(vec2(x,0))&65535u);
+    }
+}

@@ -13,3 +13,6 @@
 # rust
 /target/
 /tools/dump-activations/dump
+
+# Python validation tools
+__pycache__/

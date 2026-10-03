@@ -1,0 +1,7 @@
+#version 460
+#include "common.glsl"
+layout(local_size_x=256) in;
+layout(set=1,binding=0,std430) readonly buffer Receive { uint v[]; } receive;
+shared uint sums[256];
+void main(){uint i=gl_GlobalInvocationID.x,l=gl_LocalInvocationID.x,seed=params_u.v[0];uint expected=seed*1664525u+i*1013904223u;
+if(p.kind==0){if(i<p.n)a_u.v[i]=expected;}else{sums[l]=i<p.n && receive.v[i]!=expected ? 1:0;barrier();for(uint s=128;s>0;s/=2){if(l<s)sums[l]+=sums[l+s];barrier();}if(l==0)c_u.v[gl_WorkGroupID.x]=sums[0];}}

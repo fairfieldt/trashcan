@@ -1,0 +1,32 @@
+{
+  "no_request": {
+    "source": "final-profile.tsv",
+    "gpu_duration_ms": [
+      49.204298,
+      49.584444
+    ],
+    "gap_total_ms": [
+      12.298366,
+      11.89985
+    ],
+    "gap_median_us": [
+      122.963,
+      132.889
+    ]
+  },
+  "latency_0": {
+    "source": "qos-profile.tsv",
+    "gpu_duration_ms": [
+      47.288592,
+      47.29571
+    ],
+    "gap_total_ms": [
+      4.121627,
+      4.036894
+    ],
+    "gap_median_us": [
+      41.333,
+      41.852000000000004
+    ]
+  }
+}

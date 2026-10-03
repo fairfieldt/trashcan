@@ -11,6 +11,7 @@ from HF `google/gemma-4-12B-it-qat-q4_0-gguf` rev 29d0977).
 
 | constant | value | GGUF key |
 |---|---|---|
+| maximum context | 262144 | `gemma4.context_length` |
 | layers | 48 | `gemma4.block_count` |
 | hidden size `D` | 3840 | `gemma4.embedding_length` |
 | FFN size `F` | 15360 | `gemma4.feed_forward_length` |
@@ -242,7 +243,9 @@ that part.
 
 GGUF defaults: temperature 1.0, top-k 64, top-p 0.95. Greedy (argmax) is used for validation. With the vocab-split LM
 head, each GPU returns its local top-k (k >= 64) as (value, id) pairs over its 131072 ids. The CPU merges them and samples.
-Full logits never cross PCIe.
+Full logits never cross PCIe during ordinary generation. Both the target and assistant suppress IDs
+258883 and 258882 before top-k, matching `common/sampling.cpp` and the GGUF suppression metadata.
+The assistant's logits are not softcapped (`final_logit_softcapping: null` in its pinned config).
 
 ## 6. Validation assets
 
@@ -374,7 +377,7 @@ own push-constant structs; read the `vk_*_push_constants` structs next to each p
 
 ## 9. Working conventions
 
-- **Code** lives in this repo; `scripts/sync.sh push` copies `Cargo.*`, `engine/`, `scripts/`, `bench/` to
+- **Code** lives in this repo; `scripts/sync.sh push` copies `Cargo.*`, `engine/`, `scripts/`, `bench/`, `tools/`, `tests/`, `docs/` to
   `incite:~/trashcan/`. Build there with `cargo build --release` (Rust is in `~/.cargo/bin`, so
   `export PATH=$HOME/.cargo/bin:$PATH`).
 - **On the Mac,** `cargo check` works because `ash` loads libvulkan at runtime. A `build.rs` that runs `glslc` must
@@ -393,3 +396,33 @@ own push-constant structs; read the `vk_*_push_constants` structs next to each p
   - incite `~/trashcan/llama.cpp` (the `tp-debug` branch)
   - our llama.cpp patches are also saved in `reference/llama.cpp-patches/`.
   - `llama.cpp/AGENTS.md` forbids AI-written PRs, issues and comments upstream. Never post there.
+
+## 10. Implemented runtime conventions
+
+The Rust runtime is described in `docs/implementation.md`, with runnable validation commands. GGUF and
+safetensors are read directly; llama.cpp is not linked or needed at runtime.
+
+- Q4 upload uses a structure of arrays: one f32 scale per block followed by the original 16 packed bytes per
+  block. This is 20 bytes per 32 weights, shared by decode, small-batch verification and prefill.
+- The Q6_K output head is expanded at upload to f32 signed scales per 16 weights followed by signed 8-bit
+  quants. CPU embedding lookup still reads the original Q6_K blocks.
+- **Disable buffer device addresses and descriptor indexing/update-after-bind.** Mesa 25.0.7 RADV's
+  `radv_device.c` enables `use_global_bo_list` for these features. Including every imported DMA-BUF in each
+  submission defeats the intended independent allreduce schedule. The runtime uses fixed descriptors instead.
+- **Allocate each of the 96 receive slots separately.** Disjoint byte ranges in one DMA-BUF still share
+  buffer-level implicit fences. Each slot uses the dedicated export/import recipe above. Cap their capacity
+  at 128 tokens: 96 × 128 × 3840 × 4 = 180 MiB. Full 512-token capacity is 720 MiB, beyond the 256 MiB BAR.
+  Batches above 128 reuse two additional wide slots (15 MiB at batch 512). Interleave GPU0/GPU1 submissions
+  per segment before the next segment, so implicit fences on reused slots refer only to preceding work.
+  This stays within the BAR without CPU fence waits. `--cpu-reduce` retains the persistent host relay path.
+- For P2P, submit all 97 timeline-dependent segments in one `vkQueueSubmit` API call per GPU. This preserves the
+  per-allreduce semaphore dependencies and avoids 194 CPU submission calls per token.
+- Decode and verification attention use 32 cache partitions followed by a stable max/sum reduction. Large
+  prefill batches use one online-softmax wave per query/head. All score scales remain exactly 1.0.
+- Assistant revision `18934064dd4c5c6cc3621f6381e7d377fc8cb7bd` reads target layers 46 (sliding) and 47
+  (global). Draft steps keep the same query position and see only committed target KV. Verification rewinds
+  the logical position to the accepted prefix; the sliding ring includes the full verification capacity.
+  Greedy verification accepts the matching prefix. Stochastic verification uses P/Q acceptance and a
+  normalized max(P-Q,0) correction, using the target's temperature/top-k/top-p sampling law.
+- The assistant config mentions centroids, but no centroid tensors exist in its safetensors header. The
+  runtime computes its full BF16 head. The pinned download script verifies sizes and SHA-256 checksums.

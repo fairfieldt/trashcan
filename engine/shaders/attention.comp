@@ -1,0 +1,22 @@
+#version 460
+#include "common.glsl"
+layout(local_size_x=64) in;
+void main(){
+uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+if(t>=batch())return;
+uint pos=position()+t,start=p.window>0 && pos+1>p.window ? pos+1-p.window:0;
+uint end=params_u.v[2]!=0 ? min(pos,params_u.v[2]-1):pos;
+uint kh=head/(p.heads/p.kvheads),qbase=t*p.heads*p.dim+head*p.dim;
+float acc[8],q[8];[[unroll]] for(uint j=0;j<8;j++){acc[j]=0;q[j]=j*64+l<p.dim?a_f.v[qbase+j*64+l]:0;}
+float maxs=-1e30,den=0;
+for(uint key=start;key<=end;key++){
+    uint kb=(key%p.cap)*p.kvheads*p.dim+kh*p.dim;
+    float dot=0;
+    [[unroll]] for(uint j=0;j<p.dim/64;j++)dot=fma(q[j],half_b(kb+j*64+l),dot);
+    float score=subgroupAdd(dot),nm=max(maxs,score),rescale=exp(maxs-nm),w=exp(score-nm);
+    den=den*rescale+w;
+    [[unroll]] for(uint j=0;j<p.dim/64;j++)acc[j]=fma(w,half_c(kb+j*64+l),acc[j]*rescale);
+    maxs=nm;
+}
+[[unroll]] for(uint j=0;j<p.dim/64;j++)d_f.v[qbase+j*64+l]=acc[j]/den;
+}

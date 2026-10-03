@@ -77,7 +77,12 @@ impl fmt::Display for Value {
             Value::I32(v) => write!(f, "{v}"),
             Value::F32(v) => write!(f, "{v}"),
             Value::Bool(v) => write!(f, "{v}"),
-            Value::Str(s) if s.len() > 120 => write!(f, "{:?}... ({} bytes)", s.chars().take(100).collect::<String>(), s.len()),
+            Value::Str(s) if s.len() > 120 => write!(
+                f,
+                "{:?}... ({} bytes)",
+                s.chars().take(100).collect::<String>(),
+                s.len()
+            ),
             Value::Str(s) => write!(f, "{s:?}"),
             Value::U64(v) => write!(f, "{v}"),
             Value::I64(v) => write!(f, "{v}"),
@@ -175,12 +180,6 @@ pub struct TensorInfo {
     pub size: u64,
 }
 
-impl TensorInfo {
-    pub fn n_elements(&self) -> u64 {
-        self.dims.iter().product()
-    }
-}
-
 pub struct Gguf {
     pub version: u32,
     pub meta: BTreeMap<String, Value>,
@@ -196,7 +195,11 @@ struct Cursor<'a> {
 
 impl<'a> Cursor<'a> {
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        ensure!(self.pos + n <= self.b.len(), "unexpected end of file at {}", self.pos);
+        ensure!(
+            n <= self.b.len().saturating_sub(self.pos),
+            "unexpected end of file at {}",
+            self.pos
+        );
         let s = &self.b[self.pos..self.pos + n];
         self.pos += n;
         Ok(s)
@@ -236,7 +239,12 @@ impl<'a> Cursor<'a> {
             8 => Value::Str(self.string()?),
             9 => {
                 let elem_ty = self.u32()?;
-                let n = self.u64()? as usize;
+                let n = usize::try_from(self.u64()?)?;
+                ensure!(elem_ty != 9, "nested GGUF arrays are not supported");
+                ensure!(
+                    n <= self.b.len().saturating_sub(self.pos),
+                    "array length exceeds file"
+                );
                 let mut v = Vec::with_capacity(n);
                 for _ in 0..n {
                     v.push(self.value(elem_ty)?);
@@ -257,17 +265,30 @@ impl Gguf {
         let mmap = unsafe { Mmap::map(&file)? };
         let mut c = Cursor { b: &mmap, pos: 0 };
 
-        ensure!(c.take(4)? == b"GGUF", "{} is not a GGUF file", path.display());
+        ensure!(
+            c.take(4)? == b"GGUF",
+            "{} is not a GGUF file",
+            path.display()
+        );
         let version = c.u32()?;
-        ensure!(version == 2 || version == 3, "unsupported GGUF version {version}");
+        ensure!(
+            version == 2 || version == 3,
+            "unsupported GGUF version {version}"
+        );
         let n_tensors = c.u64()?;
         let n_meta = c.u64()?;
+        ensure!(
+            n_tensors <= mmap.len() as u64 / 24 && n_meta <= mmap.len() as u64 / 13,
+            "directory counts exceed file size"
+        );
 
         let mut meta = BTreeMap::new();
         for _ in 0..n_meta {
             let key = c.string()?;
             let ty = c.u32()?;
-            let value = c.value(ty).with_context(|| format!("reading metadata {key}"))?;
+            let value = c
+                .value(ty)
+                .with_context(|| format!("reading metadata {key}"))?;
             meta.insert(key, value);
         }
 
@@ -275,25 +296,63 @@ impl Gguf {
         for _ in 0..n_tensors {
             let name = c.string()?;
             let n_dims = c.u32()?;
+            ensure!(
+                (1..=4).contains(&n_dims),
+                "tensor {name}: invalid dimension count"
+            );
             let dims = (0..n_dims).map(|_| c.u64()).collect::<Result<Vec<_>>>()?;
             let ty = GgmlType::from_u32(c.u32()?);
             let offset = c.u64()?;
-            let n: u64 = dims.iter().product();
-            let (blk, bytes) = ty.block().with_context(|| format!("tensor {name} has unsupported type {ty}"))?;
-            ensure!(dims[0] % blk == 0, "tensor {name}: row length {} not a multiple of block {blk}", dims[0]);
-            tensors.push(TensorInfo { name, dims, ty, offset, size: n / blk * bytes });
+            ensure!(dims.iter().all(|d| *d > 0), "tensor {name}: zero dimension");
+            let n = dims
+                .iter()
+                .try_fold(1u64, |acc, d| acc.checked_mul(*d))
+                .context("tensor dimensions overflow")?;
+            let (blk, bytes) = ty
+                .block()
+                .with_context(|| format!("tensor {name} has unsupported type {ty}"))?;
+            ensure!(
+                dims[0] % blk == 0,
+                "tensor {name}: row length {} not a multiple of block {blk}",
+                dims[0]
+            );
+            tensors.push(TensorInfo {
+                name,
+                dims,
+                ty,
+                offset,
+                size: (n / blk)
+                    .checked_mul(bytes)
+                    .context("tensor byte size overflow")?,
+            });
         }
 
-        let align = meta.get("general.alignment").and_then(Value::as_u64).unwrap_or(32);
+        let align = meta
+            .get("general.alignment")
+            .and_then(Value::as_u64)
+            .unwrap_or(32);
+        ensure!(
+            align.is_power_of_two() && align <= 4096,
+            "invalid GGUF alignment {align}"
+        );
         let data_offset = (c.pos as u64).div_ceil(align) * align;
         for t in &tensors {
             ensure!(
-                data_offset + t.offset + t.size <= mmap.len() as u64,
+                data_offset
+                    .checked_add(t.offset)
+                    .and_then(|n| n.checked_add(t.size))
+                    .is_some_and(|n| n <= mmap.len() as u64),
                 "tensor {} extends past end of file",
                 t.name
             );
         }
-        Ok(Gguf { version, meta, tensors, data_offset, mmap })
+        Ok(Gguf {
+            version,
+            meta,
+            tensors,
+            data_offset,
+            mmap,
+        })
     }
 
     pub fn tensor(&self, name: &str) -> Option<&TensorInfo> {
@@ -306,19 +365,27 @@ impl Gguf {
     }
 
     pub fn get(&self, key: &str) -> Result<&Value> {
-        self.meta.get(key).with_context(|| format!("missing GGUF metadata {key}"))
+        self.meta
+            .get(key)
+            .with_context(|| format!("missing GGUF metadata {key}"))
     }
 
     pub fn get_u64(&self, key: &str) -> Result<u64> {
-        self.get(key)?.as_u64().with_context(|| format!("GGUF metadata {key} is not an integer"))
+        self.get(key)?
+            .as_u64()
+            .with_context(|| format!("GGUF metadata {key} is not an integer"))
     }
 
     pub fn get_f64(&self, key: &str) -> Result<f64> {
-        self.get(key)?.as_f64().with_context(|| format!("GGUF metadata {key} is not a number"))
+        self.get(key)?
+            .as_f64()
+            .with_context(|| format!("GGUF metadata {key} is not a number"))
     }
 
     pub fn get_str(&self, key: &str) -> Result<&str> {
-        self.get(key)?.as_str().with_context(|| format!("GGUF metadata {key} is not a string"))
+        self.get(key)?
+            .as_str()
+            .with_context(|| format!("GGUF metadata {key} is not a string"))
     }
 
     pub fn file_size(&self) -> u64 {

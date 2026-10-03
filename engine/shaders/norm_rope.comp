@@ -1,0 +1,17 @@
+#version 460
+#include "common.glsl"
+// One wave owns a head: RMS, learned scale, NeoX rotation and optional f16 KV store.
+layout(local_size_x=64) in;
+void main(){uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+uint base=t*p.n+head*p.dim;float ss=0;
+for(uint j=l;j<p.dim;j+=64){float x=a_f.v[base+j];ss=fma(x,x,ss);}
+float inv=inversesqrt(subgroupAdd(ss)/float(p.dim)+1e-6);
+for(uint j=l;j<p.dim/2;j+=64){float x=a_f.v[base+j]*inv,y=a_f.v[base+j+p.dim/2]*inv;
+if(p.b!=0){x*=b_f.v[j];y*=b_f.v[j+p.dim/2];}
+if((p.flags&4)!=0){d_f.v[base+j]=x;d_f.v[base+j+p.dim/2]=y;}
+if((p.flags&2)!=0){float theta=float(position()+t)*pow(uintBitsToFloat(p.r0),-2.0*float(j)/float(p.dim));if(p.e!=0)theta/=e_f.v[j];
+float co=cos(theta),si=sin(theta),rx=x*co-y*si; y=x*si+y*co;x=rx;}
+c_f.v[base+j]=x;c_f.v[base+j+p.dim/2]=y;
+if((p.flags&1)!=0){uint at=((position()+t)%p.cap)*p.n+head*p.dim+j;
+f_h.v[at]=uint16_t(packHalf2x16(vec2(x,0))&65535u);f_h.v[at+p.dim/2]=uint16_t(packHalf2x16(vec2(y,0))&65535u);}
+}}

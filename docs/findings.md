@@ -2,6 +2,59 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-02 (implementation): independent Rust/Vulkan engine
+
+The target forward pass, tokenizer, chat, sampling, prefill and native BF16 MTP assistant are implemented.
+Build and validation recipes, the pinned assistant manifest and milestone status are in `implementation.md`.
+The executable runs without llama.cpp. The reference checks exercise single-token, four-token, GEMM,
+CPU-relay and MTP paths against the saved activations and continuation.
+
+### Transport and memory findings
+
+- **Device addresses accidentally serialize the two GPUs on this RADV version.** Mesa 25.0.7's
+  `radv_device.c` enables `use_global_bo_list` for buffer device addresses and descriptor indexing /
+  update-after-bind. Every imported peer allocation then participates in each submission's implicit
+  synchronization. Fixed descriptors with all these features disabled restore overlap.
+- **Disjoint receive slots must be distinct DMA-BUF allocations.** Ranges in one allocation share implicit
+  fences; separate exported buffers are necessary for the pre-recorded 97-segment timeline schedule.
+- **The 256 MiB BAR limits large-batch P2P.** Ninety-six receive slots at batch 512 need 720 MiB. Slots
+  are capped at batch 128 / 180 MiB. Larger batches now reuse two 512-token buffers (15 MiB), with GPU0/GPU1
+  submissions interleaved per segment. Implicit fences then refer to preceding consumers, allowing reuse
+  without CPU fence waits. This raised pp512 from about 123 to 159 tok/s in the transport trial. CPU relay
+  remains a debug path; its preallocated staging was faster than per-hop allocation and recording.
+- At context 8192 / batch 512, measured target allocations are 4552 MiB/GPU; the assistant adds 415 MiB.
+  The 32K combined budget is about 5351 MiB/GPU, calculated rather than validated at that context.
+- The user authorized temporary CPU PM QoS latency 0. `scripts/latency-run.py` holds the request only for
+  its command. It reduced median decode semaphore gaps from about 123–133 us to about 41–42 us before
+  the last dispatch-fusion changes. Display-manager configuration was not changed.
+
+### Kernel and assistant findings
+
+- Decode Q4_0 uses f32 scales followed by packed quants (20 bytes/block); the Q6_K head expands to signed
+  bytes with f32 signed scales (320 bytes/256 weights). Original embeddings remain Q6_K on CPU.
+- A 64×64×32 fp32 GEMM reached about 2.2 TFLOP/s per GPU in the FFN microbenchmark. Four-token
+  verification still achieves much less compute throughput, limiting speculative gain.
+- The final streamed-P2P benchmark reaches pp512 161.1 tok/s, satisfying M4. tg128 is 21.2 tok/s,
+  below M3's 40–50 target. Three paired greedy chats have identical outputs and MTP gains of 1.22×,
+  1.01× and 1.45× (combined 1.20×), below M5's 1.5× target. Maximum recorded temperatures are 84/82 C.
+- Two-token FFN work is 41–49% faster with the four-row kernel; the final selector uses it for 2–4 tokens.
+  Its reference checks pass. One-draft photosynthesis still runs at 22.89 tok/s versus 23.51 with three
+  drafts, so the default stays at three. Acceptance and verification amortization both matter.
+- Independent Q/K/V and gate/up operations share a trailing barrier. Post-normalization, residual/scaling
+  and the following RMS normalization share a dispatch, with the same reduction order as separate norms.
+- The pinned assistant contains no centroid tensors, despite centroid settings in its config. Its full
+  BF16 vocabulary head is used. Its logit softcap is null; the target's is 30.
+- Every draft step keeps the target query position and visible cache fixed, and reads target layers 46
+  and 47. Stochastic verification uses P/Q acceptance and the residual distribution on rejection, not
+  greedy comparison. A 50,000-trial unit test checks the target sampling law; seeded live runs repeat.
+- Raw repetitive prompts can become unstable, as with the earlier llama.cpp investigation. The long
+  verification fixture uses a rendered chat. Serial/chunked rounding can alter a near-tied greedy decision;
+  the checker reports their common prefix separately and checks verification/rollback against the same
+  chunked-prefill cache.
+
+Final benchmark outputs and source hashes are retained under `results/engine/delivered-benchmark/`;
+correctness logs are `delivered-validation-suite.log` and `delivered-ring-check.json`.
+
 ## 2026-10-02 (later): cross-GPU transport, P2P kernel, llama.cpp TP bugs, decision to build our own engine
 
 ### Cross-GPU sync and copy (`bench/xgpu`, `results/xgpu/`)
