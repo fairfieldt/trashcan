@@ -29,8 +29,11 @@ target/release/trashcan chat ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4
 Add `--draft ~/models/gemma-4-12b-assistant/model.safetensors` for the matched assistant. The functional paths
 are implemented. M1, M2 and M4 pass; decode and MTP performance targets in M3/M5 remain open.
 Work directly on `main`, as recorded in [AGENTS.md](AGENTS.md). The
-[main-branch performance report](results/engine/main-tuning-20261003/README.md) records the latest
+[main-branch performance report](results/engine/main-tuning-20261003/README.md) records the preceding
 validated improvements, rejected experiments, and corrected hardware bounds.
+The [norm and attention-merge follow-up](results/engine/validated-followup-20261003/README.md)
+raises repeated tg256 from 23.32 to 28.72 tok/s, with prefill unchanged, and records the recovered
+unfinished investigation lenses.
 
 To serve the model through the OpenAI Responses API:
 

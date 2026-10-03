@@ -12,6 +12,173 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub fn norm(iterations: u32) -> Result<()> {
+    ensure!(iterations > 0, "positive iterations required");
+    const N: usize = 3840;
+    let inst = Rc::new(Instance::new()?);
+    for (gpu, pd) in inst.amd_gpus()?.into_iter().enumerate() {
+        let d = Device::new(inst.clone(), pd)?;
+        // Cached descriptors must not outlive buffers and see recycled Vulkan handles.
+        let mut keepalive = Vec::new();
+        let query = unsafe {
+            d.dev.create_query_pool(
+                &vk::QueryPoolCreateInfo::default()
+                    .query_type(vk::QueryType::TIMESTAMP)
+                    .query_count(2),
+                None,
+            )?
+        };
+        for columns in [1usize, 4] {
+            for seed in 1..=4u32 {
+                let mut state = seed;
+                let mut random = |count: usize| -> Vec<f32> {
+                    (0..count)
+                        .map(|i| {
+                            state ^= state << 13;
+                            state ^= state >> 17;
+                            state ^= state << 5;
+                            let scale = [0.001, 0.1, 1., 10.][i % 4];
+                            (state as f64 / u32::MAX as f64 * 2. - 1.) as f32 * scale
+                        })
+                        .collect()
+                };
+                let input = random(N * columns);
+                let peer = random(N * columns);
+                let residual = random(N * columns);
+                let post_weight = random(N);
+                let next_weight = random(N);
+                let scale = 0.875f32;
+                let mut expected = [Vec::new(), Vec::new(), Vec::new()];
+                for t in 0..columns {
+                    let x: Vec<f32> = (0..N).map(|i| input[t * N + i] + peer[t * N + i]).collect();
+                    let inv = (x.iter().map(|&v| (v as f64).powi(2)).sum::<f64>() / N as f64
+                        + 1e-6)
+                        .sqrt()
+                        .recip();
+                    let y: Vec<f32> = (0..N)
+                        .map(|i| (x[i] as f64 * inv * post_weight[i] as f64) as f32)
+                        .collect();
+                    let r: Vec<f32> = (0..N)
+                        .map(|i| (residual[t * N + i] + y[i]) * scale)
+                        .collect();
+                    let ni = (r.iter().map(|&v| (v as f64).powi(2)).sum::<f64>() / N as f64 + 1e-6)
+                        .sqrt()
+                        .recip();
+                    expected[0].extend(&y);
+                    expected[1].extend(&r);
+                    expected[2]
+                        .extend((0..N).map(|i| (r[i] as f64 * ni * next_weight[i] as f64) as f32));
+                }
+                let a = d.upload(bytemuck::cast_slice(&input))?;
+                let receive = d.upload(bytemuck::cast_slice(&peer))?;
+                let initial = d.upload(bytemuck::cast_slice(&residual))?;
+                let e = d.buffer(N * columns * 4, false, false, None)?;
+                let b = d.upload(bytemuck::cast_slice(&post_weight))?;
+                let f = d.upload(bytemuck::cast_slice(&next_weight))?;
+                let c = d.buffer(N * columns * 4, false, false, None)?;
+                let extra = d.buffer(N * columns * 4, false, false, None)?;
+                let mut p = Push {
+                    ptr: [
+                        a.address,
+                        b.address,
+                        c.address,
+                        0,
+                        e.address,
+                        f.address,
+                        0,
+                        extra.address,
+                    ],
+                    ..Push::default()
+                };
+                p.u[0] = N as u32;
+                p.u[3] = N as u32;
+                p.u[11] = 7;
+                p.u[12] = scale.to_bits();
+                p.u[15] = columns as u32;
+                let mut baseline: Option<Vec<Vec<u8>>> = None;
+                for shader in ["norm", "norm_fused"] {
+                    let cmd = d.begin()?;
+                    unsafe {
+                        d.dev.cmd_reset_query_pool(cmd, query, 0, 2);
+                    }
+                    // Restore the residual before every replay. Time only the norm dispatch.
+                    d.copy(cmd, &initial, 0, &e, 0, initial.size);
+                    unsafe {
+                        d.dev.cmd_write_timestamp(
+                            cmd,
+                            vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                            query,
+                            0,
+                        );
+                    }
+                    d.dispatch_receive(cmd, shader, p, 1, columns as u32, &receive)?;
+                    unsafe {
+                        d.dev.cmd_write_timestamp(
+                            cmd,
+                            vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                            query,
+                            1,
+                        );
+                    }
+                    d.finish(cmd)?;
+                    let warmup = Instant::now();
+                    while warmup.elapsed() < Duration::from_millis(300) {
+                        d.run_reusable(cmd)?;
+                    }
+                    for repetition in 1..=2 {
+                        let mut times = Vec::new();
+                        for _ in 0..iterations {
+                            d.run_reusable(cmd)?;
+                            let mut ticks = [0u64; 2];
+                            unsafe {
+                                d.dev.get_query_pool_results(
+                                    query,
+                                    0,
+                                    &mut ticks,
+                                    vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+                                )?;
+                            }
+                            times.push((ticks[1] - ticks[0]) as f64 * d.period as f64 / 1000.);
+                        }
+                        let outputs = vec![c.download()?, e.download()?, extra.download()?];
+                        let mut worst = 0f64;
+                        for (bytes, cpu) in outputs.iter().zip(&expected) {
+                            for (bytes, &want) in bytes.chunks_exact(4).zip(cpu) {
+                                let got = f32::from_le_bytes(bytes.try_into()?);
+                                let error =
+                                    (got as f64 - want as f64).abs() / (1. + (want as f64).abs());
+                                ensure!(
+                                    got.is_finite() && error < 1e-5,
+                                    "{shader} CPU norm mismatch: {got} vs {want}"
+                                );
+                                worst = worst.max(error);
+                            }
+                        }
+                        let identical = baseline.as_ref().is_none_or(|old| *old == outputs);
+                        ensure!(identical, "fused norm differs from generic norm on seed {seed}, columns {columns}, GPU {gpu}");
+                        if baseline.is_none() {
+                            baseline = Some(outputs);
+                        }
+                        times.sort_by(f64::total_cmp);
+                        println!(
+                            "{}",
+                            serde_json::json!({"gpu":gpu,"shader":shader,"seed":seed,"columns":columns,"repetition":repetition,"iterations":iterations,"median_us":times[times.len()/2],"cpu_worst_scaled_error":worst,"bit_identical":identical,"pass":true})
+                        );
+                    }
+                    unsafe {
+                        d.dev.free_command_buffers(d.pool, &[cmd]);
+                    }
+                }
+                keepalive.extend([a, receive, initial, e, b, f, c, extra]);
+            }
+        }
+        unsafe {
+            d.dev.destroy_query_pool(query, None);
+        }
+    }
+    Ok(())
+}
+
 pub fn attention(
     iterations: u32,
     tokens: usize,
@@ -163,9 +330,22 @@ pub fn attention(
                         "attention dim {dim}, partitions {parts}, value {i}: {got} vs {wanted}"
                     );
                 }
+                let reference_cmd = d.begin()?;
+                let mut reference_push = p;
+                reference_push.u[13] = parts;
+                d.dispatch(
+                    reference_cmd,
+                    "attention_merge_reference",
+                    reference_push,
+                    8,
+                    1,
+                );
+                d.finish(reference_cmd)?;
+                d.run(reference_cmd)?;
+                ensure!(result == output.download()?, "attention merge differs from serial reference: GPU {gpu}, dim {dim}, partitions {parts}");
                 println!(
                     "{}",
-                    serde_json::json!({"gpu":gpu,"tokens":tokens,"dim":dim,"kv_heads":kv,"partitions":parts,"kernel":kernel,"partial_shader":partial_shader,"heads_per_group":heads_per_group,"iterations":iterations,"milliseconds":(times[1]-times[0]) as f64 * d.period as f64 / 1e6 / iterations as f64,"pass":true})
+                    serde_json::json!({"gpu":gpu,"tokens":tokens,"dim":dim,"kv_heads":kv,"partitions":parts,"kernel":kernel,"partial_shader":partial_shader,"heads_per_group":heads_per_group,"iterations":iterations,"milliseconds":(times[1]-times[0]) as f64 * d.period as f64 / 1e6 / iterations as f64,"merge_bit_identical":true,"pass":true})
                 );
             }
             unsafe {

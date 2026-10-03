@@ -1,0 +1,33 @@
+#version 460
+#include "common.glsl"
+layout(local_size_x=256) in;
+layout(set=1,binding=0,std430) readonly buffer Receive { float v[]; } receive;
+shared float ss[4];
+void main() {
+    uint h=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+    if(t>=batch())return;
+    uint base=t*p.stride+h*p.n;
+    float sum=0;
+    for(uint i=l;i<p.n;i+=256) {
+        float x=a_f.v[base+i]; if((p.flags&1)!=0)x+=receive.v[t*p.n+i];
+        sum=fma(x,x,sum);
+    }
+    float s=subgroupAdd(sum); if(gl_SubgroupInvocationID==0)ss[gl_SubgroupID]=s;
+    barrier();
+    float inv=inversesqrt((ss[0]+ss[1]+ss[2]+ss[3])/float(p.n)+1e-6);
+    float residuals[15],next_sum=0;
+    for(uint i=l;i<p.n;i+=256) {
+        float x=a_f.v[base+i]; if((p.flags&1)!=0)x+=receive.v[t*p.n+i];
+        float y=x*inv; if(p.b!=0)y*=b_f.v[i];
+        c_f.v[base+i]=y;
+        if((p.flags&2)!=0){float r=(e_f.v[t*p.n+i]+y)*uintBitsToFloat(p.r0);e_f.v[t*p.n+i]=r;
+            if((p.flags&4)!=0){residuals[i/256]=r;next_sum=fma(r,r,next_sum);}}
+    }
+    if((p.flags&4)!=0){
+        // Keep exactly the same reduction order as the standalone next RMS norm.
+        barrier();float s=subgroupAdd(next_sum);
+        if(gl_SubgroupInvocationID==0)ss[gl_SubgroupID]=s;barrier();
+        float ni=inversesqrt((ss[0]+ss[1]+ss[2]+ss[3])/float(p.n)+1e-6);
+        for(uint i=l;i<p.n;i+=256)extra_f.v[t*p.n+i]=residuals[i/256]*ni*f_f.v[i];
+    }
+}

@@ -1,0 +1,34 @@
+#version 460
+#include "common.glsl"
+// D=3840, one head, flags=7, both norm weights present. Hoist independent loads
+// while keeping norm.comp's 15-element FMA chains and four-wave reduction order.
+layout(local_size_x=256) in;
+layout(set=1,binding=0,std430) readonly buffer Receive { float v[]; } receive;
+shared float ss[4];
+void main() {
+    uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+    if(t>=batch())return;
+    uint base=t*3840u;
+    float xs[15],peer[15],res[15],post[15],next[15];
+    [[unroll]] for(uint j=0;j<15;j++) {
+        uint i=l+j*256u;
+        xs[j]=a_f.v[base+i];peer[j]=receive.v[base+i];
+        res[j]=e_f.v[base+i];post[j]=b_f.v[i];next[j]=f_f.v[i];
+    }
+    float sum=0;
+    [[unroll]] for(uint j=0;j<15;j++){xs[j]+=peer[j];sum=fma(xs[j],xs[j],sum);}
+    float s=subgroupAdd(sum);if(gl_SubgroupInvocationID==0)ss[gl_SubgroupID]=s;
+    barrier();
+    float inv=inversesqrt((ss[0]+ss[1]+ss[2]+ss[3])/float(p.n)+1e-6);
+    float next_sum=0;
+    [[unroll]] for(uint j=0;j<15;j++) {
+        uint i=base+l+j*256u;
+        float y=xs[j]*inv;y*=post[j];c_f.v[i]=y;
+        float r=(res[j]+y)*uintBitsToFloat(p.r0);e_f.v[i]=r;
+        xs[j]=r;next_sum=fma(r,r,next_sum);
+    }
+    barrier();s=subgroupAdd(next_sum);
+    if(gl_SubgroupInvocationID==0)ss[gl_SubgroupID]=s;barrier();
+    float ni=inversesqrt((ss[0]+ss[1]+ss[2]+ss[3])/float(p.n)+1e-6);
+    [[unroll]] for(uint j=0;j<15;j++)extra_f.v[base+l+j*256u]=xs[j]*ni*next[j];
+}

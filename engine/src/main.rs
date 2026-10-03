@@ -53,6 +53,11 @@ enum Cmd {
         #[arg(long, default_value_t = 1)]
         batch: usize,
     },
+    /// Check fused RMS norm against the generic GPU kernel and a CPU reference.
+    NormBench {
+        #[arg(long, default_value_t = 32)]
+        iterations: u32,
+    },
     /// Sweep decode attention partitions and compare outputs with a CPU softmax.
     AttentionBench {
         #[arg(long, default_value_t = 100)]
@@ -327,6 +332,7 @@ fn main() -> Result<()> {
             warmup_ms,
         ),
         Cmd::TopkBench { iterations, batch } => micro::selection(iterations, batch),
+        Cmd::NormBench { iterations } => micro::norm(iterations),
         Cmd::AttentionBench {
             iterations,
             tokens,

@@ -1,0 +1,12 @@
+#version 460
+#include "common.glsl"
+// Original serial merge for attention-bench's all-element bit comparison.
+// The benchmark supplies the partition count in r1.
+layout(local_size_x=64) in;
+void main(){uint parts=p.r1,head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+uint base=(t*p.heads+head)*parts*(p.dim+2);
+float mx=-1e30;for(uint c=0;c<parts;c++)mx=max(mx,e_f.v[base+c*(p.dim+2)]);
+float den=0;float acc[8];[[unroll]]for(uint j=0;j<8;j++)acc[j]=0;
+for(uint c=0;c<parts;c++){uint b=base+c*(p.dim+2);float w=exp(e_f.v[b]-mx);den+=w*e_f.v[b+1];
+[[unroll]]for(uint j=0;j<p.dim/64;j++)acc[j]=fma(w,e_f.v[b+2+j*64+l],acc[j]);}
+[[unroll]]for(uint j=0;j<p.dim/64;j++)d_f.v[(t*p.heads+head)*p.dim+j*64+l]=acc[j]/den;}

@@ -1,0 +1,3 @@
+PASS: photosynthesis baseline/merge greedy output is byte-identical
+PASS: csv baseline/merge greedy output is byte-identical
+PASS: long-water baseline/merge greedy output is byte-identical

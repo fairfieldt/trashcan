@@ -9,7 +9,17 @@ speculative gain (M5) remain performance work; their original targets are retain
 
 ## Recorded acceptance
 
-The latest main-branch measurements are in `results/engine/main-tuning-20261003/`. Fixed-dimension
+The [norm/merge follow-up](../results/engine/validated-followup-20261003/README.md) at binary
+`2682f29e` raises repeated tg256 from a fresh **23.32 to 28.72 tok/s (+23.16%)**, with pp512
+unchanged at about 161 tok/s. A single paired pp4096/tg128 run raises decode from 21.15 to
+26.39 tok/s (+24.78%), with prefill unchanged near 117 tok/s. Scalar load-hoisted fused norm
+and a wide attention merge preserve the original reduction order; 133 fresh activation/logit
+files and 32 greedy tokens match the baseline byte for byte. All six reference paths, 30 CPU
+tests, tokenizer/chat fixtures, 10,000 P2P rounds, the 250-token partition boundary, and
+1700-token ring-wrap/verification/rollback checks pass on that same final binary. This evidence
+is separate from the preceding server and prefix-cache measurements below.
+
+The preceding main-branch measurements are in `results/engine/main-tuning-20261003/`. Fixed-dimension
 shared-KV attention raises repeated tg256 from 22.78 to **23.42 tok/s (+2.8%)** against a freshly rerun
 shared-KV baseline; decode after 4096 input tokens rises from 20.55 to **21.36 tok/s (+3.9%)**.
 Its three ordinary chats improve 1.3–4.0%, with all twelve ordinary/MTP outputs matching exactly.

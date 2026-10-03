@@ -1,0 +1,68 @@
+{
+  "transformer": {
+    "baseline": {
+      "tokens": 128,
+      "tok_s": 29.34,
+      "accepted": 82,
+      "proposed": 138,
+      "rounds": 46,
+      "draft_ms": 4.04,
+      "verify_ms": 82.31,
+      "ordinary_output_byte_identical": true
+    },
+    "merge": {
+      "tokens": 128,
+      "tok_s": 31.75,
+      "accepted": 82,
+      "proposed": 138,
+      "rounds": 46,
+      "draft_ms": 3.84,
+      "verify_ms": 75.73,
+      "ordinary_output_byte_identical": true
+    }
+  },
+  "photosynthesis": {
+    "baseline": {
+      "tokens": 128,
+      "tok_s": 24.7,
+      "accepted": 72,
+      "proposed": 165,
+      "rounds": 55,
+      "draft_ms": 4.01,
+      "verify_ms": 81.76,
+      "ordinary_output_byte_identical": true
+    },
+    "merge": {
+      "tokens": 128,
+      "tok_s": 26.44,
+      "accepted": 72,
+      "proposed": 165,
+      "rounds": 55,
+      "draft_ms": 3.81,
+      "verify_ms": 76.22,
+      "ordinary_output_byte_identical": true
+    }
+  },
+  "csv": {
+    "baseline": {
+      "tokens": 128,
+      "tok_s": 37.15,
+      "accepted": 90,
+      "proposed": 111,
+      "rounds": 37,
+      "draft_ms": 3.96,
+      "verify_ms": 80.86,
+      "ordinary_output_byte_identical": true
+    },
+    "merge": {
+      "tokens": 128,
+      "tok_s": 39.09,
+      "accepted": 90,
+      "proposed": 111,
+      "rounds": 37,
+      "draft_ms": 3.88,
+      "verify_ms": 76.41,
+      "ordinary_output_byte_identical": true
+    }
+  }
+}

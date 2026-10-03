@@ -1,0 +1,12 @@
+[Sat Oct  3 01:10:03 2026] amdgpu 0000:02:00.0: amdgpu: ring comp_1.0.0 timeout, signaled seq=1026819, emitted seq=1026820
+[Sat Oct  3 01:10:03 2026] amdgpu 0000:02:00.0: amdgpu: GPU reset begin!
+[Sat Oct  3 10:05:52 2026] amdgpu 0000:06:00.0: amdgpu: ring comp_1.1.1 timeout, signaled seq=3175285, emitted seq=3175286
+[Sat Oct  3 10:05:52 2026] amdgpu 0000:06:00.0: amdgpu: GPU reset begin!
+[Sat Oct  3 10:26:47 2026] amdgpu 0000:02:00.0: amdgpu: ring comp_1.1.1 timeout, signaled seq=3324679, emitted seq=3324681
+[Sat Oct  3 10:26:47 2026] amdgpu 0000:06:00.0: amdgpu: ring comp_1.1.1 timeout, signaled seq=3317890, emitted seq=3317892
+[Sat Oct  3 10:26:47 2026] amdgpu 0000:02:00.0: amdgpu: GPU reset begin!
+[Sat Oct  3 10:26:47 2026] amdgpu 0000:06:00.0: amdgpu: GPU reset begin!
+[Sat Oct  3 10:27:55 2026] amdgpu 0000:02:00.0: amdgpu: ring comp_1.1.1 timeout, signaled seq=3327632, emitted seq=3327634
+[Sat Oct  3 10:27:55 2026] amdgpu 0000:06:00.0: amdgpu: ring comp_1.1.1 timeout, signaled seq=3320843, emitted seq=3320845
+[Sat Oct  3 10:27:55 2026] amdgpu 0000:02:00.0: amdgpu: GPU reset begin!
+[Sat Oct  3 10:27:55 2026] amdgpu 0000:06:00.0: amdgpu: GPU reset begin!

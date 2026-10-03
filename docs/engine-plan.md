@@ -48,7 +48,8 @@ operations and exclude dequantization, norms, softmax and reductions.
 | ideal bound, omitted overheads | weight-only 65.10 tok/s | counted-compute-only 315.50 tok/s |
 | transport sensitivity | 96 × 42 us = 4.032 ms; adding this assumption to weights gives 51.57 tok/s | 754,974,720 bytes sent in each direction per chunk; about 81 ms at the isolated 9.3 GB/s copy rate |
 | historical engine at ceiling-audit snapshot, 2026-10-03 | tg128 22.14; separate tg256 21.88; ordinary 128-token chat 23.82–24.25 tok/s | pp512 160.87; repeat 161.05 tok/s |
-| latest measured build `5b62aa40`, 2026-10-03 | pooled tg256 **23.42 tok/s**; fresh pp4096/tg128 **21.36 tok/s** | pooled pp512 **159.94 tok/s** |
+| preceding measured build `5b62aa40`, 2026-10-03 | pooled tg256 **23.42 tok/s**; fresh pp4096/tg128 **21.36 tok/s** | pooled pp512 **159.94 tok/s** |
+| norm + merge follow-up `2682f29e`, 2026-10-03 | pooled tg256 **28.72 tok/s** vs fresh 23.32; pp4096/tg128 **26.39 tok/s** vs fresh 21.15 (one pair) | pooled pp512 **160.76 tok/s**, unchanged vs fresh 160.83 |
 | experiment goals | beat the measured baseline first; 40–50 remains an unvalidated stretch goal | first test 175–190 tok/s; 200 requires almost the whole graph to match the best FFN GEMM |
 | recorded llama.cpp reference | 12.3 (layer split), about 9 (tensor split) | 36 (layer), 118 (tensor) |
 
@@ -57,8 +58,8 @@ ideal bandwidth with a fixed historical hop measurement, while omitting attentio
 inefficiency. In the ceiling audit's historical final-token profile, GPU segment work takes 41.74–41.77 ms and accumulated
 semaphore gaps take 2.65–2.75 ms. These are one-token timestamp samples, not run-wide averages; even
 eliminating every measured gap saves only about 6% of that sample. Kernel work dominated that sample.
-The [main-branch tuning report](../results/engine/main-tuning-20261003/README.md) separates the latest
-fixed-dimension build from its fresh shared-KV baseline and the earlier shared-KV/core phases. The latest
+The [main-branch tuning report](../results/engine/main-tuning-20261003/README.md) separates the preceding
+fixed-dimension build from its fresh shared-KV baseline and the earlier shared-KV/core phases. Those
 fixed rates pool two runs by total tokens/time; long-context rates use one pair. These explicit-batch
 measurements do not by themselves validate the batch512 default or long-lived server behavior.
 
@@ -78,6 +79,13 @@ remain scalar. Logical payload counts are not hardware DRAM measurements: cache 
 and execution details matter. The 32K figure is calculated, not validated by a 32K execution.
 Long-context throughput requires its own measurement; a short-context decode target cannot be
 carried over unchanged.
+
+The [norm/merge follow-up](../results/engine/validated-followup-20261003/README.md) removes
+about 8.24 ms of last-token GPU work through a scalar load-hoisted fused norm and a wide
+attention-partition merge, preserving the original reduction order. Its +23.16% repeated decode
+gain is a measured workload result; it does not alter the physical rooflines or complete M3/M5.
+The recovered investigation shows that instruction issue and serialized load dependencies matter
+alongside matrix traffic. Remaining Q4 and verification candidates need independent acceptance.
 
 Optimize in this order, retaining changes only with correctness and sustained-clock measurements:
 

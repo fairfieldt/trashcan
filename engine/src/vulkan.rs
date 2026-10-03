@@ -214,6 +214,10 @@ impl Device {
                 include_bytes!(concat!(env!("OUT_DIR"), "/norm.spv")).as_slice(),
             ),
             (
+                "norm_fused",
+                include_bytes!(concat!(env!("OUT_DIR"), "/norm_fused.spv")).as_slice(),
+            ),
+            (
                 "norm_rope",
                 include_bytes!(concat!(env!("OUT_DIR"), "/norm_rope.spv")).as_slice(),
             ),
@@ -242,6 +246,11 @@ impl Device {
             (
                 "attention_merge",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge.spv")).as_slice(),
+            ),
+            (
+                "attention_merge_reference",
+                include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge_reference.spv"))
+                    .as_slice(),
             ),
             (
                 "geglu",
@@ -578,7 +587,20 @@ impl Device {
         y: u32,
         receive: &Buffer,
     ) -> Result<()> {
-        self.dispatch_receive(cmd, "norm", p, x, y, receive)
+        // The fixed-width kernel preserves norm's per-lane FMA chains and reduction tree.
+        let shader = if x == 1
+            && p.u[0] == 3840
+            && p.u[3] == 3840
+            && p.u[11] == 7
+            && p.ptr[1] != 0
+            && p.ptr[5] != 0
+            && p.ptr[7] != 0
+        {
+            "norm_fused"
+        } else {
+            "norm"
+        };
+        self.dispatch_receive(cmd, shader, p, x, y, receive)
     }
     pub fn dispatch_receive(
         &self,

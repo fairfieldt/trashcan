@@ -2,6 +2,40 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-03: validated fused norm and attention merge
+
+Evidence, source/binary manifests and reproduction are in
+`results/engine/validated-followup-20261003/`. Its recovery report identifies and summarizes
+all five unfinished Claude lenses: schedule, verification, Q4, head and platform. Unsafe or
+unaccepted experiments remain separate from the accepted implementation.
+
+- Scalar load-hoisted fused norm keeps the original arithmetic order and all three outputs.
+  Its one-column micro time falls from 65.80 to 19.17 us; 64 randomized records match the
+  generic norm bit for bit and pass an f64 CPU check.
+- Parallel partition-header loading and one output element per lane cut 768-key/32-partition
+  attention time from 164.2 to 102.1 us sliding and 226.5 to 100.7 us global. The unchanged
+  partial shader isolates the merge gain; 200 final cases compare every output bit with the
+  original serial merge, within a 400-case baseline/final sweep.
+- Two runs per phase give pooled tg256 **23.323 -> 26.062 -> 28.723 tok/s (+23.16%)**.
+  Prefill remains near 161 tok/s. Mean last-token per-GPU work falls from 39.86 to 31.62 ms;
+  semaphore gaps vary, so this is a kernel improvement rather than a demonstrated transport gain.
+- One paired pp4096/tg128 run raises decode **21.149 -> 26.389 tok/s (+24.78%)**, with
+  prefill unchanged near 117 tok/s. That percentage has single-pair confidence.
+- Final binary `2682f29e` passes six 132-tensor reference paths, 30 CPU tests, tokenizer/chat
+  fixtures, 10,000 bidirectional P2P payloads, the 250-token partition boundary and the
+  1700-token ring-wrap/verification/rollback check. Fresh baseline/norm/final b1 dumps have
+  identical bytes for all 133 activation/logit files and 32 greedy tokens. Both D700s sustain
+  850/1370 MHz during compute; complete clock logs include loading and idle periods.
+- Three ordinary chats rise from 25.50–25.62 to 30.28–30.88 tok/s; MTP rises from
+  29.34/24.70/37.15 to 31.75/26.44/39.09 tok/s, with all output bytes and proposal counts
+  identical. These single pairs give a pooled MTP/ordinary ratio of 1.156x -> 1.031x.
+  Verification remains about 76 ms/round, so a faster ordinary decoder makes M5 harder.
+  A separate 1788-token prompt improves 21.73 -> 27.59 tok/s with identical output.
+
+Fine partition thresholds, Q4 interleaving, conformant verification kernels and head packing
+remain leads requiring separate application acceptance. Hardware bounds are unchanged;
+neither M3 nor M5 is complete from these decode measurements.
+
 ## 2026-10-03: main-branch attention, prefix reuse and ceiling audit
 
 The performance branch is merged; this project now works directly on `main` as recorded in

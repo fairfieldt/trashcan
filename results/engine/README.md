@@ -2,7 +2,11 @@
 
 These are recorded outputs from incite. Model weights and build binaries are not stored here.
 
-- `main-tuning-20261003/` contains the latest main-branch Q4/attention and resident-prefix experiments,
+- `validated-followup-20261003/` independently validates the investigation's load-hoisted norm
+  and wide attention merge. Repeated tg256 rises from 23.32 to 28.72 tok/s; pp512 is unchanged.
+  Source/binary hashes, clocks, reference and greedy parity evidence, and a recovery summary
+  of all five unfinished Claude lenses are preserved alongside its README.
+- `main-tuning-20261003/` contains the preceding main-branch Q4/attention and resident-prefix experiments,
   repeated benchmarks, matching chat outputs, long-context checks and complete validation evidence.
   Its README distinguishes measured gains, unchanged workloads and rejected candidates.
 - `ceiling-audit-20261003/` validates exact tensor costs and separates theoretical bounds from practical
