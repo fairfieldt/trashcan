@@ -133,6 +133,9 @@ enum Cmd {
         draft: Option<PathBuf>,
         #[arg(long, default_value_t = 3)]
         draft_tokens: usize,
+        /// Report each prefill chunk and ordinary decode step, checking finite top scores.
+        #[arg(long)]
+        progress: bool,
     },
     /// Render the model's embedded Jinja chat template.
     Render {
@@ -497,6 +500,7 @@ fn main() -> Result<()> {
             profile,
             draft,
             draft_tokens,
+            progress,
         } => {
             anyhow::ensure!(pp > 0 && tg > 0, "pp and tg must be positive");
             validate_draft(draft.as_ref(), draft_tokens, batch)?;
@@ -508,7 +512,21 @@ fn main() -> Result<()> {
                 .transpose()?;
             let ids = vec![9259; pp];
             let start = std::time::Instant::now();
-            let mut logits = generation::prefill(&mut e, &ids, batch)?;
+            let mut logits = if progress {
+                let mut logits = Vec::new();
+                for chunk in ids.chunks(batch) {
+                    let chunk_start = std::time::Instant::now();
+                    logits = e.forward(chunk, None, false)?.remove(0);
+                    anyhow::ensure!(logits[0].0.is_finite(), "nonfinite prefill top score");
+                    eprintln!(
+                        "{}",
+                        serde_json::json!({"phase":"prefill","position":e.pos,"chunk_tokens":chunk.len(),"chunk_seconds":chunk_start.elapsed().as_secs_f64(),"elapsed_seconds":start.elapsed().as_secs_f64(),"top1_score":logits[0].0,"top1_id":logits[0].1})
+                    );
+                }
+                logits
+            } else {
+                generation::prefill(&mut e, &ids, batch)?
+            };
             let pp_time = start.elapsed().as_secs_f64();
             if let Some(p) = profile.as_ref() {
                 generation::profile(&e, &p.with_extension("prefill.tsv"))?;
@@ -530,8 +548,15 @@ fn main() -> Result<()> {
                     }
                 }
             } else {
-                for _ in 0..tg {
+                for step in 0..tg {
                     logits = e.forward(&[logits[0].1], None, false)?.remove(0);
+                    if progress {
+                        anyhow::ensure!(logits[0].0.is_finite(), "nonfinite decode top score");
+                        eprintln!(
+                            "{}",
+                            serde_json::json!({"phase":"decode","position":e.pos,"tokens":step+1,"elapsed_seconds":start.elapsed().as_secs_f64(),"top1_score":logits[0].0,"top1_id":logits[0].1})
+                        );
+                    }
                 }
             }
             let tg_time = start.elapsed().as_secs_f64();

@@ -1,0 +1,16 @@
+Measure prefill and decode without stopping on end-of-turn tokens
+
+Usage: trashcan bench [OPTIONS] <MODEL>
+
+Arguments:
+  <MODEL>  
+
+Options:
+      --pp <PP>                      [default: 512]
+      --tg <TG>                      [default: 128]
+      --batch <BATCH>                [default: 512]
+      --profile <PROFILE>            
+      --draft <DRAFT>                
+      --draft-tokens <DRAFT_TOKENS>  [default: 3]
+      --progress                     Report each prefill chunk and ordinary decode step, checking finite top scores
+  -h, --help                         Print help

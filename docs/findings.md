@@ -2,6 +2,27 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-03: 80,000-token context measurement
+
+`results/engine/context-80000-20261003/` records one fresh 4K/80K pair using the
+validated `5925623` kernels plus optional CLI progress logging. Inputs are repeated
+synthetic token IDs, batch512, followed by 128 forced greedy forwards; model loading
+is outside the timers.
+
+- 4K prefill/decode: 117.57 / 26.73 tok/s. At 80K: **28.75 / 12.35 tok/s**, with
+  prefill taking **46m 22.5s** and decode 10.361s. The last full prefill chunk runs
+  at 15.86 tok/s; global-attention bulk prefill cost grows with the causal prefix.
+- Last-step GPU0 work grows 34.04 -> 67.00 ms, almost entirely from the eight global
+  attention segments (4.01 -> 36.98 ms); the remaining GPU work stays near 30.03 ms.
+  The last 64 decode steps give 13.81 tok/s, while 12.35 is the full 128-step average.
+- Peak late physical VRAM is about 5.62 GiB per card, so this ordinary workload fits.
+  Card1's visible aperture reaches 256 MiB and GTT usage grows during graph recording
+  for the final batch128 chunk and decode. Its contribution to transient timing needs
+  a separate controlled test; this is not a clean demonstration of a context ceiling.
+- All 157 prefill chunks and 128 decode steps report finite top scores and correct
+  positions. Both GPUs sustain 850/1370 MHz and no new reset occurs. This is benchmark
+  sanity, with no independent 80K reference logits or retrieval-quality evaluation.
+
 ## 2026-10-03: validated fused norm and attention merge
 
 Evidence, source/binary manifests and reproduction are in

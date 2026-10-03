@@ -2,6 +2,10 @@
 
 These are recorded outputs from incite. Model weights and build binaries are not stored here.
 
+- `context-80000-20261003/` measures a fresh 4K/80K comparison with unchanged model kernels.
+  80,000-token prefill takes 46m 22.5s (28.75 tok/s); 128 decode steps run at 12.35 tok/s.
+  Per-chunk timing, profiles, clocks, memory pressure and the benchmark's validation limits
+  are preserved with source/binary hashes.
 - `validated-followup-20261003/` independently validates the investigation's load-hoisted norm
   and wide attention merge. Repeated tg256 rises from 23.32 to 28.72 tok/s; pp512 is unchanged.
   Source/binary hashes, clocks, reference and greedy parity evidence, and a recovery summary

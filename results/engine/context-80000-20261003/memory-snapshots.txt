@@ -1,0 +1,155 @@
+{"chunk_seconds": 7.489475695, "chunk_tokens": 512, "elapsed_seconds": 123.816239459, "phase": "prefill", "position": 11264, "top1_id": 236770, "top1_score": 26.82101821899414}
+Prefill cumulative 90.97 tok/s; latest four chunks 70.89 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 8.862282011, "chunk_tokens": 512, "elapsed_seconds": 189.800265747, "phase": "prefill", "position": 15360, "top1_id": 236770, "top1_score": 26.821212768554688}
+Prefill cumulative 80.93 tok/s; latest four chunks 59.52 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 10.29156054, "chunk_tokens": 512, "elapsed_seconds": 267.068353235, "phase": "prefill", "position": 19456, "top1_id": 236770, "top1_score": 26.821199417114258}
+Prefill cumulative 72.85 tok/s; latest four chunks 51.13 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 11.185705549, "chunk_tokens": 512, "elapsed_seconds": 321.134939792, "phase": "prefill", "position": 22016, "top1_id": 236770, "top1_score": 26.82123565673828}
+Prefill cumulative 68.56 tok/s; latest four chunks 46.95 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 12.056557469, "chunk_tokens": 512, "elapsed_seconds": 379.729038578, "phase": "prefill", "position": 24576, "top1_id": 236770, "top1_score": 26.82122230529785}
+Prefill cumulative 64.72 tok/s; latest four chunks 43.37 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 12.975145453, "chunk_tokens": 512, "elapsed_seconds": 442.878644181, "phase": "prefill", "position": 27136, "top1_id": 236770, "top1_score": 26.821020126342773}
+Prefill cumulative 61.27 tok/s; latest four chunks 40.25 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 13.910579854, "chunk_tokens": 512, "elapsed_seconds": 510.58561094, "phase": "prefill", "position": 29696, "top1_id": 236770, "top1_score": 26.82111167907715}
+Prefill cumulative 58.16 tok/s; latest four chunks 37.56 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 14.655380271, "chunk_tokens": 512, "elapsed_seconds": 568.078213783, "phase": "prefill", "position": 31744, "top1_id": 236770, "top1_score": 26.821063995361328}
+Prefill cumulative 55.88 tok/s; latest four chunks 35.62 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 15.541306862, "chunk_tokens": 512, "elapsed_seconds": 643.937844714, "phase": "prefill", "position": 34304, "top1_id": 236770, "top1_score": 26.82131004333496}
+Prefill cumulative 53.27 tok/s; latest four chunks 33.54 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 16.08608248, "chunk_tokens": 512, "elapsed_seconds": 691.648290184, "phase": "prefill", "position": 35840, "top1_id": 236770, "top1_score": 26.821178436279297}
+Prefill cumulative 51.82 tok/s; latest four chunks 32.38 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 16.672083827, "chunk_tokens": 512, "elapsed_seconds": 740.990370682, "phase": "prefill", "position": 37376, "top1_id": 236770, "top1_score": 26.821195602416992}
+Prefill cumulative 50.44 tok/s; latest four chunks 31.30 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 17.359400117, "chunk_tokens": 512, "elapsed_seconds": 809.378922814, "phase": "prefill", "position": 39424, "top1_id": 236770, "top1_score": 26.821165084838867}
+Prefill cumulative 48.71 tok/s; latest four chunks 29.95 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 18.244050276, "chunk_tokens": 512, "elapsed_seconds": 898.907530863, "phase": "prefill", "position": 41984, "top1_id": 236770, "top1_score": 26.821117401123047}
+Prefill cumulative 46.71 tok/s; latest four chunks 28.45 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 19.013740156, "chunk_tokens": 512, "elapsed_seconds": 973.859253578, "phase": "prefill", "position": 44032, "top1_id": 236770, "top1_score": 26.821102142333984}
+Prefill cumulative 45.21 tok/s; latest four chunks 27.32 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 19.699346324, "chunk_tokens": 512, "elapsed_seconds": 1051.67396957, "phase": "prefill", "position": 46080, "top1_id": 236770, "top1_score": 26.82132339477539}
+Prefill cumulative 43.82 tok/s; latest four chunks 26.32 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 20.130397427, "chunk_tokens": 512, "elapsed_seconds": 1091.743111994, "phase": "prefill", "position": 47104, "top1_id": 236770, "top1_score": 26.821176528930664}
+Prefill cumulative 43.15 tok/s; latest four chunks 25.82 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 20.821735909, "chunk_tokens": 512, "elapsed_seconds": 1173.954760089, "phase": "prefill", "position": 49152, "top1_id": 236770, "top1_score": 26.821205139160156}
+Prefill cumulative 41.87 tok/s; latest four chunks 24.91 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 21.213279994, "chunk_tokens": 512, "elapsed_seconds": 1216.235324816, "phase": "prefill", "position": 50176, "top1_id": 236770, "top1_score": 26.8212947845459}
+Prefill cumulative 41.26 tok/s; latest four chunks 24.46 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 21.743422945, "chunk_tokens": 512, "elapsed_seconds": 1280.9959585, "phase": "prefill", "position": 51712, "top1_id": 236770, "top1_score": 26.821128845214844}
+Prefill cumulative 40.37 tok/s; latest four chunks 23.82 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 22.309502458, "chunk_tokens": 512, "elapsed_seconds": 1347.420965595, "phase": "prefill", "position": 53248, "top1_id": 236770, "top1_score": 26.821096420288086}
+Prefill cumulative 39.52 tok/s; latest four chunks 23.23 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 23.075656236, "chunk_tokens": 512, "elapsed_seconds": 1438.615279982, "phase": "prefill", "position": 55296, "top1_id": 236770, "top1_score": 26.82095718383789}
+Prefill cumulative 38.44 tok/s; latest four chunks 22.46 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 23.444197059, "chunk_tokens": 512, "elapsed_seconds": 1485.369725934, "phase": "prefill", "position": 56320, "top1_id": 236770, "top1_score": 26.82103157043457}
+Prefill cumulative 37.92 tok/s; latest four chunks 22.09 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 23.986037083, "chunk_tokens": 512, "elapsed_seconds": 1556.750451012, "phase": "prefill", "position": 57856, "top1_id": 236770, "top1_score": 26.821067810058594}
+Prefill cumulative 37.16 tok/s; latest four chunks 21.60 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 24.40217328, "chunk_tokens": 512, "elapsed_seconds": 1605.37559916, "phase": "prefill", "position": 58880, "top1_id": 236770, "top1_score": 26.821096420288086}
+Prefill cumulative 36.68 tok/s; latest four chunks 21.25 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 24.949501764, "chunk_tokens": 512, "elapsed_seconds": 1679.641258951, "phase": "prefill", "position": 60416, "top1_id": 236770, "top1_score": 26.821002960205078}
+Prefill cumulative 35.97 tok/s; latest four chunks 20.76 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 25.556089267, "chunk_tokens": 512, "elapsed_seconds": 1755.614007483, "phase": "prefill", "position": 61952, "top1_id": 236770, "top1_score": 26.821016311645508}
+Prefill cumulative 35.29 tok/s; latest four chunks 20.29 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 26.110503141, "chunk_tokens": 512, "elapsed_seconds": 1833.354306282, "phase": "prefill", "position": 63488, "top1_id": 236770, "top1_score": 26.82103729248047}
+Prefill cumulative 34.63 tok/s; latest four chunks 19.83 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 26.836581794, "chunk_tokens": 512, "elapsed_seconds": 1939.631691746, "phase": "prefill", "position": 65536, "top1_id": 236770, "top1_score": 26.82107162475586}
+Prefill cumulative 33.79 tok/s; latest four chunks 19.27 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 27.19131245, "chunk_tokens": 512, "elapsed_seconds": 1993.864495779, "phase": "prefill", "position": 66560, "top1_id": 236770, "top1_score": 26.8211727142334}
+Prefill cumulative 33.38 tok/s; latest four chunks 19.01 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 27.826461533, "chunk_tokens": 512, "elapsed_seconds": 2076.794739237, "phase": "prefill", "position": 68096, "top1_id": 236770, "top1_score": 26.82105255126953}
+Prefill cumulative 32.79 tok/s; latest four chunks 18.60 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 28.322091571, "chunk_tokens": 512, "elapsed_seconds": 2161.280771651, "phase": "prefill", "position": 69632, "top1_id": 236770, "top1_score": 26.82112693786621}
+Prefill cumulative 32.22 tok/s; latest four chunks 18.23 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 28.955605924, "chunk_tokens": 512, "elapsed_seconds": 2247.711986295, "phase": "prefill", "position": 71168, "top1_id": 236770, "top1_score": 26.82101058959961}
+Prefill cumulative 31.66 tok/s; latest four chunks 17.85 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 29.71420195, "chunk_tokens": 512, "elapsed_seconds": 2365.499701228, "phase": "prefill", "position": 73216, "top1_id": 236770, "top1_score": 26.82111167907715}
+Prefill cumulative 30.95 tok/s; latest four chunks 17.39 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 30.195254199, "chunk_tokens": 512, "elapsed_seconds": 2425.655856102, "phase": "prefill", "position": 74240, "top1_id": 236770, "top1_score": 26.821138381958008}
+Prefill cumulative 30.61 tok/s; latest four chunks 17.14 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 30.722865195, "chunk_tokens": 512, "elapsed_seconds": 2517.171277325, "phase": "prefill", "position": 75776, "top1_id": 236770, "top1_score": 26.821069717407227}
+Prefill cumulative 30.10 tok/s; latest four chunks 16.83 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 31.116444271, "chunk_tokens": 512, "elapsed_seconds": 2579.172165281, "phase": "prefill", "position": 76800, "top1_id": 236770, "top1_score": 26.8210506439209}
+Prefill cumulative 29.78 tok/s; latest four chunks 16.62 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 31.673231961, "chunk_tokens": 512, "elapsed_seconds": 2673.560613259, "phase": "prefill", "position": 78336, "top1_id": 236770, "top1_score": 26.82113265991211}
+Prefill cumulative 29.30 tok/s; latest four chunks 16.32 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"chunk_seconds": 32.095342894, "chunk_tokens": 512, "elapsed_seconds": 2737.490856883, "phase": "prefill", "position": 79360, "top1_id": 236770, "top1_score": 26.821163177490234}
+Prefill cumulative 28.99 tok/s; latest four chunks 16.12 tok/s
+card0 {'vram_used': 5732.4, 'vis_vram_used': 53.22, 'gtt_used': 66.73}
+card1 {'vram_used': 5716.54, 'vis_vram_used': 250.8, 'gtt_used': 42.66}
+{"elapsed_seconds": 10.360905178, "phase": "decode", "position": 80128, "tokens": 128, "top1_id": 236770, "top1_score": 26.871627807617188}
+card0 {'vram_used': 28.43, 'vis_vram_used': 4.75, 'gtt_used': 29.21}
+card1 {'vram_used': 12.58, 'vis_vram_used': 12.07, 'gtt_used': 5.15}
