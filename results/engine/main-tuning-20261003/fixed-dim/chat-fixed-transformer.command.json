@@ -1,0 +1,18 @@
+[
+  "sudo",
+  "-n",
+  "python3",
+  "scripts/latency-run.py",
+  "target/release/trashcan",
+  "chat",
+  "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+  "Explain how a transformer works, step by step, in English.",
+  "--batch",
+  "128",
+  "--temperature",
+  "0",
+  "--max-tokens",
+  "128",
+  "--profile",
+  "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-transformer.tsv"
+]

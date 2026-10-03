@@ -1,0 +1,23 @@
+Generate chat responses. Omit PROMPT for interactive mode (/reset, /quit)
+
+Usage: trashcan chat [OPTIONS] <MODEL> [PROMPT]
+
+Arguments:
+  <MODEL>   
+  [PROMPT]  
+
+Options:
+      --system <SYSTEM>              
+      --thinking                     
+      --max-tokens <MAX_TOKENS>      [default: 256]
+      --context <CONTEXT>            [default: 8192]
+      --batch <BATCH>                [default: 512]
+      --temperature <TEMPERATURE>    [default: 1]
+      --top-k <TOP_K>                [default: 64]
+      --top-p <TOP_P>                [default: 0.95]
+      --seed <SEED>                  [default: 1]
+      --cpu-reduce                   
+      --profile <PROFILE>            
+      --draft <DRAFT>                
+      --draft-tokens <DRAFT_TOKENS>  [default: 3]
+  -h, --help                         Print help

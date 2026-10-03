@@ -1,0 +1,29 @@
+#version 460
+#include "common.glsl"
+// 64 x 64 outputs, one Q4 block per K step. Vector loads decode each packed word once.
+layout(local_size_x=256) in;
+shared vec4 tile_w[8][64],tile_x[8][64];
+void main(){uint nb=batch(),lane=gl_LocalInvocationID.x,group=lane/16;
+uint rr=(group%4)*4+(lane%4),tt=(group/4)*4+((lane%16)/4);
+uint row0=gl_WorkGroupID.x*64,tok0=gl_WorkGroupID.y*64;
+vec4 a0=vec4(0),a1=vec4(0),a2=vec4(0),a3=vec4(0);
+for(uint kb=0;kb<p.k;kb+=32){
+uint r=lane/4,j=lane%4;vec4 lo=vec4(0),hi=vec4(0);
+if(row0+r<p.n){uint block=(row0+r)*(p.k/32)+kb/32;
+uint qs=ww.words[p.stride+block*4+j];float scale=uintBitsToFloat(ww.words[block]);
+lo=vec4(ivec4(uvec4(qs,qs>>8,qs>>16,qs>>24)&15u)-8)*scale;
+hi=vec4(ivec4(uvec4(qs>>4,qs>>12,qs>>20,qs>>28)&15u)-8)*scale;}
+tile_w[j][r]=lo;tile_w[j+4][r]=hi;
+for(uint i=lane;i<512;i+=256){uint xr=i/8,xj=i%8;vec4 x=vec4(0);if(tok0+xr<nb)x=b_v4.v[(tok0+xr)*(p.k/4)+kb/4+xj];tile_x[xj][xr]=x;}barrier();
+[[unroll]]for(uint j=0;j<8;j++){
+vec4 b0=tile_x[j][tt],b1=tile_x[j][tt+16],b2=tile_x[j][tt+32],b3=tile_x[j][tt+48];
+vec4 w0=tile_w[j][rr],w1=tile_w[j][rr+16],w2=tile_w[j][rr+32],w3=tile_w[j][rr+48];
+[[unroll]]for(uint v=0;v<4;v++){vec4 x=vec4(b0[v],b1[v],b2[v],b3[v]);
+a0=fma(vec4(w0[v]),x,a0);a1=fma(vec4(w1[v]),x,a1);a2=fma(vec4(w2[v]),x,a2);a3=fma(vec4(w3[v]),x,a3);}
+}barrier();}
+for(uint t=0;t<4;t++){uint col=tok0+tt+t*16;if(col<nb){
+if(row0+rr<p.n)c_f.v[col*p.n+row0+rr]=a0[t];
+if(row0+rr+16<p.n)c_f.v[col*p.n+row0+rr+16]=a1[t];
+if(row0+rr+32<p.n)c_f.v[col*p.n+row0+rr+32]=a2[t];
+if(row0+rr+48<p.n)c_f.v[col*p.n+row0+rr+48]=a3[t];
+}}}

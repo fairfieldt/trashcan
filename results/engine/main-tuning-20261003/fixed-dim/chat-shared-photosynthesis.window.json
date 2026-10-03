@@ -1,0 +1,6 @@
+{
+  "command_epoch_started": 1791027769.679374,
+  "command_epoch_finished": 1791027805.691979,
+  "returncode": 0,
+  "note": "Whole command window includes model loading and cleanup, not just inference."
+}

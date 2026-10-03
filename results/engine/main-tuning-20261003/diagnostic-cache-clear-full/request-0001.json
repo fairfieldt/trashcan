@@ -1,0 +1,23 @@
+{
+  "assistant": false,
+  "cached_tokens": 0,
+  "epoch_started": 1791024987.6068661,
+  "last_forward_profile": "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/diagnostic-cache-clear-full/request-0001.tsv",
+  "last_profile_from_this_request": true,
+  "max_output_tokens": 1,
+  "note": "Diagnostic-only. Ordinary forward wall time includes graph recording; existing GPU timestamps only. Request wall time excludes diagnostic file writes. A cached no-forward request retains the previous forward profile.",
+  "ordinary_forward_count": 0,
+  "ordinary_forwards": [],
+  "output_tokens": 1,
+  "prefill_ms": 455.366355,
+  "prefill_tokens": 16,
+  "prompt_tokens": 16,
+  "reasoning_tokens": 0,
+  "request_index": 1,
+  "request_wall_ms": 455.53173200000003,
+  "requested_top_k": 64,
+  "response_id": "resp_18daffbcaa27a6900",
+  "stream": false,
+  "target_top_k": 1,
+  "temperature": 0.0
+}

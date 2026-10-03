@@ -1,0 +1,16 @@
+[
+  "sudo",
+  "-n",
+  "python3",
+  "scripts/latency-run.py",
+  "target/release/trashcan",
+  "attention-bench",
+  "--tokens",
+  "1536",
+  "--partitions",
+  "64",
+  "--iterations",
+  "100",
+  "--kernel",
+  "selected"
+]

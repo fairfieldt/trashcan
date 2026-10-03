@@ -1,0 +1,17 @@
+[
+  "sudo",
+  "-n",
+  "python3",
+  "scripts/latency-run.py",
+  "target/release/trashcan-shared-accepted",
+  "bench",
+  "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+  "--pp",
+  "512",
+  "--tg",
+  "256",
+  "--batch",
+  "512",
+  "--profile",
+  "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-shared-2.tsv"
+]

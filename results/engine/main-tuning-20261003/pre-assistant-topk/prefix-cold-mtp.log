@@ -1,0 +1,20 @@
+warmup: 0.435s, cached 0/16, output 1
+boundary_128_first: 16.922s, cached 0/1403, output 128
+boundary_128_repeat: 16.744s, cached 0/1403, output 128
+boundary_129_first: 16.729s, cached 0/1403, output 129
+boundary_129_repeat: 16.712s, cached 0/1403, output 129
+boundary_130_first: 16.917s, cached 0/1403, output 130
+boundary_130_repeat: 16.773s, cached 0/1403, output 130
+stochastic_first: 1.412s, cached 0/47, output 32
+stochastic_repeat: 1.257s, cached 0/47, output 32
+greedy_again_first: 2.121s, cached 0/47, output 32
+greedy_again_repeat: 1.662s, cached 0/47, output 32
+ring_wrap_first: 13.975s, cached 0/1403, output 32
+ring_wrap_repeat: 13.987s, cached 0/1403, output 32
+long_history: 14.662s, cached 0/1457, output 2
+changed_system: 14.647s, cached 0/1413, output 32
+shorter_prompt: 1.367s, cached 0/16, output 8
+tool_first: 1.488s, cached 0/77, output 13
+tool_repeat: 1.339s, cached 0/77, output 13
+tool_continuation: 2.177s, cached 0/110, output 22
+Prefix reuse checks passed

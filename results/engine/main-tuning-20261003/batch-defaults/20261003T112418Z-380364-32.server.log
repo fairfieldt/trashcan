@@ -1,0 +1,6 @@
+CPU latency request: 0 us, scoped to this command
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4214.4 MiB
+GPU1: target allocations 4214.4 MiB
+Responses server listening on http://127.0.0.1:18170 (model: gemma-4-12b)

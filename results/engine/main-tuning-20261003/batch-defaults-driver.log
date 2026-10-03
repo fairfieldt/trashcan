@@ -1,0 +1,115 @@
+32 short_first: 1.788s, cached 0/26, output 32, first delta None
+32 short_repeat: 1.230s, cached 26/26, output 32, first delta 0.0045482259993150365
+32 medium: 7.865s, cached 4/512, output 1, first delta None
+32 long_default_budget_first: 39.766s, cached 467/1763, output 256, first delta None
+32 long_default_budget_repeat: 46.462s, cached 0/1763, output 256, first delta 34.44406065400108
+32 long_history: 41.198s, cached 0/2041, output 2, first delta 41.15118353800062
+32 stochastic_first: 2.034s, cached 0/47, output 32, first delta None
+32 stochastic_repeat: 1.200s, cached 47/47, output 32, first delta 0.00252694500159123
+32 greedy_again_first: 1.233s, cached 46/47, output 32, first delta None
+32 greedy_again_repeat: 1.211s, cached 47/47, output 32, first delta 0.004662438001105329
+32 varied_1: 0.410s, cached 4/23, output 1, first delta None
+32 varied_2: 0.403s, cached 14/24, output 1, first delta None
+32 varied_3: 0.404s, cached 15/26, output 1, first delta None
+32 varied_4: 0.407s, cached 17/30, output 1, first delta None
+32 varied_5: 0.419s, cached 21/38, output 1, first delta None
+32 varied_6: 0.413s, cached 29/46, output 1, first delta None
+32 varied_7: 0.434s, cached 37/62, output 1, first delta None
+32 varied_8: 0.492s, cached 53/86, output 1, first delta None
+128 short_first: 1.752s, cached 0/26, output 32, first delta None
+128 short_repeat: 1.229s, cached 26/26, output 32, first delta 0.004212493000522954
+128 medium: 3.954s, cached 4/512, output 1, first delta None
+128 long_default_budget_first: 26.302s, cached 467/1763, output 256, first delta None
+128 long_default_budget_repeat: 29.441s, cached 0/1763, output 256, first delta 17.370375264999893
+128 long_history: 20.442s, cached 0/2041, output 2, first delta 20.393506268999772
+128 stochastic_first: 1.701s, cached 0/47, output 32, first delta None
+128 stochastic_repeat: 1.230s, cached 47/47, output 32, first delta 0.004849534001550637
+128 greedy_again_first: 1.229s, cached 46/47, output 32, first delta None
+128 greedy_again_repeat: 1.203s, cached 47/47, output 32, first delta 0.002464990997395944
+128 varied_1: 0.417s, cached 4/23, output 1, first delta None
+128 varied_2: 0.409s, cached 14/24, output 1, first delta None
+128 varied_3: 0.411s, cached 15/26, output 1, first delta None
+128 varied_4: 0.412s, cached 17/30, output 1, first delta None
+128 varied_5: 0.412s, cached 21/38, output 1, first delta None
+128 varied_6: 0.411s, cached 29/46, output 1, first delta None
+128 varied_7: 0.425s, cached 37/62, output 1, first delta None
+128 varied_8: 0.443s, cached 53/86, output 1, first delta None
+512 short_first: 1.756s, cached 0/26, output 32, first delta None
+512 short_repeat: 1.192s, cached 26/26, output 32, first delta 0.0025115649987128563
+512 medium: 3.194s, cached 4/512, output 1, first delta None
+512 long_default_budget_first: 22.639s, cached 467/1763, output 256, first delta None
+512 long_default_budget_repeat: 11.989s, cached 1763/1763, output 256, first delta 0.015613927000231342
+512 long_history: 2.783s, cached 1759/2041, output 2, first delta 2.7364541169990844
+512 stochastic_first: 1.655s, cached 0/47, output 32, first delta None
+512 stochastic_repeat: 1.251s, cached 47/47, output 32, first delta 0.002528441997128539
+512 greedy_again_first: 1.220s, cached 46/47, output 32, first delta None
+512 greedy_again_repeat: 1.183s, cached 47/47, output 32, first delta 0.0024684419986442663
+512 varied_1: 0.410s, cached 4/23, output 1, first delta None
+512 varied_2: 0.410s, cached 14/24, output 1, first delta None
+512 varied_3: 0.410s, cached 15/26, output 1, first delta None
+512 varied_4: 0.406s, cached 17/30, output 1, first delta None
+512 varied_5: 0.412s, cached 21/38, output 1, first delta None
+512 varied_6: 0.411s, cached 29/46, output 1, first delta None
+512 varied_7: 0.430s, cached 37/62, output 1, first delta None
+512 varied_8: 0.452s, cached 53/86, output 1, first delta None
+512-mtp short_first: 1.785s, cached 0/26, output 32, first delta None
+512-mtp short_repeat: 1.165s, cached 25/26, output 32, first delta 0.14348926099773962
+512-mtp medium: 3.156s, cached 4/512, output 1, first delta None
+512-mtp long_default_budget_first: 17.636s, cached 467/1763, output 256, first delta None
+512-mtp long_default_budget_repeat: 7.104s, cached 1762/1763, output 256, first delta 0.17603429000155302
+512-mtp long_history: 2.846s, cached 1759/2041, output 2, first delta 2.8457208440013346
+512-mtp stochastic_first: 1.233s, cached 0/47, output 32, first delta None
+512-mtp stochastic_repeat: 0.792s, cached 46/47, output 32, first delta 0.13855067699842039
+512-mtp greedy_again_first: 0.771s, cached 46/47, output 32, first delta None
+512-mtp greedy_again_repeat: 0.777s, cached 46/47, output 32, first delta 0.13043467899842653
+512-mtp varied_1: 0.417s, cached 4/23, output 1, first delta None
+512-mtp varied_2: 0.410s, cached 14/24, output 1, first delta None
+512-mtp varied_3: 0.411s, cached 15/26, output 1, first delta None
+512-mtp varied_4: 0.413s, cached 17/30, output 1, first delta None
+512-mtp varied_5: 0.412s, cached 21/38, output 1, first delta None
+512-mtp varied_6: 0.411s, cached 29/46, output 1, first delta None
+512-mtp varied_7: 0.426s, cached 37/62, output 1, first delta None
+512-mtp varied_8: 0.444s, cached 53/86, output 1, first delta None
+
+Summary: /home/fairfieldt/trashcan/results/engine/main-tuning-20261003/batch-defaults/20261003T112418Z-380364-summary.json
+  32: complete=True, protocol/cache=True, repeat output exact=True
+    card0: peak observed VRAM 4291.7 MiB
+    card1: peak observed VRAM 4275.8 MiB
+    peak tracked process RSS: 6948.1 MiB
+  128: complete=True, protocol/cache=True, repeat output exact=True
+    card0: peak observed VRAM 4465.0 MiB
+    card1: peak observed VRAM 4449.1 MiB
+    peak tracked process RSS: 6950.6 MiB
+  512: complete=True, protocol/cache=True, repeat output exact=True
+    card0: peak observed VRAM 4633.4 MiB
+    card1: peak observed VRAM 4617.5 MiB
+    peak tracked process RSS: 6964.1 MiB
+  512-mtp: complete=True, protocol/cache=True, repeat output exact=True
+    card0: peak observed VRAM 5054.3 MiB
+    card1: peak observed VRAM 5038.3 MiB
+    peak tracked process RSS: 6963.5 MiB
+  32 -> 128 medium: 1.989x
+  32 -> 128 long_default_budget_first: 1.512x
+  32 -> 128 long_default_budget_repeat: 1.578x
+  32 -> 128 long_history: 2.015x
+  32 -> 512 medium: 2.462x
+  32 -> 512 long_default_budget_first: 1.757x
+  32 -> 512 long_default_budget_repeat: 3.875x
+  32 -> 512 long_history: 14.802x
+  32 -> 512-mtp medium: 2.492x
+  32 -> 512-mtp long_default_budget_first: 2.255x
+  32 -> 512-mtp long_default_budget_repeat: 6.541x
+  32 -> 512-mtp long_history: 14.476x
+  128 -> 512 medium: 1.238x
+  128 -> 512 long_default_budget_first: 1.162x
+  128 -> 512 long_default_budget_repeat: 2.456x
+  128 -> 512 long_history: 7.345x
+  128 -> 512-mtp medium: 1.253x
+  128 -> 512-mtp long_default_budget_first: 1.491x
+  128 -> 512-mtp long_default_budget_repeat: 4.144x
+  128 -> 512-mtp long_history: 7.183x
+  512 -> 512-mtp medium: 1.012x
+  512 -> 512-mtp long_default_budget_first: 1.284x
+  512 -> 512-mtp long_default_budget_repeat: 1.688x
+  512 -> 512-mtp long_history: 0.978x
+  Cross-configuration comparisons excluded: 0

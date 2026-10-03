@@ -1,0 +1,5424 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-10-03T11:58:31.883591+00:00",
+  "summarizer_sha256": "457219ab757c5f3304aafecf0d618dacb30c2fb6f0b6927767250c2e60e98d8e",
+  "parsing_helper_sha256": "ee5174b17f3007e4ad8f4e869212c45afd9dd6e32d4fc1a40e81f7176f604889",
+  "scope": "Local saved evidence only; no GPU/device queries or workloads. Earlier 325b/shared-KV comparisons remain a separate phase.",
+  "probe_inventory_complete": true,
+  "application_inventory_complete": true,
+  "server_acceptance_complete": true,
+  "all_recorded_suites_complete": true,
+  "identity": {
+    "declared_build": {
+      "note": "Shared baseline is checkpoint cc3f50f; fixed-dimension source is identified by exact hashes. Model comment corrected without changing behavior.",
+      "driver_sha256": "25d2c772ea138ab6627413154aaf7fe28ae67e368a920cf60629bee3d47ab0e0",
+      "binaries": {
+        "shared": {
+          "path": "target/release/trashcan-shared-accepted",
+          "sha256": "325b087f565ea4d2b0394892735ab06f9b9e1ffe3b8a6f190bbd2f9e81ea719e"
+        },
+        "fixed": {
+          "path": "target/release/trashcan",
+          "sha256": "5b62aa4082717a95eae881219fc258a90879ea9b35b546c149153af3e6bb0b6e"
+        }
+      },
+      "source_sha256": {
+        "Cargo.lock": "86e8db55ee801702baf4752ae81accc178e21aab6e6e067efa34a9145e7b5247",
+        "Cargo.toml": "73e9483bd79f8a6cc0f7ccb86d05db14aa1791a11e63cc09c431ec1ddbb5365d",
+        "engine/Cargo.toml": "9e6682526e932a5eb6a07db2eac5db05d46230123bc94183b23a0fa2b13aefdc",
+        "engine/build.rs": "2f878a93787aea000595fb2cdd1037585c1db7266c073a318ba56d5beb18e06e",
+        "engine/shaders/LICENSE.llama.cpp": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+        "engine/shaders/attention.comp": "23dce69e779e8e66ceb1793fd4d0a3d13fca786e820f180dad50ce10b69a04d5",
+        "engine/shaders/attention_merge.comp": "94ef61990c8bda40b22a076af128d7de760c15e4cda3c7af38b47151fab1df9a",
+        "engine/shaders/attention_partial.comp": "f2c9c85a1961639927de944f98a5fd1a1813548a442c6a83461a3db57ab2407b",
+        "engine/shaders/attention_partial_heads2.comp": "fbb25d24b1a5777721b99a9805a377d4268ab9eba3c0cce0e28e717b9d2008ad",
+        "engine/shaders/attention_partial_heads8.comp": "1391ce0a2b60082eebbb106a07c0343988a172c514ece85e30d224f3e5088e05",
+        "engine/shaders/attention_shared_body.glsl": "21b50201a59285f001407e8e75db2b0d787d91bc14164ad17c8e4ffa77077b8a",
+        "engine/shaders/common.glsl": "5edc34a1fcbd093e7eb5d18cf66ca1002bba9048340371ce7befc55caa5fb847",
+        "engine/shaders/geglu.comp": "27d50f5c098b859569d871c71b813e5d1f27ab66aa3b90c27efd060c1f2315a0",
+        "engine/shaders/gemm.comp": "197b29a8be87d2b679833cd1865232de1c606758627b16bfe3f046a60203d54b",
+        "engine/shaders/headvec.comp": "8cdda48e3b6d36ad13d80bb6df026d27d979b97cc7198834fc289be085cb9d3b",
+        "engine/shaders/matvec.comp": "c7810482a76c0a43bee9c36ee4a03d12b9876fc4cadd806b5d87b7bfd1e20596",
+        "engine/shaders/matvecq4.comp": "8b6a2386ea4b03d87a8d89a9ed1bbb73a0a7dfec40b8fb4781e9966382a9292f",
+        "engine/shaders/matvecq4narrow.comp": "d2f524f37e955b38eda5ce201b039df3f7ccbb1cf82bec40a17e12d7c128db3d",
+        "engine/shaders/merge.comp": "66a4ec9a69d48b081a1a8afc6a7f3d896e2dfa1dfa870964bbe57e74eadb4f8b",
+        "engine/shaders/multivec.comp": "c01172ddb41abc1a21c17f9ba5ca545aa4f298d5b3d6840797068cdaa664b680",
+        "engine/shaders/multivec2.comp": "64c82a60494ed6edd311e26f512b048fd0b6ceaab1f7d81cf9a5b6068c4f6ab2",
+        "engine/shaders/multivec4.comp": "0ed66ad9d7b54ad1665e220c9b952124a83cfec372ed91673b5e2c0ec4f197bc",
+        "engine/shaders/multivec_body.glsl": "00186046551d0e48e9689e270406509f6f441e8691762ef401e1532af827d341",
+        "engine/shaders/norm.comp": "fab3b365393db83df7ffbe5ca47c101b84aa4e70c0043c174fee670d1bfe4ce0",
+        "engine/shaders/norm_rope.comp": "5a23be9f9f7af556db8737ae5c8d97f941fc04c2222cd0d41da57272e3687c8d",
+        "engine/shaders/rope.comp": "6050e34c720d19e9c73b8bdaa8b447da8479568a235a4636304aaf5b652f43b7",
+        "engine/shaders/topk.comp": "0b428dc5eca6f61d0ba2a50315c6ff2ac9ebdc2817465fc828430acf644c1175",
+        "engine/shaders/visibility.comp": "9bc39c4afd54ba7d273e190229429f8ee3a074375eb9f41abdb2d16223ab2715",
+        "engine/src/assistant.rs": "ba3628240533f1a5d98f9d8cf8cc11bf46718de07883e2e05d90f465f4aa5355",
+        "engine/src/generation.rs": "121570a57cefa23087733b9a5899e393dc0e50674f64e952ed31202327adf432",
+        "engine/src/gguf.rs": "3da4af4f5c1589c4b170404ead9e934f755defe908000d0544f2c08dbf95cee9",
+        "engine/src/gpu.rs": "04b2c2013faececf4b78b7f2d4185750545ea75c570849a793269b555a4c8009",
+        "engine/src/main.rs": "85b74729670adb8061fd879186c9aff90b8ac952ca2947ddbd748b06c7d68321",
+        "engine/src/micro.rs": "c1d5ad9af8c6aba1e83751760eb7ad5d5119385b660fb86122f83fee1a48c98b",
+        "engine/src/model.rs": "43ea5e37dcfc3390f41aed1bb0ade8cb1dde597bed5aaedb9303926d74cc175a",
+        "engine/src/quant.rs": "b2cf80198bbf1721da82b9b12f88f1cbbd278b20678752c920030120851704c4",
+        "engine/src/responses.rs": "cf3621811eb117405395294e169d6c99f1f2a32c06dd200ccec869f4c0e9a919",
+        "engine/src/server.rs": "08d2ebd510e17d6e3571f01c38d4fa374d1b92e423f8d6186ea57ca17d1f0972",
+        "engine/src/tokenizer.rs": "1e33e52e3c1defe2010523582e80ea4505ee4584c45ae50ed746f8a0d5e0028b",
+        "engine/src/visibility.rs": "d683cda1366297ce05b049dd1abba5cff8a3dfd327322e25dd470bde58dfcf91",
+        "engine/src/vulkan.rs": "460df48b3521aee4c5bbdf15a4cb466d2f14a4b20f3d5e038bbeac692a205db0"
+      },
+      "invocation": [
+        "validate",
+        "decode",
+        "chat",
+        "long",
+        "checks"
+      ]
+    },
+    "prior_shared_build": {
+      "note": "Core is checkpoint 63290a5; selected source is identified by exact hashes.",
+      "driver_sha256": "9287f7561d6614b992380856d53081497c1c8fa6999f2003a1d5ade37238ddd3",
+      "binaries": {
+        "core": {
+          "path": "target/release/trashcan-core-tuned",
+          "sha256": "926542ab49ac851b6836d0af9dd4113be82c0167dfff2e1a0e6e3896a0e93809"
+        },
+        "shared": {
+          "path": "target/release/trashcan",
+          "sha256": "325b087f565ea4d2b0394892735ab06f9b9e1ffe3b8a6f190bbd2f9e81ea719e"
+        }
+      },
+      "source_sha256": {
+        "Cargo.lock": "86e8db55ee801702baf4752ae81accc178e21aab6e6e067efa34a9145e7b5247",
+        "Cargo.toml": "73e9483bd79f8a6cc0f7ccb86d05db14aa1791a11e63cc09c431ec1ddbb5365d",
+        "engine/Cargo.toml": "9e6682526e932a5eb6a07db2eac5db05d46230123bc94183b23a0fa2b13aefdc",
+        "engine/build.rs": "2f878a93787aea000595fb2cdd1037585c1db7266c073a318ba56d5beb18e06e",
+        "engine/shaders/LICENSE.llama.cpp": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+        "engine/shaders/attention.comp": "23dce69e779e8e66ceb1793fd4d0a3d13fca786e820f180dad50ce10b69a04d5",
+        "engine/shaders/attention_merge.comp": "94ef61990c8bda40b22a076af128d7de760c15e4cda3c7af38b47151fab1df9a",
+        "engine/shaders/attention_partial.comp": "f2c9c85a1961639927de944f98a5fd1a1813548a442c6a83461a3db57ab2407b",
+        "engine/shaders/attention_partial_heads2.comp": "a763100c7d7411382d3be707a9593df43031289d44b07ebf1c20abd45e01d1e6",
+        "engine/shaders/attention_partial_heads8.comp": "d98325f9b8ce504744f7496cf4510062a44f13cb7fe10b371ee1897c8829dafe",
+        "engine/shaders/attention_shared_body.glsl": "25774e6551457cb3a67e0082f4e8d4a885b212c5eb4bf1c9632d30fc97576179",
+        "engine/shaders/common.glsl": "5edc34a1fcbd093e7eb5d18cf66ca1002bba9048340371ce7befc55caa5fb847",
+        "engine/shaders/geglu.comp": "27d50f5c098b859569d871c71b813e5d1f27ab66aa3b90c27efd060c1f2315a0",
+        "engine/shaders/gemm.comp": "197b29a8be87d2b679833cd1865232de1c606758627b16bfe3f046a60203d54b",
+        "engine/shaders/headvec.comp": "8cdda48e3b6d36ad13d80bb6df026d27d979b97cc7198834fc289be085cb9d3b",
+        "engine/shaders/matvec.comp": "c7810482a76c0a43bee9c36ee4a03d12b9876fc4cadd806b5d87b7bfd1e20596",
+        "engine/shaders/matvecq4.comp": "8b6a2386ea4b03d87a8d89a9ed1bbb73a0a7dfec40b8fb4781e9966382a9292f",
+        "engine/shaders/matvecq4narrow.comp": "d2f524f37e955b38eda5ce201b039df3f7ccbb1cf82bec40a17e12d7c128db3d",
+        "engine/shaders/merge.comp": "66a4ec9a69d48b081a1a8afc6a7f3d896e2dfa1dfa870964bbe57e74eadb4f8b",
+        "engine/shaders/multivec.comp": "c01172ddb41abc1a21c17f9ba5ca545aa4f298d5b3d6840797068cdaa664b680",
+        "engine/shaders/multivec2.comp": "64c82a60494ed6edd311e26f512b048fd0b6ceaab1f7d81cf9a5b6068c4f6ab2",
+        "engine/shaders/multivec4.comp": "0ed66ad9d7b54ad1665e220c9b952124a83cfec372ed91673b5e2c0ec4f197bc",
+        "engine/shaders/multivec_body.glsl": "00186046551d0e48e9689e270406509f6f441e8691762ef401e1532af827d341",
+        "engine/shaders/norm.comp": "fab3b365393db83df7ffbe5ca47c101b84aa4e70c0043c174fee670d1bfe4ce0",
+        "engine/shaders/norm_rope.comp": "5a23be9f9f7af556db8737ae5c8d97f941fc04c2222cd0d41da57272e3687c8d",
+        "engine/shaders/rope.comp": "6050e34c720d19e9c73b8bdaa8b447da8479568a235a4636304aaf5b652f43b7",
+        "engine/shaders/topk.comp": "0b428dc5eca6f61d0ba2a50315c6ff2ac9ebdc2817465fc828430acf644c1175",
+        "engine/shaders/visibility.comp": "9bc39c4afd54ba7d273e190229429f8ee3a074375eb9f41abdb2d16223ab2715",
+        "engine/src/assistant.rs": "ba3628240533f1a5d98f9d8cf8cc11bf46718de07883e2e05d90f465f4aa5355",
+        "engine/src/generation.rs": "121570a57cefa23087733b9a5899e393dc0e50674f64e952ed31202327adf432",
+        "engine/src/gguf.rs": "3da4af4f5c1589c4b170404ead9e934f755defe908000d0544f2c08dbf95cee9",
+        "engine/src/gpu.rs": "04b2c2013faececf4b78b7f2d4185750545ea75c570849a793269b555a4c8009",
+        "engine/src/main.rs": "85b74729670adb8061fd879186c9aff90b8ac952ca2947ddbd748b06c7d68321",
+        "engine/src/micro.rs": "c1d5ad9af8c6aba1e83751760eb7ad5d5119385b660fb86122f83fee1a48c98b",
+        "engine/src/model.rs": "d9598061b6ebb7169b0413561a3025a63ffcbc49fd481130691b3e45a905d897",
+        "engine/src/quant.rs": "b2cf80198bbf1721da82b9b12f88f1cbbd278b20678752c920030120851704c4",
+        "engine/src/responses.rs": "cf3621811eb117405395294e169d6c99f1f2a32c06dd200ccec869f4c0e9a919",
+        "engine/src/server.rs": "08d2ebd510e17d6e3571f01c38d4fa374d1b92e423f8d6186ea57ca17d1f0972",
+        "engine/src/tokenizer.rs": "1e33e52e3c1defe2010523582e80ea4505ee4584c45ae50ed746f8a0d5e0028b",
+        "engine/src/visibility.rs": "d683cda1366297ce05b049dd1abba5cff8a3dfd327322e25dd470bde58dfcf91",
+        "engine/src/vulkan.rs": "460df48b3521aee4c5bbdf15a4cb466d2f14a4b20f3d5e038bbeac692a205db0"
+      },
+      "invocation": [
+        "micro",
+        "validate",
+        "decode",
+        "chat",
+        "long",
+        "checks"
+      ]
+    },
+    "shared_baseline_matches_prior_build": true,
+    "fixed_binary_matches_probe": false,
+    "fixed_shader_sources_match_probe": true,
+    "changed_source_files_from_shared": [
+      {
+        "path": "engine/shaders/attention_partial_heads2.comp",
+        "shared_sha256": "a763100c7d7411382d3be707a9593df43031289d44b07ebf1c20abd45e01d1e6",
+        "fixed_sha256": "fbb25d24b1a5777721b99a9805a377d4268ab9eba3c0cce0e28e717b9d2008ad"
+      },
+      {
+        "path": "engine/shaders/attention_partial_heads8.comp",
+        "shared_sha256": "d98325f9b8ce504744f7496cf4510062a44f13cb7fe10b371ee1897c8829dafe",
+        "fixed_sha256": "1391ce0a2b60082eebbb106a07c0343988a172c514ece85e30d224f3e5088e05"
+      },
+      {
+        "path": "engine/shaders/attention_shared_body.glsl",
+        "shared_sha256": "25774e6551457cb3a67e0082f4e8d4a885b212c5eb4bf1c9632d30fc97576179",
+        "fixed_sha256": "21b50201a59285f001407e8e75db2b0d787d91bc14164ad17c8e4ffa77077b8a"
+      },
+      {
+        "path": "engine/src/model.rs",
+        "shared_sha256": "d9598061b6ebb7169b0413561a3025a63ffcbc49fd481130691b3e45a905d897",
+        "fixed_sha256": "43ea5e37dcfc3390f41aed1bb0ade8cb1dde597bed5aaedb9303926d74cc175a"
+      }
+    ],
+    "source_files_only_in_fixed": [],
+    "source_files_only_in_shared": [],
+    "complete": true,
+    "note": "The probe and application build are identified separately. Shader hashes must match; a different final binary is not silently attributed probe-wide identity. Fresh application validation establishes the final binary's evidence."
+  },
+  "probe": {
+    "complete": true,
+    "checks_complete": true,
+    "expected_runs": 16,
+    "expected_checks": 64,
+    "recorded_checks": 64,
+    "passing_rows": 64,
+    "missing_runs": [],
+    "extra_runs": [],
+    "duplicate_runs": [],
+    "declared_identity": {
+      "baseline_build": "../shared-kv/build.json",
+      "baseline_binary_sha256": "325b087f565ea4d2b0394892735ab06f9b9e1ffe3b8a6f190bbd2f9e81ea719e",
+      "candidate_manifest": "../shader-candidates/fixed-dim/source.json",
+      "runs": [
+        {
+          "name": "baseline-1-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027165.8095615,
+          "epoch_finished": 1791027167.2462525,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-1-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027167.2468112,
+          "epoch_finished": 1791027168.7107894,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-1-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027168.711406,
+          "epoch_finished": 1791027170.3428092,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-1-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027170.3438935,
+          "epoch_finished": 1791027171.9773114,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-1-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027171.977973,
+          "epoch_finished": 1791027174.014383,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-1-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027174.015101,
+          "epoch_finished": 1791027175.8135033,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-1-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027175.8146248,
+          "epoch_finished": 1791027179.154678,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-1-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027179.1558583,
+          "epoch_finished": 1791027182.4691408,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-2-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027182.4703667,
+          "epoch_finished": 1791027183.8974304,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-2-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027183.898648,
+          "epoch_finished": 1791027185.3358872,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-2-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027185.3364887,
+          "epoch_finished": 1791027186.966034,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-2-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027186.9667275,
+          "epoch_finished": 1791027188.6372697,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-2-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027188.6385024,
+          "epoch_finished": 1791027190.5027392,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-2-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027190.5039752,
+          "epoch_finished": 1791027192.326943,
+          "returncode": 0
+        },
+        {
+          "name": "baseline-2-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027192.3282168,
+          "epoch_finished": 1791027195.5697932,
+          "returncode": 0
+        },
+        {
+          "name": "fixed-dim-2-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027195.5710704,
+          "epoch_finished": 1791027199.0161388,
+          "returncode": 0
+        }
+      ],
+      "candidate_binary_sha256": "81c3ea310ec2a1e259c6c428db362670bacc81aa50e52239db1e711ac3f33fa8",
+      "candidate_shader_sha256": {
+        "attention_shared_body.glsl": "21b50201a59285f001407e8e75db2b0d787d91bc14164ad17c8e4ffa77077b8a",
+        "attention_partial_heads2.comp": "fbb25d24b1a5777721b99a9805a377d4268ab9eba3c0cce0e28e717b9d2008ad",
+        "attention_partial_heads8.comp": "1391ce0a2b60082eebbb106a07c0343988a172c514ece85e30d224f3e5088e05"
+      },
+      "completed": true,
+      "restored_binary_sha256": "325b087f565ea4d2b0394892735ab06f9b9e1ffe3b8a6f190bbd2f9e81ea719e",
+      "restored_binary_identical": true,
+      "restored_source_exact": true
+    },
+    "baseline_matches_prior_shared_build": true,
+    "restoration_exact": true,
+    "candidate_shader_manifest_matches": true,
+    "candidate_source_hash_checks": {
+      "attention_partial_heads2.comp": true,
+      "attention_partial_heads8.comp": true,
+      "attention_shared_body.glsl": true,
+      "common.glsl": true,
+      "LICENSE.llama.cpp": true
+    },
+    "cpu_compilation": {
+      "complete": true,
+      "declared": {
+        "scope": "CPU-only GLSL/SPIR-V checks; no GPU execution or numerical/performance claim",
+        "compiler": "shaderc 2025.2-1\nspirv-tools 2025.1~rc1-1\nglslang 15.1.0+1.4.309.0-1\n\nTarget: SPIR-V 1.0\n",
+        "validator": null,
+        "source_manifest_sha256": "56ea38eb463f3bdb95d77b131efb023be7dc2e4e0127a6a57b5f7a23fcade6b1",
+        "variants": [
+          {
+            "variant": "baseline",
+            "heads_per_group": 2,
+            "compile_command": [
+              "/usr/bin/glslc",
+              "--target-env=vulkan1.2",
+              "-O",
+              "-I/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim/baseline",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim/baseline/attention_partial_heads2.comp",
+              "-o",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim-probe/spv/baseline-attention_partial_heads2.spv"
+            ],
+            "compile_passed": true,
+            "validation_command": null,
+            "spirv_validation_passed": null,
+            "spirv_bytes": 9700,
+            "spirv_sha256": "aea04a44f281c35d6fdae4e3381ac0a65246ce798526681a83e48d83580b768f"
+          },
+          {
+            "variant": "baseline",
+            "heads_per_group": 8,
+            "compile_command": [
+              "/usr/bin/glslc",
+              "--target-env=vulkan1.2",
+              "-O",
+              "-I/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim/baseline",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim/baseline/attention_partial_heads8.comp",
+              "-o",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim-probe/spv/baseline-attention_partial_heads8.spv"
+            ],
+            "compile_passed": true,
+            "validation_command": null,
+            "spirv_validation_passed": null,
+            "spirv_bytes": 9716,
+            "spirv_sha256": "5cd40eef1f2095a6b6163257686402f466a25bd1b6989dff46ebbb2347cd3f05"
+          },
+          {
+            "variant": "fixed-dim",
+            "heads_per_group": 2,
+            "compile_command": [
+              "/usr/bin/glslc",
+              "--target-env=vulkan1.2",
+              "-O",
+              "-I/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim/attention_partial_heads2.comp",
+              "-o",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim-probe/spv/fixed-dim-attention_partial_heads2.spv"
+            ],
+            "compile_passed": true,
+            "validation_command": null,
+            "spirv_validation_passed": null,
+            "spirv_bytes": 7952,
+            "spirv_sha256": "8dd46928300494b04a7640ea5bfae594a139506ca045de50e07db0a5a8c83634"
+          },
+          {
+            "variant": "fixed-dim",
+            "heads_per_group": 8,
+            "compile_command": [
+              "/usr/bin/glslc",
+              "--target-env=vulkan1.2",
+              "-O",
+              "-I/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/shader-candidates/fixed-dim/attention_partial_heads8.comp",
+              "-o",
+              "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim-probe/spv/fixed-dim-attention_partial_heads8.spv"
+            ],
+            "compile_passed": true,
+            "validation_command": null,
+            "spirv_validation_passed": null,
+            "spirv_bytes": 10480,
+            "spirv_sha256": "ff8c0e901be2d9d69f32c6f6cb39e99ffef178f5dc0cc2bcfc259b3d3be838d0"
+          }
+        ]
+      },
+      "source_manifest_matches": true,
+      "spirv_file_checks": [
+        {
+          "file": "fixed-dim-probe/spv/baseline-attention_partial_heads2.spv",
+          "sha256": "aea04a44f281c35d6fdae4e3381ac0a65246ce798526681a83e48d83580b768f",
+          "bytes": 9700,
+          "matches": true
+        },
+        {
+          "file": "fixed-dim-probe/spv/baseline-attention_partial_heads8.spv",
+          "sha256": "5cd40eef1f2095a6b6163257686402f466a25bd1b6989dff46ebbb2347cd3f05",
+          "bytes": 9716,
+          "matches": true
+        },
+        {
+          "file": "fixed-dim-probe/spv/fixed-dim-attention_partial_heads2.spv",
+          "sha256": "8dd46928300494b04a7640ea5bfae594a139506ca045de50e07db0a5a8c83634",
+          "bytes": 7952,
+          "matches": true
+        },
+        {
+          "file": "fixed-dim-probe/spv/fixed-dim-attention_partial_heads8.spv",
+          "sha256": "ff8c0e901be2d9d69f32c6f6cb39e99ffef178f5dc0cc2bcfc259b3d3be838d0",
+          "bytes": 10480,
+          "matches": true
+        }
+      ],
+      "separate_spirv_validator_available": false,
+      "separate_spirv_validation_complete": false
+    },
+    "runs": {
+      "baseline-1-128-p16": {
+        "label": "baseline",
+        "repetition": 1,
+        "tokens": 128,
+        "partitions": 16,
+        "command_record": {
+          "name": "baseline-1-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027165.8095615,
+          "epoch_finished": 1791027167.2462525,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.08608444411605834,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.1246533328578186,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.08591259226486207,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.12451703656204223,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          }
+        ]
+      },
+      "baseline-1-1536-p64": {
+        "label": "baseline",
+        "repetition": 1,
+        "tokens": 1536,
+        "partitions": 64,
+        "command_record": {
+          "name": "baseline-1-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027171.977973,
+          "epoch_finished": 1791027174.014383,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.29745925812454227,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.4114933317636108,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.29723110997726443,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.4114281465786743,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          }
+        ]
+      },
+      "baseline-1-768-p32": {
+        "label": "baseline",
+        "repetition": 1,
+        "tokens": 768,
+        "partitions": 32,
+        "command_record": {
+          "name": "baseline-1-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027168.711406,
+          "epoch_finished": 1791027170.3428092,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.18543111040374757,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.26237036936950686,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.1854637029962158,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.2624814804801941,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          }
+        ]
+      },
+      "baseline-1-8192-p64": {
+        "label": "baseline",
+        "repetition": 1,
+        "tokens": 8192,
+        "partitions": 64,
+        "command_record": {
+          "name": "baseline-1-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027175.8146248,
+          "epoch_finished": 1791027179.154678,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8158799968876648,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.8714118485276795,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8462518486236573,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.8716296263046265,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          }
+        ]
+      },
+      "baseline-2-128-p16": {
+        "label": "baseline",
+        "repetition": 2,
+        "tokens": 128,
+        "partitions": 16,
+        "command_record": {
+          "name": "baseline-2-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027182.4703667,
+          "epoch_finished": 1791027183.8974304,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.08608740707901001,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.12499703656021119,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.08591407374633789,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.12472444396865845,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          }
+        ]
+      },
+      "baseline-2-1536-p64": {
+        "label": "baseline",
+        "repetition": 2,
+        "tokens": 1536,
+        "partitions": 64,
+        "command_record": {
+          "name": "baseline-2-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027188.6385024,
+          "epoch_finished": 1791027190.5027392,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.2971244433110046,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.41101777620986935,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.29706222108901975,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.4113303688012695,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          }
+        ]
+      },
+      "baseline-2-768-p32": {
+        "label": "baseline",
+        "repetition": 2,
+        "tokens": 768,
+        "partitions": 32,
+        "command_record": {
+          "name": "baseline-2-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027185.3364887,
+          "epoch_finished": 1791027186.966034,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.18543407336669923,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.26235259159179686,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.18557481410690307,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.2623881471472168,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          }
+        ]
+      },
+      "baseline-2-8192-p64": {
+        "label": "baseline",
+        "repetition": 2,
+        "tokens": 8192,
+        "partitions": 64,
+        "command_record": {
+          "name": "baseline-2-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027192.3282168,
+          "epoch_finished": 1791027195.5697932,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8160355524426269,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.8715407374160766,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8164562931817627,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.8713525892686462,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          }
+        ]
+      },
+      "fixed-dim-1-128-p16": {
+        "label": "fixed-dim",
+        "repetition": 1,
+        "tokens": 128,
+        "partitions": 16,
+        "command_record": {
+          "name": "fixed-dim-1-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027167.2468112,
+          "epoch_finished": 1791027168.7107894,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.07674666637390136,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.11138814772323608,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.07650222193038941,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.1113940736491394,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          }
+        ]
+      },
+      "fixed-dim-1-1536-p64": {
+        "label": "fixed-dim",
+        "repetition": 1,
+        "tokens": 1536,
+        "partitions": 64,
+        "command_record": {
+          "name": "fixed-dim-1-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027174.015101,
+          "epoch_finished": 1791027175.8135033,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.2976681470126343,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.3861688874157715,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.29715703590347287,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.38629777630416867,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          }
+        ]
+      },
+      "fixed-dim-1-768-p32": {
+        "label": "fixed-dim",
+        "repetition": 1,
+        "tokens": 768,
+        "partitions": 32,
+        "command_record": {
+          "name": "fixed-dim-1-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027170.3438935,
+          "epoch_finished": 1791027171.9773114,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.16401629567062379,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.22667259172790527,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.1641155549295044,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.2268518509864807,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          }
+        ]
+      },
+      "fixed-dim-1-8192-p64": {
+        "label": "fixed-dim",
+        "repetition": 1,
+        "tokens": 8192,
+        "partitions": 64,
+        "command_record": {
+          "name": "fixed-dim-1-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027179.1558583,
+          "epoch_finished": 1791027182.4691408,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8166592561439514,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.7463674045602418,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8166814783660888,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.7462666638198853,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          }
+        ]
+      },
+      "fixed-dim-2-128-p16": {
+        "label": "fixed-dim",
+        "repetition": 2,
+        "tokens": 128,
+        "partitions": 16,
+        "command_record": {
+          "name": "fixed-dim-2-128-p16",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "128",
+            "--partitions",
+            "16",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027183.898648,
+          "epoch_finished": 1791027185.3358872,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.07674074044799804,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.11156740698181153,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.07646370341201783,
+            "partial_shader": "attention_partial_heads2_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.11123259216827393,
+            "partial_shader": "attention_partial_heads8_16",
+            "partitions": 16,
+            "pass": true,
+            "tokens": 128
+          }
+        ]
+      },
+      "fixed-dim-2-1536-p64": {
+        "label": "fixed-dim",
+        "repetition": 2,
+        "tokens": 1536,
+        "partitions": 64,
+        "command_record": {
+          "name": "fixed-dim-2-1536-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "1536",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027190.5039752,
+          "epoch_finished": 1791027192.326943,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.2974770359022522,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.38608888741607666,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.29736148034713744,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.38620888741561893,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 1536
+          }
+        ]
+      },
+      "fixed-dim-2-768-p32": {
+        "label": "fixed-dim",
+        "repetition": 2,
+        "tokens": 768,
+        "partitions": 32,
+        "command_record": {
+          "name": "fixed-dim-2-768-p32",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "768",
+            "--partitions",
+            "32",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027186.9667275,
+          "epoch_finished": 1791027188.6372697,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.1643229623361206,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.22677777691268922,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 2,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.16428592529922487,
+            "partial_shader": "attention_partial_heads2",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.22678518432006836,
+            "partial_shader": "attention_partial_heads8",
+            "partitions": 32,
+            "pass": true,
+            "tokens": 768
+          }
+        ]
+      },
+      "fixed-dim-2-8192-p64": {
+        "label": "fixed-dim",
+        "repetition": 2,
+        "tokens": 8192,
+        "partitions": 64,
+        "command_record": {
+          "name": "fixed-dim-2-8192-p64",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-fixed-dim",
+            "attention-bench",
+            "--tokens",
+            "8192",
+            "--partitions",
+            "64",
+            "--iterations",
+            "100",
+            "--kernel",
+            "selected"
+          ],
+          "epoch_started": 1791027195.5710704,
+          "epoch_finished": 1791027199.0161388,
+          "returncode": 0
+        },
+        "status": "complete_pass",
+        "row_inventory_complete": true,
+        "invalid_lines": [],
+        "rows": [
+          {
+            "dim": 256,
+            "gpu": 0,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8170518487350463,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 0,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.746460737893219,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 256,
+            "gpu": 1,
+            "heads_per_group": 1,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 4,
+            "milliseconds": 0.8174370339187622,
+            "partial_shader": "attention_partial64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          },
+          {
+            "dim": 512,
+            "gpu": 1,
+            "heads_per_group": 8,
+            "iterations": 100,
+            "kernel": "selected",
+            "kv_heads": 1,
+            "milliseconds": 0.7464814786338806,
+            "partial_shader": "attention_partial_heads8_64",
+            "partitions": 64,
+            "pass": true,
+            "tokens": 8192
+          }
+        ]
+      }
+    },
+    "comparisons": [
+      {
+        "tokens": 128,
+        "partitions": 16,
+        "dim": 256,
+        "kv_heads": 4,
+        "role": "selected_shared_kernel",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.0859985181904602,
+            "fixed_mean_ms": 0.0766244441521454,
+            "speedup": 1.1223379058998673,
+            "time_reduction_percent": 10.900273906527225,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.08608444411605834,
+                "fixed_ms": 0.07674666637390136,
+                "speedup": 1.12167014130183
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.08591259226486207,
+                "fixed_ms": 0.07650222193038941,
+                "speedup": 1.123007804179012
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.08600074041267394,
+            "fixed_mean_ms": 0.07660222193000793,
+            "speedup": 1.1226925048108072,
+            "time_reduction_percent": 10.928415775919243,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.08608740707901001,
+                "fixed_ms": 0.07674074044799804,
+                "speedup": 1.1217953667953668
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.08591407374633789,
+                "fixed_ms": 0.07646370341201783,
+                "speedup": 1.123592893263325
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.08599962930156707,
+        "fixed_mean_ms": 0.07661333304107666,
+        "speedup": 1.1225151796418764,
+        "time_reduction_percent": 10.914345023019035
+      },
+      {
+        "tokens": 128,
+        "partitions": 16,
+        "dim": 512,
+        "kv_heads": 1,
+        "role": "selected_shared_kernel",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.12458518470993041,
+            "fixed_mean_ms": 0.11139111068618773,
+            "speedup": 1.1184481772599715,
+            "time_reduction_percent": 10.59040371008978,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.1246533328578186,
+                "fixed_ms": 0.11138814772323608,
+                "speedup": 1.1190897362575978
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.12451703656204223,
+                "fixed_ms": 0.1113940736491394,
+                "speedup": 1.1178066523919086
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.12486074026443482,
+            "fixed_mean_ms": 0.11139999957504274,
+            "speedup": 1.120832502161048,
+            "time_reduction_percent": 10.780602982878696,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.12499703656021119,
+                "fixed_ms": 0.11156740698181153,
+                "speedup": 1.120372337600255
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.12472444396865845,
+                "fixed_ms": 0.11123259216827393,
+                "speedup": 1.1212940518366585
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.12472296248718262,
+        "fixed_mean_ms": 0.11139555513061523,
+        "speedup": 1.119640387275242,
+        "time_reduction_percent": 10.685608400247071
+      },
+      {
+        "tokens": 768,
+        "partitions": 32,
+        "dim": 256,
+        "kv_heads": 4,
+        "role": "selected_shared_kernel",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.1854474066999817,
+            "fixed_mean_ms": 0.16406592530006409,
+            "speedup": 1.1303224990857335,
+            "time_reduction_percent": 11.529673981641997,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.18543111040374757,
+                "fixed_ms": 0.16401629567062379,
+                "speedup": 1.1305651651597404
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.1854637029962158,
+                "fixed_ms": 0.1641155549295044,
+                "speedup": 1.1300799797793786
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.18550444373680114,
+            "fixed_mean_ms": 0.16430444381767273,
+            "speedup": 1.129028767734693,
+            "time_reduction_percent": 11.428297614911887,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.18543407336669923,
+                "fixed_ms": 0.1643229623361206,
+                "speedup": 1.1284732865720624
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.18557481410690307,
+                "fixed_ms": 0.16428592529922487,
+                "speedup": 1.12958437412641
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.1854759252183914,
+        "fixed_mean_ms": 0.1641851845588684,
+        "speedup": 1.1296751635461313,
+        "time_reduction_percent": 11.47897800453288
+      },
+      {
+        "tokens": 768,
+        "partitions": 32,
+        "dim": 512,
+        "kv_heads": 1,
+        "role": "selected_shared_kernel",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.2624259249248505,
+            "fixed_mean_ms": 0.22676222135719298,
+            "speedup": 1.1572735676789851,
+            "time_reduction_percent": 13.590007762331535,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.26237036936950686,
+                "fixed_ms": 0.22667259172790527,
+                "speedup": 1.1574860787953258
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.2624814804801941,
+                "fixed_ms": 0.2268518509864807,
+                "speedup": 1.157061224489796
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.26237036936950686,
+            "fixed_mean_ms": 0.2267814806163788,
+            "speedup": 1.1569303130767097,
+            "time_reduction_percent": 13.564370412196503,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.26235259159179686,
+                "fixed_ms": 0.22677777691268922,
+                "speedup": 1.156870814959987
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.2623881471472168,
+                "fixed_ms": 0.22678518432006836,
+                "speedup": 1.1569898092500654
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.2623981471471787,
+        "fixed_mean_ms": 0.22677185098678587,
+        "speedup": 1.1571019330898735,
+        "time_reduction_percent": 13.577190444264108
+      },
+      {
+        "tokens": 1536,
+        "partitions": 64,
+        "dim": 256,
+        "kv_heads": 4,
+        "role": "scalar_control",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.2973451840509034,
+            "fixed_mean_ms": 0.29741259145805354,
+            "speedup": 0.9997733538892227,
+            "time_reduction_percent": -0.022669749088199964,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.29745925812454227,
+                "fixed_ms": 0.2976681470126343,
+                "speedup": 0.9992982491066363
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.29723110997726443,
+                "fixed_ms": 0.29715703590347287,
+                "speedup": 1.0002492758536454
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.2970933322000122,
+            "fixed_mean_ms": 0.29741925812469483,
+            "speedup": 0.9989041532591478,
+            "time_reduction_percent": -0.10970489383557158,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.2971244433110046,
+                "fixed_ms": 0.2974770359022522,
+                "speedup": 0.9988147233275396
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.29706222108901975,
+                "fixed_ms": 0.29736148034713744,
+                "speedup": 0.9989936179434931
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.2972192581254578,
+        "fixed_mean_ms": 0.2974159247913742,
+        "speedup": 0.9993387487033375,
+        "time_reduction_percent": -0.06616888392654285
+      },
+      {
+        "tokens": 1536,
+        "partitions": 64,
+        "dim": 512,
+        "kv_heads": 1,
+        "role": "selected_shared_kernel",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.41146073917114256,
+            "fixed_mean_ms": 0.3862333318599701,
+            "speedup": 1.0653164945388989,
+            "time_reduction_percent": 6.131182129792312,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.4114933317636108,
+                "fixed_ms": 0.3861688874157715,
+                "speedup": 1.0655786759966852
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.4114281465786743,
+                "fixed_ms": 0.38629777630416867,
+                "speedup": 1.0650544005583873
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.4111740725055694,
+            "fixed_mean_ms": 0.3861488874158478,
+            "speedup": 1.0648070884191665,
+            "time_reduction_percent": 6.086275074988501,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.41101777620986935,
+                "fixed_ms": 0.38608888741607666,
+                "speedup": 1.0645677449061814
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.4113303688012695,
+                "fixed_ms": 0.38620888741561893,
+                "speedup": 1.0650463575650864
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.41131740583835597,
+        "fixed_mean_ms": 0.3861911096379089,
+        "speedup": 1.065061819325684,
+        "time_reduction_percent": 6.1087364268560655
+      },
+      {
+        "tokens": 8192,
+        "partitions": 64,
+        "dim": 256,
+        "kv_heads": 4,
+        "role": "scalar_control",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.831065922755661,
+            "fixed_mean_ms": 0.8166703672550202,
+            "speedup": 1.0176271309427167,
+            "time_reduction_percent": 1.7321797352618962,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.8158799968876648,
+                "fixed_ms": 0.8166592561439514,
+                "speedup": 0.9990457963337536
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.8462518486236573,
+                "fixed_ms": 0.8166814783660888,
+                "speedup": 1.036207959946305
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.8162459228121948,
+            "fixed_mean_ms": 0.8172444413269042,
+            "speedup": 0.9987781886737728,
+            "time_reduction_percent": -0.12233059753232745,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.8160355524426269,
+                "fixed_ms": 0.8170518487350463,
+                "speedup": 0.9987561422277021
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.8164562931817627,
+                "fixed_ms": 0.8174370339187622,
+                "speedup": 0.9988002247313192
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.823655922783928,
+        "fixed_mean_ms": 0.8169574042909622,
+        "speedup": 1.0081993485312486,
+        "time_reduction_percent": 0.813266596848472
+      },
+      {
+        "tokens": 8192,
+        "partitions": 64,
+        "dim": 512,
+        "kv_heads": 1,
+        "role": "selected_shared_kernel",
+        "eligible": true,
+        "repetitions": [
+          {
+            "repetition": 1,
+            "eligible": true,
+            "baseline_mean_ms": 0.871520737416153,
+            "fixed_mean_ms": 0.7463170341900636,
+            "speedup": 1.1677620870089962,
+            "time_reduction_percent": 14.366118653388327,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.8714118485276795,
+                "fixed_ms": 0.7463674045602418,
+                "speedup": 1.1675373860158238
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.8716296263046265,
+                "fixed_ms": 0.7462666638198853,
+                "speedup": 1.1679868183352193
+              }
+            ]
+          },
+          {
+            "repetition": 2,
+            "eligible": true,
+            "baseline_mean_ms": 0.8714466633423614,
+            "fixed_mean_ms": 0.7464711082635498,
+            "speedup": 1.1674218247636285,
+            "time_reduction_percent": 14.341159400333037,
+            "per_gpu": [
+              {
+                "gpu": 0,
+                "baseline_ms": 0.8715407374160766,
+                "fixed_ms": 0.746460737893219,
+                "speedup": 1.1675640702495331
+              },
+              {
+                "gpu": 1,
+                "baseline_ms": 0.8713525892686462,
+                "fixed_ms": 0.7464814786338806,
+                "speedup": 1.1672795832299678
+              }
+            ]
+          }
+        ],
+        "baseline_mean_ms": 0.8714837003792573,
+        "fixed_mean_ms": 0.7463940712268067,
+        "speedup": 1.1675919383266906,
+        "time_reduction_percent": 14.353639557230203
+      }
+    ],
+    "note": "Means average two GPUs and two equal-iteration repetitions. Payload/cache micro results do not establish application gains. Scalar controls are separate."
+  },
+  "validation": {
+    "status": "complete_logged_checks",
+    "cpu_test_suites": [
+      {
+        "passed": 30,
+        "failed": 0,
+        "ignored": 0,
+        "measured": 0,
+        "filtered_out": 0
+      }
+    ],
+    "full_cpu_suite_at_least_30_tests_passed": true,
+    "tokenizer_fixture_counts": [
+      30
+    ],
+    "chat_fixture_counts": [
+      4
+    ],
+    "p2p_records": [
+      {
+        "rounds": 10000,
+        "elements": 3840
+      }
+    ],
+    "activation_logit_greedy_passes": 6,
+    "expected_activation_passes": 6,
+    "errors": [],
+    "note": "Pass evidence parsed from the full validation log, including unfiltered CPU test counts. No separate validation-process exit/window file is emitted by the driver."
+  },
+  "decode": {
+    "complete": true,
+    "runs": {
+      "shared": [
+        {
+          "name": "decode-shared-1",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "bench",
+            "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+            "--pp",
+            "512",
+            "--tg",
+            "256",
+            "--batch",
+            "512",
+            "--profile",
+            "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-shared-1.tsv"
+          ],
+          "command_window": {
+            "command_epoch_started": 1791027466.6010945,
+            "command_epoch_finished": 1791027510.5206766,
+            "returncode": 0,
+            "note": "Whole command window includes model loading and cleanup, not just inference."
+          },
+          "command_completed": true,
+          "status": "complete",
+          "metrics": {
+            "device_allocations_mib": [
+              4556.094512939453,
+              4556.094512939453
+            ],
+            "draft_accepted": null,
+            "draft_proposed": null,
+            "last_forward_submit_wait_read_ms": [
+              0.093913,
+              43.652632,
+              0.027062999999998283
+            ],
+            "pp": 512,
+            "pp_seconds": 3.176765923,
+            "pp_tok_s": 161.17020026344574,
+            "tg": 256,
+            "tg_seconds": 11.206662366,
+            "tg_tok_s": 22.843554275060598
+          },
+          "expected_workload_matches": true,
+          "command_matches_build_and_workload": true,
+          "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+        },
+        {
+          "name": "decode-shared-2",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "bench",
+            "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+            "--pp",
+            "512",
+            "--tg",
+            "256",
+            "--batch",
+            "512",
+            "--profile",
+            "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-shared-2.tsv"
+          ],
+          "command_window": {
+            "command_epoch_started": 1791027552.4272182,
+            "command_epoch_finished": 1791027593.648868,
+            "returncode": 0,
+            "note": "Whole command window includes model loading and cleanup, not just inference."
+          },
+          "command_completed": true,
+          "status": "complete",
+          "metrics": {
+            "device_allocations_mib": [
+              4556.094512939453,
+              4556.094512939453
+            ],
+            "draft_accepted": null,
+            "draft_proposed": null,
+            "last_forward_submit_wait_read_ms": [
+              0.186992,
+              45.159322,
+              0.05232499999999618
+            ],
+            "pp": 512,
+            "pp_seconds": 3.176200432,
+            "pp_tok_s": 161.19889501985938,
+            "tg": 256,
+            "tg_seconds": 11.270668273,
+            "tg_tok_s": 22.71382617242611
+          },
+          "expected_workload_matches": true,
+          "command_matches_build_and_workload": true,
+          "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+        }
+      ],
+      "fixed": [
+        {
+          "name": "decode-fixed-1",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan",
+            "bench",
+            "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+            "--pp",
+            "512",
+            "--tg",
+            "256",
+            "--batch",
+            "512",
+            "--profile",
+            "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-fixed-1.tsv"
+          ],
+          "command_window": {
+            "command_epoch_started": 1791027510.5212495,
+            "command_epoch_finished": 1791027552.426486,
+            "returncode": 0,
+            "note": "Whole command window includes model loading and cleanup, not just inference."
+          },
+          "command_completed": true,
+          "status": "complete",
+          "metrics": {
+            "device_allocations_mib": [
+              4556.094512939453,
+              4556.094512939453
+            ],
+            "draft_accepted": null,
+            "draft_proposed": null,
+            "last_forward_submit_wait_read_ms": [
+              0.095751,
+              42.569995999999996,
+              0.02730400000000799
+            ],
+            "pp": 512,
+            "pp_seconds": 3.220476904,
+            "pp_tok_s": 158.98266476125613,
+            "tg": 256,
+            "tg_seconds": 11.021526972,
+            "tg_tok_s": 23.227271561405566
+          },
+          "expected_workload_matches": true,
+          "command_matches_build_and_workload": true,
+          "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+        },
+        {
+          "name": "decode-fixed-2",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan",
+            "bench",
+            "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+            "--pp",
+            "512",
+            "--tg",
+            "256",
+            "--batch",
+            "512",
+            "--profile",
+            "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-fixed-2.tsv"
+          ],
+          "command_window": {
+            "command_epoch_started": 1791027593.6494594,
+            "command_epoch_finished": 1791027633.6712122,
+            "returncode": 0,
+            "note": "Whole command window includes model loading and cleanup, not just inference."
+          },
+          "command_completed": true,
+          "status": "complete",
+          "metrics": {
+            "device_allocations_mib": [
+              4556.094512939453,
+              4556.094512939453
+            ],
+            "draft_accepted": null,
+            "draft_proposed": null,
+            "last_forward_submit_wait_read_ms": [
+              0.106147,
+              42.417525,
+              0.029853000000002794
+            ],
+            "pp": 512,
+            "pp_seconds": 3.181777867,
+            "pp_tok_s": 160.9163245838871,
+            "tg": 256,
+            "tg_seconds": 10.844790172,
+            "tg_tok_s": 23.60580480948009
+          },
+          "expected_workload_matches": true,
+          "command_matches_build_and_workload": true,
+          "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+        }
+      ]
+    },
+    "pooled": {
+      "shared": {
+        "complete_runs": 2,
+        "expected_runs": 2,
+        "complete": true,
+        "pp": {
+          "tokens": 1024,
+          "seconds": 6.3529663549999995,
+          "weighted_tok_s": 161.184546364562,
+          "mean_tok_s": 161.18454764165256,
+          "min_tok_s": 161.17020026344574,
+          "max_tok_s": 161.19889501985938,
+          "tokens_per_run": [
+            512
+          ]
+        },
+        "tg": {
+          "tokens": 512,
+          "seconds": 22.477330639,
+          "weighted_tok_s": 22.778505518428343,
+          "mean_tok_s": 22.778690223743354,
+          "min_tok_s": 22.71382617242611,
+          "max_tok_s": 22.843554275060598,
+          "tokens_per_run": [
+            256
+          ]
+        }
+      },
+      "fixed": {
+        "complete_runs": 2,
+        "expected_runs": 2,
+        "complete": true,
+        "pp": {
+          "tokens": 1024,
+          "seconds": 6.402254771,
+          "weighted_tok_s": 159.94365057735064,
+          "mean_tok_s": 159.94949467257163,
+          "min_tok_s": 158.98266476125613,
+          "max_tok_s": 160.9163245838871,
+          "tokens_per_run": [
+            512
+          ]
+        },
+        "tg": {
+          "tokens": 512,
+          "seconds": 21.866317144,
+          "weighted_tok_s": 23.415008418118095,
+          "mean_tok_s": 23.41653818544283,
+          "min_tok_s": 23.227271561405566,
+          "max_tok_s": 23.60580480948009,
+          "tokens_per_run": [
+            256
+          ]
+        }
+      }
+    },
+    "matching_model_paths": true,
+    "comparison": {
+      "pp_speedup": 0.9923013972790868,
+      "tg_speedup": 1.0279431369707204
+    },
+    "note": "Exact phase seconds; pooled throughput is total tokens / total seconds. Two labels belong to this fresh phase only.",
+    "identity_verified": true
+  },
+  "chat": {
+    "complete": true,
+    "expected_runs": 12,
+    "parity_inventory_complete_and_exact": true,
+    "runs": {
+      "chat-shared-transformer": {
+        "name": "chat-shared-transformer",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan-shared-accepted",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain how a transformer works, step by step, in English.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-shared-transformer.tsv"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027633.6718943,
+          "command_epoch_finished": 1791027666.7066348,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "transformer",
+        "label": "shared",
+        "draft": false,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 26,
+        "output_tokens": 128,
+        "prefill_tok_s": 54.21,
+        "decode_tok_s": 25.1,
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": null,
+        "status": "complete"
+      },
+      "chat-shared-transformer-mtp": {
+        "name": "chat-shared-transformer-mtp",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan-shared-accepted",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain how a transformer works, step by step, in English.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-shared-transformer-mtp.tsv",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027666.7082927,
+          "command_epoch_finished": 1791027700.1392717,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "transformer",
+        "label": "shared",
+        "draft": true,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 26,
+        "output_tokens": 128,
+        "prefill_tok_s": 53.82,
+        "decode_tok_s": 29.01,
+        "mtp": {
+          "accepted": 82,
+          "proposed": 138,
+          "rounds": 46,
+          "draft_ms_per_proposal": 4.04,
+          "verify_ms_per_round": 83.41
+        },
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors",
+        "status": "complete"
+      },
+      "chat-fixed-transformer": {
+        "name": "chat-fixed-transformer",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain how a transformer works, step by step, in English.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-transformer.tsv"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027700.1411347,
+          "command_epoch_finished": 1791027733.9121435,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "transformer",
+        "label": "fixed",
+        "draft": false,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 26,
+        "output_tokens": 128,
+        "prefill_tok_s": 55.6,
+        "decode_tok_s": 25.62,
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": null,
+        "status": "complete"
+      },
+      "chat-fixed-transformer-mtp": {
+        "name": "chat-fixed-transformer-mtp",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain how a transformer works, step by step, in English.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-transformer-mtp.tsv",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027733.9136302,
+          "command_epoch_finished": 1791027769.677568,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "transformer",
+        "label": "fixed",
+        "draft": true,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 26,
+        "output_tokens": 128,
+        "prefill_tok_s": 53.93,
+        "decode_tok_s": 29.69,
+        "mtp": {
+          "accepted": 82,
+          "proposed": 138,
+          "rounds": 46,
+          "draft_ms_per_proposal": 3.93,
+          "verify_ms_per_round": 81.64
+        },
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors",
+        "status": "complete"
+      },
+      "chat-shared-photosynthesis": {
+        "name": "chat-shared-photosynthesis",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan-shared-accepted",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain photosynthesis to a ten-year-old in three short paragraphs.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-shared-photosynthesis.tsv"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027769.679374,
+          "command_epoch_finished": 1791027805.691979,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "photosynthesis",
+        "label": "shared",
+        "draft": false,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 27,
+        "output_tokens": 128,
+        "prefill_tok_s": 53.61,
+        "decode_tok_s": 25.35,
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": null,
+        "status": "complete"
+      },
+      "chat-shared-photosynthesis-mtp": {
+        "name": "chat-shared-photosynthesis-mtp",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan-shared-accepted",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain photosynthesis to a ten-year-old in three short paragraphs.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-shared-photosynthesis-mtp.tsv",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027805.6937838,
+          "command_epoch_finished": 1791027843.9093883,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "photosynthesis",
+        "label": "shared",
+        "draft": true,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 27,
+        "output_tokens": 128,
+        "prefill_tok_s": 56.1,
+        "decode_tok_s": 24.23,
+        "mtp": {
+          "accepted": 72,
+          "proposed": 165,
+          "rounds": 55,
+          "draft_ms_per_proposal": 4.04,
+          "verify_ms_per_round": 83.56
+        },
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors",
+        "status": "complete"
+      },
+      "chat-fixed-photosynthesis": {
+        "name": "chat-fixed-photosynthesis",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain photosynthesis to a ten-year-old in three short paragraphs.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-photosynthesis.tsv"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027843.910277,
+          "command_epoch_finished": 1791027876.9019928,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "photosynthesis",
+        "label": "fixed",
+        "draft": false,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 27,
+        "output_tokens": 128,
+        "prefill_tok_s": 53.42,
+        "decode_tok_s": 25.67,
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": null,
+        "status": "complete"
+      },
+      "chat-fixed-photosynthesis-mtp": {
+        "name": "chat-fixed-photosynthesis-mtp",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Explain photosynthesis to a ten-year-old in three short paragraphs.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-photosynthesis-mtp.tsv",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027876.903456,
+          "command_epoch_finished": 1791027913.127307,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "photosynthesis",
+        "label": "fixed",
+        "draft": true,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 27,
+        "output_tokens": 128,
+        "prefill_tok_s": 56.08,
+        "decode_tok_s": 24.8,
+        "mtp": {
+          "accepted": 72,
+          "proposed": 165,
+          "rounds": 55,
+          "draft_ms_per_proposal": 3.96,
+          "verify_ms_per_round": 81.58
+        },
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors",
+        "status": "complete"
+      },
+      "chat-shared-csv": {
+        "name": "chat-shared-csv",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan-shared-accepted",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Write a Python function that reads a CSV file and returns rows where the age column is at least 18. Include a short example.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-shared-csv.tsv"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027913.1291916,
+          "command_epoch_finished": 1791027947.7615988,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "csv",
+        "label": "shared",
+        "draft": false,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 41,
+        "output_tokens": 128,
+        "prefill_tok_s": 77.03,
+        "decode_tok_s": 24.93,
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": null,
+        "status": "complete"
+      },
+      "chat-shared-csv-mtp": {
+        "name": "chat-shared-csv-mtp",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan-shared-accepted",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Write a Python function that reads a CSV file and returns rows where the age column is at least 18. Include a short example.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-shared-csv-mtp.tsv",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027947.7627516,
+          "command_epoch_finished": 1791027979.8258865,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "csv",
+        "label": "shared",
+        "draft": true,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 41,
+        "output_tokens": 128,
+        "prefill_tok_s": 80.54,
+        "decode_tok_s": 36.32,
+        "mtp": {
+          "accepted": 90,
+          "proposed": 111,
+          "rounds": 37,
+          "draft_ms_per_proposal": 4.13,
+          "verify_ms_per_round": 82.37
+        },
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors",
+        "status": "complete"
+      },
+      "chat-fixed-csv": {
+        "name": "chat-fixed-csv",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Write a Python function that reads a CSV file and returns rows where the age column is at least 18. Include a short example.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-csv.tsv"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791027979.827702,
+          "command_epoch_finished": 1791028014.4243834,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "csv",
+        "label": "fixed",
+        "draft": false,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 41,
+        "output_tokens": 128,
+        "prefill_tok_s": 82.75,
+        "decode_tok_s": 25.92,
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": null,
+        "status": "complete"
+      },
+      "chat-fixed-csv-mtp": {
+        "name": "chat-fixed-csv-mtp",
+        "command": [
+          "sudo",
+          "-n",
+          "python3",
+          "scripts/latency-run.py",
+          "target/release/trashcan",
+          "chat",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "Write a Python function that reads a CSV file and returns rows where the age column is at least 18. Include a short example.",
+          "--batch",
+          "128",
+          "--temperature",
+          "0",
+          "--max-tokens",
+          "128",
+          "--profile",
+          "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-csv-mtp.tsv",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "command_window": {
+          "command_epoch_started": 1791028014.426279,
+          "command_epoch_finished": 1791028048.2616704,
+          "returncode": 0,
+          "note": "Whole command window includes model loading and cleanup, not just inference."
+        },
+        "command_completed": true,
+        "prompt": "csv",
+        "label": "fixed",
+        "draft": true,
+        "exact_shared_ordinary_output": true,
+        "input_tokens": 41,
+        "output_tokens": 128,
+        "prefill_tok_s": 86.0,
+        "decode_tok_s": 36.96,
+        "mtp": {
+          "accepted": 90,
+          "proposed": 111,
+          "rounds": 37,
+          "draft_ms_per_proposal": 3.98,
+          "verify_ms_per_round": 81.28
+        },
+        "command_matches_build_and_workload": true,
+        "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "assistant_path": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors",
+        "status": "complete"
+      }
+    },
+    "groups": {
+      "shared_ordinary": {
+        "complete_runs": 3,
+        "expected_runs": 3,
+        "all_outputs_exact": true,
+        "tokens": 384,
+        "seconds_reconstructed_from_rounded_rates": 15.283287511829606,
+        "weighted_decode_tok_s_approx": 25.125484271808368
+      },
+      "shared_mtp": {
+        "complete_runs": 3,
+        "expected_runs": 3,
+        "all_outputs_exact": true,
+        "tokens": 384,
+        "seconds_reconstructed_from_rounded_rates": 13.219208092898231,
+        "weighted_decode_tok_s_approx": 29.048638715831753
+      },
+      "fixed_ordinary": {
+        "complete_runs": 3,
+        "expected_runs": 3,
+        "all_outputs_exact": true,
+        "tokens": 384,
+        "seconds_reconstructed_from_rounded_rates": 14.920733811403746,
+        "weighted_decode_tok_s_approx": 25.73599964007891
+      },
+      "fixed_mtp": {
+        "complete_runs": 3,
+        "expected_runs": 3,
+        "all_outputs_exact": true,
+        "tokens": 384,
+        "seconds_reconstructed_from_rounded_rates": 12.93570968339273,
+        "weighted_decode_tok_s_approx": 29.68526732576499
+      }
+    },
+    "comparisons": [
+      {
+        "prompt": "transformer",
+        "draft": false,
+        "eligible": true,
+        "decode_speedup": 1.0207171314741035
+      },
+      {
+        "prompt": "transformer",
+        "draft": true,
+        "eligible": true,
+        "decode_speedup": 1.0234401930368837
+      },
+      {
+        "prompt": "photosynthesis",
+        "draft": false,
+        "eligible": true,
+        "decode_speedup": 1.0126232741617358
+      },
+      {
+        "prompt": "photosynthesis",
+        "draft": true,
+        "eligible": true,
+        "decode_speedup": 1.0235245563351218
+      },
+      {
+        "prompt": "csv",
+        "draft": false,
+        "eligible": true,
+        "decode_speedup": 1.0397111913357402
+      },
+      {
+        "prompt": "csv",
+        "draft": true,
+        "eligible": true,
+        "decode_speedup": 1.0176211453744493
+      }
+    ],
+    "note": "CLI rates are rounded to two decimals; reconstructed seconds and pooled rates are approximate. Output equality is checked independently from saved text.",
+    "identity_verified": true
+  },
+  "long_context": {
+    "complete": true,
+    "runs": {
+      "shared": [
+        {
+          "name": "long-shared",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan-shared-accepted",
+            "bench",
+            "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+            "--pp",
+            "4096",
+            "--tg",
+            "128",
+            "--batch",
+            "512",
+            "--profile",
+            "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/long-shared.tsv"
+          ],
+          "command_window": {
+            "command_epoch_started": 1791028048.2635167,
+            "command_epoch_finished": 1791028119.495379,
+            "returncode": 0,
+            "note": "Whole command window includes model loading and cleanup, not just inference."
+          },
+          "command_completed": true,
+          "status": "complete",
+          "metrics": {
+            "device_allocations_mib": [
+              4556.094512939453,
+              4556.094512939453
+            ],
+            "draft_accepted": null,
+            "draft_proposed": null,
+            "last_forward_submit_wait_read_ms": [
+              0.094281,
+              47.653259999999996,
+              0.027346000000001425
+            ],
+            "pp": 4096,
+            "pp_seconds": 34.85385409,
+            "pp_tok_s": 117.51928465136925,
+            "tg": 128,
+            "tg_seconds": 6.228099322,
+            "tg_tok_s": 20.552016495282217
+          },
+          "expected_workload_matches": true,
+          "command_matches_build_and_workload": true,
+          "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+        }
+      ],
+      "fixed": [
+        {
+          "name": "long-fixed",
+          "command": [
+            "sudo",
+            "-n",
+            "python3",
+            "scripts/latency-run.py",
+            "target/release/trashcan",
+            "bench",
+            "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+            "--pp",
+            "4096",
+            "--tg",
+            "128",
+            "--batch",
+            "512",
+            "--profile",
+            "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/long-fixed.tsv"
+          ],
+          "command_window": {
+            "command_epoch_started": 1791028119.4960344,
+            "command_epoch_finished": 1791028187.4138167,
+            "returncode": 0,
+            "note": "Whole command window includes model loading and cleanup, not just inference."
+          },
+          "command_completed": true,
+          "status": "complete",
+          "metrics": {
+            "device_allocations_mib": [
+              4556.094512939453,
+              4556.094512939453
+            ],
+            "draft_accepted": null,
+            "draft_proposed": null,
+            "last_forward_submit_wait_read_ms": [
+              0.09565799999999999,
+              45.828692000000004,
+              0.02709000000000117
+            ],
+            "pp": 4096,
+            "pp_seconds": 34.905848018,
+            "pp_tok_s": 117.34423406323788,
+            "tg": 128,
+            "tg_seconds": 5.99266266,
+            "tg_tok_s": 21.359453595540785
+          },
+          "expected_workload_matches": true,
+          "command_matches_build_and_workload": true,
+          "model_path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+        }
+      ]
+    },
+    "pooled": {
+      "shared": {
+        "complete_runs": 1,
+        "expected_runs": 1,
+        "complete": true,
+        "pp": {
+          "tokens": 4096,
+          "seconds": 34.85385409,
+          "weighted_tok_s": 117.51928465136925,
+          "mean_tok_s": 117.51928465136925,
+          "min_tok_s": 117.51928465136925,
+          "max_tok_s": 117.51928465136925,
+          "tokens_per_run": [
+            4096
+          ]
+        },
+        "tg": {
+          "tokens": 128,
+          "seconds": 6.228099322,
+          "weighted_tok_s": 20.552016495282217,
+          "mean_tok_s": 20.552016495282217,
+          "min_tok_s": 20.552016495282217,
+          "max_tok_s": 20.552016495282217,
+          "tokens_per_run": [
+            128
+          ]
+        }
+      },
+      "fixed": {
+        "complete_runs": 1,
+        "expected_runs": 1,
+        "complete": true,
+        "pp": {
+          "tokens": 4096,
+          "seconds": 34.905848018,
+          "weighted_tok_s": 117.34423406323788,
+          "mean_tok_s": 117.34423406323788,
+          "min_tok_s": 117.34423406323788,
+          "max_tok_s": 117.34423406323788,
+          "tokens_per_run": [
+            4096
+          ]
+        },
+        "tg": {
+          "tokens": 128,
+          "seconds": 5.99266266,
+          "weighted_tok_s": 21.359453595540785,
+          "mean_tok_s": 21.359453595540785,
+          "min_tok_s": 21.359453595540785,
+          "max_tok_s": 21.359453595540785,
+          "tokens_per_run": [
+            128
+          ]
+        }
+      }
+    },
+    "matching_model_paths": true,
+    "comparison": {
+      "pp_speedup": 0.9985104522321534,
+      "tg_speedup": 1.0392874879427971
+    },
+    "note": "Exact phase seconds; pooled throughput is total tokens / total seconds. Two labels belong to this fresh phase only.",
+    "identity_verified": true
+  },
+  "boundary_checks": [
+    {
+      "name": "check-250",
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan",
+        "check-batches",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--tokens",
+        "250",
+        "--batch",
+        "128",
+        "--draft",
+        "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791028187.4148946,
+        "command_epoch_finished": 1791028243.2559478,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "command_completed": true,
+      "status": "complete_pass",
+      "metrics": {
+        "batch": 128,
+        "draft_accepted": 42,
+        "draft_proposed": 146,
+        "greedy_tokens": 64,
+        "max_logit_error": 0.0059490203857421875,
+        "pass": true,
+        "relative_logit_error": 9.830356004374719e-05,
+        "serial_chunked_greedy_common_prefix": 64,
+        "tokens": 250,
+        "top64_overlap": 64
+      },
+      "command_matches_build_and_workload": true
+    },
+    {
+      "name": "check-2300",
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan",
+        "check-batches",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--tokens",
+        "2300",
+        "--batch",
+        "512",
+        "--draft",
+        "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791028243.257031,
+        "command_epoch_finished": 1791028440.2181203,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "command_completed": true,
+      "status": "complete_pass",
+      "metrics": {
+        "batch": 512,
+        "draft_accepted": 42,
+        "draft_proposed": 139,
+        "greedy_tokens": 64,
+        "max_logit_error": 0.07851791381835938,
+        "pass": true,
+        "relative_logit_error": 0.0013516709160725923,
+        "serial_chunked_greedy_common_prefix": 64,
+        "tokens": 2300,
+        "top64_overlap": 64
+      },
+      "command_matches_build_and_workload": true
+    }
+  ],
+  "batch_defaults": {
+    "inventory": [
+      {
+        "file": "20261003T115400Z-447949-summary.json",
+        "run_id": "20261003T115400Z-447949",
+        "completed": true,
+        "matches_selected_build": true,
+        "source_mismatches": [],
+        "compared_source_files": 34
+      }
+    ],
+    "selection": "latest_complete_matching_invocation",
+    "identity_match_note": "Exact selected binary hash and all overlapping declared source hashes must match. Entire declared identities are retained; files absent from one manifest are listed, not silently verified.",
+    "run_id": "20261003T115400Z-447949",
+    "declared_identity": {
+      "git_head": null,
+      "git_status": null,
+      "binary": "/home/fairfieldt/trashcan/target/release/trashcan",
+      "binary_sha256": "5b62aa4082717a95eae881219fc258a90879ea9b35b546c149153af3e6bb0b6e",
+      "source_sha256": {
+        "engine/src/assistant.rs": "ba3628240533f1a5d98f9d8cf8cc11bf46718de07883e2e05d90f465f4aa5355",
+        "engine/src/generation.rs": "121570a57cefa23087733b9a5899e393dc0e50674f64e952ed31202327adf432",
+        "engine/src/gguf.rs": "3da4af4f5c1589c4b170404ead9e934f755defe908000d0544f2c08dbf95cee9",
+        "engine/src/gpu.rs": "04b2c2013faececf4b78b7f2d4185750545ea75c570849a793269b555a4c8009",
+        "engine/src/main.rs": "85b74729670adb8061fd879186c9aff90b8ac952ca2947ddbd748b06c7d68321",
+        "engine/src/micro.rs": "c1d5ad9af8c6aba1e83751760eb7ad5d5119385b660fb86122f83fee1a48c98b",
+        "engine/src/model.rs": "43ea5e37dcfc3390f41aed1bb0ade8cb1dde597bed5aaedb9303926d74cc175a",
+        "engine/src/quant.rs": "b2cf80198bbf1721da82b9b12f88f1cbbd278b20678752c920030120851704c4",
+        "engine/src/responses.rs": "cf3621811eb117405395294e169d6c99f1f2a32c06dd200ccec869f4c0e9a919",
+        "engine/src/server.rs": "08d2ebd510e17d6e3571f01c38d4fa374d1b92e423f8d6186ea57ca17d1f0972",
+        "engine/src/tokenizer.rs": "1e33e52e3c1defe2010523582e80ea4505ee4584c45ae50ed746f8a0d5e0028b",
+        "engine/src/visibility.rs": "d683cda1366297ce05b049dd1abba5cff8a3dfd327322e25dd470bde58dfcf91",
+        "engine/src/vulkan.rs": "460df48b3521aee4c5bbdf15a4cb466d2f14a4b20f3d5e038bbeac692a205db0",
+        "engine/shaders/attention.comp": "23dce69e779e8e66ceb1793fd4d0a3d13fca786e820f180dad50ce10b69a04d5",
+        "engine/shaders/attention_merge.comp": "94ef61990c8bda40b22a076af128d7de760c15e4cda3c7af38b47151fab1df9a",
+        "engine/shaders/attention_partial.comp": "f2c9c85a1961639927de944f98a5fd1a1813548a442c6a83461a3db57ab2407b",
+        "engine/shaders/attention_partial_heads2.comp": "fbb25d24b1a5777721b99a9805a377d4268ab9eba3c0cce0e28e717b9d2008ad",
+        "engine/shaders/attention_partial_heads8.comp": "1391ce0a2b60082eebbb106a07c0343988a172c514ece85e30d224f3e5088e05",
+        "engine/shaders/geglu.comp": "27d50f5c098b859569d871c71b813e5d1f27ab66aa3b90c27efd060c1f2315a0",
+        "engine/shaders/gemm.comp": "197b29a8be87d2b679833cd1865232de1c606758627b16bfe3f046a60203d54b",
+        "engine/shaders/headvec.comp": "8cdda48e3b6d36ad13d80bb6df026d27d979b97cc7198834fc289be085cb9d3b",
+        "engine/shaders/matvec.comp": "c7810482a76c0a43bee9c36ee4a03d12b9876fc4cadd806b5d87b7bfd1e20596",
+        "engine/shaders/matvecq4.comp": "8b6a2386ea4b03d87a8d89a9ed1bbb73a0a7dfec40b8fb4781e9966382a9292f",
+        "engine/shaders/matvecq4narrow.comp": "d2f524f37e955b38eda5ce201b039df3f7ccbb1cf82bec40a17e12d7c128db3d",
+        "engine/shaders/merge.comp": "66a4ec9a69d48b081a1a8afc6a7f3d896e2dfa1dfa870964bbe57e74eadb4f8b",
+        "engine/shaders/multivec.comp": "c01172ddb41abc1a21c17f9ba5ca545aa4f298d5b3d6840797068cdaa664b680",
+        "engine/shaders/multivec2.comp": "64c82a60494ed6edd311e26f512b048fd0b6ceaab1f7d81cf9a5b6068c4f6ab2",
+        "engine/shaders/multivec4.comp": "0ed66ad9d7b54ad1665e220c9b952124a83cfec372ed91673b5e2c0ec4f197bc",
+        "engine/shaders/norm.comp": "fab3b365393db83df7ffbe5ca47c101b84aa4e70c0043c174fee670d1bfe4ce0",
+        "engine/shaders/norm_rope.comp": "5a23be9f9f7af556db8737ae5c8d97f941fc04c2222cd0d41da57272e3687c8d",
+        "engine/shaders/rope.comp": "6050e34c720d19e9c73b8bdaa8b447da8479568a235a4636304aaf5b652f43b7",
+        "engine/shaders/topk.comp": "0b428dc5eca6f61d0ba2a50315c6ff2ac9ebdc2817465fc828430acf644c1175",
+        "engine/shaders/visibility.comp": "9bc39c4afd54ba7d273e190229429f8ee3a074375eb9f41abdb2d16223ab2715",
+        "engine/build.rs": "2f878a93787aea000595fb2cdd1037585c1db7266c073a318ba56d5beb18e06e",
+        "scripts/latency-run.py": "e15fc81e69818e3d9992fbdedcca1c4579b32a52b6e77e4524a3a734097aea71",
+        "scripts/test-server.py": "c57089c6298fcb088ce4b666ed59a3d1bab1b014a0d67e3ab1c045b30991161a",
+        "results/engine/main-tuning-20261003/bench-batch-defaults.py": "ba46bba3a0f2a0f3cd657bfc6f8cb884610e3252be5574afc5b99be66c317867"
+      },
+      "invocation": [
+        "results/engine/main-tuning-20261003/bench-batch-defaults.py",
+        "--labels",
+        "512",
+        "512-mtp",
+        "--use-default-512",
+        "--output-dir",
+        "results/engine/main-tuning-20261003/fixed-dim/batch-defaults"
+      ],
+      "model": {
+        "path": "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "bytes": 6975879296
+      },
+      "assistant": "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+    },
+    "source_files_only_in_batch_manifest": [
+      "results/engine/main-tuning-20261003/bench-batch-defaults.py",
+      "scripts/latency-run.py",
+      "scripts/test-server.py"
+    ],
+    "completed": true,
+    "labels": [
+      "512",
+      "512-mtp"
+    ],
+    "local_report_inventory_complete": true,
+    "protocol_and_cache_passed": true,
+    "repeat_output_exact": true,
+    "trials": {
+      "512": {
+        "label": "512",
+        "batch": 512,
+        "draft": false,
+        "batch_argument_omitted": true,
+        "command": [
+          "sudo",
+          "-n",
+          "/usr/bin/python3",
+          "/home/fairfieldt/trashcan/scripts/latency-run.py",
+          "/home/fairfieldt/trashcan/target/release/trashcan",
+          "serve",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "18172",
+          "--context",
+          "8192"
+        ],
+        "completed": true,
+        "protocol_and_cache_passed": true,
+        "repeat_output_exact": true,
+        "failed_checks": [],
+        "request_count": 18,
+        "expected_requests": 18,
+        "requests": [
+          {
+            "name": "short_first",
+            "seconds": 1.7508329560005222,
+            "first_delta_seconds": null,
+            "input_tokens": 26,
+            "cached_tokens": 0,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 18.277014886159392,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "short_repeat",
+            "seconds": 1.1740240270009963,
+            "first_delta_seconds": 0.004841046000365168,
+            "input_tokens": 26,
+            "cached_tokens": 26,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 27.256682371094985,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "medium",
+            "seconds": 3.1799474289982754,
+            "first_delta_seconds": null,
+            "input_tokens": 512,
+            "cached_tokens": 4,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 0.31447060755812967,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "long_default_budget_first",
+            "seconds": 22.3635594160005,
+            "first_delta_seconds": null,
+            "input_tokens": 1763,
+            "cached_tokens": 467,
+            "output_tokens": 256,
+            "output_tokens_per_wall_second": 11.447193858453462,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "long_default_budget_repeat",
+            "seconds": 11.637697567999567,
+            "first_delta_seconds": 0.01291133999984595,
+            "input_tokens": 1763,
+            "cached_tokens": 1763,
+            "output_tokens": 256,
+            "output_tokens_per_wall_second": 21.99747832457245,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "long_history",
+            "seconds": 2.795949480998388,
+            "first_delta_seconds": 2.750649136996799,
+            "input_tokens": 2041,
+            "cached_tokens": 1759,
+            "output_tokens": 2,
+            "output_tokens_per_wall_second": 0.7153205068947929,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "stochastic_first",
+            "seconds": 1.6902885249983228,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 0,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 18.931679134502645,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "stochastic_repeat",
+            "seconds": 1.2190982100000838,
+            "first_delta_seconds": 0.0025627130016800947,
+            "input_tokens": 47,
+            "cached_tokens": 47,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 26.248910659952326,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_first",
+            "seconds": 1.211733500000264,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 26.408447071895782,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_repeat",
+            "seconds": 1.1708773099999235,
+            "first_delta_seconds": 0.0024914649984566495,
+            "input_tokens": 47,
+            "cached_tokens": 47,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 27.329934337870203,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_1",
+            "seconds": 0.4096408559998963,
+            "first_delta_seconds": null,
+            "input_tokens": 23,
+            "cached_tokens": 4,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.441162753551743,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_2",
+            "seconds": 0.4094589950000227,
+            "first_delta_seconds": null,
+            "input_tokens": 24,
+            "cached_tokens": 14,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4422469947203007,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_3",
+            "seconds": 0.4107631439983379,
+            "first_delta_seconds": null,
+            "input_tokens": 26,
+            "cached_tokens": 15,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4344930031114145,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_4",
+            "seconds": 0.41138542699991376,
+            "first_delta_seconds": null,
+            "input_tokens": 30,
+            "cached_tokens": 17,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4308104623263906,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_5",
+            "seconds": 0.41217272200083244,
+            "first_delta_seconds": null,
+            "input_tokens": 38,
+            "cached_tokens": 21,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.42616734835252,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_6",
+            "seconds": 0.412885660000029,
+            "first_delta_seconds": null,
+            "input_tokens": 46,
+            "cached_tokens": 29,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4219780362435683,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_7",
+            "seconds": 0.43346056700102054,
+            "first_delta_seconds": null,
+            "input_tokens": 62,
+            "cached_tokens": 37,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.307014930836017,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_8",
+            "seconds": 0.45158376199833583,
+            "first_delta_seconds": null,
+            "input_tokens": 86,
+            "cached_tokens": 53,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.2144286047284516,
+            "http_status": 200,
+            "error": null
+          }
+        ],
+        "request_inventory_complete": true,
+        "missing_requests": [],
+        "duplicate_requests": [],
+        "repeat_comparisons": [
+          {
+            "name": "short",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 1.7508329560005222,
+            "repeat_seconds": 1.1740240270009963,
+            "eligible": true,
+            "speedup": 1.4913093052047361
+          },
+          {
+            "name": "long_default_budget",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 22.3635594160005,
+            "repeat_seconds": 11.637697567999567,
+            "eligible": true,
+            "speedup": 1.9216480996631216
+          },
+          {
+            "name": "stochastic",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 1.6902885249983228,
+            "repeat_seconds": 1.2190982100000838,
+            "eligible": true,
+            "speedup": 1.3865072650694865
+          },
+          {
+            "name": "greedy_again",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 1.211733500000264,
+            "repeat_seconds": 1.1708773099999235,
+            "eligible": true,
+            "speedup": 1.0348936559376518
+          }
+        ],
+        "eligible_repeat_comparisons": 4,
+        "output_drift_repeat_names": [],
+        "protocol_test": {
+          "command": [
+            "/usr/bin/python3",
+            "/home/fairfieldt/trashcan/scripts/test-server.py",
+            "--url",
+            "http://127.0.0.1:18172"
+          ],
+          "command_shell": "/usr/bin/python3 /home/fairfieldt/trashcan/scripts/test-server.py --url http://127.0.0.1:18172",
+          "returncode": 0
+        },
+        "cleanup_remaining": [],
+        "error": null,
+        "memory": {
+          "cards": {
+            "card0": {
+              "device": "/sys/devices/pci0000:00/0000:00:02.0/0000:02:00.0",
+              "vram": {
+                "total_bytes": 6442450944,
+                "peak_bytes": 4858445824,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 4820393984,
+                "end_bytes": 4858445824,
+                "growth_from_ready_to_peak_bytes": 38051840,
+                "peak_fraction_of_capacity": 0.7541300455729166
+              },
+              "vis_vram": {
+                "total_bytes": 268435456,
+                "peak_bytes": 248774656,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 5668864,
+                "end_bytes": 248774656,
+                "growth_from_ready_to_peak_bytes": 243105792,
+                "peak_fraction_of_capacity": 0.9267578125
+              },
+              "gtt": {
+                "total_bytes": 33701752832,
+                "peak_bytes": 258711552,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 54239232,
+                "end_bytes": 258711552,
+                "growth_from_ready_to_peak_bytes": 204472320,
+                "peak_fraction_of_capacity": 0.007676501376342419
+              }
+            },
+            "card1": {
+              "device": "/sys/devices/pci0000:00/0000:00:03.0/0000:06:00.0",
+              "vram": {
+                "total_bytes": 6442450944,
+                "peak_bytes": 4841820160,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 4803768320,
+                "end_bytes": 4841820160,
+                "growth_from_ready_to_peak_bytes": 38051840,
+                "peak_fraction_of_capacity": 0.7515494028727213
+              },
+              "vis_vram": {
+                "total_bytes": 268435456,
+                "peak_bytes": 256454656,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 13348864,
+                "end_bytes": 256454656,
+                "growth_from_ready_to_peak_bytes": 243105792,
+                "peak_fraction_of_capacity": 0.9553680419921875
+              },
+              "gtt": {
+                "total_bytes": 33701752832,
+                "peak_bytes": 233480192,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 29007872,
+                "end_bytes": 233480192,
+                "growth_from_ready_to_peak_bytes": 204472320,
+                "peak_fraction_of_capacity": 0.0069278352720665995
+              }
+            }
+          },
+          "tracked_processes_rss_kib": {
+            "ready": 7095192,
+            "peak": 7130772,
+            "growth_ready_to_peak": 35580
+          },
+          "snapshot_count": 20,
+          "note": "Observed snapshots, not continuous maxima. Device counters include other clients; RSS sums only tracked processes. Ready precedes lazy mappings and first command recording."
+        },
+        "short_after_long_history": [
+          {
+            "name": "stochastic_first",
+            "seconds": 1.6902885249983228,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 0,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 18.931679134502645,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "stochastic_repeat",
+            "seconds": 1.2190982100000838,
+            "first_delta_seconds": 0.0025627130016800947,
+            "input_tokens": 47,
+            "cached_tokens": 47,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 26.248910659952326,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_first",
+            "seconds": 1.211733500000264,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 26.408447071895782,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_repeat",
+            "seconds": 1.1708773099999235,
+            "first_delta_seconds": 0.0024914649984566495,
+            "input_tokens": 47,
+            "cached_tokens": 47,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 27.329934337870203,
+            "http_status": 200,
+            "error": null
+          }
+        ],
+        "aggregate_observed_requests": {
+          "output_tokens": 715,
+          "wall_seconds": 51.54535955499523,
+          "output_tokens_per_wall_second": 13.871277767247815
+        },
+        "rate_note": "HTTP output tokens / request wall time includes prefill, protocol, and cache effects; it is not sustained GPU decode throughput."
+      },
+      "512-mtp": {
+        "label": "512-mtp",
+        "batch": 512,
+        "draft": true,
+        "batch_argument_omitted": true,
+        "command": [
+          "sudo",
+          "-n",
+          "/usr/bin/python3",
+          "/home/fairfieldt/trashcan/scripts/latency-run.py",
+          "/home/fairfieldt/trashcan/target/release/trashcan",
+          "serve",
+          "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+          "--host",
+          "127.0.0.1",
+          "--port",
+          "18173",
+          "--context",
+          "8192",
+          "--draft",
+          "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+        ],
+        "completed": true,
+        "protocol_and_cache_passed": true,
+        "repeat_output_exact": true,
+        "failed_checks": [],
+        "request_count": 18,
+        "expected_requests": 18,
+        "requests": [
+          {
+            "name": "short_first",
+            "seconds": 1.7923373300000094,
+            "first_delta_seconds": null,
+            "input_tokens": 26,
+            "cached_tokens": 0,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 17.853782022159763,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "short_repeat",
+            "seconds": 1.1596640949974244,
+            "first_delta_seconds": 0.1433084409982257,
+            "input_tokens": 26,
+            "cached_tokens": 25,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 27.59419743876012,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "medium",
+            "seconds": 3.119931772998825,
+            "first_delta_seconds": null,
+            "input_tokens": 512,
+            "cached_tokens": 4,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 0.32051982952140556,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "long_default_budget_first",
+            "seconds": 17.526421791000757,
+            "first_delta_seconds": null,
+            "input_tokens": 1763,
+            "cached_tokens": 467,
+            "output_tokens": 256,
+            "output_tokens_per_wall_second": 14.606518264409658,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "long_default_budget_repeat",
+            "seconds": 6.8687073750006675,
+            "first_delta_seconds": 0.1693815540020296,
+            "input_tokens": 1763,
+            "cached_tokens": 1762,
+            "output_tokens": 256,
+            "output_tokens_per_wall_second": 37.27047696510366,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "long_history",
+            "seconds": 2.861519981001038,
+            "first_delta_seconds": 2.8612365650005813,
+            "input_tokens": 2041,
+            "cached_tokens": 1759,
+            "output_tokens": 2,
+            "output_tokens_per_wall_second": 0.6989292450442178,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "stochastic_first",
+            "seconds": 1.2253520650010614,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 0,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 26.114943544794436,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "stochastic_repeat",
+            "seconds": 0.8233807270007674,
+            "first_delta_seconds": 0.14665875699938624,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 38.86415961734088,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_first",
+            "seconds": 0.7738580629993521,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 41.35125229033996,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_repeat",
+            "seconds": 0.782534777001274,
+            "first_delta_seconds": 0.13121204799972475,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 40.89275127506301,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_1",
+            "seconds": 0.4179243599974143,
+            "first_delta_seconds": null,
+            "input_tokens": 23,
+            "cached_tokens": 4,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.392777487309395,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_2",
+            "seconds": 0.4101680280000437,
+            "first_delta_seconds": null,
+            "input_tokens": 24,
+            "cached_tokens": 14,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.438025228041161,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_3",
+            "seconds": 0.41142525100076455,
+            "first_delta_seconds": null,
+            "input_tokens": 26,
+            "cached_tokens": 15,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.430575171474202,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_4",
+            "seconds": 0.4117659619987535,
+            "first_delta_seconds": null,
+            "input_tokens": 30,
+            "cached_tokens": 17,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4285640200707683,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_5",
+            "seconds": 0.41220556299958844,
+            "first_delta_seconds": null,
+            "input_tokens": 38,
+            "cached_tokens": 21,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4259740521769677,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_6",
+            "seconds": 0.4110949770001753,
+            "first_delta_seconds": null,
+            "input_tokens": 46,
+            "cached_tokens": 29,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.4325278973174456,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_7",
+            "seconds": 0.42701737099923776,
+            "first_delta_seconds": null,
+            "input_tokens": 62,
+            "cached_tokens": 37,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.3418251057561426,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "varied_8",
+            "seconds": 0.4504168390012637,
+            "first_delta_seconds": null,
+            "input_tokens": 86,
+            "cached_tokens": 53,
+            "output_tokens": 1,
+            "output_tokens_per_wall_second": 2.2201656630275193,
+            "http_status": 200,
+            "error": null
+          }
+        ],
+        "request_inventory_complete": true,
+        "missing_requests": [],
+        "duplicate_requests": [],
+        "repeat_comparisons": [
+          {
+            "name": "short",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 1.7923373300000094,
+            "repeat_seconds": 1.1596640949974244,
+            "eligible": true,
+            "speedup": 1.5455659425275128
+          },
+          {
+            "name": "long_default_budget",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 17.526421791000757,
+            "repeat_seconds": 6.8687073750006675,
+            "eligible": true,
+            "speedup": 2.5516332017272836
+          },
+          {
+            "name": "stochastic",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 1.2253520650010614,
+            "repeat_seconds": 0.8233807270007674,
+            "eligible": true,
+            "speedup": 1.4881961950512348
+          },
+          {
+            "name": "greedy_again",
+            "exact_output": true,
+            "same_token_counts": true,
+            "first_seconds": 0.7738580629993521,
+            "repeat_seconds": 0.782534777001274,
+            "eligible": true,
+            "speedup": 0.9889120403885797
+          }
+        ],
+        "eligible_repeat_comparisons": 4,
+        "output_drift_repeat_names": [],
+        "protocol_test": {
+          "command": [
+            "/usr/bin/python3",
+            "/home/fairfieldt/trashcan/scripts/test-server.py",
+            "--url",
+            "http://127.0.0.1:18173"
+          ],
+          "command_shell": "/usr/bin/python3 /home/fairfieldt/trashcan/scripts/test-server.py --url http://127.0.0.1:18173",
+          "returncode": 0
+        },
+        "cleanup_remaining": [],
+        "error": null,
+        "memory": {
+          "cards": {
+            "card0": {
+              "device": "/sys/devices/pci0000:00/0000:00:02.0/0000:02:00.0",
+              "vram": {
+                "total_bytes": 6442450944,
+                "peak_bytes": 5299793920,
+                "first_peak_phase": "end",
+                "ready_bytes": 5257220096,
+                "end_bytes": 5299793920,
+                "growth_from_ready_to_peak_bytes": 42573824,
+                "peak_fraction_of_capacity": 0.8226362864176432
+              },
+              "vis_vram": {
+                "total_bytes": 268435456,
+                "peak_bytes": 253329408,
+                "first_peak_phase": "end",
+                "ready_bytes": 5668864,
+                "end_bytes": 253329408,
+                "growth_from_ready_to_peak_bytes": 247660544,
+                "peak_fraction_of_capacity": 0.9437255859375
+              },
+              "gtt": {
+                "total_bytes": 33701752832,
+                "peak_bytes": 258801664,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 54296576,
+                "end_bytes": 258801664,
+                "growth_from_ready_to_peak_bytes": 204505088,
+                "peak_fraction_of_capacity": 0.007679175183857689
+              }
+            },
+            "card1": {
+              "device": "/sys/devices/pci0000:00/0000:00:03.0/0000:06:00.0",
+              "vram": {
+                "total_bytes": 6442450944,
+                "peak_bytes": 5283069952,
+                "first_peak_phase": "end",
+                "ready_bytes": 5240594432,
+                "end_bytes": 5283069952,
+                "growth_from_ready_to_peak_bytes": 42475520,
+                "peak_fraction_of_capacity": 0.8200403849283854
+              },
+              "vis_vram": {
+                "total_bytes": 268435456,
+                "peak_bytes": 260911104,
+                "first_peak_phase": "end",
+                "ready_bytes": 13348864,
+                "end_bytes": 260911104,
+                "growth_from_ready_to_peak_bytes": 247562240,
+                "peak_fraction_of_capacity": 0.9719696044921875
+              },
+              "gtt": {
+                "total_bytes": 33701752832,
+                "peak_bytes": 233570304,
+                "first_peak_phase": "after_medium",
+                "ready_bytes": 29065216,
+                "end_bytes": 233570304,
+                "growth_from_ready_to_peak_bytes": 204505088,
+                "peak_fraction_of_capacity": 0.00693050907958187
+              }
+            }
+          },
+          "tracked_processes_rss_kib": {
+            "ready": 7118728,
+            "peak": 7130556,
+            "growth_ready_to_peak": 11828
+          },
+          "snapshot_count": 20,
+          "note": "Observed snapshots, not continuous maxima. Device counters include other clients; RSS sums only tracked processes. Ready precedes lazy mappings and first command recording."
+        },
+        "short_after_long_history": [
+          {
+            "name": "stochastic_first",
+            "seconds": 1.2253520650010614,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 0,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 26.114943544794436,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "stochastic_repeat",
+            "seconds": 0.8233807270007674,
+            "first_delta_seconds": 0.14665875699938624,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 38.86415961734088,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_first",
+            "seconds": 0.7738580629993521,
+            "first_delta_seconds": null,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 41.35125229033996,
+            "http_status": 200,
+            "error": null
+          },
+          {
+            "name": "greedy_again_repeat",
+            "seconds": 0.782534777001274,
+            "first_delta_seconds": 0.13121204799972475,
+            "input_tokens": 47,
+            "cached_tokens": 46,
+            "output_tokens": 32,
+            "output_tokens_per_wall_second": 40.89275127506301,
+            "http_status": 200,
+            "error": null
+          }
+        ],
+        "aggregate_observed_requests": {
+          "output_tokens": 715,
+          "wall_seconds": 40.28572632799842,
+          "output_tokens_per_wall_second": 17.748221645021648
+        },
+        "rate_note": "HTTP output tokens / request wall time includes prefill, protocol, and cache effects; it is not sustained GPU decode throughput."
+      }
+    },
+    "cross_configuration_comparisons": [
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "short_first",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 1.7508329560005222,
+        "candidate_seconds": 1.7923373300000094,
+        "speedup": 0.9768434360514675
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "short_repeat",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 1.1740240270009963,
+        "candidate_seconds": 1.1596640949974244,
+        "speedup": 1.0123828374660542
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "medium",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 3.1799474289982754,
+        "candidate_seconds": 3.119931772998825,
+        "speedup": 1.0192362078295591
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "long_default_budget_first",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 22.3635594160005,
+        "candidate_seconds": 17.526421791000757,
+        "speedup": 1.2759911682305543
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "long_default_budget_repeat",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 11.637697567999567,
+        "candidate_seconds": 6.8687073750006675,
+        "speedup": 1.6943067934959795
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "long_history",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 2.795949480998388,
+        "candidate_seconds": 2.861519981001038,
+        "speedup": 0.977085429967988
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "stochastic_first",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 1.6902885249983228,
+        "candidate_seconds": 1.2253520650010614,
+        "speedup": 1.379430918898283
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "stochastic_repeat",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 1.2190982100000838,
+        "candidate_seconds": 0.8233807270007674,
+        "speedup": 1.4806008569580567
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "greedy_again_first",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 1.211733500000264,
+        "candidate_seconds": 0.7738580629993521,
+        "speedup": 1.5658343020989864
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "greedy_again_repeat",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 1.1708773099999235,
+        "candidate_seconds": 0.782534777001274,
+        "speedup": 1.4962623316075538
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_1",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.4096408559998963,
+        "candidate_seconds": 0.4179243599974143,
+        "speedup": 0.9801794181187016
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_2",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.4094589950000227,
+        "candidate_seconds": 0.4101680280000437,
+        "speedup": 0.998271359658435
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_3",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.4107631439983379,
+        "candidate_seconds": 0.41142525100076455,
+        "speedup": 0.9983906991590427
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_4",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.41138542699991376,
+        "candidate_seconds": 0.4117659619987535,
+        "speedup": 0.9990758463934402
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_5",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.41217272200083244,
+        "candidate_seconds": 0.41220556299958844,
+        "speedup": 0.9999203285891703
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_6",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.412885660000029,
+        "candidate_seconds": 0.4110949770001753,
+        "speedup": 1.0043558863523963
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_7",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.43346056700102054,
+        "candidate_seconds": 0.42701737099923776,
+        "speedup": 1.0150888381582825
+      },
+      {
+        "reference": "512",
+        "candidate": "512-mtp",
+        "name": "varied_8",
+        "same_request": true,
+        "exact_output": true,
+        "same_token_counts": true,
+        "eligible": true,
+        "reference_seconds": 0.45158376199833583,
+        "candidate_seconds": 0.4504168390012637,
+        "speedup": 1.0025907623694967
+      }
+    ],
+    "ineligible_comparison_count": 0,
+    "source_files_only_in_fixed_manifest": [
+      "Cargo.lock",
+      "Cargo.toml",
+      "engine/Cargo.toml",
+      "engine/shaders/LICENSE.llama.cpp",
+      "engine/shaders/attention_shared_body.glsl",
+      "engine/shaders/common.glsl",
+      "engine/shaders/multivec_body.glsl"
+    ],
+    "required_labels": [
+      "512",
+      "512-mtp"
+    ],
+    "required_label_inventory_complete": true,
+    "acceptance": {
+      "512": {
+        "completed": true,
+        "request_inventory_complete": true,
+        "default_batch_exercised": true,
+        "protocol_and_cache_passed": true,
+        "repeat_output_exact": true,
+        "protocol_suite_passed": true,
+        "scoped_cleanup_complete": true,
+        "report_identity_and_command_valid": true,
+        "responses_independently_valid": true,
+        "checks_present_and_passed": true,
+        "repeat_inventory_and_equality_valid": true,
+        "long_default_budget_and_cache_valid": true,
+        "memory_inventory_complete": true,
+        "no_report_error": true
+      },
+      "512-mtp": {
+        "completed": true,
+        "request_inventory_complete": true,
+        "default_batch_exercised": true,
+        "protocol_and_cache_passed": true,
+        "repeat_output_exact": true,
+        "protocol_suite_passed": true,
+        "scoped_cleanup_complete": true,
+        "report_identity_and_command_valid": true,
+        "responses_independently_valid": true,
+        "checks_present_and_passed": true,
+        "repeat_inventory_and_equality_valid": true,
+        "long_default_budget_and_cache_valid": true,
+        "memory_inventory_complete": true,
+        "no_report_error": true
+      }
+    },
+    "independent_checks": {
+      "512": {
+        "repeat_comparisons": [
+          {
+            "name": "short",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          },
+          {
+            "name": "long_default_budget",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          },
+          {
+            "name": "stochastic",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          },
+          {
+            "name": "greedy_again",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          }
+        ],
+        "long_default_budget_and_cache_valid": true,
+        "memory_inventory_complete": true,
+        "missing_memory": [],
+        "invalid_response_names": []
+      },
+      "512-mtp": {
+        "repeat_comparisons": [
+          {
+            "name": "short",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          },
+          {
+            "name": "long_default_budget",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          },
+          {
+            "name": "stochastic",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          },
+          {
+            "name": "greedy_again",
+            "same_request_except_stream": true,
+            "exact_output": true,
+            "same_token_counts": true
+          }
+        ],
+        "long_default_budget_and_cache_valid": true,
+        "memory_inventory_complete": true,
+        "missing_memory": [],
+        "invalid_response_names": []
+      }
+    },
+    "complete": true
+  },
+  "parse_errors": [],
+  "evidence_files": {
+    "fixed-dim/build.json": {
+      "status": "read",
+      "bytes": 4853,
+      "sha256": "df8e1871a04d23d901eb2a401979c5558379b9a21d69928f8086cd09d78d2bfa"
+    },
+    "shared-kv/build.json": {
+      "status": "read",
+      "bytes": 4791,
+      "sha256": "5eeba3f85b6f44e75ef72c0c327c2761290406b841f782cfce7e647145266989"
+    },
+    "fixed-dim-probe/probe.json": {
+      "status": "read",
+      "bytes": 8799,
+      "sha256": "d194e7b8b6aff7ebcf71727360444e094218ddfa9a1afc14fc49c038700405d4"
+    },
+    "shader-candidates/fixed-dim/source.json": {
+      "status": "read",
+      "bytes": 1947,
+      "sha256": "56ea38eb463f3bdb95d77b131efb023be7dc2e4e0127a6a57b5f7a23fcade6b1"
+    },
+    "fixed-dim-probe/cpu-compile.json": {
+      "status": "read",
+      "bytes": 3492,
+      "sha256": "6559f5616b9bc18186ca7ebdaf2aebfb26a04fa812a987d44ef0bf2f82c25143"
+    },
+    "fixed-dim-probe/baseline-1-128-p16.jsonl": {
+      "status": "read",
+      "bytes": 851,
+      "sha256": "ddb7e4e41928c9f1ca76fbb86b11afec44956d5dacb591240373f6074b450109"
+    },
+    "fixed-dim-probe/baseline-1-1536-p64.jsonl": {
+      "status": "read",
+      "bytes": 838,
+      "sha256": "8a4c61950cd46a9bf1c99aab7ec39468c50e3f4eb10a6ad027f137cb78dde70d"
+    },
+    "fixed-dim-probe/baseline-1-768-p32.jsonl": {
+      "status": "read",
+      "bytes": 838,
+      "sha256": "4258bc711c9a178961be6f8c3457669d90d915e06f6312b04b4d41ff363bbf42"
+    },
+    "fixed-dim-probe/baseline-1-8192-p64.jsonl": {
+      "status": "read",
+      "bytes": 836,
+      "sha256": "fad50fa91373afb2f1b4c6da4fc6270d9403515e579845a2b71b4e57cd777520"
+    },
+    "fixed-dim-probe/baseline-2-128-p16.jsonl": {
+      "status": "read",
+      "bytes": 852,
+      "sha256": "bbb88fb55ad88d04f7639f384c8603871d3e36ea5e60f470b348cec52a0c1f26"
+    },
+    "fixed-dim-probe/baseline-2-1536-p64.jsonl": {
+      "status": "read",
+      "bytes": 838,
+      "sha256": "265c32ec6295b1273348d956a668fe297dcb17fda5160e7536f8618fbd026fef"
+    },
+    "fixed-dim-probe/baseline-2-768-p32.jsonl": {
+      "status": "read",
+      "bytes": 839,
+      "sha256": "d9d4349ea1528b180a7a815e9a7570ec94e590831988c3241fa16f4d239fde94"
+    },
+    "fixed-dim-probe/baseline-2-8192-p64.jsonl": {
+      "status": "read",
+      "bytes": 836,
+      "sha256": "8d362777ed5fc8ea669538a3b0deeb8ae51a8d8da553f958063a457413514674"
+    },
+    "fixed-dim-probe/fixed-dim-1-128-p16.jsonl": {
+      "status": "read",
+      "bytes": 851,
+      "sha256": "b30a67588ef3dc6246c7c1acbb54757f83d127572c613882366173031e27b271"
+    },
+    "fixed-dim-probe/fixed-dim-1-1536-p64.jsonl": {
+      "status": "read",
+      "bytes": 838,
+      "sha256": "dab4b8c30a8dc2185fe856e9b016809105dde115c6cd2befb8b4f954ea33dfbb"
+    },
+    "fixed-dim-probe/fixed-dim-1-768-p32.jsonl": {
+      "status": "read",
+      "bytes": 838,
+      "sha256": "ee395f6326ba395dfc6ca2c462bf629d6f9252f61ce1923a9d885d07928d95f9"
+    },
+    "fixed-dim-probe/fixed-dim-1-8192-p64.jsonl": {
+      "status": "read",
+      "bytes": 836,
+      "sha256": "0b56ab1fd5a440dabde8e30712f4e2a5ce87d8d2eff63caa7b68bc8202d1f17c"
+    },
+    "fixed-dim-probe/fixed-dim-2-128-p16.jsonl": {
+      "status": "read",
+      "bytes": 852,
+      "sha256": "2824c455d08d4ab2ad656b2b96fa9487037d42536655ecba8b94618b3bf4cd2d"
+    },
+    "fixed-dim-probe/fixed-dim-2-1536-p64.jsonl": {
+      "status": "read",
+      "bytes": 839,
+      "sha256": "533136d802a0d3d053a656b69776642bf3ffe4f01484296af3d74e2e750235e2"
+    },
+    "fixed-dim-probe/fixed-dim-2-768-p32.jsonl": {
+      "status": "read",
+      "bytes": 839,
+      "sha256": "0350492834d15c76278031c9d030e6d1a455ce6233352dd3c3cb369ed7ce61dd"
+    },
+    "fixed-dim-probe/fixed-dim-2-8192-p64.jsonl": {
+      "status": "read",
+      "bytes": 835,
+      "sha256": "8dab30e3118c96bb1e3c1d91085095efa3a9e7c7bcd909482ab16548a7d45431"
+    },
+    "shader-candidates/fixed-dim/attention_partial_heads2.comp": {
+      "status": "read",
+      "bytes": 119,
+      "sha256": "fbb25d24b1a5777721b99a9805a377d4268ab9eba3c0cce0e28e717b9d2008ad"
+    },
+    "shader-candidates/fixed-dim/attention_partial_heads8.comp": {
+      "status": "read",
+      "bytes": 119,
+      "sha256": "1391ce0a2b60082eebbb106a07c0343988a172c514ece85e30d224f3e5088e05"
+    },
+    "shader-candidates/fixed-dim/attention_shared_body.glsl": {
+      "status": "read",
+      "bytes": 2579,
+      "sha256": "21b50201a59285f001407e8e75db2b0d787d91bc14164ad17c8e4ffa77077b8a"
+    },
+    "shader-candidates/fixed-dim/common.glsl": {
+      "status": "read",
+      "bytes": 4317,
+      "sha256": "5edc34a1fcbd093e7eb5d18cf66ca1002bba9048340371ce7befc55caa5fb847"
+    },
+    "shader-candidates/fixed-dim/LICENSE.llama.cpp": {
+      "status": "read",
+      "bytes": 1078,
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    "fixed-dim/validation.log": {
+      "status": "read",
+      "bytes": 41320,
+      "sha256": "95947cefada59a2e8a2668e328e9740a343318c5fd5fdb367e3a8a979da2d3c5"
+    },
+    "fixed-dim/decode-shared-1.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "2ad1e0186119510749ad6247f6433586f021faac3dba60ed6f9eb68a43f68b4a"
+    },
+    "fixed-dim/decode-shared-1.command.json": {
+      "status": "read",
+      "bytes": 369,
+      "sha256": "407401921cf2b1dc20f29b6138a5398a61804e91ee38a610d4b12950b48faae6"
+    },
+    "fixed-dim/decode-shared-1.json": {
+      "status": "read",
+      "bytes": 315,
+      "sha256": "32def5883b398d5440a86301cf91804b172d7ba0afe18a572fff254e7a36e476"
+    },
+    "fixed-dim/decode-shared-2.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "3f125bd28f90d0a450329188eec32d9dbfb61b7413bf7d7cb098f49e78558a51"
+    },
+    "fixed-dim/decode-shared-2.command.json": {
+      "status": "read",
+      "bytes": 369,
+      "sha256": "74bcc45f14d7bae936c6ab228d869ebeeff819e21a1b1f741c6a188473a71953"
+    },
+    "fixed-dim/decode-shared-2.json": {
+      "status": "read",
+      "bytes": 313,
+      "sha256": "89321de5414997244e1bd8b18a2d1d11da79f6b2a3716cd571b41390817fcee3"
+    },
+    "fixed-dim/decode-fixed-1.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "d34426b1ac20fb5caed4f4750cb461dea293d8f4a31e09e6f6b5c3f95ebb5351"
+    },
+    "fixed-dim/decode-fixed-1.command.json": {
+      "status": "read",
+      "bytes": 352,
+      "sha256": "39409fa74b9268fd31b3f8676968c141303cd069862f894c4c3091bff042bf3e"
+    },
+    "fixed-dim/decode-fixed-1.json": {
+      "status": "read",
+      "bytes": 323,
+      "sha256": "6bd9249382e533698ed7d705a0bffffebb415869e57f25a2d69cc81a39403eda"
+    },
+    "fixed-dim/decode-fixed-2.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "0015f2f8e8a37ad98ab685bfb467a70757b21d10fd5b86d8b397fbe7ef1d6ce4"
+    },
+    "fixed-dim/decode-fixed-2.command.json": {
+      "status": "read",
+      "bytes": 352,
+      "sha256": "b5d97838a71e09f7244cea4f7ce3c09d4ab7563a81d32bef4e81e901e944b10f"
+    },
+    "fixed-dim/decode-fixed-2.json": {
+      "status": "read",
+      "bytes": 313,
+      "sha256": "c62d0135517fdcb6633512457e3ee0d44831d557ff95e709251bdb98216e1467"
+    },
+    "fixed-dim/chat-shared-transformer.txt": {
+      "status": "read",
+      "bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5"
+    },
+    "fixed-dim/chat-shared-transformer.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "12cc49c361ea9597fd8c01ea937d5dbb69835a8be95036130c4bdaaff29d9162"
+    },
+    "fixed-dim/chat-shared-transformer.command.json": {
+      "status": "read",
+      "bytes": 455,
+      "sha256": "bb914a3177b45ba87f8dfa5bccd179f3d179be174e321725e82a700a5185036d"
+    },
+    "fixed-dim/chat-shared-transformer.log": {
+      "status": "read",
+      "bytes": 251,
+      "sha256": "e3ee3c06e15d6022f09572228a8affede976b1ed2bf611043a2283e519f2aa5a"
+    },
+    "fixed-dim/chat-shared-transformer-mtp.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "f45f0d486f828ddd3683023b30262adef86074424ddbb50ebdb1ab403c8f285a"
+    },
+    "fixed-dim/chat-shared-transformer-mtp.command.json": {
+      "status": "read",
+      "bytes": 541,
+      "sha256": "dbc4bc1f00ef19b0037f4f11aa563f7b48b79f2ae4cdd680d8ad953e0326917e"
+    },
+    "fixed-dim/chat-shared-transformer-mtp.txt": {
+      "status": "read",
+      "bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5"
+    },
+    "fixed-dim/chat-shared-transformer-mtp.log": {
+      "status": "read",
+      "bytes": 509,
+      "sha256": "2e77e0ffddb8b4ec3793793816b6011829a4a73c7e25937e4a29fe17ed46ba1a"
+    },
+    "fixed-dim/chat-fixed-transformer.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "e8e1d7e4fb4de755d07916611a57285be84ad54fe133aaed68f93e65da676017"
+    },
+    "fixed-dim/chat-fixed-transformer.command.json": {
+      "status": "read",
+      "bytes": 438,
+      "sha256": "fc1c2440fcb18d2f720f2edd5669838bb1f87cc9d40a70a2908d38d5b53387a8"
+    },
+    "fixed-dim/chat-fixed-transformer.txt": {
+      "status": "read",
+      "bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5"
+    },
+    "fixed-dim/chat-fixed-transformer.log": {
+      "status": "read",
+      "bytes": 251,
+      "sha256": "7567e251316ffe31ca409663d65db47bc9e5c91d9ce0eca7d03fd7f08fb278ff"
+    },
+    "fixed-dim/chat-fixed-transformer-mtp.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "13416053bc124af9ab487c27cdb35940cd4c70f00b477309a2f10cc27ff72d5f"
+    },
+    "fixed-dim/chat-fixed-transformer-mtp.command.json": {
+      "status": "read",
+      "bytes": 524,
+      "sha256": "600d61c53b1339b9ce3e640bc4ac3215d3ae9cedd89710fb936f5102105c4092"
+    },
+    "fixed-dim/chat-fixed-transformer-mtp.txt": {
+      "status": "read",
+      "bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5"
+    },
+    "fixed-dim/chat-fixed-transformer-mtp.log": {
+      "status": "read",
+      "bytes": 509,
+      "sha256": "4810b4d60ff7d274a08b6903b4985cd9566a75ea3ad52094e65652247ed77d93"
+    },
+    "fixed-dim/chat-shared-photosynthesis.txt": {
+      "status": "read",
+      "bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa"
+    },
+    "fixed-dim/chat-shared-photosynthesis.window.json": {
+      "status": "read",
+      "bytes": 205,
+      "sha256": "f6ead993906df694dab442d379489963052ed12663168a9cd27fb43e4855827c"
+    },
+    "fixed-dim/chat-shared-photosynthesis.command.json": {
+      "status": "read",
+      "bytes": 467,
+      "sha256": "c4438f562916d3ec39468d782c27755d26f159508ce2f1722679f480fc4bb9b7"
+    },
+    "fixed-dim/chat-shared-photosynthesis.log": {
+      "status": "read",
+      "bytes": 251,
+      "sha256": "e869f0e1a67a5d56c4765491f76758d3c62bba610527b12379337031cf4a5ccc"
+    },
+    "fixed-dim/chat-shared-photosynthesis-mtp.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "89c36e24710fa94f80285e6dc22ff63fc74702a6220b385278d755188afdd6ad"
+    },
+    "fixed-dim/chat-shared-photosynthesis-mtp.command.json": {
+      "status": "read",
+      "bytes": 553,
+      "sha256": "6ecf37c10f1477f7c8db51a79c12ce20145e1b9a728994ed11d8c8cee1162347"
+    },
+    "fixed-dim/chat-shared-photosynthesis-mtp.txt": {
+      "status": "read",
+      "bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa"
+    },
+    "fixed-dim/chat-shared-photosynthesis-mtp.log": {
+      "status": "read",
+      "bytes": 509,
+      "sha256": "bd171404adfe87f5d590c78cc0133915f3397936ebbf0c49c60ae1d055e4adbd"
+    },
+    "fixed-dim/chat-fixed-photosynthesis.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "8a585e0701b27051cea7fbc98244a64fe4af86dd9a56f3270efba9b372e6fd84"
+    },
+    "fixed-dim/chat-fixed-photosynthesis.command.json": {
+      "status": "read",
+      "bytes": 450,
+      "sha256": "b1a0e36ade71c66f02922b2e9e2520019e126b7f09d851a4e1865f28f01fa320"
+    },
+    "fixed-dim/chat-fixed-photosynthesis.txt": {
+      "status": "read",
+      "bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa"
+    },
+    "fixed-dim/chat-fixed-photosynthesis.log": {
+      "status": "read",
+      "bytes": 251,
+      "sha256": "1f4583c7cbbcc700be1b2b7f8810cc822928aab2821714759364369da6480d01"
+    },
+    "fixed-dim/chat-fixed-photosynthesis-mtp.window.json": {
+      "status": "read",
+      "bytes": 205,
+      "sha256": "6e39bd1ec65aa46694a7a4f5cf0fb11e2ba7b62a658fb40cae2b141977e75d3d"
+    },
+    "fixed-dim/chat-fixed-photosynthesis-mtp.command.json": {
+      "status": "read",
+      "bytes": 536,
+      "sha256": "6afa691232be6d0a206c43b97023667d2c4531c3a03f6528f1384516279940ea"
+    },
+    "fixed-dim/chat-fixed-photosynthesis-mtp.txt": {
+      "status": "read",
+      "bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa"
+    },
+    "fixed-dim/chat-fixed-photosynthesis-mtp.log": {
+      "status": "read",
+      "bytes": 509,
+      "sha256": "5047cf79d7505de021b3eed454821da710ddb01dde8e9a6e2d35f9b807c8e68f"
+    },
+    "fixed-dim/chat-shared-csv.txt": {
+      "status": "read",
+      "bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d"
+    },
+    "fixed-dim/chat-shared-csv.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "8985e1ee189464960890ee55679c8be2144e02e2d580301828ecb7f97eedc9d9"
+    },
+    "fixed-dim/chat-shared-csv.command.json": {
+      "status": "read",
+      "bytes": 513,
+      "sha256": "645a1401e7be2c7eac54208ab62a3a45ba135cd4e172b415c3d22cb99e6e2c75"
+    },
+    "fixed-dim/chat-shared-csv.log": {
+      "status": "read",
+      "bytes": 251,
+      "sha256": "7b5c8f1f9bd8b4ef3c204b913e05e1f790ed38d8f20c723879272e1dc2f6a7c8"
+    },
+    "fixed-dim/chat-shared-csv-mtp.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "3d7132b18a450e04d194e5a3580aa6037ef180a5fca58d4595e2d80dfbbd376c"
+    },
+    "fixed-dim/chat-shared-csv-mtp.command.json": {
+      "status": "read",
+      "bytes": 599,
+      "sha256": "2836394c1c5b7bff5f04fc10e1930ba42245b2096e446c728c9116d3d22cbedd"
+    },
+    "fixed-dim/chat-shared-csv-mtp.txt": {
+      "status": "read",
+      "bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d"
+    },
+    "fixed-dim/chat-shared-csv-mtp.log": {
+      "status": "read",
+      "bytes": 509,
+      "sha256": "8d72ad39b61319af2c6518356c73a3fd55da8bf616f1b5510594165072e25e95"
+    },
+    "fixed-dim/chat-fixed-csv.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "56aa4c822248fbed35974602b2e63a73923d806eced3495b43240cf7442857e1"
+    },
+    "fixed-dim/chat-fixed-csv.command.json": {
+      "status": "read",
+      "bytes": 496,
+      "sha256": "290a962c09f4a67aac263de322d5e4382051aef932c453f018f2ac6317b312a1"
+    },
+    "fixed-dim/chat-fixed-csv.txt": {
+      "status": "read",
+      "bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d"
+    },
+    "fixed-dim/chat-fixed-csv.log": {
+      "status": "read",
+      "bytes": 251,
+      "sha256": "c79e2671f1e800541e8fa95208801e2a8b3adb8641f0a422423b3c339148a504"
+    },
+    "fixed-dim/chat-fixed-csv-mtp.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "1042d2be493dcfa90112c1abb590d959aea00ea3351f1ce48a7d96ad3cb8b2d4"
+    },
+    "fixed-dim/chat-fixed-csv-mtp.command.json": {
+      "status": "read",
+      "bytes": 582,
+      "sha256": "9809a17a80d3fe10b4cda7084e4087634463ccabd06331117b9133902e016022"
+    },
+    "fixed-dim/chat-fixed-csv-mtp.txt": {
+      "status": "read",
+      "bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d"
+    },
+    "fixed-dim/chat-fixed-csv-mtp.log": {
+      "status": "read",
+      "bytes": 509,
+      "sha256": "7d9afdfede9220677de125135cab4cfde61458a4a58a7cc4d8e407fcae60d218"
+    },
+    "fixed-dim/chat-parity.json": {
+      "status": "read",
+      "bytes": 997,
+      "sha256": "8d1da8ee8afe04575ac10a3226938f0acd39cfdc02b4f6d92d0dd72bd1036b8e"
+    },
+    "fixed-dim/long-shared.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "636f33388266fd7e49708af64aecf017b01c6a9ca0df108b512054ace4e7d03c"
+    },
+    "fixed-dim/long-shared.command.json": {
+      "status": "read",
+      "bytes": 366,
+      "sha256": "a30fdd827817ab055f417fbe6ac937a1d50452ad88d18404aae02fb139a6a0dd"
+    },
+    "fixed-dim/long-shared.json": {
+      "status": "read",
+      "bytes": 324,
+      "sha256": "89e276d75a9ac39b41850964ed1963d12894f5437a7b10a094db392545cfe10b"
+    },
+    "fixed-dim/long-fixed.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "8dea6c56323817123b20e8e5306b6b750fbbb19769bdd2c3eee0275efb7e66c8"
+    },
+    "fixed-dim/long-fixed.command.json": {
+      "status": "read",
+      "bytes": 349,
+      "sha256": "0b1e969a61fe165ab3401a516ab8f34fe5cfa67e5671351dc2dcdd50780f8fdb"
+    },
+    "fixed-dim/long-fixed.json": {
+      "status": "read",
+      "bytes": 334,
+      "sha256": "1de9b55520cbe18a2bd1908cda2005784862fe9dc6777632a99f186c7d2ce1d4"
+    },
+    "fixed-dim/check-250.window.json": {
+      "status": "read",
+      "bytes": 207,
+      "sha256": "8a5233d41a24d38402188b26a4dc9d312fe2c5e96a2595f97258bde6de5c29a9"
+    },
+    "fixed-dim/check-250.command.json": {
+      "status": "read",
+      "bytes": 316,
+      "sha256": "f6ec694ebafffc144bb73ec4aa97dfdad0285f41e0fc0055ae0bb65695338e02"
+    },
+    "fixed-dim/check-250.json": {
+      "status": "read",
+      "bytes": 245,
+      "sha256": "b3599cabaadbb93e760a658fce7d1dfbe9ff342427f4cad249483628aa7fe154"
+    },
+    "fixed-dim/check-2300.window.json": {
+      "status": "read",
+      "bytes": 206,
+      "sha256": "b5326ca5eda7147e3d77adc73dbb06343b5af994879221824d2a31f1a6207189"
+    },
+    "fixed-dim/check-2300.command.json": {
+      "status": "read",
+      "bytes": 317,
+      "sha256": "64017aa7ef4b554bada9a1cd8299367d759ddb9a49c33962a3d3f37eb8b60eb9"
+    },
+    "fixed-dim/check-2300.json": {
+      "status": "read",
+      "bytes": 243,
+      "sha256": "4168d13ae74e49d792ef8d91e30c7343d5701f57e8fb3ef4326adf05511837f3"
+    },
+    "fixed-dim/batch-defaults/20261003T115400Z-447949-summary.json": {
+      "status": "read",
+      "bytes": 14884,
+      "sha256": "946c56eaa0b9dd904e90b2a0c7fc8774f6c4863de7e1b30f96e9e0f37711b24f"
+    },
+    "fixed-dim/batch-defaults/20261003T115400Z-447949-512.json": {
+      "status": "read",
+      "bytes": 300785,
+      "sha256": "253b7abd764d60aa1f5a508db40720eaf28dffe8644e46b35835b2c0a6943613"
+    },
+    "fixed-dim/batch-defaults/20261003T115400Z-447949-512-mtp.json": {
+      "status": "read",
+      "bytes": 305270,
+      "sha256": "508c0d8a394ee3765536e275e6c9bc320067a01ae6f57e509ddb999ab5e9c8c5"
+    }
+  },
+  "timing_note": "Whole-command windows include loading and cleanup. They do not delimit inference or establish sustained clocks. Missing/copied-in-progress files never count as passed."
+}

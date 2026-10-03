@@ -2,6 +2,61 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-03: main-branch attention, prefix reuse and ceiling audit
+
+The performance branch is merged; this project now works directly on `main` as recorded in
+`AGENTS.md`. Evidence and reproduction are in `results/engine/main-tuning-20261003/`.
+
+- Exact GGUF accounting gives 4,040,294,400 matrix bytes per GPU per decode token and
+  11.92230912 GFLOP per GPU. At the measured 1370 MHz memory clock, the weight-only bound is
+  65.10 tok/s. Adding the historical 96 × 42 us transport assumption gives 51.57 tok/s, an optimistic
+  sensitivity calculation rather than a measured practical ceiling. Four-column verification is
+  47.68923648 GFLOP per GPU. `results/engine/ceiling-audit-20261003/` retains the full audit.
+- Unsigned Q4 unpacking and shape-specific wave geometry improve warmed FFN gate/down payload
+  bandwidth to about 158/165 GB/s per GPU; narrow attention projections improve more. Adaptive
+  attention uses fewer partitions for short prefixes and more for long global attention.
+- Three ordinary 128-token chats improve by 3.1–4.5%, with identical text. The paired MTP results
+  are 29.17/24.50/37.09 tok/s; their combined gain over ordinary decoding is about 1.17×, below M5.
+  These are single paired chat runs, and skipping the final unused CLI forward contributes to the gain.
+- Long-context decode improves from 17.90 to 19.08 tok/s (+6.6%); prefill remains about 117.4 tok/s.
+  The repeated pp512/tg256 workload is unchanged within run variation: 161.23/21.970 baseline versus
+  161.00/21.869 after tuning. Its -0.46% decode difference is not a demonstrated improvement.
+- A following shared-KV iteration groups two sliding or eight global query heads, retaining scalar
+  loads for the shortest prefixes. Against a fresh rerun of the preceding core, paired tg256 improves
+  from 22.028 to 22.687 tok/s (+2.99%), with pp512 unchanged near 160. Ordinary short chats are
+  essentially unchanged in this phase, while all twelve ordinary/MTP outputs remain identical.
+  Decode after a 4096-token prefill improves from 19.154 to 20.370 tok/s (+6.35%); prefill stays near 117.4.
+- Compiling the shared kernels for their selected dimensions (256 sliding / 512 global), with
+  one K/V plane per group, reduces their measured time by 6.1–14.4%. A fresh paired full-model
+  phase raises pooled tg256 from 22.779 to 23.415 tok/s (+2.79%) and long-context decode from
+  20.552 to 21.359 tok/s (+3.93%). Prefill remains unchanged. All twelve chat outputs match;
+  ordinary chat improves 1.3–4.0% and MTP 1.8–2.4% in these single pairs.
+- Resident graph growth exposed a separate allocation cliff: each target graph pair consumes about
+  9.1 MiB of visible command storage per GPU in the batch128 diagnostic. At the 256 MiB aperture limit, gaps between GPU segments
+  grew to 98–142 ms per token despite unchanged shader times and clocks. A controlled clear restored
+  greedy requests from 4.915/5.979 to 1.666/1.701 s with identical outputs. Later growth reproduced
+  the delay even for stochastic requests. The target now evicts its least-recent graph before recording
+  a fifth pair; clearing after the driver has grown its backing pools is insufficient.
+- Resident serving reuses only exact token prefixes with surviving sliding history, including tracking
+  speculative writes that were rejected. Cached-token usage is explicit and `--no-prefix-cache`
+  permits cold comparisons. A repeated 1403-token prompt with 128 output tokens falls from 19.31 to
+  6.25 s; a full-history follow-up falls from 14.37 to 1.08 s, with matching output in those comparisons.
+- The batch512 default passes 72 resident requests across batch32/128/512 and speculative512, with
+  all 108 cross-configuration comparisons exact. Against batch32, a 512-token input falls from 7.865
+  to 3.194 s, and the repeated 1763-token input with 256 output tokens falls from 46.462 to 11.989 s.
+  The latter includes retained-prefix reuse. Both default ordinary/MTP protocol suites pass; observed
+  visible-VRAM peaks remain below 256 MiB, with only 7.176 MiB headroom on the fuller card with MTP.
+  These request snapshots validate this workload, not arbitrary other clients or 32K execution.
+- Six reference paths pass all 132 tensors, logits and ten greedy tokens. Tokenizer/chat fixtures,
+  10,000 bidirectional P2P payloads, 26 CPU tests, partition-boundary and 2300-token cache-wrap checks
+  pass. Ordinary and MTP HTTP suites cover prefix limits, JSON/SSE, tools and sampler changes.
+  All sampled points in the seven approximate benchmark decode windows show both GPUs at 850/1370 MHz.
+  The later shared-KV/cache-bound build separately passes all six paths, fixtures, P2P and 30 CPU tests.
+
+Several alternatives lost: universal Q4 wave shapes, small-batch unsigned/row-major kernels, transposed
+GEMM tiles and packed attention loads. Retain the measured selectors; neither a hardware maximum nor
+M3/M5 completion has been demonstrated.
+
 ## 2026-10-03: measured kernel and server improvements
 
 Raw comparisons, source/binary hashes, clocks and validation logs are in

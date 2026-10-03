@@ -1,0 +1,1845 @@
+{
+  "captured_at_utc": "2026-10-03T10:46:47.559070+00:00",
+  "script_sha256": "1a125dc406689b0f8f45c7440162b7cf4e5b2c49a2d8b2a1b9215a3705af54ba",
+  "scope": "Read-only capture of completed local raw files copied with rsync-preserved mtimes. Git does not preserve these timestamps.",
+  "method": "Approximate combined end = bench JSON mtime; start = end - pp_seconds - tg_seconds. Decode ends at that mtime; approximate prefill ends where decode starts.",
+  "limitations": [
+    "These are reconstructed windows, not recorded exact inference start/end timestamps.",
+    "Observed local mtime_ns is preserved exactly; a zero subsecond component does not establish nanosecond precision. Current copied files commonly have whole-second mtimes.",
+    "Stdout buffering, filesystem timestamp granularity, profile writes between timed phases, final profile writes/cleanup, and copy behavior can shift the anchor or insert unmeasured gaps. Their jitter is not measured or corrected.",
+    "Inference setup/model loading is excluded by the reported phase durations; stderr log mtime may precede inference and is not used as its endpoint.",
+    "Assumes rsync retained source timestamps and the benchmark files and clock samples use the same incite wall clock; the script does not independently verify that assumption.",
+    "Clock coverage fractions count samples, not elapsed-time duty cycle or GPU utilization. Sampling may miss brief changes, and the ongoing remote log can extend beyond this local snapshot.",
+    "CLI chat file mtimes are captured, but no chat windows are inferred from rounded rates. GPU reference validation and performance acceptance are separate from this alignment."
+  ],
+  "clock_snapshot": {
+    "file": "clocks.txt",
+    "status": "captured",
+    "size_bytes": 537088,
+    "sha256": "18aeda79abc2e7bb6ec483d53006abf5a85101b0981d8996b6e549bf45a2991d",
+    "mtime_ns": 1791024015000000000,
+    "mtime_utc": "2026-10-03T10:40:15+00:00",
+    "mtime_subsecond_ns": 0,
+    "changed_during_read": false,
+    "parsed_samples": 14042,
+    "first_sample_epoch_seconds": 1791020228.967,
+    "last_sample_epoch_seconds": 1791024015.807,
+    "median_sample_interval_seconds": 0.2669999599456787
+  },
+  "files": {
+    "baseline-1.json": {
+      "file": "baseline-1.json",
+      "status": "captured",
+      "size_bytes": 311,
+      "sha256": "6c461fc51988f0b133f8b76478b7830fd9a224148cd86befd3a1c43b0c42b1ac",
+      "mtime_ns": 1791020277000000000,
+      "mtime_utc": "2026-10-03T09:37:57+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-1.log": {
+      "file": "baseline-1.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "740f38773a53ec1ac825d155e942a6fdaca6745b11ec8ac5addd09d98c0d59c2",
+      "mtime_ns": 1791020262000000000,
+      "mtime_utc": "2026-10-03T09:37:42+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-1.tsv": {
+      "file": "baseline-1.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "aec3d30df26ae5f1d189dde96b0ca5129c59910a3501f6ae1ffb399b26282404",
+      "mtime_ns": 1791020277000000000,
+      "mtime_utc": "2026-10-03T09:37:57+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-1.prefill.tsv": {
+      "file": "baseline-1.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4006,
+      "sha256": "d71650698ef70ae431795fb55fde07c5f997413aac202504fed6d6ee315d484b",
+      "mtime_ns": 1791020265000000000,
+      "mtime_utc": "2026-10-03T09:37:45+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-2.json": {
+      "file": "baseline-2.json",
+      "status": "captured",
+      "size_bytes": 315,
+      "sha256": "aa92be5d68182134ba551b2c81f3376761a70c1a2a853f6d8b96e2273f6f1fa1",
+      "mtime_ns": 1791020321000000000,
+      "mtime_utc": "2026-10-03T09:38:41+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-2.log": {
+      "file": "baseline-2.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "740f38773a53ec1ac825d155e942a6fdaca6745b11ec8ac5addd09d98c0d59c2",
+      "mtime_ns": 1791020306000000000,
+      "mtime_utc": "2026-10-03T09:38:26+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-2.tsv": {
+      "file": "baseline-2.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "5500b0244ce50bd86b36a692d6ebd51a6995a00017e557a657c85ff71e5e05e6",
+      "mtime_ns": 1791020321000000000,
+      "mtime_utc": "2026-10-03T09:38:41+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "baseline-2.prefill.tsv": {
+      "file": "baseline-2.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4006,
+      "sha256": "06fb0fa6cca2c6e0512c46c0f20eb6e482e1b11c60cf019cc4c09b8ec27c4f45",
+      "mtime_ns": 1791020309000000000,
+      "mtime_utc": "2026-10-03T09:38:29+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "selected.json": {
+      "file": "selected.json",
+      "status": "captured",
+      "size_bytes": 323,
+      "sha256": "d818b3185ea5d22653f184091e024f0f42538d4f93050d10eda07014bcf1c67a",
+      "mtime_ns": 1791020993000000000,
+      "mtime_utc": "2026-10-03T09:49:53+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "selected.log": {
+      "file": "selected.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "740f38773a53ec1ac825d155e942a6fdaca6745b11ec8ac5addd09d98c0d59c2",
+      "mtime_ns": 1791020978000000000,
+      "mtime_utc": "2026-10-03T09:49:38+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "selected.tsv": {
+      "file": "selected.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "d17a6a9570ab70744165b7f2f2601682e4fc974ebec4fd2b20e527308a6298f1",
+      "mtime_ns": 1791020993000000000,
+      "mtime_utc": "2026-10-03T09:49:53+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "selected.prefill.tsv": {
+      "file": "selected.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4006,
+      "sha256": "5a4e82709dd87f8a2b5f9e320e4cf6b54e28c456036c5327df42d9c709fb294e",
+      "mtime_ns": 1791020981000000000,
+      "mtime_utc": "2026-10-03T09:49:41+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-1.json": {
+      "file": "final-1.json",
+      "status": "captured",
+      "size_bytes": 324,
+      "sha256": "419cb67592f1168bbaf79483d8ae2796b6bfb6c46cabca28bbd7691eda9478ea",
+      "mtime_ns": 1791022741000000000,
+      "mtime_utc": "2026-10-03T10:19:01+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-1.log": {
+      "file": "final-1.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "d34826aeaaf0f27ccdc2d8fd98ad4327444f23381bb66fd6a67a31d4aeb26b75",
+      "mtime_ns": 1791022726000000000,
+      "mtime_utc": "2026-10-03T10:18:46+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-1.tsv": {
+      "file": "final-1.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "7ff4a96549c0a2ded56ec0b6ae549ed1dabc6228cd3665e8cc9b9ccbef8bb90a",
+      "mtime_ns": 1791022741000000000,
+      "mtime_utc": "2026-10-03T10:19:01+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-1.prefill.tsv": {
+      "file": "final-1.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4006,
+      "sha256": "6ca98eecdb8e1eac3704b61c00ebddfb77a318b91dc94e9fd016c09e5abd64a2",
+      "mtime_ns": 1791022729000000000,
+      "mtime_utc": "2026-10-03T10:18:49+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-2.json": {
+      "file": "final-2.json",
+      "status": "captured",
+      "size_bytes": 320,
+      "sha256": "561f16deca115193e6557c726967593602d9c506cd446015e0083c2dd929ed9e",
+      "mtime_ns": 1791022782000000000,
+      "mtime_utc": "2026-10-03T10:19:42+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-2.log": {
+      "file": "final-2.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "d34826aeaaf0f27ccdc2d8fd98ad4327444f23381bb66fd6a67a31d4aeb26b75",
+      "mtime_ns": 1791022767000000000,
+      "mtime_utc": "2026-10-03T10:19:27+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-2.tsv": {
+      "file": "final-2.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "1f8c7da778001954aee79ce01b22acd909c8044e1761f3efd82af1335e158479",
+      "mtime_ns": 1791022782000000000,
+      "mtime_utc": "2026-10-03T10:19:42+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "final-2.prefill.tsv": {
+      "file": "final-2.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4006,
+      "sha256": "19a8a3a6a33ef08926b198a781f4852ef60e64795830ecdb875ffdadaa87b5d6",
+      "mtime_ns": 1791022770000000000,
+      "mtime_utc": "2026-10-03T10:19:30+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-baseline.json": {
+      "file": "long-baseline.json",
+      "status": "captured",
+      "size_bytes": 325,
+      "sha256": "88fec4e4c189c882c161ff66e371e11cdd4de6e5edd40479c0198414a4eab2a4",
+      "mtime_ns": 1791023256000000000,
+      "mtime_utc": "2026-10-03T10:27:36+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-baseline.log": {
+      "file": "long-baseline.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "740f38773a53ec1ac825d155e942a6fdaca6745b11ec8ac5addd09d98c0d59c2",
+      "mtime_ns": 1791023214000000000,
+      "mtime_utc": "2026-10-03T10:26:54+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-baseline.tsv": {
+      "file": "long-baseline.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "b0a55bb4752e9392d34034118ea1dd8265055d4785bbd735e4b0504d6f33d868",
+      "mtime_ns": 1791023256000000000,
+      "mtime_utc": "2026-10-03T10:27:36+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-baseline.prefill.tsv": {
+      "file": "long-baseline.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4021,
+      "sha256": "49423284ff95295bb83f9fb913411765468ef26067b4799e9df01512249fda92",
+      "mtime_ns": 1791023249000000000,
+      "mtime_utc": "2026-10-03T10:27:29+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-final.json": {
+      "file": "long-final.json",
+      "status": "captured",
+      "size_bytes": 334,
+      "sha256": "7203d8302ce8661be8a78036bc6ed8c1c08056f95a7acd49fdcc76e1ebf6c3ed",
+      "mtime_ns": 1791023325000000000,
+      "mtime_utc": "2026-10-03T10:28:45+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-final.log": {
+      "file": "long-final.log",
+      "status": "captured",
+      "size_bytes": 186,
+      "sha256": "d34826aeaaf0f27ccdc2d8fd98ad4327444f23381bb66fd6a67a31d4aeb26b75",
+      "mtime_ns": 1791023284000000000,
+      "mtime_utc": "2026-10-03T10:28:04+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-final.tsv": {
+      "file": "long-final.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "a30858da9f13f995f8e749dd31d8c10d9e3fee4f2629fa27092b65c8500e481e",
+      "mtime_ns": 1791023325000000000,
+      "mtime_utc": "2026-10-03T10:28:45+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "long-final.prefill.tsv": {
+      "file": "long-final.prefill.tsv",
+      "status": "captured",
+      "size_bytes": 4021,
+      "sha256": "7d6bb7e61bb14bbf0ad1c66b409f55b23003c14b25009963d14032ab71c12e62",
+      "mtime_ns": 1791023318000000000,
+      "mtime_utc": "2026-10-03T10:28:38+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-csv-mtp.log": {
+      "file": "chat-baseline-csv-mtp.log",
+      "status": "captured",
+      "size_bytes": 509,
+      "sha256": "8a022be2975f9fd27c7a999d1c572613260c832e5ee778ed5db9f05ab1af42df",
+      "mtime_ns": 1791022986000000000,
+      "mtime_utc": "2026-10-03T10:23:06+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-csv.log": {
+      "file": "chat-baseline-csv.log",
+      "status": "captured",
+      "size_bytes": 251,
+      "sha256": "e7e950deb6cb15756dccdd640000bebfdfba3aa6cdbb3c15dd6bb9c702c7f444",
+      "mtime_ns": 1791022954000000000,
+      "mtime_utc": "2026-10-03T10:22:34+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-photosynthesis-mtp.log": {
+      "file": "chat-baseline-photosynthesis-mtp.log",
+      "status": "captured",
+      "size_bytes": 509,
+      "sha256": "946189f8fa5e60a66ffb74e24f8e2c3310a36c894a95ece0dd227a944c43e7a8",
+      "mtime_ns": 1791022918000000000,
+      "mtime_utc": "2026-10-03T10:21:58+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-photosynthesis.log": {
+      "file": "chat-baseline-photosynthesis.log",
+      "status": "captured",
+      "size_bytes": 251,
+      "sha256": "c85b8362779e43ea72cb6c58d67f2fe6b5ae5cd6f30a93cce97ade8c951dfb6a",
+      "mtime_ns": 1791022884000000000,
+      "mtime_utc": "2026-10-03T10:21:24+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-transformer-mtp.log": {
+      "file": "chat-baseline-transformer-mtp.log",
+      "status": "captured",
+      "size_bytes": 509,
+      "sha256": "ae730d680d80a43c4ae997b077edcb89253067823fcb86e94c77b03622aa698e",
+      "mtime_ns": 1791022848000000000,
+      "mtime_utc": "2026-10-03T10:20:48+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-transformer.log": {
+      "file": "chat-baseline-transformer.log",
+      "status": "captured",
+      "size_bytes": 251,
+      "sha256": "acc9e0e8bfe4278517e1c6927de8214dbb80c387084e466a4474245efeeee71c",
+      "mtime_ns": 1791022814000000000,
+      "mtime_utc": "2026-10-03T10:20:14+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-csv-mtp.log": {
+      "file": "chat-final-csv-mtp.log",
+      "status": "captured",
+      "size_bytes": 509,
+      "sha256": "db285a8785db9cf81165545f75e592116de5910d023cd84f6b99b693307967aa",
+      "mtime_ns": 1791023187000000000,
+      "mtime_utc": "2026-10-03T10:26:27+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-csv.log": {
+      "file": "chat-final-csv.log",
+      "status": "captured",
+      "size_bytes": 251,
+      "sha256": "6965d76e57d9a0296378e4ca219a424fbd19bc5f603947a73fb1e27a0416bb86",
+      "mtime_ns": 1791023153000000000,
+      "mtime_utc": "2026-10-03T10:25:53+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-photosynthesis-mtp.log": {
+      "file": "chat-final-photosynthesis-mtp.log",
+      "status": "captured",
+      "size_bytes": 509,
+      "sha256": "976197d983bcfeaf93b8a462b9935e97a2d4a32b7c923d94ca1e4ca13cf0431c",
+      "mtime_ns": 1791023119000000000,
+      "mtime_utc": "2026-10-03T10:25:19+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-photosynthesis.log": {
+      "file": "chat-final-photosynthesis.log",
+      "status": "captured",
+      "size_bytes": 251,
+      "sha256": "6aafdc8a1a03b19493b0386799d23a1ff216fc61cdfba8f45585eaa5cdc66629",
+      "mtime_ns": 1791023085000000000,
+      "mtime_utc": "2026-10-03T10:24:45+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-transformer-mtp.log": {
+      "file": "chat-final-transformer-mtp.log",
+      "status": "captured",
+      "size_bytes": 509,
+      "sha256": "a2f58bc182226fabdd4cf22a09e4fd64d44db76481d21338bddb2c2ae6e1a2d1",
+      "mtime_ns": 1791023052000000000,
+      "mtime_utc": "2026-10-03T10:24:12+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-transformer.log": {
+      "file": "chat-final-transformer.log",
+      "status": "captured",
+      "size_bytes": 251,
+      "sha256": "9d85fad61c8242e338e076a0b6b0872510f06868b6c2cdd6a42cfaaaed408dd9",
+      "mtime_ns": 1791023018000000000,
+      "mtime_utc": "2026-10-03T10:23:38+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-csv-mtp.txt": {
+      "file": "chat-baseline-csv-mtp.txt",
+      "status": "captured",
+      "size_bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d",
+      "mtime_ns": 1791022986000000000,
+      "mtime_utc": "2026-10-03T10:23:06+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-csv.txt": {
+      "file": "chat-baseline-csv.txt",
+      "status": "captured",
+      "size_bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d",
+      "mtime_ns": 1791022954000000000,
+      "mtime_utc": "2026-10-03T10:22:34+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-photosynthesis-mtp.txt": {
+      "file": "chat-baseline-photosynthesis-mtp.txt",
+      "status": "captured",
+      "size_bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa",
+      "mtime_ns": 1791022918000000000,
+      "mtime_utc": "2026-10-03T10:21:58+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-photosynthesis.txt": {
+      "file": "chat-baseline-photosynthesis.txt",
+      "status": "captured",
+      "size_bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa",
+      "mtime_ns": 1791022884000000000,
+      "mtime_utc": "2026-10-03T10:21:24+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-transformer-mtp.txt": {
+      "file": "chat-baseline-transformer-mtp.txt",
+      "status": "captured",
+      "size_bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5",
+      "mtime_ns": 1791022848000000000,
+      "mtime_utc": "2026-10-03T10:20:48+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-transformer.txt": {
+      "file": "chat-baseline-transformer.txt",
+      "status": "captured",
+      "size_bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5",
+      "mtime_ns": 1791022814000000000,
+      "mtime_utc": "2026-10-03T10:20:14+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-csv-mtp.txt": {
+      "file": "chat-final-csv-mtp.txt",
+      "status": "captured",
+      "size_bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d",
+      "mtime_ns": 1791023187000000000,
+      "mtime_utc": "2026-10-03T10:26:27+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-csv.txt": {
+      "file": "chat-final-csv.txt",
+      "status": "captured",
+      "size_bytes": 446,
+      "sha256": "240d8f2fe7012df9b6ff1fda2207abf8dd45fd356cc9900cd17d308114ed854d",
+      "mtime_ns": 1791023153000000000,
+      "mtime_utc": "2026-10-03T10:25:53+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-photosynthesis-mtp.txt": {
+      "file": "chat-final-photosynthesis-mtp.txt",
+      "status": "captured",
+      "size_bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa",
+      "mtime_ns": 1791023119000000000,
+      "mtime_utc": "2026-10-03T10:25:19+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-photosynthesis.txt": {
+      "file": "chat-final-photosynthesis.txt",
+      "status": "captured",
+      "size_bytes": 641,
+      "sha256": "2f5cce029794742aef6b9898767b5c4211f4200bc27ad88f00a15c05a4ec55aa",
+      "mtime_ns": 1791023085000000000,
+      "mtime_utc": "2026-10-03T10:24:45+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-transformer-mtp.txt": {
+      "file": "chat-final-transformer-mtp.txt",
+      "status": "captured",
+      "size_bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5",
+      "mtime_ns": 1791023052000000000,
+      "mtime_utc": "2026-10-03T10:24:12+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-transformer.txt": {
+      "file": "chat-final-transformer.txt",
+      "status": "captured",
+      "size_bytes": 538,
+      "sha256": "cdaa3c8df5b573b5c6c5626db5d639ae75ca77db4e94f6f4ccae7497f8ef98c5",
+      "mtime_ns": 1791023018000000000,
+      "mtime_utc": "2026-10-03T10:23:38+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-csv-mtp.tsv": {
+      "file": "chat-baseline-csv-mtp.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "e2e80477dfbaf64afa709dfd803bbcbb830d4aa377dedf5c8bfa99a173488749",
+      "mtime_ns": 1791022986000000000,
+      "mtime_utc": "2026-10-03T10:23:06+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-csv.tsv": {
+      "file": "chat-baseline-csv.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "1e8210d87625d2d52f1b46eaf8a0ed0f95e57f4e8a29a423ba8a84754f5ac4f1",
+      "mtime_ns": 1791022954000000000,
+      "mtime_utc": "2026-10-03T10:22:34+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-photosynthesis-mtp.tsv": {
+      "file": "chat-baseline-photosynthesis-mtp.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "f28194471f17e6b5b270409477a74f345a6b01ab72003e4661abdbf428cb2448",
+      "mtime_ns": 1791022918000000000,
+      "mtime_utc": "2026-10-03T10:21:58+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-photosynthesis.tsv": {
+      "file": "chat-baseline-photosynthesis.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "8dceb3c0387b41703ab671a07b7466e6b35ada9e37662ee4428e9215b1d1e0e3",
+      "mtime_ns": 1791022884000000000,
+      "mtime_utc": "2026-10-03T10:21:24+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-transformer-mtp.tsv": {
+      "file": "chat-baseline-transformer-mtp.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "e7bfa16cccae740bf10afa9e7da9cb49415631b8d73e6e10e4a30ef80b0c3860",
+      "mtime_ns": 1791022848000000000,
+      "mtime_utc": "2026-10-03T10:20:48+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-baseline-transformer.tsv": {
+      "file": "chat-baseline-transformer.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "ad1379ed0f467649b4759c3611b1335d2c8ae38fd95efcfae2db644861c77eb0",
+      "mtime_ns": 1791022814000000000,
+      "mtime_utc": "2026-10-03T10:20:14+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-csv-mtp.tsv": {
+      "file": "chat-final-csv-mtp.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "10871d79545f9eb6452ca6eb0eb6e117825d0df565319f965fe045c4e26f4cc6",
+      "mtime_ns": 1791023187000000000,
+      "mtime_utc": "2026-10-03T10:26:27+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-csv.tsv": {
+      "file": "chat-final-csv.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "f0ff67ea4bf2d95b838d30af202f8501db10a18466c72b1cd173d47a4d59df12",
+      "mtime_ns": 1791023153000000000,
+      "mtime_utc": "2026-10-03T10:25:53+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-photosynthesis-mtp.tsv": {
+      "file": "chat-final-photosynthesis-mtp.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "53e78b9979e8e26df175079130e0ff21b869c8cf1ecbd81c070d5cdcbcaac1fd",
+      "mtime_ns": 1791023119000000000,
+      "mtime_utc": "2026-10-03T10:25:19+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-photosynthesis.tsv": {
+      "file": "chat-final-photosynthesis.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "3d844f6f70dde8864fa40d34b9f67d45e1ccddd761ad6a4928634d0a8f0a1971",
+      "mtime_ns": 1791023085000000000,
+      "mtime_utc": "2026-10-03T10:24:45+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-transformer-mtp.tsv": {
+      "file": "chat-final-transformer-mtp.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "91b2e125967e410a984dbc8eb3c93222cf7e97f5e415d26f0dd842e9e5a1b0fd",
+      "mtime_ns": 1791023052000000000,
+      "mtime_utc": "2026-10-03T10:24:12+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "chat-final-transformer.tsv": {
+      "file": "chat-final-transformer.tsv",
+      "status": "captured",
+      "size_bytes": 3813,
+      "sha256": "f24109e9508c241488f97332c58c2f1c5deef5e885fbd295bd1bf92fbd54312d",
+      "mtime_ns": 1791023018000000000,
+      "mtime_utc": "2026-10-03T10:23:38+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    }
+  },
+  "benchmarks": [
+    {
+      "name": "baseline-1",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "baseline-1.json",
+      "measured_pp_seconds": 3.180404955,
+      "measured_tg_seconds": 11.635226607,
+      "pp_tokens": 512,
+      "tg_tokens": 256,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791020262.1843686,
+        "approximate_end_epoch_seconds": 1791020277.0,
+        "approximate_start_utc": "2026-10-03T09:37:42.184369+00:00",
+        "approximate_end_utc": "2026-10-03T09:37:57+00:00",
+        "duration_seconds": 14.81563138961792,
+        "clock_samples": 55,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020262.293,
+        "last_sample_epoch_seconds": 1791020276.917,
+        "start_to_first_sample_seconds": 0.10863137245178223,
+        "last_sample_to_end_seconds": 0.08299994468688965,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 52,
+        "both_cards_at_850_1370_sample_fraction": 0.9454545454545454,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 52,
+            "at_850_1370_sample_fraction": 0.9454545454545454,
+            "max_temperature_c": 64.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 650,
+                "memory_mhz": 1370,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 52
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 53,
+            "at_850_1370_sample_fraction": 0.9636363636363636,
+            "max_temperature_c": 62.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 53
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791020262.1843686,
+        "approximate_end_epoch_seconds": 1791020265.3647735,
+        "approximate_start_utc": "2026-10-03T09:37:42.184369+00:00",
+        "approximate_end_utc": "2026-10-03T09:37:45.364774+00:00",
+        "duration_seconds": 3.1804049015045166,
+        "clock_samples": 12,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020262.293,
+        "last_sample_epoch_seconds": 1791020265.283,
+        "start_to_first_sample_seconds": 0.10863137245178223,
+        "last_sample_to_end_seconds": 0.08177351951599121,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 9,
+        "both_cards_at_850_1370_sample_fraction": 0.75,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 9,
+            "at_850_1370_sample_fraction": 0.75,
+            "max_temperature_c": 61.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 650,
+                "memory_mhz": 1370,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 9
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 10,
+            "at_850_1370_sample_fraction": 0.8333333333333334,
+            "max_temperature_c": 59.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 10
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791020265.3647735,
+        "approximate_end_epoch_seconds": 1791020277.0,
+        "approximate_start_utc": "2026-10-03T09:37:45.364774+00:00",
+        "approximate_end_utc": "2026-10-03T09:37:57+00:00",
+        "duration_seconds": 11.635226488113403,
+        "clock_samples": 43,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020265.565,
+        "last_sample_epoch_seconds": 1791020276.917,
+        "start_to_first_sample_seconds": 0.2002265453338623,
+        "last_sample_to_end_seconds": 0.08299994468688965,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 43,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 64.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 62.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "baseline-2",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "baseline-2.json",
+      "measured_pp_seconds": 3.170783857,
+      "measured_tg_seconds": 11.669360714,
+      "pp_tokens": 512,
+      "tg_tokens": 256,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791020306.1598556,
+        "approximate_end_epoch_seconds": 1791020321.0,
+        "approximate_start_utc": "2026-10-03T09:38:26.159856+00:00",
+        "approximate_end_utc": "2026-10-03T09:38:41+00:00",
+        "duration_seconds": 14.840144395828247,
+        "clock_samples": 55,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020306.213,
+        "last_sample_epoch_seconds": 1791020320.784,
+        "start_to_first_sample_seconds": 0.05314445495605469,
+        "last_sample_to_end_seconds": 0.21600008010864258,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 54,
+        "both_cards_at_850_1370_sample_fraction": 0.9818181818181818,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 54,
+            "at_850_1370_sample_fraction": 0.9818181818181818,
+            "max_temperature_c": 68.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 54
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 54,
+            "at_850_1370_sample_fraction": 0.9818181818181818,
+            "max_temperature_c": 65.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 54
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791020306.1598556,
+        "approximate_end_epoch_seconds": 1791020309.3306394,
+        "approximate_start_utc": "2026-10-03T09:38:26.159856+00:00",
+        "approximate_end_utc": "2026-10-03T09:38:29.330639+00:00",
+        "duration_seconds": 3.170783758163452,
+        "clock_samples": 12,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020306.213,
+        "last_sample_epoch_seconds": 1791020309.113,
+        "start_to_first_sample_seconds": 0.05314445495605469,
+        "last_sample_to_end_seconds": 0.21763944625854492,
+        "largest_internal_sample_gap_seconds": 0.2669999599456787,
+        "both_cards_at_850_1370_samples": 11,
+        "both_cards_at_850_1370_sample_fraction": 0.9166666666666666,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 11,
+            "at_850_1370_sample_fraction": 0.9166666666666666,
+            "max_temperature_c": 65.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 11
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 11,
+            "at_850_1370_sample_fraction": 0.9166666666666666,
+            "max_temperature_c": 63.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 11
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791020309.3306394,
+        "approximate_end_epoch_seconds": 1791020321.0,
+        "approximate_start_utc": "2026-10-03T09:38:29.330639+00:00",
+        "approximate_end_utc": "2026-10-03T09:38:41+00:00",
+        "duration_seconds": 11.669360637664795,
+        "clock_samples": 43,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020309.395,
+        "last_sample_epoch_seconds": 1791020320.784,
+        "start_to_first_sample_seconds": 0.0643606185913086,
+        "last_sample_to_end_seconds": 0.21600008010864258,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 43,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 68.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 65.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "selected",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "selected.json",
+      "measured_pp_seconds": 3.175918163,
+      "measured_tg_seconds": 11.572862569,
+      "pp_tokens": 512,
+      "tg_tokens": 256,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791020978.2512193,
+        "approximate_end_epoch_seconds": 1791020993.0,
+        "approximate_start_utc": "2026-10-03T09:49:38.251219+00:00",
+        "approximate_end_utc": "2026-10-03T09:49:53+00:00",
+        "duration_seconds": 14.748780727386475,
+        "clock_samples": 55,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020978.423,
+        "last_sample_epoch_seconds": 1791020992.909,
+        "start_to_first_sample_seconds": 0.17178082466125488,
+        "last_sample_to_end_seconds": 0.09100008010864258,
+        "largest_internal_sample_gap_seconds": 0.2819998264312744,
+        "both_cards_at_850_1370_samples": 53,
+        "both_cards_at_850_1370_sample_fraction": 0.9636363636363636,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 53,
+            "at_850_1370_sample_fraction": 0.9636363636363636,
+            "max_temperature_c": 75.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 53
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 54,
+            "at_850_1370_sample_fraction": 0.9818181818181818,
+            "max_temperature_c": 73.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 54
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791020978.2512193,
+        "approximate_end_epoch_seconds": 1791020981.4271374,
+        "approximate_start_utc": "2026-10-03T09:49:38.251219+00:00",
+        "approximate_end_utc": "2026-10-03T09:49:41.427137+00:00",
+        "duration_seconds": 3.1759181022644043,
+        "clock_samples": 12,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020978.423,
+        "last_sample_epoch_seconds": 1791020981.369,
+        "start_to_first_sample_seconds": 0.17178082466125488,
+        "last_sample_to_end_seconds": 0.05813741683959961,
+        "largest_internal_sample_gap_seconds": 0.28100013732910156,
+        "both_cards_at_850_1370_samples": 10,
+        "both_cards_at_850_1370_sample_fraction": 0.8333333333333334,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 10,
+            "at_850_1370_sample_fraction": 0.8333333333333334,
+            "max_temperature_c": 73.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 10
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 11,
+            "at_850_1370_sample_fraction": 0.9166666666666666,
+            "max_temperature_c": 71.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 11
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791020981.4271374,
+        "approximate_end_epoch_seconds": 1791020993.0,
+        "approximate_start_utc": "2026-10-03T09:49:41.427137+00:00",
+        "approximate_end_utc": "2026-10-03T09:49:53+00:00",
+        "duration_seconds": 11.57286262512207,
+        "clock_samples": 43,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791020981.65,
+        "last_sample_epoch_seconds": 1791020992.909,
+        "start_to_first_sample_seconds": 0.22286272048950195,
+        "last_sample_to_end_seconds": 0.09100008010864258,
+        "largest_internal_sample_gap_seconds": 0.2819998264312744,
+        "both_cards_at_850_1370_samples": 43,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 75.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 73.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "final-1",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "final-1.json",
+      "measured_pp_seconds": 3.182023113,
+      "measured_tg_seconds": 11.77492142,
+      "pp_tokens": 512,
+      "tg_tokens": 256,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791022726.0430555,
+        "approximate_end_epoch_seconds": 1791022741.0,
+        "approximate_start_utc": "2026-10-03T10:18:46.043056+00:00",
+        "approximate_end_utc": "2026-10-03T10:19:01+00:00",
+        "duration_seconds": 14.956944465637207,
+        "clock_samples": 55,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791022726.152,
+        "last_sample_epoch_seconds": 1791022740.896,
+        "start_to_first_sample_seconds": 0.10894441604614258,
+        "last_sample_to_end_seconds": 0.10400009155273438,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 53,
+        "both_cards_at_850_1370_sample_fraction": 0.9636363636363636,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 53,
+            "at_850_1370_sample_fraction": 0.9636363636363636,
+            "max_temperature_c": 71.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 450,
+                "memory_mhz": 1370,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 53
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 54,
+            "at_850_1370_sample_fraction": 0.9818181818181818,
+            "max_temperature_c": 69.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 54
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791022726.0430555,
+        "approximate_end_epoch_seconds": 1791022729.2250786,
+        "approximate_start_utc": "2026-10-03T10:18:46.043056+00:00",
+        "approximate_end_utc": "2026-10-03T10:18:49.225079+00:00",
+        "duration_seconds": 3.182023048400879,
+        "clock_samples": 12,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791022726.152,
+        "last_sample_epoch_seconds": 1791022729.131,
+        "start_to_first_sample_seconds": 0.10894441604614258,
+        "last_sample_to_end_seconds": 0.09407854080200195,
+        "largest_internal_sample_gap_seconds": 0.28100013732910156,
+        "both_cards_at_850_1370_samples": 10,
+        "both_cards_at_850_1370_sample_fraction": 0.8333333333333334,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 10,
+            "at_850_1370_sample_fraction": 0.8333333333333334,
+            "max_temperature_c": 70.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 450,
+                "memory_mhz": 1370,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 10
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 11,
+            "at_850_1370_sample_fraction": 0.9166666666666666,
+            "max_temperature_c": 68.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 11
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791022729.2250786,
+        "approximate_end_epoch_seconds": 1791022741.0,
+        "approximate_start_utc": "2026-10-03T10:18:49.225079+00:00",
+        "approximate_end_utc": "2026-10-03T10:19:01+00:00",
+        "duration_seconds": 11.774921417236328,
+        "clock_samples": 43,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791022729.405,
+        "last_sample_epoch_seconds": 1791022740.896,
+        "start_to_first_sample_seconds": 0.17992138862609863,
+        "last_sample_to_end_seconds": 0.10400009155273438,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 43,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 71.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 69.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "final-2",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "final-2.json",
+      "measured_pp_seconds": 3.1782362060000002,
+      "measured_tg_seconds": 11.637688753,
+      "pp_tokens": 512,
+      "tg_tokens": 256,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791022767.184075,
+        "approximate_end_epoch_seconds": 1791022782.0,
+        "approximate_start_utc": "2026-10-03T10:19:27.184075+00:00",
+        "approximate_end_utc": "2026-10-03T10:19:42+00:00",
+        "duration_seconds": 14.815924882888794,
+        "clock_samples": 55,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791022767.222,
+        "last_sample_epoch_seconds": 1791022781.756,
+        "start_to_first_sample_seconds": 0.037924766540527344,
+        "last_sample_to_end_seconds": 0.24399995803833008,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 53,
+        "both_cards_at_850_1370_sample_fraction": 0.9636363636363636,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 53,
+            "at_850_1370_sample_fraction": 0.9636363636363636,
+            "max_temperature_c": 71.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 53
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 54,
+            "at_850_1370_sample_fraction": 0.9818181818181818,
+            "max_temperature_c": 70.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 54
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791022767.184075,
+        "approximate_end_epoch_seconds": 1791022770.3623114,
+        "approximate_start_utc": "2026-10-03T10:19:27.184075+00:00",
+        "approximate_end_utc": "2026-10-03T10:19:30.362311+00:00",
+        "duration_seconds": 3.178236246109009,
+        "clock_samples": 12,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791022767.222,
+        "last_sample_epoch_seconds": 1791022770.172,
+        "start_to_first_sample_seconds": 0.037924766540527344,
+        "last_sample_to_end_seconds": 0.19031143188476562,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 10,
+        "both_cards_at_850_1370_sample_fraction": 0.8333333333333334,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 10,
+            "at_850_1370_sample_fraction": 0.8333333333333334,
+            "max_temperature_c": 70.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 10
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 11,
+            "at_850_1370_sample_fraction": 0.9166666666666666,
+            "max_temperature_c": 68.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 1
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 11
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791022770.3623114,
+        "approximate_end_epoch_seconds": 1791022782.0,
+        "approximate_start_utc": "2026-10-03T10:19:30.362311+00:00",
+        "approximate_end_utc": "2026-10-03T10:19:42+00:00",
+        "duration_seconds": 11.637688636779785,
+        "clock_samples": 43,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791022770.44,
+        "last_sample_epoch_seconds": 1791022781.756,
+        "start_to_first_sample_seconds": 0.07768869400024414,
+        "last_sample_to_end_seconds": 0.24399995803833008,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 43,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 71.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 43,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 70.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 43
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "long-baseline",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "long-baseline.json",
+      "measured_pp_seconds": 34.872132811,
+      "measured_tg_seconds": 7.149719786,
+      "pp_tokens": 4096,
+      "tg_tokens": 128,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791023213.9781475,
+        "approximate_end_epoch_seconds": 1791023256.0,
+        "approximate_start_utc": "2026-10-03T10:26:53.978148+00:00",
+        "approximate_end_utc": "2026-10-03T10:27:36+00:00",
+        "duration_seconds": 42.02185249328613,
+        "clock_samples": 156,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791023214.028,
+        "last_sample_epoch_seconds": 1791023255.985,
+        "start_to_first_sample_seconds": 0.049852609634399414,
+        "last_sample_to_end_seconds": 0.015000104904174805,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 153,
+        "both_cards_at_850_1370_sample_fraction": 0.9807692307692307,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 153,
+            "at_850_1370_sample_fraction": 0.9807692307692307,
+            "max_temperature_c": 80.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 3
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 153
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 154,
+            "at_850_1370_sample_fraction": 0.9871794871794872,
+            "max_temperature_c": 78.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 154
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791023213.9781475,
+        "approximate_end_epoch_seconds": 1791023248.8502803,
+        "approximate_start_utc": "2026-10-03T10:26:53.978148+00:00",
+        "approximate_end_utc": "2026-10-03T10:27:28.850280+00:00",
+        "duration_seconds": 34.872132778167725,
+        "clock_samples": 129,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791023214.028,
+        "last_sample_epoch_seconds": 1791023248.686,
+        "start_to_first_sample_seconds": 0.049852609634399414,
+        "last_sample_to_end_seconds": 0.16428017616271973,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 126,
+        "both_cards_at_850_1370_sample_fraction": 0.9767441860465116,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 126,
+            "at_850_1370_sample_fraction": 0.9767441860465116,
+            "max_temperature_c": 80.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 3
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 126
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 127,
+            "at_850_1370_sample_fraction": 0.9844961240310077,
+            "max_temperature_c": 78.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 127
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791023248.8502803,
+        "approximate_end_epoch_seconds": 1791023256.0,
+        "approximate_start_utc": "2026-10-03T10:27:28.850280+00:00",
+        "approximate_end_utc": "2026-10-03T10:27:36+00:00",
+        "duration_seconds": 7.149719715118408,
+        "clock_samples": 27,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791023248.968,
+        "last_sample_epoch_seconds": 1791023255.985,
+        "start_to_first_sample_seconds": 0.11771965026855469,
+        "last_sample_to_end_seconds": 0.015000104904174805,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 27,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 27,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 80.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 27
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 27,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 78.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 27
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "long-final",
+      "status": "approximate_windows_from_complete_bench_json",
+      "timing_source": "long-final.json",
+      "measured_pp_seconds": 34.888822175,
+      "measured_tg_seconds": 6.707674934,
+      "pp_tokens": 4096,
+      "tg_tokens": 128,
+      "combined": {
+        "approximate_start_epoch_seconds": 1791023283.403503,
+        "approximate_end_epoch_seconds": 1791023325.0,
+        "approximate_start_utc": "2026-10-03T10:28:03.403503+00:00",
+        "approximate_end_utc": "2026-10-03T10:28:45+00:00",
+        "duration_seconds": 41.59649705886841,
+        "clock_samples": 153,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791023283.493,
+        "last_sample_epoch_seconds": 1791023324.756,
+        "start_to_first_sample_seconds": 0.08949708938598633,
+        "last_sample_to_end_seconds": 0.24399995803833008,
+        "largest_internal_sample_gap_seconds": 0.28299999237060547,
+        "both_cards_at_850_1370_samples": 150,
+        "both_cards_at_850_1370_sample_fraction": 0.9803921568627451,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 150,
+            "at_850_1370_sample_fraction": 0.9803921568627451,
+            "max_temperature_c": 84.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 3
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 150
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 151,
+            "at_850_1370_sample_fraction": 0.9869281045751634,
+            "max_temperature_c": 82.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 151
+              }
+            ]
+          }
+        ]
+      },
+      "prefill": {
+        "approximate_start_epoch_seconds": 1791023283.403503,
+        "approximate_end_epoch_seconds": 1791023318.292325,
+        "approximate_start_utc": "2026-10-03T10:28:03.403503+00:00",
+        "approximate_end_utc": "2026-10-03T10:28:38.292325+00:00",
+        "duration_seconds": 34.888822078704834,
+        "clock_samples": 129,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791023283.493,
+        "last_sample_epoch_seconds": 1791023318.26,
+        "start_to_first_sample_seconds": 0.08949708938598633,
+        "last_sample_to_end_seconds": 0.032325029373168945,
+        "largest_internal_sample_gap_seconds": 0.28299999237060547,
+        "both_cards_at_850_1370_samples": 126,
+        "both_cards_at_850_1370_sample_fraction": 0.9767441860465116,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 126,
+            "at_850_1370_sample_fraction": 0.9767441860465116,
+            "max_temperature_c": 84.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 3
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 126
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 127,
+            "at_850_1370_sample_fraction": 0.9844961240310077,
+            "max_temperature_c": 82.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 300,
+                "memory_mhz": 150,
+                "samples": 2
+              },
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 127
+              }
+            ]
+          }
+        ]
+      },
+      "decode": {
+        "approximate_start_epoch_seconds": 1791023318.292325,
+        "approximate_end_epoch_seconds": 1791023325.0,
+        "approximate_start_utc": "2026-10-03T10:28:38.292325+00:00",
+        "approximate_end_utc": "2026-10-03T10:28:45+00:00",
+        "duration_seconds": 6.707674980163574,
+        "clock_samples": 24,
+        "clock_log_spans_approximate_window": true,
+        "status": "sampled_approximate_window",
+        "first_sample_epoch_seconds": 1791023318.527,
+        "last_sample_epoch_seconds": 1791023324.756,
+        "start_to_first_sample_seconds": 0.23467493057250977,
+        "last_sample_to_end_seconds": 0.24399995803833008,
+        "largest_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_cards_at_850_1370_samples": 24,
+        "both_cards_at_850_1370_sample_fraction": 1.0,
+        "cards": [
+          {
+            "gpu": 0,
+            "at_850_1370_samples": 24,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 84.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 24
+              }
+            ]
+          },
+          {
+            "gpu": 1,
+            "at_850_1370_samples": 24,
+            "at_850_1370_sample_fraction": 1.0,
+            "max_temperature_c": 82.0,
+            "clock_pair_samples": [
+              {
+                "core_mhz": 850,
+                "memory_mhz": 1370,
+                "samples": 24
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "cli_chat_windows": {
+    "status": "omitted",
+    "reason": "Only rounded rates are available in CLI logs; timestamp metadata retained above."
+  }
+}

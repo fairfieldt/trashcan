@@ -1,0 +1,16 @@
+   Compiling trashcan v0.1.0 (/home/fairfieldt/trashcan/engine)
+error: failed to run custom build command for `trashcan v0.1.0 (/home/fairfieldt/trashcan/engine)`
+
+Caused by:
+  process didn't exit successfully: `/home/fairfieldt/trashcan/target/release/build/trashcan-e8a770594990293a/build-script-build` (exit status: 101)
+  --- stdout
+  cargo:rerun-if-changed=shaders
+
+  --- stderr
+  shaders/attention_partial.comp:16: error: 'active' : Reserved word.
+  shaders/attention_partial.comp:16: error: '' :  syntax error, unexpected end of file, expecting COMMA or SEMICOLON
+  2 errors generated.
+
+  thread 'main' (293854) panicked at engine/build.rs:42:13:
+  shader attention_partial failed
+  note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

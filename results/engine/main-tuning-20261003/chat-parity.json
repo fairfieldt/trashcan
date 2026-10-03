@@ -1,0 +1,50 @@
+[
+  {
+    "run": "chat-baseline-transformer",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-baseline-transformer-mtp",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-baseline-photosynthesis",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-baseline-photosynthesis-mtp",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-baseline-csv",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-baseline-csv-mtp",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-final-transformer",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-final-transformer-mtp",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-final-photosynthesis",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-final-photosynthesis-mtp",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-final-csv",
+    "matches_baseline": true
+  },
+  {
+    "run": "chat-final-csv-mtp",
+    "matches_baseline": true
+  }
+]

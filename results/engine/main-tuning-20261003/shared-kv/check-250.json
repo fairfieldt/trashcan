@@ -1,0 +1,1 @@
+{"batch":128,"draft_accepted":42,"draft_proposed":146,"greedy_tokens":64,"max_logit_error":0.0059490203857421875,"pass":true,"relative_logit_error":0.00009830356004374719,"serial_chunked_greedy_common_prefix":64,"tokens":250,"top64_overlap":64}

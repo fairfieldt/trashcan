@@ -4,7 +4,7 @@ Run the same engine as an optional HTTP server:
 
 ```sh
 target/release/trashcan serve ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf \
-  --host 127.0.0.1 --port 8000 --context 8192 --batch 32
+  --host 127.0.0.1 --port 8000 --context 8192 --batch 512
 ```
 
 `server` is an alias for `serve`. The model stays loaded and requests run serially through one
@@ -14,6 +14,10 @@ remain available. After wrap, the furthest KV write must be no more than `--batc
 beyond the reused prefix; rejected speculative writes count too. Older or changed prefixes safely
 fall back to a full replay. This is a single resident sequence, not durable conversation storage;
 clients still send the full history.
+
+The default batch capacity is 512. It gives long prompts larger prefill chunks and retains enough
+sliding history for a repeated 256-token reply at the default 8K context. Short prompts use their
+actual length. `--batch 128` reduces buffer memory when needed, with a shorter reuse horizon.
 
 Identical prompts also reuse their saved logits when the target candidate count matches and
 the drafter is disabled. Other cache hits recompute the changed suffix and at least the final
@@ -28,7 +32,8 @@ streaming disconnects invalidate the sequence. Response usage reports the reused
 Temperature zero selects greedy sampling. `--draft FILE` enables the same matched assistant as
 chat, with `--draft-tokens` (default 3). `--cpu-reduce` selects the CPU relay path.
 The target and assistant each rank one candidate for greedy requests and 64 for stochastic requests.
-Both graph variants stay cached in the resident models, so requests can alternate sampling modes.
+Requests can alternate sampling modes. The target keeps up to four recently used execution graphs;
+older graphs are rebuilt as needed without clearing the retained token/KV prefix.
 
 | Endpoint | Behavior |
 | --- | --- |

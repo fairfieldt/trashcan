@@ -1,0 +1,47 @@
+Diagnostic-only cached command-buffer experiment
+
+Source is an isolated export of revision 63290a5b862a8f879e70b3d7739abde685c04b35,
+plus server-diagnostic.patch and server-cache-clear.patch. The latter edits only
+Engine::set_top_k in model.rs. Current production source is never edited or restored.
+server-cache-clear-base.json records source, harness and binary hashes; the build
+log and server-cache-clear-binary-source.sha256 preserve compilation provenance.
+
+When TRASHCAN_CLEAR_GRAPHS_ON_TOP_K_SWITCH=1 and top-k changes, the diagnostic
+waits both devices idle, explicitly frees every cached command buffer, then clears
+the graph map. Capture buffers drop normally with their graphs. Model buffers,
+descriptors, query pools, semaphores, timeline counter and KV history stay intact.
+The server log reports each transition, graph/command counts and clearing time.
+The first request changes the initial 64 to 1 with an empty cache; later relevant
+transitions are request 8 (1 to 64) and request 10 (64 to 1).
+
+After the GPU owner authorizes this sequential run, execute on incite from ~/trashcan:
+
+  python3 results/engine/main-tuning-20261003/run-server-cache-clear.py
+
+This runs the cold full19 replay followed by the five short requests in the same
+resident process, on port 18164 with batch 128. The default output directory must
+not exist. --output-dir, --port and --binary can override their defaults.
+--graph-policy retain provides a control with the same binary and memory client;
+it disables the clearing gate. --skip-short-followup omits the final five requests.
+No production binary or source is replaced. The runner terminates only its own
+server process group when finished.
+
+The memory client samples /sys/class/drm/card*/device/mem_info_* and /proc process
+memory before and after each request, outside the measured HTTP interval. It
+records the wrapper PID and descendants, plus MemAvailable and swap totals.
+These file reads make no additional GPU API calls. They are snapshots, not peak
+memory measurements, and absence/errors are retained rather than treated as zero.
+
+Full replay responses are in client.json; followup responses are short-client.json.
+The corresponding server profile indices are 1..19 and 20..24; join by response_id
+rather than the client-local request index. Token IDs remain in per-forward JSON.
+
+Interpret steady per-forward gaps separately from first-use graph recording.
+Because clearing includes device_wait_idle, recovery warrants an idle-only control
+to distinguish an explicit queue drain from released command-buffer residency.
+If clearing fails, a next diagnostic can force the target GPU top-k to 64 while
+retaining greedy CPU argmax sampling, keeping the identical saved request bodies.
+No such alternative production change is included here.
+
+The temporary source copies were removed after compilation and the completed run.
+Hashes, both patches, the source revision and the separately built binary are retained.

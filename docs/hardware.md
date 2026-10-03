@@ -103,6 +103,11 @@ per GPU over the complete forward, not a measured DRAM counter. The FFN microben
 Do not compare original Q4 byte rates directly with the physical bus limit: the repack expands
 18-byte blocks to 20 bytes. Clocks in those runs reach 850/1370 under sustained load.
 
+The subsequent [main-branch iterations](../results/engine/main-tuning-20261003/README.md) reach
+**23.42 tok/s** for pooled tg256 after pp512 and **21.36 tok/s** after a 4096-token prefill.
+Those are different workloads and experiment phases; their fresh paired comparisons and exact
+build hashes are preserved in that report. Fixed pp512 remains about 160 tok/s.
+
 [`engine-plan.md`](engine-plan.md#cost-model) and the reproducible
 [`ceiling audit`](../results/engine/ceiling-audit-20261003/README.md) separate exact tensor costs,
 ideal rooflines, recorded throughput, and unvalidated optimization targets. The audit checked all

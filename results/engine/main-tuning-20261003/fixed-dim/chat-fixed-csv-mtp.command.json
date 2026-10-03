@@ -1,0 +1,20 @@
+[
+  "sudo",
+  "-n",
+  "python3",
+  "scripts/latency-run.py",
+  "target/release/trashcan",
+  "chat",
+  "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+  "Write a Python function that reads a CSV file and returns rows where the age column is at least 18. Include a short example.",
+  "--batch",
+  "128",
+  "--temperature",
+  "0",
+  "--max-tokens",
+  "128",
+  "--profile",
+  "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/chat-fixed-csv-mtp.tsv",
+  "--draft",
+  "/home/fairfieldt/models/gemma-4-12b-assistant/model.safetensors"
+]

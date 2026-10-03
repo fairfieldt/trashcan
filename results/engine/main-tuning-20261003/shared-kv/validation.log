@@ -1,0 +1,683 @@
+CPU latency request: 0 us, scoped to this command
+   Compiling trashcan v0.1.0 (/home/fairfieldt/trashcan/engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.62s
+     Running unittests src/main.rs (target/debug/deps/trashcan-0cb8b47ffaf52f24)
+
+running 30 tests
+test assistant::tests::acceptance_and_correction ... ok
+test assistant::tests::rejection_consumes_only_committed_samples ... ok
+test model::attention_partition_tests::decode_thresholds_and_sliding_window_choose_distinct_graph_buckets ... ok
+test model::attention_partition_tests::verification_uses_final_visible_token_and_large_prefill_has_one_bucket ... ok
+test generation::tests::greedy_and_seed ... ok
+test model::graph_cache_tests::failed_replacement_leaves_consistent_recency_and_no_extra_eviction ... ok
+test model::graph_cache_tests::hot_decode_graph_survives_prompt_shape_eviction ... ok
+test model::kv_history_tests::any_prefix_survives_before_the_first_sliding_ring_wrap ... ok
+test model::kv_history_tests::retention_includes_writes_beyond_speculative_rollback ... ok
+test model::kv_history_tests::rewind_limit_counts_all_decode_steps_and_resets_for_new_sequence ... ok
+test quant::tests::q4_shard ... ok
+test quant::tests::q6_signed_scales_and_planes ... ok
+test responses::tests::client_disconnect_propagates_and_stops_output ... ok
+test responses::tests::messages_sampling_and_reasoning ... ok
+test responses::tests::native_nested_arguments_and_strings ... ok
+test server::tests::changed_sampler_or_drafter_recomputes_the_last_prompt_token ... ok
+test server::tests::committed_speculative_tokens_include_stop_and_unemitted_tail ... ok
+test server::tests::taking_cache_invalidates_failures_until_successful_replacement ... ok
+test vulkan::attention_selection_tests::shared_shapes_keep_the_matching_partition_merge ... ok
+test responses::tests::tool_replay_preserves_multiple_rounds_and_out_of_order_results ... ok
+test vulkan::attention_selection_tests::tiny_and_unmeasured_cases_retain_scalar_loads ... ok
+test responses::tests::rejects_unsupported_and_invalid_requests ... ok
+test server::tests::exact_prefix_matching_handles_changes_shortening_and_empty_prompts ... ok
+test server::tests::repeated_prompt_reuses_saved_logits_and_excludes_unprocessed_output ... ok
+test responses::tests::token_limit_never_completes_a_partial_tool ... ok
+test responses::tests::hidden_reasoning_and_generation_failure ... ok
+test responses::tests::client_tool_search_returns_native_items_and_loads_discovered_tools ... ok
+test responses::tests::streaming_unicode_reasoning_and_tools_match_terminal_items ... ok
+test assistant::tests::stochastic_verification_preserves_target_mass ... ok
+test model::kv_history_tests::accepted_rewinds_keep_every_required_sliding_key_after_ring_wrap ... ok
+
+test result: ok. 30 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.06s
+30 tokenizer fixtures passed
+4 chat fixtures passed
+P2P visibility passed: 10000 changing rounds x 3840 elements x two directions
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4154.5 MiB
+GPU1: target allocations 4154.5 MiB
+greedy: [9259, 236888, 2088, 740, 564, 1601, 611, 3124, 236881, 106]
+attn_out-0                       rel  1.78e-04  cos 1.000000
+l_out-0                          rel  1.81e-04  cos 1.000000
+attn_out-1                       rel  2.86e-04  cos 1.000000
+l_out-1                          rel  1.45e-04  cos 1.000000
+attn_out-2                       rel  2.25e-04  cos 1.000000
+l_out-2                          rel  1.64e-04  cos 1.000000
+attn_out-3                       rel  3.14e-04  cos 1.000000
+l_out-3                          rel  1.87e-04  cos 1.000000
+attn_out-4                       rel  3.06e-04  cos 1.000000
+l_out-4                          rel  2.47e-04  cos 1.000000
+attn_out-5                       rel  3.33e-04  cos 1.000000
+l_out-5                          rel  3.08e-04  cos 1.000000
+attn_out-6                       rel  3.81e-04  cos 1.000000
+l_out-6                          rel  3.20e-04  cos 1.000000
+attn_out-7                       rel  3.49e-04  cos 1.000000
+l_out-7                          rel  2.88e-04  cos 1.000000
+attn_out-8                       rel  3.99e-04  cos 1.000000
+l_out-8                          rel  2.09e-04  cos 1.000000
+attn_out-9                       rel  3.02e-04  cos 1.000000
+l_out-9                          rel  1.48e-04  cos 1.000000
+attn_out-10                      rel  4.11e-04  cos 1.000000
+l_out-10                         rel  1.98e-04  cos 1.000000
+attn_out-11                      rel  3.98e-04  cos 1.000000
+l_out-11                         rel  1.06e-04  cos 1.000000
+attn_out-12                      rel  7.89e-05  cos 1.000000
+l_out-12                         rel  7.65e-05  cos 1.000000
+attn_out-13                      rel  5.60e-05  cos 1.000000
+l_out-13                         rel  5.56e-05  cos 1.000000
+attn_out-14                      rel  6.22e-05  cos 1.000000
+l_out-14                         rel  6.98e-05  cos 1.000000
+attn_out-15                      rel  7.76e-05  cos 1.000000
+l_out-15                         rel  9.20e-05  cos 1.000000
+attn_out-16                      rel  9.32e-05  cos 1.000000
+l_out-16                         rel  9.93e-05  cos 1.000000
+attn_out-17                      rel  1.61e-04  cos 1.000000
+l_out-17                         rel  1.68e-04  cos 1.000000
+attn_out-18                      rel  1.39e-04  cos 1.000000
+l_out-18                         rel  1.40e-04  cos 1.000000
+attn_out-19                      rel  1.17e-04  cos 1.000000
+l_out-19                         rel  1.26e-04  cos 1.000000
+attn_out-20                      rel  1.21e-04  cos 1.000000
+l_out-20                         rel  1.52e-04  cos 1.000000
+attn_out-21                      rel  1.52e-04  cos 1.000000
+l_out-21                         rel  1.87e-04  cos 1.000000
+attn_out-22                      rel  1.90e-04  cos 1.000000
+l_out-22                         rel  2.73e-04  cos 1.000000
+attn_out-23                      rel  1.97e-04  cos 1.000000
+l_out-23                         rel  2.88e-04  cos 1.000000
+attn_out-24                      rel  2.44e-04  cos 1.000000
+l_out-24                         rel  2.35e-04  cos 1.000000
+attn_out-25                      rel  2.22e-04  cos 1.000000
+l_out-25                         rel  2.54e-04  cos 1.000000
+attn_out-26                      rel  2.89e-04  cos 1.000000
+l_out-26                         rel  4.37e-04  cos 1.000000
+attn_out-27                      rel  4.47e-04  cos 1.000000
+l_out-27                         rel  4.60e-04  cos 1.000000
+attn_out-28                      rel  4.46e-04  cos 1.000000
+l_out-28                         rel  4.37e-04  cos 1.000000
+attn_out-29                      rel  3.81e-04  cos 1.000000
+l_out-29                         rel  4.07e-04  cos 1.000000
+attn_out-30                      rel  3.84e-04  cos 1.000000
+l_out-30                         rel  3.56e-04  cos 1.000000
+attn_out-31                      rel  3.53e-04  cos 1.000000
+l_out-31                         rel  3.36e-04  cos 1.000000
+attn_out-32                      rel  4.20e-04  cos 1.000000
+l_out-32                         rel  4.03e-04  cos 1.000000
+attn_out-33                      rel  4.04e-04  cos 1.000000
+l_out-33                         rel  3.80e-04  cos 1.000000
+attn_out-34                      rel  4.39e-04  cos 1.000000
+l_out-34                         rel  4.79e-04  cos 1.000000
+attn_out-35                      rel  4.61e-04  cos 1.000000
+l_out-35                         rel  4.76e-04  cos 1.000000
+attn_out-36                      rel  4.31e-04  cos 1.000000
+l_out-36                         rel  4.31e-04  cos 1.000000
+attn_out-37                      rel  4.48e-04  cos 1.000000
+l_out-37                         rel  3.98e-04  cos 1.000000
+attn_out-38                      rel  5.09e-04  cos 1.000000
+l_out-38                         rel  5.18e-04  cos 1.000000
+attn_out-39                      rel  5.58e-04  cos 1.000000
+l_out-39                         rel  6.06e-04  cos 1.000000
+attn_out-40                      rel  6.40e-04  cos 1.000000
+l_out-40                         rel  6.99e-04  cos 1.000000
+attn_out-41                      rel  7.31e-04  cos 1.000000
+l_out-41                         rel  7.86e-04  cos 1.000000
+attn_out-42                      rel  7.47e-04  cos 1.000000
+l_out-42                         rel  7.70e-04  cos 1.000000
+attn_out-43                      rel  7.73e-04  cos 1.000000
+l_out-43                         rel  7.65e-04  cos 1.000000
+attn_out-44                      rel  8.17e-04  cos 1.000000
+l_out-44                         rel  8.99e-04  cos 1.000000
+attn_out-45                      rel  9.35e-04  cos 1.000000
+l_out-45                         rel  9.95e-04  cos 1.000000
+attn_out-46                      rel  8.83e-04  cos 1.000000
+l_out-46                         rel  9.23e-04  cos 1.000000
+attn_out-47                      rel  8.09e-04  cos 1.000000
+l_out-47                         rel  6.67e-04  cos 1.000000
+result_norm                      rel  9.05e-04  cos 1.000000
+worst relative error over 132 tensors: 9.95e-04
+logits: rel 6.92e-04 cos 1.000000; top-1 9259 vs 9259; top-10 overlap 10/10
+greedy: first 10 of 32 tokens identical
+PASS: 132 required tensors, logits, and 10 greedy tokens
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4156.8 MiB
+GPU1: target allocations 4156.8 MiB
+greedy: [9259, 236888, 2088, 740, 564, 1601, 611, 3124, 236881, 106]
+attn_out-0                       rel  1.78e-04  cos 1.000000
+l_out-0                          rel  1.81e-04  cos 1.000000
+attn_out-1                       rel  2.88e-04  cos 1.000000
+l_out-1                          rel  1.45e-04  cos 1.000000
+attn_out-2                       rel  2.27e-04  cos 1.000000
+l_out-2                          rel  1.65e-04  cos 1.000000
+attn_out-3                       rel  3.14e-04  cos 1.000000
+l_out-3                          rel  1.87e-04  cos 1.000000
+attn_out-4                       rel  3.05e-04  cos 1.000000
+l_out-4                          rel  2.48e-04  cos 1.000000
+attn_out-5                       rel  3.37e-04  cos 1.000000
+l_out-5                          rel  3.09e-04  cos 1.000000
+attn_out-6                       rel  3.75e-04  cos 1.000000
+l_out-6                          rel  3.17e-04  cos 1.000000
+attn_out-7                       rel  3.53e-04  cos 1.000000
+l_out-7                          rel  2.97e-04  cos 1.000000
+attn_out-8                       rel  4.07e-04  cos 1.000000
+l_out-8                          rel  2.12e-04  cos 1.000000
+attn_out-9                       rel  3.05e-04  cos 1.000000
+l_out-9                          rel  1.56e-04  cos 1.000000
+attn_out-10                      rel  4.02e-04  cos 1.000000
+l_out-10                         rel  2.00e-04  cos 1.000000
+attn_out-11                      rel  3.97e-04  cos 1.000000
+l_out-11                         rel  1.07e-04  cos 1.000000
+attn_out-12                      rel  7.96e-05  cos 1.000000
+l_out-12                         rel  7.68e-05  cos 1.000000
+attn_out-13                      rel  5.53e-05  cos 1.000000
+l_out-13                         rel  5.51e-05  cos 1.000000
+attn_out-14                      rel  6.19e-05  cos 1.000000
+l_out-14                         rel  7.18e-05  cos 1.000000
+attn_out-15                      rel  7.78e-05  cos 1.000000
+l_out-15                         rel  9.23e-05  cos 1.000000
+attn_out-16                      rel  9.27e-05  cos 1.000000
+l_out-16                         rel  9.91e-05  cos 1.000000
+attn_out-17                      rel  1.63e-04  cos 1.000000
+l_out-17                         rel  1.70e-04  cos 1.000000
+attn_out-18                      rel  1.42e-04  cos 1.000000
+l_out-18                         rel  1.43e-04  cos 1.000000
+attn_out-19                      rel  1.21e-04  cos 1.000000
+l_out-19                         rel  1.31e-04  cos 1.000000
+attn_out-20                      rel  1.22e-04  cos 1.000000
+l_out-20                         rel  1.51e-04  cos 1.000000
+attn_out-21                      rel  1.52e-04  cos 1.000000
+l_out-21                         rel  1.86e-04  cos 1.000000
+attn_out-22                      rel  1.90e-04  cos 1.000000
+l_out-22                         rel  2.68e-04  cos 1.000000
+attn_out-23                      rel  1.98e-04  cos 1.000000
+l_out-23                         rel  2.90e-04  cos 1.000000
+attn_out-24                      rel  2.47e-04  cos 1.000000
+l_out-24                         rel  2.37e-04  cos 1.000000
+attn_out-25                      rel  2.26e-04  cos 1.000000
+l_out-25                         rel  2.58e-04  cos 1.000000
+attn_out-26                      rel  2.90e-04  cos 1.000000
+l_out-26                         rel  4.38e-04  cos 1.000000
+attn_out-27                      rel  4.46e-04  cos 1.000000
+l_out-27                         rel  4.64e-04  cos 1.000000
+attn_out-28                      rel  4.53e-04  cos 1.000000
+l_out-28                         rel  4.47e-04  cos 1.000000
+attn_out-29                      rel  3.88e-04  cos 1.000000
+l_out-29                         rel  4.14e-04  cos 1.000000
+attn_out-30                      rel  3.90e-04  cos 1.000000
+l_out-30                         rel  3.64e-04  cos 1.000000
+attn_out-31                      rel  3.60e-04  cos 1.000000
+l_out-31                         rel  3.42e-04  cos 1.000000
+attn_out-32                      rel  4.23e-04  cos 1.000000
+l_out-32                         rel  4.06e-04  cos 1.000000
+attn_out-33                      rel  4.03e-04  cos 1.000000
+l_out-33                         rel  3.79e-04  cos 1.000000
+attn_out-34                      rel  4.27e-04  cos 1.000000
+l_out-34                         rel  4.65e-04  cos 1.000000
+attn_out-35                      rel  4.47e-04  cos 1.000000
+l_out-35                         rel  4.61e-04  cos 1.000000
+attn_out-36                      rel  4.18e-04  cos 1.000000
+l_out-36                         rel  4.18e-04  cos 1.000000
+attn_out-37                      rel  4.33e-04  cos 1.000000
+l_out-37                         rel  3.88e-04  cos 1.000000
+attn_out-38                      rel  4.96e-04  cos 1.000000
+l_out-38                         rel  5.02e-04  cos 1.000000
+attn_out-39                      rel  5.36e-04  cos 1.000000
+l_out-39                         rel  5.84e-04  cos 1.000000
+attn_out-40                      rel  6.23e-04  cos 1.000000
+l_out-40                         rel  6.80e-04  cos 1.000000
+attn_out-41                      rel  7.16e-04  cos 1.000000
+l_out-41                         rel  7.68e-04  cos 1.000000
+attn_out-42                      rel  7.31e-04  cos 1.000000
+l_out-42                         rel  7.49e-04  cos 1.000000
+attn_out-43                      rel  7.51e-04  cos 1.000000
+l_out-43                         rel  7.44e-04  cos 1.000000
+attn_out-44                      rel  7.92e-04  cos 1.000000
+l_out-44                         rel  8.91e-04  cos 1.000000
+attn_out-45                      rel  9.17e-04  cos 1.000000
+l_out-45                         rel  9.76e-04  cos 1.000000
+attn_out-46                      rel  8.62e-04  cos 1.000000
+l_out-46                         rel  8.99e-04  cos 1.000000
+attn_out-47                      rel  7.89e-04  cos 1.000000
+l_out-47                         rel  6.21e-04  cos 1.000000
+result_norm                      rel  8.84e-04  cos 1.000000
+worst relative error over 132 tensors: 9.76e-04
+logits: rel 6.70e-04 cos 1.000000; top-1 9259 vs 9259; top-10 overlap 10/10
+greedy: first 10 of 32 tokens identical
+PASS: 132 required tensors, logits, and 10 greedy tokens
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4161.6 MiB
+GPU1: target allocations 4161.6 MiB
+greedy: [9259, 236888, 2088, 740, 564, 1601, 611, 3124, 236881, 106]
+attn_out-0                       rel  1.79e-04  cos 1.000000
+l_out-0                          rel  1.81e-04  cos 1.000000
+attn_out-1                       rel  2.87e-04  cos 1.000000
+l_out-1                          rel  1.45e-04  cos 1.000000
+attn_out-2                       rel  2.27e-04  cos 1.000000
+l_out-2                          rel  1.66e-04  cos 1.000000
+attn_out-3                       rel  3.15e-04  cos 1.000000
+l_out-3                          rel  1.88e-04  cos 1.000000
+attn_out-4                       rel  3.06e-04  cos 1.000000
+l_out-4                          rel  2.48e-04  cos 1.000000
+attn_out-5                       rel  3.37e-04  cos 1.000000
+l_out-5                          rel  3.08e-04  cos 1.000000
+attn_out-6                       rel  3.75e-04  cos 1.000000
+l_out-6                          rel  3.17e-04  cos 1.000000
+attn_out-7                       rel  3.53e-04  cos 1.000000
+l_out-7                          rel  2.97e-04  cos 1.000000
+attn_out-8                       rel  4.07e-04  cos 1.000000
+l_out-8                          rel  2.13e-04  cos 1.000000
+attn_out-9                       rel  3.07e-04  cos 1.000000
+l_out-9                          rel  1.56e-04  cos 1.000000
+attn_out-10                      rel  3.98e-04  cos 1.000000
+l_out-10                         rel  2.00e-04  cos 1.000000
+attn_out-11                      rel  3.96e-04  cos 1.000000
+l_out-11                         rel  1.06e-04  cos 1.000000
+attn_out-12                      rel  7.97e-05  cos 1.000000
+l_out-12                         rel  7.70e-05  cos 1.000000
+attn_out-13                      rel  5.57e-05  cos 1.000000
+l_out-13                         rel  5.53e-05  cos 1.000000
+attn_out-14                      rel  6.21e-05  cos 1.000000
+l_out-14                         rel  7.20e-05  cos 1.000000
+attn_out-15                      rel  7.82e-05  cos 1.000000
+l_out-15                         rel  9.28e-05  cos 1.000000
+attn_out-16                      rel  9.28e-05  cos 1.000000
+l_out-16                         rel  9.92e-05  cos 1.000000
+attn_out-17                      rel  1.63e-04  cos 1.000000
+l_out-17                         rel  1.69e-04  cos 1.000000
+attn_out-18                      rel  1.42e-04  cos 1.000000
+l_out-18                         rel  1.43e-04  cos 1.000000
+attn_out-19                      rel  1.21e-04  cos 1.000000
+l_out-19                         rel  1.30e-04  cos 1.000000
+attn_out-20                      rel  1.22e-04  cos 1.000000
+l_out-20                         rel  1.50e-04  cos 1.000000
+attn_out-21                      rel  1.52e-04  cos 1.000000
+l_out-21                         rel  1.86e-04  cos 1.000000
+attn_out-22                      rel  1.90e-04  cos 1.000000
+l_out-22                         rel  2.69e-04  cos 1.000000
+attn_out-23                      rel  1.98e-04  cos 1.000000
+l_out-23                         rel  2.89e-04  cos 1.000000
+attn_out-24                      rel  2.46e-04  cos 1.000000
+l_out-24                         rel  2.36e-04  cos 1.000000
+attn_out-25                      rel  2.25e-04  cos 1.000000
+l_out-25                         rel  2.57e-04  cos 1.000000
+attn_out-26                      rel  2.89e-04  cos 1.000000
+l_out-26                         rel  4.36e-04  cos 1.000000
+attn_out-27                      rel  4.44e-04  cos 1.000000
+l_out-27                         rel  4.61e-04  cos 1.000000
+attn_out-28                      rel  4.50e-04  cos 1.000000
+l_out-28                         rel  4.44e-04  cos 1.000000
+attn_out-29                      rel  3.85e-04  cos 1.000000
+l_out-29                         rel  4.11e-04  cos 1.000000
+attn_out-30                      rel  3.88e-04  cos 1.000000
+l_out-30                         rel  3.61e-04  cos 1.000000
+attn_out-31                      rel  3.58e-04  cos 1.000000
+l_out-31                         rel  3.39e-04  cos 1.000000
+attn_out-32                      rel  4.19e-04  cos 1.000000
+l_out-32                         rel  4.04e-04  cos 1.000000
+attn_out-33                      rel  4.01e-04  cos 1.000000
+l_out-33                         rel  3.76e-04  cos 1.000000
+attn_out-34                      rel  4.25e-04  cos 1.000000
+l_out-34                         rel  4.63e-04  cos 1.000000
+attn_out-35                      rel  4.46e-04  cos 1.000000
+l_out-35                         rel  4.60e-04  cos 1.000000
+attn_out-36                      rel  4.17e-04  cos 1.000000
+l_out-36                         rel  4.17e-04  cos 1.000000
+attn_out-37                      rel  4.34e-04  cos 1.000000
+l_out-37                         rel  3.89e-04  cos 1.000000
+attn_out-38                      rel  4.97e-04  cos 1.000000
+l_out-38                         rel  5.04e-04  cos 1.000000
+attn_out-39                      rel  5.38e-04  cos 1.000000
+l_out-39                         rel  5.87e-04  cos 1.000000
+attn_out-40                      rel  6.26e-04  cos 1.000000
+l_out-40                         rel  6.84e-04  cos 1.000000
+attn_out-41                      rel  7.20e-04  cos 1.000000
+l_out-41                         rel  7.73e-04  cos 1.000000
+attn_out-42                      rel  7.35e-04  cos 1.000000
+l_out-42                         rel  7.54e-04  cos 1.000000
+attn_out-43                      rel  7.56e-04  cos 1.000000
+l_out-43                         rel  7.47e-04  cos 1.000000
+attn_out-44                      rel  7.96e-04  cos 1.000000
+l_out-44                         rel  9.01e-04  cos 1.000000
+attn_out-45                      rel  9.26e-04  cos 1.000000
+l_out-45                         rel  9.85e-04  cos 1.000000
+attn_out-46                      rel  8.70e-04  cos 1.000000
+l_out-46                         rel  9.07e-04  cos 1.000000
+attn_out-47                      rel  7.91e-04  cos 1.000000
+l_out-47                         rel  6.34e-04  cos 1.000000
+result_norm                      rel  8.89e-04  cos 1.000000
+worst relative error over 132 tensors: 9.85e-04
+logits: rel 6.75e-04 cos 1.000000; top-1 9259 vs 9259; top-10 overlap 10/10
+greedy: first 10 of 32 tokens identical
+PASS: 132 required tensors, logits, and 10 greedy tokens
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4183.7 MiB
+GPU1: target allocations 4183.7 MiB
+greedy: [9259, 236888, 2088, 740, 564, 1601, 611, 3124, 236881, 106]
+attn_out-0                       rel  1.79e-04  cos 1.000000
+l_out-0                          rel  1.80e-04  cos 1.000000
+attn_out-1                       rel  2.85e-04  cos 1.000000
+l_out-1                          rel  1.44e-04  cos 1.000000
+attn_out-2                       rel  2.23e-04  cos 1.000000
+l_out-2                          rel  1.63e-04  cos 1.000000
+attn_out-3                       rel  3.07e-04  cos 1.000000
+l_out-3                          rel  1.84e-04  cos 1.000000
+attn_out-4                       rel  3.08e-04  cos 1.000000
+l_out-4                          rel  2.44e-04  cos 1.000000
+attn_out-5                       rel  3.28e-04  cos 1.000000
+l_out-5                          rel  3.04e-04  cos 1.000000
+attn_out-6                       rel  3.71e-04  cos 1.000000
+l_out-6                          rel  3.10e-04  cos 1.000000
+attn_out-7                       rel  3.48e-04  cos 1.000000
+l_out-7                          rel  2.87e-04  cos 1.000000
+attn_out-8                       rel  4.06e-04  cos 1.000000
+l_out-8                          rel  2.18e-04  cos 1.000000
+attn_out-9                       rel  3.12e-04  cos 1.000000
+l_out-9                          rel  1.53e-04  cos 1.000000
+attn_out-10                      rel  4.04e-04  cos 1.000000
+l_out-10                         rel  1.95e-04  cos 1.000000
+attn_out-11                      rel  3.95e-04  cos 1.000000
+l_out-11                         rel  1.05e-04  cos 1.000000
+attn_out-12                      rel  8.01e-05  cos 1.000000
+l_out-12                         rel  7.74e-05  cos 1.000000
+attn_out-13                      rel  5.51e-05  cos 1.000000
+l_out-13                         rel  5.46e-05  cos 1.000000
+attn_out-14                      rel  6.11e-05  cos 1.000000
+l_out-14                         rel  6.80e-05  cos 1.000000
+attn_out-15                      rel  7.73e-05  cos 1.000000
+l_out-15                         rel  9.18e-05  cos 1.000000
+attn_out-16                      rel  8.72e-05  cos 1.000000
+l_out-16                         rel  9.36e-05  cos 1.000000
+attn_out-17                      rel  1.57e-04  cos 1.000000
+l_out-17                         rel  1.64e-04  cos 1.000000
+attn_out-18                      rel  1.39e-04  cos 1.000000
+l_out-18                         rel  1.39e-04  cos 1.000000
+attn_out-19                      rel  1.18e-04  cos 1.000000
+l_out-19                         rel  1.27e-04  cos 1.000000
+attn_out-20                      rel  1.22e-04  cos 1.000000
+l_out-20                         rel  1.53e-04  cos 1.000000
+attn_out-21                      rel  1.57e-04  cos 1.000000
+l_out-21                         rel  1.88e-04  cos 1.000000
+attn_out-22                      rel  1.87e-04  cos 1.000000
+l_out-22                         rel  2.74e-04  cos 1.000000
+attn_out-23                      rel  1.97e-04  cos 1.000000
+l_out-23                         rel  2.88e-04  cos 1.000000
+attn_out-24                      rel  2.46e-04  cos 1.000000
+l_out-24                         rel  2.39e-04  cos 1.000000
+attn_out-25                      rel  2.27e-04  cos 1.000000
+l_out-25                         rel  2.58e-04  cos 1.000000
+attn_out-26                      rel  2.91e-04  cos 1.000000
+l_out-26                         rel  4.38e-04  cos 1.000000
+attn_out-27                      rel  4.46e-04  cos 1.000000
+l_out-27                         rel  4.64e-04  cos 1.000000
+attn_out-28                      rel  4.53e-04  cos 1.000000
+l_out-28                         rel  4.45e-04  cos 1.000000
+attn_out-29                      rel  3.89e-04  cos 1.000000
+l_out-29                         rel  4.12e-04  cos 1.000000
+attn_out-30                      rel  3.87e-04  cos 1.000000
+l_out-30                         rel  3.62e-04  cos 1.000000
+attn_out-31                      rel  3.58e-04  cos 1.000000
+l_out-31                         rel  3.43e-04  cos 1.000000
+attn_out-32                      rel  4.25e-04  cos 1.000000
+l_out-32                         rel  4.09e-04  cos 1.000000
+attn_out-33                      rel  4.04e-04  cos 1.000000
+l_out-33                         rel  3.81e-04  cos 1.000000
+attn_out-34                      rel  4.30e-04  cos 1.000000
+l_out-34                         rel  4.70e-04  cos 1.000000
+attn_out-35                      rel  4.50e-04  cos 1.000000
+l_out-35                         rel  4.61e-04  cos 1.000000
+attn_out-36                      rel  4.21e-04  cos 1.000000
+l_out-36                         rel  4.19e-04  cos 1.000000
+attn_out-37                      rel  4.34e-04  cos 1.000000
+l_out-37                         rel  3.87e-04  cos 1.000000
+attn_out-38                      rel  4.93e-04  cos 1.000000
+l_out-38                         rel  5.02e-04  cos 1.000000
+attn_out-39                      rel  5.43e-04  cos 1.000000
+l_out-39                         rel  5.89e-04  cos 1.000000
+attn_out-40                      rel  6.26e-04  cos 1.000000
+l_out-40                         rel  6.83e-04  cos 1.000000
+attn_out-41                      rel  7.16e-04  cos 1.000000
+l_out-41                         rel  7.70e-04  cos 1.000000
+attn_out-42                      rel  7.31e-04  cos 1.000000
+l_out-42                         rel  7.54e-04  cos 1.000000
+attn_out-43                      rel  7.57e-04  cos 1.000000
+l_out-43                         rel  7.51e-04  cos 1.000000
+attn_out-44                      rel  8.00e-04  cos 1.000000
+l_out-44                         rel  8.87e-04  cos 1.000000
+attn_out-45                      rel  9.17e-04  cos 1.000000
+l_out-45                         rel  9.82e-04  cos 1.000000
+attn_out-46                      rel  8.64e-04  cos 1.000000
+l_out-46                         rel  9.04e-04  cos 1.000000
+attn_out-47                      rel  7.83e-04  cos 1.000000
+l_out-47                         rel  6.34e-04  cos 1.000000
+result_norm                      rel  8.89e-04  cos 1.000000
+worst relative error over 132 tensors: 9.82e-04
+logits: rel 6.75e-04 cos 1.000000; top-1 9259 vs 9259; top-10 overlap 10/10
+greedy: first 10 of 32 tokens identical
+PASS: 132 required tensors, logits, and 10 greedy tokens
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4153.1 MiB
+GPU1: target allocations 4153.1 MiB
+greedy: [9259, 236888, 2088, 740, 564, 1601, 611, 3124, 236881, 106]
+attn_out-0                       rel  1.78e-04  cos 1.000000
+l_out-0                          rel  1.81e-04  cos 1.000000
+attn_out-1                       rel  2.86e-04  cos 1.000000
+l_out-1                          rel  1.45e-04  cos 1.000000
+attn_out-2                       rel  2.25e-04  cos 1.000000
+l_out-2                          rel  1.64e-04  cos 1.000000
+attn_out-3                       rel  3.14e-04  cos 1.000000
+l_out-3                          rel  1.87e-04  cos 1.000000
+attn_out-4                       rel  3.06e-04  cos 1.000000
+l_out-4                          rel  2.47e-04  cos 1.000000
+attn_out-5                       rel  3.33e-04  cos 1.000000
+l_out-5                          rel  3.08e-04  cos 1.000000
+attn_out-6                       rel  3.81e-04  cos 1.000000
+l_out-6                          rel  3.20e-04  cos 1.000000
+attn_out-7                       rel  3.49e-04  cos 1.000000
+l_out-7                          rel  2.88e-04  cos 1.000000
+attn_out-8                       rel  3.99e-04  cos 1.000000
+l_out-8                          rel  2.09e-04  cos 1.000000
+attn_out-9                       rel  3.02e-04  cos 1.000000
+l_out-9                          rel  1.48e-04  cos 1.000000
+attn_out-10                      rel  4.11e-04  cos 1.000000
+l_out-10                         rel  1.98e-04  cos 1.000000
+attn_out-11                      rel  3.98e-04  cos 1.000000
+l_out-11                         rel  1.06e-04  cos 1.000000
+attn_out-12                      rel  7.89e-05  cos 1.000000
+l_out-12                         rel  7.65e-05  cos 1.000000
+attn_out-13                      rel  5.60e-05  cos 1.000000
+l_out-13                         rel  5.56e-05  cos 1.000000
+attn_out-14                      rel  6.22e-05  cos 1.000000
+l_out-14                         rel  6.98e-05  cos 1.000000
+attn_out-15                      rel  7.76e-05  cos 1.000000
+l_out-15                         rel  9.20e-05  cos 1.000000
+attn_out-16                      rel  9.32e-05  cos 1.000000
+l_out-16                         rel  9.93e-05  cos 1.000000
+attn_out-17                      rel  1.61e-04  cos 1.000000
+l_out-17                         rel  1.68e-04  cos 1.000000
+attn_out-18                      rel  1.39e-04  cos 1.000000
+l_out-18                         rel  1.40e-04  cos 1.000000
+attn_out-19                      rel  1.17e-04  cos 1.000000
+l_out-19                         rel  1.26e-04  cos 1.000000
+attn_out-20                      rel  1.21e-04  cos 1.000000
+l_out-20                         rel  1.52e-04  cos 1.000000
+attn_out-21                      rel  1.52e-04  cos 1.000000
+l_out-21                         rel  1.87e-04  cos 1.000000
+attn_out-22                      rel  1.90e-04  cos 1.000000
+l_out-22                         rel  2.73e-04  cos 1.000000
+attn_out-23                      rel  1.97e-04  cos 1.000000
+l_out-23                         rel  2.88e-04  cos 1.000000
+attn_out-24                      rel  2.44e-04  cos 1.000000
+l_out-24                         rel  2.35e-04  cos 1.000000
+attn_out-25                      rel  2.22e-04  cos 1.000000
+l_out-25                         rel  2.54e-04  cos 1.000000
+attn_out-26                      rel  2.89e-04  cos 1.000000
+l_out-26                         rel  4.37e-04  cos 1.000000
+attn_out-27                      rel  4.47e-04  cos 1.000000
+l_out-27                         rel  4.60e-04  cos 1.000000
+attn_out-28                      rel  4.46e-04  cos 1.000000
+l_out-28                         rel  4.37e-04  cos 1.000000
+attn_out-29                      rel  3.81e-04  cos 1.000000
+l_out-29                         rel  4.07e-04  cos 1.000000
+attn_out-30                      rel  3.84e-04  cos 1.000000
+l_out-30                         rel  3.56e-04  cos 1.000000
+attn_out-31                      rel  3.53e-04  cos 1.000000
+l_out-31                         rel  3.36e-04  cos 1.000000
+attn_out-32                      rel  4.20e-04  cos 1.000000
+l_out-32                         rel  4.03e-04  cos 1.000000
+attn_out-33                      rel  4.04e-04  cos 1.000000
+l_out-33                         rel  3.80e-04  cos 1.000000
+attn_out-34                      rel  4.39e-04  cos 1.000000
+l_out-34                         rel  4.79e-04  cos 1.000000
+attn_out-35                      rel  4.61e-04  cos 1.000000
+l_out-35                         rel  4.76e-04  cos 1.000000
+attn_out-36                      rel  4.31e-04  cos 1.000000
+l_out-36                         rel  4.31e-04  cos 1.000000
+attn_out-37                      rel  4.48e-04  cos 1.000000
+l_out-37                         rel  3.98e-04  cos 1.000000
+attn_out-38                      rel  5.09e-04  cos 1.000000
+l_out-38                         rel  5.18e-04  cos 1.000000
+attn_out-39                      rel  5.58e-04  cos 1.000000
+l_out-39                         rel  6.06e-04  cos 1.000000
+attn_out-40                      rel  6.40e-04  cos 1.000000
+l_out-40                         rel  6.99e-04  cos 1.000000
+attn_out-41                      rel  7.31e-04  cos 1.000000
+l_out-41                         rel  7.86e-04  cos 1.000000
+attn_out-42                      rel  7.47e-04  cos 1.000000
+l_out-42                         rel  7.70e-04  cos 1.000000
+attn_out-43                      rel  7.73e-04  cos 1.000000
+l_out-43                         rel  7.65e-04  cos 1.000000
+attn_out-44                      rel  8.17e-04  cos 1.000000
+l_out-44                         rel  8.99e-04  cos 1.000000
+attn_out-45                      rel  9.35e-04  cos 1.000000
+l_out-45                         rel  9.95e-04  cos 1.000000
+attn_out-46                      rel  8.83e-04  cos 1.000000
+l_out-46                         rel  9.23e-04  cos 1.000000
+attn_out-47                      rel  8.09e-04  cos 1.000000
+l_out-47                         rel  6.67e-04  cos 1.000000
+result_norm                      rel  9.05e-04  cos 1.000000
+worst relative error over 132 tensors: 9.95e-04
+logits: rel 6.92e-04 cos 1.000000; top-1 9259 vs 9259; top-10 overlap 10/10
+greedy: first 10 of 32 tokens identical
+PASS: 132 required tensors, logits, and 10 greedy tokens
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4171.0 MiB
+GPU1: target allocations 4171.0 MiB
+MTP loaded: native BF16; full vocabulary head (checkpoint has no centroid tensors)
+GPU0: target + MTP allocations 4586.3 MiB
+GPU1: target + MTP allocations 4586.3 MiB
+draft acceptance 7/7
+greedy: [9259, 236888, 2088, 740, 564, 1601, 611, 3124, 236881, 106]
+attn_out-0                       rel  1.79e-04  cos 1.000000
+l_out-0                          rel  1.81e-04  cos 1.000000
+attn_out-1                       rel  2.87e-04  cos 1.000000
+l_out-1                          rel  1.45e-04  cos 1.000000
+attn_out-2                       rel  2.27e-04  cos 1.000000
+l_out-2                          rel  1.66e-04  cos 1.000000
+attn_out-3                       rel  3.15e-04  cos 1.000000
+l_out-3                          rel  1.88e-04  cos 1.000000
+attn_out-4                       rel  3.06e-04  cos 1.000000
+l_out-4                          rel  2.48e-04  cos 1.000000
+attn_out-5                       rel  3.37e-04  cos 1.000000
+l_out-5                          rel  3.08e-04  cos 1.000000
+attn_out-6                       rel  3.75e-04  cos 1.000000
+l_out-6                          rel  3.17e-04  cos 1.000000
+attn_out-7                       rel  3.53e-04  cos 1.000000
+l_out-7                          rel  2.97e-04  cos 1.000000
+attn_out-8                       rel  4.07e-04  cos 1.000000
+l_out-8                          rel  2.13e-04  cos 1.000000
+attn_out-9                       rel  3.07e-04  cos 1.000000
+l_out-9                          rel  1.56e-04  cos 1.000000
+attn_out-10                      rel  3.98e-04  cos 1.000000
+l_out-10                         rel  2.00e-04  cos 1.000000
+attn_out-11                      rel  3.96e-04  cos 1.000000
+l_out-11                         rel  1.06e-04  cos 1.000000
+attn_out-12                      rel  7.97e-05  cos 1.000000
+l_out-12                         rel  7.70e-05  cos 1.000000
+attn_out-13                      rel  5.57e-05  cos 1.000000
+l_out-13                         rel  5.53e-05  cos 1.000000
+attn_out-14                      rel  6.21e-05  cos 1.000000
+l_out-14                         rel  7.20e-05  cos 1.000000
+attn_out-15                      rel  7.82e-05  cos 1.000000
+l_out-15                         rel  9.28e-05  cos 1.000000
+attn_out-16                      rel  9.28e-05  cos 1.000000
+l_out-16                         rel  9.92e-05  cos 1.000000
+attn_out-17                      rel  1.63e-04  cos 1.000000
+l_out-17                         rel  1.69e-04  cos 1.000000
+attn_out-18                      rel  1.42e-04  cos 1.000000
+l_out-18                         rel  1.43e-04  cos 1.000000
+attn_out-19                      rel  1.21e-04  cos 1.000000
+l_out-19                         rel  1.30e-04  cos 1.000000
+attn_out-20                      rel  1.22e-04  cos 1.000000
+l_out-20                         rel  1.50e-04  cos 1.000000
+attn_out-21                      rel  1.52e-04  cos 1.000000
+l_out-21                         rel  1.86e-04  cos 1.000000
+attn_out-22                      rel  1.90e-04  cos 1.000000
+l_out-22                         rel  2.69e-04  cos 1.000000
+attn_out-23                      rel  1.98e-04  cos 1.000000
+l_out-23                         rel  2.89e-04  cos 1.000000
+attn_out-24                      rel  2.46e-04  cos 1.000000
+l_out-24                         rel  2.36e-04  cos 1.000000
+attn_out-25                      rel  2.25e-04  cos 1.000000
+l_out-25                         rel  2.57e-04  cos 1.000000
+attn_out-26                      rel  2.89e-04  cos 1.000000
+l_out-26                         rel  4.36e-04  cos 1.000000
+attn_out-27                      rel  4.44e-04  cos 1.000000
+l_out-27                         rel  4.61e-04  cos 1.000000
+attn_out-28                      rel  4.50e-04  cos 1.000000
+l_out-28                         rel  4.44e-04  cos 1.000000
+attn_out-29                      rel  3.85e-04  cos 1.000000
+l_out-29                         rel  4.11e-04  cos 1.000000
+attn_out-30                      rel  3.88e-04  cos 1.000000
+l_out-30                         rel  3.61e-04  cos 1.000000
+attn_out-31                      rel  3.58e-04  cos 1.000000
+l_out-31                         rel  3.39e-04  cos 1.000000
+attn_out-32                      rel  4.19e-04  cos 1.000000
+l_out-32                         rel  4.04e-04  cos 1.000000
+attn_out-33                      rel  4.01e-04  cos 1.000000
+l_out-33                         rel  3.76e-04  cos 1.000000
+attn_out-34                      rel  4.25e-04  cos 1.000000
+l_out-34                         rel  4.63e-04  cos 1.000000
+attn_out-35                      rel  4.46e-04  cos 1.000000
+l_out-35                         rel  4.60e-04  cos 1.000000
+attn_out-36                      rel  4.17e-04  cos 1.000000
+l_out-36                         rel  4.17e-04  cos 1.000000
+attn_out-37                      rel  4.34e-04  cos 1.000000
+l_out-37                         rel  3.89e-04  cos 1.000000
+attn_out-38                      rel  4.97e-04  cos 1.000000
+l_out-38                         rel  5.04e-04  cos 1.000000
+attn_out-39                      rel  5.38e-04  cos 1.000000
+l_out-39                         rel  5.87e-04  cos 1.000000
+attn_out-40                      rel  6.26e-04  cos 1.000000
+l_out-40                         rel  6.84e-04  cos 1.000000
+attn_out-41                      rel  7.20e-04  cos 1.000000
+l_out-41                         rel  7.73e-04  cos 1.000000
+attn_out-42                      rel  7.35e-04  cos 1.000000
+l_out-42                         rel  7.54e-04  cos 1.000000
+attn_out-43                      rel  7.56e-04  cos 1.000000
+l_out-43                         rel  7.47e-04  cos 1.000000
+attn_out-44                      rel  7.96e-04  cos 1.000000
+l_out-44                         rel  9.01e-04  cos 1.000000
+attn_out-45                      rel  9.26e-04  cos 1.000000
+l_out-45                         rel  9.85e-04  cos 1.000000
+attn_out-46                      rel  8.70e-04  cos 1.000000
+l_out-46                         rel  9.07e-04  cos 1.000000
+attn_out-47                      rel  7.91e-04  cos 1.000000
+l_out-47                         rel  6.34e-04  cos 1.000000
+result_norm                      rel  8.89e-04  cos 1.000000
+worst relative error over 132 tensors: 9.85e-04
+logits: rel 6.75e-04 cos 1.000000; top-1 9259 vs 9259; top-10 overlap 10/10
+greedy: first 10 of 32 tokens identical
+PASS: 132 required tensors, logits, and 10 greedy tokens

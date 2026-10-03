@@ -1,0 +1,27 @@
+#version 460
+#include "common.glsl"
+// Preserve four rows/wave and four lanes/block; interleave two K accumulators.
+layout(local_size_x=256) in;
+void main() {
+    uint lane=gl_SubgroupInvocationID;
+    uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
+    uint part=lane%4, blocks=p.k/32;
+    vec4 sums[2]; sums[0]=vec4(0); sums[1]=vec4(0);
+    for(uint start=lane/4;start<blocks;start+=32) {
+        [[unroll]] for(uint z=0;z<2;z++) {
+            uint b=start+z*16;
+            if(b<blocks) {
+                vec4 x0=b_v4.v[b*8+part],x1=b_v4.v[b*8+part+4];
+                [[unroll]] for(uint r=0;r<4;r++) {
+                    uint block=(first+r)*blocks+b;
+                    float d=uintBitsToFloat(ww.words[block]);
+                    uint qs=ww.words[p.stride+block*4+part];
+                    sums[z][r]=fma(dot(q4_lo(qs),x0)+dot(q4_hi(qs),x1),d,sums[z][r]);
+                }
+            }
+        }
+    }
+    vec4 sum=subgroupAdd(sums[0]+sums[1]);
+    if(lane==0) [[unroll]] for(uint r=0;r<4;r++)
+        if(first+r<p.n)c_f.v[first+r]=sum[r];
+}

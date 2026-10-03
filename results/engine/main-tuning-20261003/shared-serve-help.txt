@@ -1,0 +1,25 @@
+Serve the loaded model through the OpenAI Responses API
+
+Usage: trashcan serve [OPTIONS] <MODEL>
+
+Arguments:
+  <MODEL>  
+
+Options:
+      --host <HOST>                  [default: 127.0.0.1]
+      --port <PORT>                  [default: 8000]
+      --model-id <MODEL_ID>          [default: gemma-4-12b]
+      --cors                         Enable browser cross-origin requests
+      --context <CONTEXT>            [default: 8192]
+      --batch <BATCH>                [default: 512]
+      --max-tokens <MAX_TOKENS>      [default: 256]
+      --thinking                     
+      --temperature <TEMPERATURE>    [default: 1]
+      --top-k <TOP_K>                [default: 64]
+      --top-p <TOP_P>                [default: 0.95]
+      --seed <SEED>                  [default: 1]
+      --cpu-reduce                   
+      --draft <DRAFT>                
+      --draft-tokens <DRAFT_TOKENS>  [default: 3]
+      --no-prefix-cache              Replay every prompt from position zero instead of reusing resident KV
+  -h, --help                         Print help

@@ -1,0 +1,2 @@
+{"batch":128,"cols":7680,"iterations":100,"kernel":"gemm","matrix_GFLOP_s":1786.651780274704,"milliseconds":4.225639983880463,"original_GB_s":3.9257485406426595,"repacked_GB_s":4.361942822936289,"rows":3840,"tensor":"blk.0.ffn_down.weight","warmup_ms":500}
+{"batch":128,"cols":7680,"iterations":100,"kernel":"gemm","matrix_GFLOP_s":1787.4476477997305,"milliseconds":4.223758502406159,"original_GB_s":3.9274972729974547,"repacked_GB_s":4.363885858886061,"rows":3840,"tensor":"blk.0.ffn_down.weight","warmup_ms":500}

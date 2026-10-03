@@ -1,0 +1,4407 @@
+{
+  "captured_at_utc": "2026-10-03T11:55:36.439699+00:00",
+  "scope": "Completed fixed-dimension phase only; reconstructed approximate windows, never exact inference markers.",
+  "analysis_script_sha256": "6a6a44fab09463dca93ab8ff19ac3def111ac3fb74b6e62ebfc45448c482a6d5",
+  "source_identity": {
+    "fixed_build_manifest": {
+      "file": "fixed-dim/build.json",
+      "size_bytes": 4853,
+      "sha256": "df8e1871a04d23d901eb2a401979c5558379b9a21d69928f8086cd09d78d2bfa",
+      "mtime_ns": 1791027264000000000,
+      "mtime_utc": "2026-10-03T11:34:24+00:00",
+      "mtime_subsecond_ns": 0,
+      "changed_during_read": false
+    },
+    "binaries": {
+      "shared": {
+        "path": "target/release/trashcan-shared-accepted",
+        "sha256": "325b087f565ea4d2b0394892735ab06f9b9e1ffe3b8a6f190bbd2f9e81ea719e"
+      },
+      "fixed": {
+        "path": "target/release/trashcan",
+        "sha256": "5b62aa4082717a95eae881219fc258a90879ea9b35b546c149153af3e6bb0b6e"
+      }
+    },
+    "inspected_source": {
+      "engine/src/main.rs": {
+        "sha256": "85b74729670adb8061fd879186c9aff90b8ac952ca2947ddbd748b06c7d68321",
+        "matches_fixed_build_manifest": true
+      },
+      "engine/src/model.rs": {
+        "sha256": "43ea5e37dcfc3390f41aed1bb0ade8cb1dde597bed5aaedb9303926d74cc175a",
+        "matches_fixed_build_manifest": true
+      },
+      "engine/src/generation.rs": {
+        "sha256": "121570a57cefa23087733b9a5899e393dc0e50674f64e952ed31202327adf432",
+        "matches_fixed_build_manifest": true
+      },
+      "engine/src/gpu.rs": {
+        "sha256": "04b2c2013faececf4b78b7f2d4185750545ea75c570849a793269b555a4c8009",
+        "matches_fixed_build_manifest": true
+      },
+      "scripts/clockmon.sh": {
+        "sha256": "a8638e299db670b7457ca6ca3710e43c4ae6d4eb7802ea36577a2790903fca08",
+        "matches_fixed_build_manifest": null
+      },
+      "scripts/latency-run.py": {
+        "sha256": "e15fc81e69818e3d9992fbdedcca1c4579b32a52b6e77e4524a3a734097aea71",
+        "matches_fixed_build_manifest": null
+      }
+    }
+  },
+  "method": {
+    "nominal_decode_end": "Remote JSON mtime, accepted only after remote/local SHA-256 and size match.",
+    "nominal_decode_start": "decode_end - JSON tg_seconds",
+    "nominal_prefill_start": "decode_start - JSON pp_seconds; omits the untimed prefill profile-write gap.",
+    "interior": "Remove 1.0 second from each end. This is a sensitivity margin, not a measured confidence bound.",
+    "sensitivity_shifts_seconds": [
+      -1,
+      -0.25,
+      0.25,
+      1
+    ],
+    "sample_selection": "Include rows whose timestamp satisfies start <= t <= end; counts are samples, not time-weighted duty cycle."
+  },
+  "code_order": {
+    "benchmark": "main.rs: prefill timer stops; prefill TSV is written; decode timer starts; decode timer stops; JSON println; final TSV is written; locals/Engine drop.",
+    "cleanup": "Engine::drop waits for device idle and frees graph command buffers, queries, fences and semaphores before fields are destroyed. Wrapper completion follows subprocess exit.",
+    "clock_sampler": "clockmon.sh timestamps before reading six sensors sequentially, truncates date output to milliseconds, then sleeps0.25s. Rows are neither simultaneous per-GPU observations nor utilization measurements.",
+    "native_gpu_mapping": {
+      "gpu0": "PCI02:00.0 / DRMcard0",
+      "gpu1": "PCI06:00.0 / DRMcard1"
+    },
+    "mapping_note": "Native Instance::amd sorts PCI bus order. The sampler comment about ggml Vulkan0 describes a separate reversed enumeration."
+  },
+  "limitations": [
+    "Nanosecond-valued filesystem mtimes are not nanosecond-accurate inference markers; serialization, stdout/filesystem behavior and timestamp granularity can shift anchors.",
+    "Remote/local content hashes match, and remote subsecond metadata improves copied whole-second anchors, but no exact monotonic-to-wall-clock alignment was instrumented.",
+    "The profile timestamps bracket phase transitions only approximately; sub-millisecond/few-millisecond agreement is an observed consistency check, not an error bound.",
+    "Clock rows timestamp before sequential reads and may miss brief clock changes; sample fractions do not establish continuous clock residency, elapsed-time duty cycle or GPU utilization.",
+    "The1s interior margin and shifted-anchor comparisons are sensitivity analyses, not a proof that every boundary error is within1s.",
+    "The clock log includes other work. Whole-command stats include loading/cleanup, and whole-log thermal maxima must not be assigned to these benchmarks.",
+    "No shader, build, model load or GPU workload was run for this analysis; only local reads and remote read-only file metadata/hash checks."
+  ],
+  "clock_snapshot": {
+    "file": "clocks.txt",
+    "size_bytes": 1162731,
+    "sha256": "bac416f9179af8c25a3e893c53ec54734b789bd3ec7a03547dcdb0fa8645606d",
+    "mtime_ns": 1791028457000000000,
+    "mtime_utc": "2026-10-03T11:54:17+00:00",
+    "changed_during_read": false,
+    "parsed_samples": 30484,
+    "invalid_line_numbers": [],
+    "first_sample_epoch_seconds": 1791020228.967,
+    "last_sample_epoch_seconds": 1791028457.678,
+    "first_sample_utc": "2026-10-03T09:37:08.967000+00:00",
+    "last_sample_utc": "2026-10-03T11:54:17.678000+00:00",
+    "median_sample_interval_seconds": 0.2669999599456787,
+    "minimum_sample_interval_seconds": 0.26199984550476074,
+    "maximum_sample_interval_seconds": 0.28799986839294434
+  },
+  "historical_clock_prefix_verification": {
+    "manifest": "measurement-windows.json",
+    "manifest_sha256": "9573e854bd613b323d771bcd03b4bcd1b8af5f8118ba7ee7f7442d3be86cf99d",
+    "historical_size_bytes": 537088,
+    "expected_sha256": "18aeda79abc2e7bb6ec483d53006abf5a85101b0981d8996b6e549bf45a2991d",
+    "current_prefix_sha256": "18aeda79abc2e7bb6ec483d53006abf5a85101b0981d8996b6e549bf45a2991d",
+    "matches": true
+  },
+  "remote_metadata": {
+    "captured_at_utc": "2026-10-03T11:53:30.774509+00:00",
+    "host": "incite",
+    "operation": "read-only stat and SHA-256 of 24 completed benchmark/profile/window files; no build, model or GPU access",
+    "files": {
+      "fixed-dim/decode-shared-1.json": {
+        "size_bytes": 315,
+        "mtime_ns": 1791027509813830055,
+        "mtime_utc": "2026-10-03T11:38:29.813830+00:00",
+        "sha256": "32def5883b398d5440a86301cf91804b172d7ba0afe18a572fff254e7a36e476",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-1.tsv": {
+        "size_bytes": 3813,
+        "mtime_ns": 1791027509813830055,
+        "mtime_utc": "2026-10-03T11:38:29.813830+00:00",
+        "sha256": "252811d84c51a535a5e9f417a2b926ec09fcc487a703d41312c417d4a1235859",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-1.prefill.tsv": {
+        "size_bytes": 4006,
+        "mtime_ns": 1791027498606448528,
+        "mtime_utc": "2026-10-03T11:38:18.606448+00:00",
+        "sha256": "a7594e4679c28a5be58d833899aacd8ccd2b5fcef48d74680e0d90200a95685c",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-1.window.json": {
+        "size_bytes": 207,
+        "mtime_ns": 1791027510513791432,
+        "mtime_utc": "2026-10-03T11:38:30.513791+00:00",
+        "sha256": "2ad1e0186119510749ad6247f6433586f021faac3dba60ed6f9eb68a43f68b4a",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-1.json": {
+        "size_bytes": 323,
+        "mtime_ns": 1791027552027501368,
+        "mtime_utc": "2026-10-03T11:39:12.027501+00:00",
+        "sha256": "6bd9249382e533698ed7d705a0bffffebb415869e57f25a2d69cc81a39403eda",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-1.tsv": {
+        "size_bytes": 3813,
+        "mtime_ns": 1791027552027501368,
+        "mtime_utc": "2026-10-03T11:39:12.027501+00:00",
+        "sha256": "235b393eac421ff65bf7122036666fa1f96d14ee895741c3ac1b2f87da281e96",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-1.prefill.tsv": {
+        "size_bytes": 4006,
+        "mtime_ns": 1791027541004109341,
+        "mtime_utc": "2026-10-03T11:39:01.004109+00:00",
+        "sha256": "b1b36e82c93f4e0d60c1ff98a94f0a3983381248fd0f5bfa368443be70ebff37",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-1.window.json": {
+        "size_bytes": 206,
+        "mtime_ns": 1791027552423479531,
+        "mtime_utc": "2026-10-03T11:39:12.423480+00:00",
+        "sha256": "d34426b1ac20fb5caed4f4750cb461dea293d8f4a31e09e6f6b5c3f95ebb5351",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-2.json": {
+        "size_bytes": 313,
+        "mtime_ns": 1791027593169233025,
+        "mtime_utc": "2026-10-03T11:39:53.169233+00:00",
+        "sha256": "89321de5414997244e1bd8b18a2d1d11da79f6b2a3716cd571b41390817fcee3",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-2.tsv": {
+        "size_bytes": 3813,
+        "mtime_ns": 1791027593173232804,
+        "mtime_utc": "2026-10-03T11:39:53.173233+00:00",
+        "sha256": "642055d492d1a58b1f1ce3056177ba3d0e6ab8946c4fd69eccf40d0350fbbdde",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-2.prefill.tsv": {
+        "size_bytes": 4006,
+        "mtime_ns": 1791027581901854136,
+        "mtime_utc": "2026-10-03T11:39:41.901854+00:00",
+        "sha256": "1c9d172266459a6fcef5f00d271bbda6f1e5abdc9fe29a3dad33535177f8c6f4",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-shared-2.window.json": {
+        "size_bytes": 206,
+        "mtime_ns": 1791027593645206788,
+        "mtime_utc": "2026-10-03T11:39:53.645207+00:00",
+        "sha256": "3f125bd28f90d0a450329188eec32d9dbfb61b7413bf7d7cb098f49e78558a51",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-2.json": {
+        "size_bytes": 313,
+        "mtime_ns": 1791027633155029471,
+        "mtime_utc": "2026-10-03T11:40:33.155030+00:00",
+        "sha256": "c62d0135517fdcb6633512457e3ee0d44831d557ff95e709251bdb98216e1467",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-2.tsv": {
+        "size_bytes": 3813,
+        "mtime_ns": 1791027633155029471,
+        "mtime_utc": "2026-10-03T11:40:33.155030+00:00",
+        "sha256": "f0229b6a8752cc3eefa199bdbf5ee5d2da593d290abc348232cc89425fc41dca",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-2.prefill.tsv": {
+        "size_bytes": 4006,
+        "mtime_ns": 1791027622307627155,
+        "mtime_utc": "2026-10-03T11:40:22.307627+00:00",
+        "sha256": "a0d40d5435122d83695303080bbae09057faa4c1efd5a82db3d75a3850026e62",
+        "changed_during_read": false
+      },
+      "fixed-dim/decode-fixed-2.window.json": {
+        "size_bytes": 207,
+        "mtime_ns": 1791027633667001263,
+        "mtime_utc": "2026-10-03T11:40:33.667001+00:00",
+        "sha256": "0015f2f8e8a37ad98ab685bfb467a70757b21d10fd5b86d8b397fbe7ef1d6ce4",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-shared.json": {
+        "size_bytes": 324,
+        "mtime_ns": 1791028118952316984,
+        "mtime_utc": "2026-10-03T11:48:38.952317+00:00",
+        "sha256": "89e276d75a9ac39b41850964ed1963d12894f5437a7b10a094db392545cfe10b",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-shared.tsv": {
+        "size_bytes": 3813,
+        "mtime_ns": 1791028118952316984,
+        "mtime_utc": "2026-10-03T11:48:38.952317+00:00",
+        "sha256": "38be89f896af690c8fa346e149f56dd3558f6a9c3a147d777e5fa6fac2b6e8a1",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-shared.prefill.tsv": {
+        "size_bytes": 4021,
+        "mtime_ns": 1791028112724658932,
+        "mtime_utc": "2026-10-03T11:48:32.724659+00:00",
+        "sha256": "754b782892842c205bb2a2c9d8bbddd390fb187d1524f5e8d36f6e4a08bb2d18",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-shared.window.json": {
+        "size_bytes": 206,
+        "mtime_ns": 1791028119492287336,
+        "mtime_utc": "2026-10-03T11:48:39.492287+00:00",
+        "sha256": "636f33388266fd7e49708af64aecf017b01c6a9ca0df108b512054ace4e7d03c",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-fixed.json": {
+        "size_bytes": 334,
+        "mtime_ns": 1791028186992581600,
+        "mtime_utc": "2026-10-03T11:49:46.992582+00:00",
+        "sha256": "1de9b55520cbe18a2bd1908cda2005784862fe9dc6777632a99f186c7d2ce1d4",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-fixed.tsv": {
+        "size_bytes": 3813,
+        "mtime_ns": 1791028186992581600,
+        "mtime_utc": "2026-10-03T11:49:46.992582+00:00",
+        "sha256": "2a5d3f2a9235ff96360488cc3e3093a1aef6322bd59602b6fff4269b7774f7f7",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-fixed.prefill.tsv": {
+        "size_bytes": 4021,
+        "mtime_ns": 1791028181000910500,
+        "mtime_utc": "2026-10-03T11:49:41.000911+00:00",
+        "sha256": "d4b21fd757c0d9fd21154c7c5f6a8acdb145187f4469b2dc9c83543dbed1b810",
+        "changed_during_read": false
+      },
+      "fixed-dim/long-fixed.window.json": {
+        "size_bytes": 207,
+        "mtime_ns": 1791028187412558546,
+        "mtime_utc": "2026-10-03T11:49:47.412559+00:00",
+        "sha256": "8dea6c56323817123b20e8e5306b6b750fbbb19769bdd2c3eee0275efb7e66c8",
+        "changed_during_read": false
+      }
+    }
+  },
+  "runs": {
+    "decode-shared-1": {
+      "label": "shared",
+      "metrics": {
+        "device_allocations_mib": [
+          4556.094512939453,
+          4556.094512939453
+        ],
+        "draft_accepted": null,
+        "draft_proposed": null,
+        "last_forward_submit_wait_read_ms": [
+          0.093913,
+          43.652632,
+          0.027062999999998283
+        ],
+        "pp": 512,
+        "pp_seconds": 3.176765923,
+        "pp_tok_s": 161.17020026344574,
+        "tg": 256,
+        "tg_seconds": 11.206662366,
+        "tg_tok_s": 22.843554275060598
+      },
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan-shared-accepted",
+        "bench",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--pp",
+        "512",
+        "--tg",
+        "256",
+        "--batch",
+        "512",
+        "--profile",
+        "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-shared-1.tsv"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791027466.6010945,
+        "command_epoch_finished": 1791027510.5206766,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "local_files": {
+        ".json": {
+          "file": "fixed-dim/decode-shared-1.json",
+          "size_bytes": 315,
+          "sha256": "32def5883b398d5440a86301cf91804b172d7ba0afe18a572fff254e7a36e476",
+          "mtime_ns": 1791027509000000000,
+          "mtime_utc": "2026-10-03T11:38:29+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".tsv": {
+          "file": "fixed-dim/decode-shared-1.tsv",
+          "size_bytes": 3813,
+          "sha256": "252811d84c51a535a5e9f417a2b926ec09fcc487a703d41312c417d4a1235859",
+          "mtime_ns": 1791027509000000000,
+          "mtime_utc": "2026-10-03T11:38:29+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".prefill.tsv": {
+          "file": "fixed-dim/decode-shared-1.prefill.tsv",
+          "size_bytes": 4006,
+          "sha256": "a7594e4679c28a5be58d833899aacd8ccd2b5fcef48d74680e0d90200a95685c",
+          "mtime_ns": 1791027498000000000,
+          "mtime_utc": "2026-10-03T11:38:18+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".window.json": {
+          "file": "fixed-dim/decode-shared-1.window.json",
+          "size_bytes": 207,
+          "sha256": "2ad1e0186119510749ad6247f6433586f021faac3dba60ed6f9eb68a43f68b4a",
+          "mtime_ns": 1791027510000000000,
+          "mtime_utc": "2026-10-03T11:38:30+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".command.json": {
+          "file": "fixed-dim/decode-shared-1.command.json",
+          "size_bytes": 369,
+          "sha256": "407401921cf2b1dc20f29b6138a5398a61804e91ee38a610d4b12950b48faae6",
+          "mtime_ns": 1791027466000000000,
+          "mtime_utc": "2026-10-03T11:37:46+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        }
+      },
+      "remote_metadata_hashes_match_local": true,
+      "nominal_anchor_remote_json_mtime_epoch_seconds": 1791027509.8138301,
+      "local_json_anchor_epoch_seconds": 1791027509.0,
+      "remote_minus_local_json_anchor_seconds": 0.8138301372528076,
+      "decode_start_minus_prefill_profile_mtime_seconds": 0.0007190704345703125,
+      "final_profile_minus_json_mtime_seconds": 0.0,
+      "command_end_minus_json_mtime_seconds": 0.7068464756011963,
+      "nominal_decode": {
+        "start_epoch_seconds": 1791027498.6071677,
+        "end_epoch_seconds": 1791027509.8138301,
+        "start_utc": "2026-10-03T11:38:18.607168+00:00",
+        "end_utc": "2026-10-03T11:38:29.813830+00:00",
+        "span_seconds": 11.20666241645813,
+        "sample_count": 42,
+        "first_sample_line": 26957,
+        "last_sample_line": 26998,
+        "first_sample_epoch_seconds": 1791027498.705,
+        "last_sample_epoch_seconds": 1791027509.799,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 42,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 42,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 42
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 42,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 42
+            }
+          ]
+        }
+      },
+      "decode_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027499.6071677,
+        "end_epoch_seconds": 1791027508.8138301,
+        "start_utc": "2026-10-03T11:38:19.607168+00:00",
+        "end_utc": "2026-10-03T11:38:28.813830+00:00",
+        "span_seconds": 9.20666241645813,
+        "sample_count": 34,
+        "first_sample_line": 26961,
+        "last_sample_line": 26994,
+        "first_sample_epoch_seconds": 1791027499.77,
+        "last_sample_epoch_seconds": 1791027508.732,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 34,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 34,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 34
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 34,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 34
+            }
+          ]
+        }
+      },
+      "nominal_prefill": {
+        "start_epoch_seconds": 1791027495.4304018,
+        "end_epoch_seconds": 1791027498.6071677,
+        "start_utc": "2026-10-03T11:38:15.430402+00:00",
+        "end_utc": "2026-10-03T11:38:18.607168+00:00",
+        "span_seconds": 3.1767659187316895,
+        "sample_count": 11,
+        "first_sample_line": 26946,
+        "last_sample_line": 26956,
+        "first_sample_epoch_seconds": 1791027495.686,
+        "last_sample_epoch_seconds": 1791027498.439,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 11,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 11,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 11
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 11,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 65,
+          "temperature_c_max": 67,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 11
+            }
+          ]
+        }
+      },
+      "nominal_combined_prefill_decode": {
+        "start_epoch_seconds": 1791027495.4304018,
+        "end_epoch_seconds": 1791027509.8138301,
+        "start_utc": "2026-10-03T11:38:15.430402+00:00",
+        "end_utc": "2026-10-03T11:38:29.813830+00:00",
+        "span_seconds": 14.38342833518982,
+        "sample_count": 53,
+        "first_sample_line": 26946,
+        "last_sample_line": 26998,
+        "first_sample_epoch_seconds": 1791027495.686,
+        "last_sample_epoch_seconds": 1791027509.799,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 53,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 53,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 53
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 53,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 65,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 53
+            }
+          ]
+        }
+      },
+      "combined_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027496.4304018,
+        "end_epoch_seconds": 1791027508.8138301,
+        "start_utc": "2026-10-03T11:38:16.430402+00:00",
+        "end_utc": "2026-10-03T11:38:28.813830+00:00",
+        "span_seconds": 12.38342833518982,
+        "sample_count": 46,
+        "first_sample_line": 26949,
+        "last_sample_line": 26994,
+        "first_sample_epoch_seconds": 1791027496.53,
+        "last_sample_epoch_seconds": 1791027508.732,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 46,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 46,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 46
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 46,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 66,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 46
+            }
+          ]
+        }
+      },
+      "whole_command_for_context_only": {
+        "start_epoch_seconds": 1791027466.6010945,
+        "end_epoch_seconds": 1791027510.5206766,
+        "start_utc": "2026-10-03T11:37:46.601094+00:00",
+        "end_utc": "2026-10-03T11:38:30.520677+00:00",
+        "span_seconds": 43.91958212852478,
+        "sample_count": 161,
+        "first_sample_line": 26840,
+        "last_sample_line": 27000,
+        "first_sample_epoch_seconds": 1791027466.754,
+        "last_sample_epoch_seconds": 1791027510.35,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.28299999237060547,
+        "both_at_850_1370_count": 56,
+        "both_at_850_1370_sample_fraction": 0.34782608695652173,
+        "gpu0": {
+          "at_850_1370_count": 77,
+          "at_850_1370_sample_fraction": 0.4782608695652174,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 65,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 75
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 7
+            },
+            {
+              "sclk_mhz": 650,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 77
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 57,
+          "at_850_1370_sample_fraction": 0.35403726708074534,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 64,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 95
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 150,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 7
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 57
+            }
+          ]
+        }
+      },
+      "decode_anchor_shift_sensitivity": {
+        "-1": {
+          "start_epoch_seconds": 1791027497.6071677,
+          "end_epoch_seconds": 1791027508.8138301,
+          "start_utc": "2026-10-03T11:38:17.607168+00:00",
+          "end_utc": "2026-10-03T11:38:28.813830+00:00",
+          "span_seconds": 11.20666241645813,
+          "sample_count": 42,
+          "first_sample_line": 26953,
+          "last_sample_line": 26994,
+          "first_sample_epoch_seconds": 1791027497.626,
+          "last_sample_epoch_seconds": 1791027508.732,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 42,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 67,
+            "temperature_c_max": 69,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          }
+        },
+        "-0.25": {
+          "start_epoch_seconds": 1791027498.3571677,
+          "end_epoch_seconds": 1791027509.5638301,
+          "start_utc": "2026-10-03T11:38:18.357168+00:00",
+          "end_utc": "2026-10-03T11:38:29.563830+00:00",
+          "span_seconds": 11.20666241645813,
+          "sample_count": 42,
+          "first_sample_line": 26956,
+          "last_sample_line": 26997,
+          "first_sample_epoch_seconds": 1791027498.439,
+          "last_sample_epoch_seconds": 1791027509.532,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 42,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 67,
+            "temperature_c_max": 69,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          }
+        },
+        "0.25": {
+          "start_epoch_seconds": 1791027498.8571677,
+          "end_epoch_seconds": 1791027510.0638301,
+          "start_utc": "2026-10-03T11:38:18.857168+00:00",
+          "end_utc": "2026-10-03T11:38:30.063830+00:00",
+          "span_seconds": 11.20666241645813,
+          "sample_count": 41,
+          "first_sample_line": 26958,
+          "last_sample_line": 26998,
+          "first_sample_epoch_seconds": 1791027498.971,
+          "last_sample_epoch_seconds": 1791027509.799,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 41,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 67,
+            "temperature_c_max": 69,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          }
+        },
+        "1": {
+          "start_epoch_seconds": 1791027499.6071677,
+          "end_epoch_seconds": 1791027510.8138301,
+          "start_utc": "2026-10-03T11:38:19.607168+00:00",
+          "end_utc": "2026-10-03T11:38:30.813830+00:00",
+          "span_seconds": 11.20666241645813,
+          "sample_count": 41,
+          "first_sample_line": 26961,
+          "last_sample_line": 27001,
+          "first_sample_epoch_seconds": 1791027499.77,
+          "last_sample_epoch_seconds": 1791027510.63,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 41,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 67,
+            "temperature_c_max": 69,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          }
+        }
+      },
+      "legacy_local_whole_second_decode_anchor": {
+        "start_epoch_seconds": 1791027497.7933376,
+        "end_epoch_seconds": 1791027509.0,
+        "start_utc": "2026-10-03T11:38:17.793338+00:00",
+        "end_utc": "2026-10-03T11:38:29+00:00",
+        "span_seconds": 11.20666241645813,
+        "sample_count": 42,
+        "first_sample_line": 26954,
+        "last_sample_line": 26995,
+        "first_sample_epoch_seconds": 1791027497.892,
+        "last_sample_epoch_seconds": 1791027508.999,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 42,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 42,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 42
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 42,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 42
+            }
+          ]
+        }
+      }
+    },
+    "decode-fixed-1": {
+      "label": "fixed",
+      "metrics": {
+        "device_allocations_mib": [
+          4556.094512939453,
+          4556.094512939453
+        ],
+        "draft_accepted": null,
+        "draft_proposed": null,
+        "last_forward_submit_wait_read_ms": [
+          0.095751,
+          42.569995999999996,
+          0.02730400000000799
+        ],
+        "pp": 512,
+        "pp_seconds": 3.220476904,
+        "pp_tok_s": 158.98266476125613,
+        "tg": 256,
+        "tg_seconds": 11.021526972,
+        "tg_tok_s": 23.227271561405566
+      },
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan",
+        "bench",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--pp",
+        "512",
+        "--tg",
+        "256",
+        "--batch",
+        "512",
+        "--profile",
+        "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-fixed-1.tsv"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791027510.5212495,
+        "command_epoch_finished": 1791027552.426486,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "local_files": {
+        ".json": {
+          "file": "fixed-dim/decode-fixed-1.json",
+          "size_bytes": 323,
+          "sha256": "6bd9249382e533698ed7d705a0bffffebb415869e57f25a2d69cc81a39403eda",
+          "mtime_ns": 1791027552000000000,
+          "mtime_utc": "2026-10-03T11:39:12+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".tsv": {
+          "file": "fixed-dim/decode-fixed-1.tsv",
+          "size_bytes": 3813,
+          "sha256": "235b393eac421ff65bf7122036666fa1f96d14ee895741c3ac1b2f87da281e96",
+          "mtime_ns": 1791027552000000000,
+          "mtime_utc": "2026-10-03T11:39:12+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".prefill.tsv": {
+          "file": "fixed-dim/decode-fixed-1.prefill.tsv",
+          "size_bytes": 4006,
+          "sha256": "b1b36e82c93f4e0d60c1ff98a94f0a3983381248fd0f5bfa368443be70ebff37",
+          "mtime_ns": 1791027541000000000,
+          "mtime_utc": "2026-10-03T11:39:01+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".window.json": {
+          "file": "fixed-dim/decode-fixed-1.window.json",
+          "size_bytes": 206,
+          "sha256": "d34426b1ac20fb5caed4f4750cb461dea293d8f4a31e09e6f6b5c3f95ebb5351",
+          "mtime_ns": 1791027552000000000,
+          "mtime_utc": "2026-10-03T11:39:12+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".command.json": {
+          "file": "fixed-dim/decode-fixed-1.command.json",
+          "size_bytes": 352,
+          "sha256": "39409fa74b9268fd31b3f8676968c141303cd069862f894c4c3091bff042bf3e",
+          "mtime_ns": 1791027510000000000,
+          "mtime_utc": "2026-10-03T11:38:30+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        }
+      },
+      "remote_metadata_hashes_match_local": true,
+      "nominal_anchor_remote_json_mtime_epoch_seconds": 1791027552.0275013,
+      "local_json_anchor_epoch_seconds": 1791027552.0,
+      "remote_minus_local_json_anchor_seconds": 0.027501344680786133,
+      "decode_start_minus_prefill_profile_mtime_seconds": 0.0018649101257324219,
+      "final_profile_minus_json_mtime_seconds": 0.0,
+      "command_end_minus_json_mtime_seconds": 0.3989846706390381,
+      "nominal_decode": {
+        "start_epoch_seconds": 1791027541.0059743,
+        "end_epoch_seconds": 1791027552.0275013,
+        "start_utc": "2026-10-03T11:39:01.005974+00:00",
+        "end_utc": "2026-10-03T11:39:12.027501+00:00",
+        "span_seconds": 11.02152705192566,
+        "sample_count": 40,
+        "first_sample_line": 27113,
+        "last_sample_line": 27152,
+        "first_sample_epoch_seconds": 1791027541.142,
+        "last_sample_epoch_seconds": 1791027551.787,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 40,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 40,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 40
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 40,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 40
+            }
+          ]
+        }
+      },
+      "decode_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027542.0059743,
+        "end_epoch_seconds": 1791027551.0275013,
+        "start_utc": "2026-10-03T11:39:02.005974+00:00",
+        "end_utc": "2026-10-03T11:39:11.027501+00:00",
+        "span_seconds": 9.02152705192566,
+        "sample_count": 33,
+        "first_sample_line": 27117,
+        "last_sample_line": 27149,
+        "first_sample_epoch_seconds": 1791027542.207,
+        "last_sample_epoch_seconds": 1791027550.975,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 33,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 33,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 33
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 33,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 33
+            }
+          ]
+        }
+      },
+      "nominal_prefill": {
+        "start_epoch_seconds": 1791027537.7854974,
+        "end_epoch_seconds": 1791027541.0059743,
+        "start_utc": "2026-10-03T11:38:57.785497+00:00",
+        "end_utc": "2026-10-03T11:39:01.005974+00:00",
+        "span_seconds": 3.2204768657684326,
+        "sample_count": 12,
+        "first_sample_line": 27101,
+        "last_sample_line": 27112,
+        "first_sample_epoch_seconds": 1791027537.883,
+        "last_sample_epoch_seconds": 1791027540.878,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 11,
+        "both_at_850_1370_sample_fraction": 0.9166666666666666,
+        "gpu0": {
+          "at_850_1370_count": 11,
+          "at_850_1370_sample_fraction": 0.9166666666666666,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 11
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 12,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 66,
+          "temperature_c_max": 69,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 12
+            }
+          ]
+        }
+      },
+      "nominal_combined_prefill_decode": {
+        "start_epoch_seconds": 1791027537.7854974,
+        "end_epoch_seconds": 1791027552.0275013,
+        "start_utc": "2026-10-03T11:38:57.785497+00:00",
+        "end_utc": "2026-10-03T11:39:12.027501+00:00",
+        "span_seconds": 14.242003917694092,
+        "sample_count": 52,
+        "first_sample_line": 27101,
+        "last_sample_line": 27152,
+        "first_sample_epoch_seconds": 1791027537.883,
+        "last_sample_epoch_seconds": 1791027551.787,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 51,
+        "both_at_850_1370_sample_fraction": 0.9807692307692307,
+        "gpu0": {
+          "at_850_1370_count": 51,
+          "at_850_1370_sample_fraction": 0.9807692307692307,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 51
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 52,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 66,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 52
+            }
+          ]
+        }
+      },
+      "combined_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027538.7854974,
+        "end_epoch_seconds": 1791027551.0275013,
+        "start_utc": "2026-10-03T11:38:58.785497+00:00",
+        "end_utc": "2026-10-03T11:39:11.027501+00:00",
+        "span_seconds": 12.242003917694092,
+        "sample_count": 45,
+        "first_sample_line": 27105,
+        "last_sample_line": 27149,
+        "first_sample_epoch_seconds": 1791027538.979,
+        "last_sample_epoch_seconds": 1791027550.975,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 45,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 45,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 45
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 45,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 45
+            }
+          ]
+        }
+      },
+      "whole_command_for_context_only": {
+        "start_epoch_seconds": 1791027510.5212495,
+        "end_epoch_seconds": 1791027552.426486,
+        "start_utc": "2026-10-03T11:38:30.521250+00:00",
+        "end_utc": "2026-10-03T11:39:12.426486+00:00",
+        "span_seconds": 41.90523648262024,
+        "sample_count": 154,
+        "first_sample_line": 27001,
+        "last_sample_line": 27154,
+        "first_sample_epoch_seconds": 1791027510.63,
+        "last_sample_epoch_seconds": 1791027552.321,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 70,
+        "both_at_850_1370_sample_fraction": 0.45454545454545453,
+        "gpu0": {
+          "at_850_1370_count": 92,
+          "at_850_1370_sample_fraction": 0.5974025974025974,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 59
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 3
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 92
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 71,
+          "at_850_1370_sample_fraction": 0.461038961038961,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 66,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 73
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 150,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 9
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 71
+            }
+          ]
+        }
+      },
+      "decode_anchor_shift_sensitivity": {
+        "-1": {
+          "start_epoch_seconds": 1791027540.0059743,
+          "end_epoch_seconds": 1791027551.0275013,
+          "start_utc": "2026-10-03T11:39:00.005974+00:00",
+          "end_utc": "2026-10-03T11:39:11.027501+00:00",
+          "span_seconds": 11.02152705192566,
+          "sample_count": 41,
+          "first_sample_line": 27109,
+          "last_sample_line": 27149,
+          "first_sample_epoch_seconds": 1791027540.083,
+          "last_sample_epoch_seconds": 1791027550.975,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 41,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 71,
+            "temperature_c_max": 72,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          }
+        },
+        "-0.25": {
+          "start_epoch_seconds": 1791027540.7559743,
+          "end_epoch_seconds": 1791027551.7775013,
+          "start_utc": "2026-10-03T11:39:00.755974+00:00",
+          "end_utc": "2026-10-03T11:39:11.777501+00:00",
+          "span_seconds": 11.02152705192566,
+          "sample_count": 40,
+          "first_sample_line": 27112,
+          "last_sample_line": 27151,
+          "first_sample_epoch_seconds": 1791027540.878,
+          "last_sample_epoch_seconds": 1791027551.521,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 40,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 71,
+            "temperature_c_max": 73,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          }
+        },
+        "0.25": {
+          "start_epoch_seconds": 1791027541.2559743,
+          "end_epoch_seconds": 1791027552.2775013,
+          "start_utc": "2026-10-03T11:39:01.255974+00:00",
+          "end_utc": "2026-10-03T11:39:12.277501+00:00",
+          "span_seconds": 11.02152705192566,
+          "sample_count": 40,
+          "first_sample_line": 27114,
+          "last_sample_line": 27153,
+          "first_sample_epoch_seconds": 1791027541.408,
+          "last_sample_epoch_seconds": 1791027552.054,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 40,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 71,
+            "temperature_c_max": 73,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          }
+        },
+        "1": {
+          "start_epoch_seconds": 1791027542.0059743,
+          "end_epoch_seconds": 1791027553.0275013,
+          "start_utc": "2026-10-03T11:39:02.005974+00:00",
+          "end_utc": "2026-10-03T11:39:13.027501+00:00",
+          "span_seconds": 11.02152705192566,
+          "sample_count": 40,
+          "first_sample_line": 27117,
+          "last_sample_line": 27156,
+          "first_sample_epoch_seconds": 1791027542.207,
+          "last_sample_epoch_seconds": 1791027552.853,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 40,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 71,
+            "temperature_c_max": 73,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 69,
+            "temperature_c_max": 71,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          }
+        }
+      },
+      "legacy_local_whole_second_decode_anchor": {
+        "start_epoch_seconds": 1791027540.978473,
+        "end_epoch_seconds": 1791027552.0,
+        "start_utc": "2026-10-03T11:39:00.978473+00:00",
+        "end_utc": "2026-10-03T11:39:12+00:00",
+        "span_seconds": 11.02152705192566,
+        "sample_count": 40,
+        "first_sample_line": 27113,
+        "last_sample_line": 27152,
+        "first_sample_epoch_seconds": 1791027541.142,
+        "last_sample_epoch_seconds": 1791027551.787,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 40,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 40,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 40
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 40,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 40
+            }
+          ]
+        }
+      }
+    },
+    "decode-shared-2": {
+      "label": "shared",
+      "metrics": {
+        "device_allocations_mib": [
+          4556.094512939453,
+          4556.094512939453
+        ],
+        "draft_accepted": null,
+        "draft_proposed": null,
+        "last_forward_submit_wait_read_ms": [
+          0.186992,
+          45.159322,
+          0.05232499999999618
+        ],
+        "pp": 512,
+        "pp_seconds": 3.176200432,
+        "pp_tok_s": 161.19889501985938,
+        "tg": 256,
+        "tg_seconds": 11.270668273,
+        "tg_tok_s": 22.71382617242611
+      },
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan-shared-accepted",
+        "bench",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--pp",
+        "512",
+        "--tg",
+        "256",
+        "--batch",
+        "512",
+        "--profile",
+        "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-shared-2.tsv"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791027552.4272182,
+        "command_epoch_finished": 1791027593.648868,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "local_files": {
+        ".json": {
+          "file": "fixed-dim/decode-shared-2.json",
+          "size_bytes": 313,
+          "sha256": "89321de5414997244e1bd8b18a2d1d11da79f6b2a3716cd571b41390817fcee3",
+          "mtime_ns": 1791027593000000000,
+          "mtime_utc": "2026-10-03T11:39:53+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".tsv": {
+          "file": "fixed-dim/decode-shared-2.tsv",
+          "size_bytes": 3813,
+          "sha256": "642055d492d1a58b1f1ce3056177ba3d0e6ab8946c4fd69eccf40d0350fbbdde",
+          "mtime_ns": 1791027593000000000,
+          "mtime_utc": "2026-10-03T11:39:53+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".prefill.tsv": {
+          "file": "fixed-dim/decode-shared-2.prefill.tsv",
+          "size_bytes": 4006,
+          "sha256": "1c9d172266459a6fcef5f00d271bbda6f1e5abdc9fe29a3dad33535177f8c6f4",
+          "mtime_ns": 1791027581000000000,
+          "mtime_utc": "2026-10-03T11:39:41+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".window.json": {
+          "file": "fixed-dim/decode-shared-2.window.json",
+          "size_bytes": 206,
+          "sha256": "3f125bd28f90d0a450329188eec32d9dbfb61b7413bf7d7cb098f49e78558a51",
+          "mtime_ns": 1791027593000000000,
+          "mtime_utc": "2026-10-03T11:39:53+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".command.json": {
+          "file": "fixed-dim/decode-shared-2.command.json",
+          "size_bytes": 369,
+          "sha256": "74bcc45f14d7bae936c6ab228d869ebeeff819e21a1b1f741c6a188473a71953",
+          "mtime_ns": 1791027552000000000,
+          "mtime_utc": "2026-10-03T11:39:12+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        }
+      },
+      "remote_metadata_hashes_match_local": true,
+      "nominal_anchor_remote_json_mtime_epoch_seconds": 1791027593.169233,
+      "local_json_anchor_epoch_seconds": 1791027593.0,
+      "remote_minus_local_json_anchor_seconds": 0.16923308372497559,
+      "decode_start_minus_prefill_profile_mtime_seconds": -0.003289461135864258,
+      "final_profile_minus_json_mtime_seconds": 0.0039997100830078125,
+      "command_end_minus_json_mtime_seconds": 0.47963500022888184,
+      "nominal_decode": {
+        "start_epoch_seconds": 1791027581.8985648,
+        "end_epoch_seconds": 1791027593.169233,
+        "start_utc": "2026-10-03T11:39:41.898565+00:00",
+        "end_utc": "2026-10-03T11:39:53.169233+00:00",
+        "span_seconds": 11.270668268203735,
+        "sample_count": 42,
+        "first_sample_line": 27263,
+        "last_sample_line": 27304,
+        "first_sample_epoch_seconds": 1791027581.908,
+        "last_sample_epoch_seconds": 1791027593.031,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 42,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 42,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 42
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 42,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 42
+            }
+          ]
+        }
+      },
+      "decode_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027582.8985648,
+        "end_epoch_seconds": 1791027592.169233,
+        "start_utc": "2026-10-03T11:39:42.898565+00:00",
+        "end_utc": "2026-10-03T11:39:52.169233+00:00",
+        "span_seconds": 9.270668268203735,
+        "sample_count": 34,
+        "first_sample_line": 27267,
+        "last_sample_line": 27300,
+        "first_sample_epoch_seconds": 1791027582.987,
+        "last_sample_epoch_seconds": 1791027591.964,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 34,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 34,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 73,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 34
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 34,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 34
+            }
+          ]
+        }
+      },
+      "nominal_prefill": {
+        "start_epoch_seconds": 1791027578.7223644,
+        "end_epoch_seconds": 1791027581.8985648,
+        "start_utc": "2026-10-03T11:39:38.722364+00:00",
+        "end_utc": "2026-10-03T11:39:41.898565+00:00",
+        "span_seconds": 3.1762003898620605,
+        "sample_count": 11,
+        "first_sample_line": 27252,
+        "last_sample_line": 27262,
+        "first_sample_epoch_seconds": 1791027578.874,
+        "last_sample_epoch_seconds": 1791027581.627,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 11,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 11,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 11
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 11,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 71,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 11
+            }
+          ]
+        }
+      },
+      "nominal_combined_prefill_decode": {
+        "start_epoch_seconds": 1791027578.7223644,
+        "end_epoch_seconds": 1791027593.169233,
+        "start_utc": "2026-10-03T11:39:38.722364+00:00",
+        "end_utc": "2026-10-03T11:39:53.169233+00:00",
+        "span_seconds": 14.446868658065796,
+        "sample_count": 53,
+        "first_sample_line": 27252,
+        "last_sample_line": 27304,
+        "first_sample_epoch_seconds": 1791027578.874,
+        "last_sample_epoch_seconds": 1791027593.031,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 53,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 53,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 53
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 53,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 53
+            }
+          ]
+        }
+      },
+      "combined_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027579.7223644,
+        "end_epoch_seconds": 1791027592.169233,
+        "start_utc": "2026-10-03T11:39:39.722364+00:00",
+        "end_utc": "2026-10-03T11:39:52.169233+00:00",
+        "span_seconds": 12.446868658065796,
+        "sample_count": 45,
+        "first_sample_line": 27256,
+        "last_sample_line": 27300,
+        "first_sample_epoch_seconds": 1791027579.94,
+        "last_sample_epoch_seconds": 1791027591.964,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 45,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 45,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 45
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 45,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 45
+            }
+          ]
+        }
+      },
+      "whole_command_for_context_only": {
+        "start_epoch_seconds": 1791027552.4272182,
+        "end_epoch_seconds": 1791027593.648868,
+        "start_utc": "2026-10-03T11:39:12.427218+00:00",
+        "end_utc": "2026-10-03T11:39:53.648868+00:00",
+        "span_seconds": 41.22164988517761,
+        "sample_count": 152,
+        "first_sample_line": 27155,
+        "last_sample_line": 27306,
+        "first_sample_epoch_seconds": 1791027552.586,
+        "last_sample_epoch_seconds": 1791027593.575,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 72,
+        "both_at_850_1370_sample_fraction": 0.47368421052631576,
+        "gpu0": {
+          "at_850_1370_count": 94,
+          "at_850_1370_sample_fraction": 0.618421052631579,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 54
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 3
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 94
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 73,
+          "at_850_1370_sample_fraction": 0.48026315789473684,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 65
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 5
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 150,
+              "samples": 2
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 7
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 73
+            }
+          ]
+        }
+      },
+      "decode_anchor_shift_sensitivity": {
+        "-1": {
+          "start_epoch_seconds": 1791027580.8985648,
+          "end_epoch_seconds": 1791027592.169233,
+          "start_utc": "2026-10-03T11:39:40.898565+00:00",
+          "end_utc": "2026-10-03T11:39:52.169233+00:00",
+          "span_seconds": 11.270668268203735,
+          "sample_count": 41,
+          "first_sample_line": 27260,
+          "last_sample_line": 27300,
+          "first_sample_epoch_seconds": 1791027581.064,
+          "last_sample_epoch_seconds": 1791027591.964,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 41,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 70,
+            "temperature_c_max": 72,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          }
+        },
+        "-0.25": {
+          "start_epoch_seconds": 1791027581.6485648,
+          "end_epoch_seconds": 1791027592.919233,
+          "start_utc": "2026-10-03T11:39:41.648565+00:00",
+          "end_utc": "2026-10-03T11:39:52.919233+00:00",
+          "span_seconds": 11.270668268203735,
+          "sample_count": 41,
+          "first_sample_line": 27263,
+          "last_sample_line": 27303,
+          "first_sample_epoch_seconds": 1791027581.908,
+          "last_sample_epoch_seconds": 1791027592.763,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 41,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 70,
+            "temperature_c_max": 72,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          }
+        },
+        "0.25": {
+          "start_epoch_seconds": 1791027582.1485648,
+          "end_epoch_seconds": 1791027593.419233,
+          "start_utc": "2026-10-03T11:39:42.148565+00:00",
+          "end_utc": "2026-10-03T11:39:53.419233+00:00",
+          "span_seconds": 11.270668268203735,
+          "sample_count": 42,
+          "first_sample_line": 27264,
+          "last_sample_line": 27305,
+          "first_sample_epoch_seconds": 1791027582.187,
+          "last_sample_epoch_seconds": 1791027593.31,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 42,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 70,
+            "temperature_c_max": 72,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          }
+        },
+        "1": {
+          "start_epoch_seconds": 1791027582.8985648,
+          "end_epoch_seconds": 1791027594.169233,
+          "start_utc": "2026-10-03T11:39:42.898565+00:00",
+          "end_utc": "2026-10-03T11:39:54.169233+00:00",
+          "span_seconds": 11.270668268203735,
+          "sample_count": 42,
+          "first_sample_line": 27267,
+          "last_sample_line": 27308,
+          "first_sample_epoch_seconds": 1791027582.987,
+          "last_sample_epoch_seconds": 1791027594.107,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 42,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 73,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 42,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 71,
+            "temperature_c_max": 72,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 42
+              }
+            ]
+          }
+        }
+      },
+      "legacy_local_whole_second_decode_anchor": {
+        "start_epoch_seconds": 1791027581.7293317,
+        "end_epoch_seconds": 1791027593.0,
+        "start_utc": "2026-10-03T11:39:41.729332+00:00",
+        "end_utc": "2026-10-03T11:39:53+00:00",
+        "span_seconds": 11.270668268203735,
+        "sample_count": 41,
+        "first_sample_line": 27263,
+        "last_sample_line": 27303,
+        "first_sample_epoch_seconds": 1791027581.908,
+        "last_sample_epoch_seconds": 1791027592.763,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 41,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 41,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 41
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 41,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 41
+            }
+          ]
+        }
+      }
+    },
+    "decode-fixed-2": {
+      "label": "fixed",
+      "metrics": {
+        "device_allocations_mib": [
+          4556.094512939453,
+          4556.094512939453
+        ],
+        "draft_accepted": null,
+        "draft_proposed": null,
+        "last_forward_submit_wait_read_ms": [
+          0.106147,
+          42.417525,
+          0.029853000000002794
+        ],
+        "pp": 512,
+        "pp_seconds": 3.181777867,
+        "pp_tok_s": 160.9163245838871,
+        "tg": 256,
+        "tg_seconds": 10.844790172,
+        "tg_tok_s": 23.60580480948009
+      },
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan",
+        "bench",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--pp",
+        "512",
+        "--tg",
+        "256",
+        "--batch",
+        "512",
+        "--profile",
+        "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/decode-fixed-2.tsv"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791027593.6494594,
+        "command_epoch_finished": 1791027633.6712122,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "local_files": {
+        ".json": {
+          "file": "fixed-dim/decode-fixed-2.json",
+          "size_bytes": 313,
+          "sha256": "c62d0135517fdcb6633512457e3ee0d44831d557ff95e709251bdb98216e1467",
+          "mtime_ns": 1791027633000000000,
+          "mtime_utc": "2026-10-03T11:40:33+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".tsv": {
+          "file": "fixed-dim/decode-fixed-2.tsv",
+          "size_bytes": 3813,
+          "sha256": "f0229b6a8752cc3eefa199bdbf5ee5d2da593d290abc348232cc89425fc41dca",
+          "mtime_ns": 1791027633000000000,
+          "mtime_utc": "2026-10-03T11:40:33+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".prefill.tsv": {
+          "file": "fixed-dim/decode-fixed-2.prefill.tsv",
+          "size_bytes": 4006,
+          "sha256": "a0d40d5435122d83695303080bbae09057faa4c1efd5a82db3d75a3850026e62",
+          "mtime_ns": 1791027622000000000,
+          "mtime_utc": "2026-10-03T11:40:22+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".window.json": {
+          "file": "fixed-dim/decode-fixed-2.window.json",
+          "size_bytes": 207,
+          "sha256": "0015f2f8e8a37ad98ab685bfb467a70757b21d10fd5b86d8b397fbe7ef1d6ce4",
+          "mtime_ns": 1791027633000000000,
+          "mtime_utc": "2026-10-03T11:40:33+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".command.json": {
+          "file": "fixed-dim/decode-fixed-2.command.json",
+          "size_bytes": 352,
+          "sha256": "b5d97838a71e09f7244cea4f7ce3c09d4ab7563a81d32bef4e81e901e944b10f",
+          "mtime_ns": 1791027593000000000,
+          "mtime_utc": "2026-10-03T11:39:53+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        }
+      },
+      "remote_metadata_hashes_match_local": true,
+      "nominal_anchor_remote_json_mtime_epoch_seconds": 1791027633.1550295,
+      "local_json_anchor_epoch_seconds": 1791027633.0,
+      "remote_minus_local_json_anchor_seconds": 0.1550295352935791,
+      "decode_start_minus_prefill_profile_mtime_seconds": 0.0026121139526367188,
+      "final_profile_minus_json_mtime_seconds": 0.0,
+      "command_end_minus_json_mtime_seconds": 0.5161826610565186,
+      "nominal_decode": {
+        "start_epoch_seconds": 1791027622.3102393,
+        "end_epoch_seconds": 1791027633.1550295,
+        "start_utc": "2026-10-03T11:40:22.310239+00:00",
+        "end_utc": "2026-10-03T11:40:33.155030+00:00",
+        "span_seconds": 10.84479022026062,
+        "sample_count": 40,
+        "first_sample_line": 27413,
+        "last_sample_line": 27452,
+        "first_sample_epoch_seconds": 1791027622.553,
+        "last_sample_epoch_seconds": 1791027632.967,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+        "both_at_850_1370_count": 40,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 40,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 74,
+          "temperature_c_max": 76,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 40
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 40,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 40
+            }
+          ]
+        }
+      },
+      "decode_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027623.3102393,
+        "end_epoch_seconds": 1791027632.1550295,
+        "start_utc": "2026-10-03T11:40:23.310239+00:00",
+        "end_utc": "2026-10-03T11:40:32.155030+00:00",
+        "span_seconds": 8.84479022026062,
+        "sample_count": 33,
+        "first_sample_line": 27416,
+        "last_sample_line": 27448,
+        "first_sample_epoch_seconds": 1791027623.352,
+        "last_sample_epoch_seconds": 1791027631.902,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+        "both_at_850_1370_count": 33,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 33,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 74,
+          "temperature_c_max": 76,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 33
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 33,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 33
+            }
+          ]
+        }
+      },
+      "nominal_prefill": {
+        "start_epoch_seconds": 1791027619.1284614,
+        "end_epoch_seconds": 1791027622.3102393,
+        "start_utc": "2026-10-03T11:40:19.128461+00:00",
+        "end_utc": "2026-10-03T11:40:22.310239+00:00",
+        "span_seconds": 3.1817779541015625,
+        "sample_count": 12,
+        "first_sample_line": 27401,
+        "last_sample_line": 27412,
+        "first_sample_epoch_seconds": 1791027619.264,
+        "last_sample_epoch_seconds": 1791027622.287,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 12,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 12,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 12
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 12,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 72,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 12
+            }
+          ]
+        }
+      },
+      "nominal_combined_prefill_decode": {
+        "start_epoch_seconds": 1791027619.1284614,
+        "end_epoch_seconds": 1791027633.1550295,
+        "start_utc": "2026-10-03T11:40:19.128461+00:00",
+        "end_utc": "2026-10-03T11:40:33.155030+00:00",
+        "span_seconds": 14.026568174362183,
+        "sample_count": 52,
+        "first_sample_line": 27401,
+        "last_sample_line": 27452,
+        "first_sample_epoch_seconds": 1791027619.264,
+        "last_sample_epoch_seconds": 1791027632.967,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 52,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 52,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 76,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 52
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 52,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 52
+            }
+          ]
+        }
+      },
+      "combined_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791027620.1284614,
+        "end_epoch_seconds": 1791027632.1550295,
+        "start_utc": "2026-10-03T11:40:20.128461+00:00",
+        "end_utc": "2026-10-03T11:40:32.155030+00:00",
+        "span_seconds": 12.026568174362183,
+        "sample_count": 44,
+        "first_sample_line": 27405,
+        "last_sample_line": 27448,
+        "first_sample_epoch_seconds": 1791027620.376,
+        "last_sample_epoch_seconds": 1791027631.902,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 44,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 44,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 73,
+          "temperature_c_max": 76,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 44
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 44,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 71,
+          "temperature_c_max": 73,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 44
+            }
+          ]
+        }
+      },
+      "whole_command_for_context_only": {
+        "start_epoch_seconds": 1791027593.6494594,
+        "end_epoch_seconds": 1791027633.6712122,
+        "start_utc": "2026-10-03T11:39:53.649459+00:00",
+        "end_utc": "2026-10-03T11:40:33.671212+00:00",
+        "span_seconds": 40.02175283432007,
+        "sample_count": 148,
+        "first_sample_line": 27307,
+        "last_sample_line": 27454,
+        "first_sample_epoch_seconds": 1791027593.84,
+        "last_sample_epoch_seconds": 1791027633.503,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.28299999237060547,
+        "both_at_850_1370_count": 71,
+        "both_at_850_1370_sample_fraction": 0.4797297297297297,
+        "gpu0": {
+          "at_850_1370_count": 94,
+          "at_850_1370_sample_fraction": 0.6351351351351351,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 76,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 51
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 150,
+              "samples": 2
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 94
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 71,
+          "at_850_1370_sample_fraction": 0.4797297297297297,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 69,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 65
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 2
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 150,
+              "samples": 3
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 7
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 71
+            }
+          ]
+        }
+      },
+      "decode_anchor_shift_sensitivity": {
+        "-1": {
+          "start_epoch_seconds": 1791027621.3102393,
+          "end_epoch_seconds": 1791027632.1550295,
+          "start_utc": "2026-10-03T11:40:21.310239+00:00",
+          "end_utc": "2026-10-03T11:40:32.155030+00:00",
+          "span_seconds": 10.84479022026062,
+          "sample_count": 40,
+          "first_sample_line": 27409,
+          "last_sample_line": 27448,
+          "first_sample_epoch_seconds": 1791027621.478,
+          "last_sample_epoch_seconds": 1791027631.902,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+          "both_at_850_1370_count": 40,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 74,
+            "temperature_c_max": 76,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 73,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          }
+        },
+        "-0.25": {
+          "start_epoch_seconds": 1791027622.0602393,
+          "end_epoch_seconds": 1791027632.9050295,
+          "start_utc": "2026-10-03T11:40:22.060239+00:00",
+          "end_utc": "2026-10-03T11:40:32.905030+00:00",
+          "span_seconds": 10.84479022026062,
+          "sample_count": 40,
+          "first_sample_line": 27412,
+          "last_sample_line": 27451,
+          "first_sample_epoch_seconds": 1791027622.287,
+          "last_sample_epoch_seconds": 1791027632.7,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+          "both_at_850_1370_count": 40,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 74,
+            "temperature_c_max": 76,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          }
+        },
+        "0.25": {
+          "start_epoch_seconds": 1791027622.5602393,
+          "end_epoch_seconds": 1791027633.4050295,
+          "start_utc": "2026-10-03T11:40:22.560239+00:00",
+          "end_utc": "2026-10-03T11:40:33.405030+00:00",
+          "span_seconds": 10.84479022026062,
+          "sample_count": 40,
+          "first_sample_line": 27414,
+          "last_sample_line": 27453,
+          "first_sample_epoch_seconds": 1791027622.819,
+          "last_sample_epoch_seconds": 1791027633.234,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+          "both_at_850_1370_count": 40,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 74,
+            "temperature_c_max": 76,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 40,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 40
+              }
+            ]
+          }
+        },
+        "1": {
+          "start_epoch_seconds": 1791027623.3102393,
+          "end_epoch_seconds": 1791027634.1550295,
+          "start_utc": "2026-10-03T11:40:23.310239+00:00",
+          "end_utc": "2026-10-03T11:40:34.155030+00:00",
+          "span_seconds": 10.84479022026062,
+          "sample_count": 41,
+          "first_sample_line": 27416,
+          "last_sample_line": 27456,
+          "first_sample_epoch_seconds": 1791027623.352,
+          "last_sample_epoch_seconds": 1791027634.048,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+          "both_at_850_1370_count": 41,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 74,
+            "temperature_c_max": 76,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 41,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 72,
+            "temperature_c_max": 74,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 41
+              }
+            ]
+          }
+        }
+      },
+      "legacy_local_whole_second_decode_anchor": {
+        "start_epoch_seconds": 1791027622.1552098,
+        "end_epoch_seconds": 1791027633.0,
+        "start_utc": "2026-10-03T11:40:22.155210+00:00",
+        "end_utc": "2026-10-03T11:40:33+00:00",
+        "span_seconds": 10.84479022026062,
+        "sample_count": 41,
+        "first_sample_line": 27412,
+        "last_sample_line": 27452,
+        "first_sample_epoch_seconds": 1791027622.287,
+        "last_sample_epoch_seconds": 1791027632.967,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2819998264312744,
+        "both_at_850_1370_count": 41,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 41,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 74,
+          "temperature_c_max": 76,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 41
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 41,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 74,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 41
+            }
+          ]
+        }
+      }
+    },
+    "long-shared": {
+      "label": "shared",
+      "metrics": {
+        "device_allocations_mib": [
+          4556.094512939453,
+          4556.094512939453
+        ],
+        "draft_accepted": null,
+        "draft_proposed": null,
+        "last_forward_submit_wait_read_ms": [
+          0.094281,
+          47.653259999999996,
+          0.027346000000001425
+        ],
+        "pp": 4096,
+        "pp_seconds": 34.85385409,
+        "pp_tok_s": 117.51928465136925,
+        "tg": 128,
+        "tg_seconds": 6.228099322,
+        "tg_tok_s": 20.552016495282217
+      },
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan-shared-accepted",
+        "bench",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--pp",
+        "4096",
+        "--tg",
+        "128",
+        "--batch",
+        "512",
+        "--profile",
+        "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/long-shared.tsv"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791028048.2635167,
+        "command_epoch_finished": 1791028119.495379,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "local_files": {
+        ".json": {
+          "file": "fixed-dim/long-shared.json",
+          "size_bytes": 324,
+          "sha256": "89e276d75a9ac39b41850964ed1963d12894f5437a7b10a094db392545cfe10b",
+          "mtime_ns": 1791028118000000000,
+          "mtime_utc": "2026-10-03T11:48:38+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".tsv": {
+          "file": "fixed-dim/long-shared.tsv",
+          "size_bytes": 3813,
+          "sha256": "38be89f896af690c8fa346e149f56dd3558f6a9c3a147d777e5fa6fac2b6e8a1",
+          "mtime_ns": 1791028118000000000,
+          "mtime_utc": "2026-10-03T11:48:38+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".prefill.tsv": {
+          "file": "fixed-dim/long-shared.prefill.tsv",
+          "size_bytes": 4021,
+          "sha256": "754b782892842c205bb2a2c9d8bbddd390fb187d1524f5e8d36f6e4a08bb2d18",
+          "mtime_ns": 1791028112000000000,
+          "mtime_utc": "2026-10-03T11:48:32+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".window.json": {
+          "file": "fixed-dim/long-shared.window.json",
+          "size_bytes": 206,
+          "sha256": "636f33388266fd7e49708af64aecf017b01c6a9ca0df108b512054ace4e7d03c",
+          "mtime_ns": 1791028119000000000,
+          "mtime_utc": "2026-10-03T11:48:39+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".command.json": {
+          "file": "fixed-dim/long-shared.command.json",
+          "size_bytes": 366,
+          "sha256": "a30fdd827817ab055f417fbe6ac937a1d50452ad88d18404aae02fb139a6a0dd",
+          "mtime_ns": 1791028048000000000,
+          "mtime_utc": "2026-10-03T11:47:28+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        }
+      },
+      "remote_metadata_hashes_match_local": true,
+      "nominal_anchor_remote_json_mtime_epoch_seconds": 1791028118.952317,
+      "local_json_anchor_epoch_seconds": 1791028118.0,
+      "remote_minus_local_json_anchor_seconds": 0.9523169994354248,
+      "decode_start_minus_prefill_profile_mtime_seconds": -0.0004413127899169922,
+      "final_profile_minus_json_mtime_seconds": 0.0,
+      "command_end_minus_json_mtime_seconds": 0.5430619716644287,
+      "nominal_decode": {
+        "start_epoch_seconds": 1791028112.7242177,
+        "end_epoch_seconds": 1791028118.952317,
+        "start_utc": "2026-10-03T11:48:32.724218+00:00",
+        "end_utc": "2026-10-03T11:48:38.952317+00:00",
+        "span_seconds": 6.228099346160889,
+        "sample_count": 23,
+        "first_sample_line": 29216,
+        "last_sample_line": 29238,
+        "first_sample_epoch_seconds": 1791028112.954,
+        "last_sample_epoch_seconds": 1791028118.873,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 23,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 23,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 79,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 23
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 23,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 76,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 23
+            }
+          ]
+        }
+      },
+      "decode_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791028113.7242177,
+        "end_epoch_seconds": 1791028117.952317,
+        "start_utc": "2026-10-03T11:48:33.724218+00:00",
+        "end_utc": "2026-10-03T11:48:37.952317+00:00",
+        "span_seconds": 4.228099346160889,
+        "sample_count": 16,
+        "first_sample_line": 29219,
+        "last_sample_line": 29234,
+        "first_sample_epoch_seconds": 1791028113.753,
+        "last_sample_epoch_seconds": 1791028117.806,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 16,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 16,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 79,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 16
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 16,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 77,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 16
+            }
+          ]
+        }
+      },
+      "nominal_prefill": {
+        "start_epoch_seconds": 1791028077.8703635,
+        "end_epoch_seconds": 1791028112.7242177,
+        "start_utc": "2026-10-03T11:47:57.870363+00:00",
+        "end_utc": "2026-10-03T11:48:32.724218+00:00",
+        "span_seconds": 34.853854179382324,
+        "sample_count": 129,
+        "first_sample_line": 29087,
+        "last_sample_line": 29215,
+        "first_sample_epoch_seconds": 1791028077.962,
+        "last_sample_epoch_seconds": 1791028112.674,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 128,
+        "both_at_850_1370_sample_fraction": 0.9922480620155039,
+        "gpu0": {
+          "at_850_1370_count": 128,
+          "at_850_1370_sample_fraction": 0.9922480620155039,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 128
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 129,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 129
+            }
+          ]
+        }
+      },
+      "nominal_combined_prefill_decode": {
+        "start_epoch_seconds": 1791028077.8703635,
+        "end_epoch_seconds": 1791028118.952317,
+        "start_utc": "2026-10-03T11:47:57.870363+00:00",
+        "end_utc": "2026-10-03T11:48:38.952317+00:00",
+        "span_seconds": 41.08195352554321,
+        "sample_count": 152,
+        "first_sample_line": 29087,
+        "last_sample_line": 29238,
+        "first_sample_epoch_seconds": 1791028077.962,
+        "last_sample_epoch_seconds": 1791028118.873,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 151,
+        "both_at_850_1370_sample_fraction": 0.993421052631579,
+        "gpu0": {
+          "at_850_1370_count": 151,
+          "at_850_1370_sample_fraction": 0.993421052631579,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 151
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 152,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 152
+            }
+          ]
+        }
+      },
+      "combined_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791028078.8703635,
+        "end_epoch_seconds": 1791028117.952317,
+        "start_utc": "2026-10-03T11:47:58.870363+00:00",
+        "end_utc": "2026-10-03T11:48:37.952317+00:00",
+        "span_seconds": 39.08195352554321,
+        "sample_count": 144,
+        "first_sample_line": 29091,
+        "last_sample_line": 29234,
+        "first_sample_epoch_seconds": 1791028079.05,
+        "last_sample_epoch_seconds": 1791028117.806,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 144,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 144,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 144
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 144,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 70,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 144
+            }
+          ]
+        }
+      },
+      "whole_command_for_context_only": {
+        "start_epoch_seconds": 1791028048.2635167,
+        "end_epoch_seconds": 1791028119.495379,
+        "start_utc": "2026-10-03T11:47:28.263517+00:00",
+        "end_utc": "2026-10-03T11:48:39.495379+00:00",
+        "span_seconds": 71.23186230659485,
+        "sample_count": 262,
+        "first_sample_line": 28979,
+        "last_sample_line": 29240,
+        "first_sample_epoch_seconds": 1791028048.336,
+        "last_sample_epoch_seconds": 1791028119.407,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.28299999237060547,
+        "both_at_850_1370_count": 170,
+        "both_at_850_1370_sample_fraction": 0.648854961832061,
+        "gpu0": {
+          "at_850_1370_count": 192,
+          "at_850_1370_sample_fraction": 0.732824427480916,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 68,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 65
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 4
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 192
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 171,
+          "at_850_1370_sample_fraction": 0.6526717557251909,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 67,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 81
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 150,
+              "samples": 2
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 7
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 171
+            }
+          ]
+        }
+      },
+      "decode_anchor_shift_sensitivity": {
+        "-1": {
+          "start_epoch_seconds": 1791028111.7242177,
+          "end_epoch_seconds": 1791028117.952317,
+          "start_utc": "2026-10-03T11:48:31.724218+00:00",
+          "end_utc": "2026-10-03T11:48:37.952317+00:00",
+          "span_seconds": 6.228099346160889,
+          "sample_count": 23,
+          "first_sample_line": 29212,
+          "last_sample_line": 29234,
+          "first_sample_epoch_seconds": 1791028111.829,
+          "last_sample_epoch_seconds": 1791028117.806,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 23,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 79,
+            "temperature_c_max": 79,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 76,
+            "temperature_c_max": 77,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          }
+        },
+        "-0.25": {
+          "start_epoch_seconds": 1791028112.4742177,
+          "end_epoch_seconds": 1791028118.702317,
+          "start_utc": "2026-10-03T11:48:32.474218+00:00",
+          "end_utc": "2026-10-03T11:48:38.702317+00:00",
+          "span_seconds": 6.228099346160889,
+          "sample_count": 23,
+          "first_sample_line": 29215,
+          "last_sample_line": 29237,
+          "first_sample_epoch_seconds": 1791028112.674,
+          "last_sample_epoch_seconds": 1791028118.607,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 23,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 79,
+            "temperature_c_max": 79,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 76,
+            "temperature_c_max": 77,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          }
+        },
+        "0.25": {
+          "start_epoch_seconds": 1791028112.9742177,
+          "end_epoch_seconds": 1791028119.202317,
+          "start_utc": "2026-10-03T11:48:32.974218+00:00",
+          "end_utc": "2026-10-03T11:48:39.202317+00:00",
+          "span_seconds": 6.228099346160889,
+          "sample_count": 23,
+          "first_sample_line": 29217,
+          "last_sample_line": 29239,
+          "first_sample_epoch_seconds": 1791028113.22,
+          "last_sample_epoch_seconds": 1791028119.14,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 23,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 78,
+            "temperature_c_max": 79,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 76,
+            "temperature_c_max": 77,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          }
+        },
+        "1": {
+          "start_epoch_seconds": 1791028113.7242177,
+          "end_epoch_seconds": 1791028119.952317,
+          "start_utc": "2026-10-03T11:48:33.724218+00:00",
+          "end_utc": "2026-10-03T11:48:39.952317+00:00",
+          "span_seconds": 6.228099346160889,
+          "sample_count": 23,
+          "first_sample_line": 29219,
+          "last_sample_line": 29241,
+          "first_sample_epoch_seconds": 1791028113.753,
+          "last_sample_epoch_seconds": 1791028119.687,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 23,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 78,
+            "temperature_c_max": 79,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 76,
+            "temperature_c_max": 77,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          }
+        }
+      },
+      "legacy_local_whole_second_decode_anchor": {
+        "start_epoch_seconds": 1791028111.7719007,
+        "end_epoch_seconds": 1791028118.0,
+        "start_utc": "2026-10-03T11:48:31.771901+00:00",
+        "end_utc": "2026-10-03T11:48:38+00:00",
+        "span_seconds": 6.228099346160889,
+        "sample_count": 23,
+        "first_sample_line": 29212,
+        "last_sample_line": 29234,
+        "first_sample_epoch_seconds": 1791028111.829,
+        "last_sample_epoch_seconds": 1791028117.806,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 23,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 23,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 79,
+          "temperature_c_max": 79,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 23
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 23,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 76,
+          "temperature_c_max": 77,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 23
+            }
+          ]
+        }
+      }
+    },
+    "long-fixed": {
+      "label": "fixed",
+      "metrics": {
+        "device_allocations_mib": [
+          4556.094512939453,
+          4556.094512939453
+        ],
+        "draft_accepted": null,
+        "draft_proposed": null,
+        "last_forward_submit_wait_read_ms": [
+          0.09565799999999999,
+          45.828692000000004,
+          0.02709000000000117
+        ],
+        "pp": 4096,
+        "pp_seconds": 34.905848018,
+        "pp_tok_s": 117.34423406323788,
+        "tg": 128,
+        "tg_seconds": 5.99266266,
+        "tg_tok_s": 21.359453595540785
+      },
+      "command": [
+        "sudo",
+        "-n",
+        "python3",
+        "scripts/latency-run.py",
+        "target/release/trashcan",
+        "bench",
+        "/home/fairfieldt/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf",
+        "--pp",
+        "4096",
+        "--tg",
+        "128",
+        "--batch",
+        "512",
+        "--profile",
+        "/home/fairfieldt/trashcan/results/engine/main-tuning-20261003/fixed-dim/long-fixed.tsv"
+      ],
+      "command_window": {
+        "command_epoch_started": 1791028119.4960344,
+        "command_epoch_finished": 1791028187.4138167,
+        "returncode": 0,
+        "note": "Whole command window includes model loading and cleanup, not just inference."
+      },
+      "local_files": {
+        ".json": {
+          "file": "fixed-dim/long-fixed.json",
+          "size_bytes": 334,
+          "sha256": "1de9b55520cbe18a2bd1908cda2005784862fe9dc6777632a99f186c7d2ce1d4",
+          "mtime_ns": 1791028186000000000,
+          "mtime_utc": "2026-10-03T11:49:46+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".tsv": {
+          "file": "fixed-dim/long-fixed.tsv",
+          "size_bytes": 3813,
+          "sha256": "2a5d3f2a9235ff96360488cc3e3093a1aef6322bd59602b6fff4269b7774f7f7",
+          "mtime_ns": 1791028186000000000,
+          "mtime_utc": "2026-10-03T11:49:46+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".prefill.tsv": {
+          "file": "fixed-dim/long-fixed.prefill.tsv",
+          "size_bytes": 4021,
+          "sha256": "d4b21fd757c0d9fd21154c7c5f6a8acdb145187f4469b2dc9c83543dbed1b810",
+          "mtime_ns": 1791028181000000000,
+          "mtime_utc": "2026-10-03T11:49:41+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".window.json": {
+          "file": "fixed-dim/long-fixed.window.json",
+          "size_bytes": 207,
+          "sha256": "8dea6c56323817123b20e8e5306b6b750fbbb19769bdd2c3eee0275efb7e66c8",
+          "mtime_ns": 1791028187000000000,
+          "mtime_utc": "2026-10-03T11:49:47+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        },
+        ".command.json": {
+          "file": "fixed-dim/long-fixed.command.json",
+          "size_bytes": 349,
+          "sha256": "0b1e969a61fe165ab3401a516ab8f34fe5cfa67e5671351dc2dcdd50780f8fdb",
+          "mtime_ns": 1791028119000000000,
+          "mtime_utc": "2026-10-03T11:48:39+00:00",
+          "mtime_subsecond_ns": 0,
+          "changed_during_read": false
+        }
+      },
+      "remote_metadata_hashes_match_local": true,
+      "nominal_anchor_remote_json_mtime_epoch_seconds": 1791028186.9925816,
+      "local_json_anchor_epoch_seconds": 1791028186.0,
+      "remote_minus_local_json_anchor_seconds": 0.9925816059112549,
+      "decode_start_minus_prefill_profile_mtime_seconds": -0.0009915828704833984,
+      "final_profile_minus_json_mtime_seconds": 0.0,
+      "command_end_minus_json_mtime_seconds": 0.4212350845336914,
+      "nominal_decode": {
+        "start_epoch_seconds": 1791028180.999919,
+        "end_epoch_seconds": 1791028186.9925816,
+        "start_utc": "2026-10-03T11:49:40.999919+00:00",
+        "end_utc": "2026-10-03T11:49:46.992582+00:00",
+        "span_seconds": 5.992662668228149,
+        "sample_count": 22,
+        "first_sample_line": 29467,
+        "last_sample_line": 29488,
+        "first_sample_epoch_seconds": 1791028181.109,
+        "last_sample_epoch_seconds": 1791028186.78,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 22,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 22,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 83,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 22
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 22,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 81,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 22
+            }
+          ]
+        }
+      },
+      "decode_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791028181.999919,
+        "end_epoch_seconds": 1791028185.9925816,
+        "start_utc": "2026-10-03T11:49:41.999919+00:00",
+        "end_utc": "2026-10-03T11:49:45.992582+00:00",
+        "span_seconds": 3.9926626682281494,
+        "sample_count": 15,
+        "first_sample_line": 29471,
+        "last_sample_line": 29485,
+        "first_sample_epoch_seconds": 1791028182.177,
+        "last_sample_epoch_seconds": 1791028185.981,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 15,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 15,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 83,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 15
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 15,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 81,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 15
+            }
+          ]
+        }
+      },
+      "nominal_prefill": {
+        "start_epoch_seconds": 1791028146.094071,
+        "end_epoch_seconds": 1791028180.999919,
+        "start_utc": "2026-10-03T11:49:06.094071+00:00",
+        "end_utc": "2026-10-03T11:49:40.999919+00:00",
+        "span_seconds": 34.905848026275635,
+        "sample_count": 128,
+        "first_sample_line": 29339,
+        "last_sample_line": 29466,
+        "first_sample_epoch_seconds": 1791028146.297,
+        "last_sample_epoch_seconds": 1791028180.842,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 128,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 128,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 75,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 128
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 128,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 73,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 128
+            }
+          ]
+        }
+      },
+      "nominal_combined_prefill_decode": {
+        "start_epoch_seconds": 1791028146.094071,
+        "end_epoch_seconds": 1791028186.9925816,
+        "start_utc": "2026-10-03T11:49:06.094071+00:00",
+        "end_utc": "2026-10-03T11:49:46.992582+00:00",
+        "span_seconds": 40.898510694503784,
+        "sample_count": 150,
+        "first_sample_line": 29339,
+        "last_sample_line": 29488,
+        "first_sample_epoch_seconds": 1791028146.297,
+        "last_sample_epoch_seconds": 1791028186.78,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 150,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 150,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 75,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 150
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 150,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 73,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 150
+            }
+          ]
+        }
+      },
+      "combined_interior_trim_1s_each_end": {
+        "start_epoch_seconds": 1791028147.094071,
+        "end_epoch_seconds": 1791028185.9925816,
+        "start_utc": "2026-10-03T11:49:07.094071+00:00",
+        "end_utc": "2026-10-03T11:49:45.992582+00:00",
+        "span_seconds": 38.898510694503784,
+        "sample_count": 144,
+        "first_sample_line": 29342,
+        "last_sample_line": 29485,
+        "first_sample_epoch_seconds": 1791028147.14,
+        "last_sample_epoch_seconds": 1791028185.981,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 144,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 144,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 77,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 144
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 144,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 74,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 144
+            }
+          ]
+        }
+      },
+      "whole_command_for_context_only": {
+        "start_epoch_seconds": 1791028119.4960344,
+        "end_epoch_seconds": 1791028187.4138167,
+        "start_utc": "2026-10-03T11:48:39.496034+00:00",
+        "end_utc": "2026-10-03T11:49:47.413817+00:00",
+        "span_seconds": 67.91778230667114,
+        "sample_count": 250,
+        "first_sample_line": 29241,
+        "last_sample_line": 29490,
+        "first_sample_epoch_seconds": 1791028119.687,
+        "last_sample_epoch_seconds": 1791028187.315,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 169,
+        "both_at_850_1370_sample_fraction": 0.676,
+        "gpu0": {
+          "at_850_1370_count": 191,
+          "at_850_1370_sample_fraction": 0.764,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 74,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 56
+            },
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 1370,
+              "samples": 2
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 1
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 191
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 170,
+          "at_850_1370_sample_fraction": 0.68,
+          "sclk_mhz_min": 300,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 150,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 72,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 300,
+              "mclk_mhz": 150,
+              "samples": 72
+            },
+            {
+              "sclk_mhz": 450,
+              "mclk_mhz": 1370,
+              "samples": 8
+            },
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 170
+            }
+          ]
+        }
+      },
+      "decode_anchor_shift_sensitivity": {
+        "-1": {
+          "start_epoch_seconds": 1791028179.999919,
+          "end_epoch_seconds": 1791028185.9925816,
+          "start_utc": "2026-10-03T11:49:39.999919+00:00",
+          "end_utc": "2026-10-03T11:49:45.992582+00:00",
+          "span_seconds": 5.992662668228149,
+          "sample_count": 23,
+          "first_sample_line": 29463,
+          "last_sample_line": 29485,
+          "first_sample_epoch_seconds": 1791028180.012,
+          "last_sample_epoch_seconds": 1791028185.981,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 23,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 83,
+            "temperature_c_max": 83,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 23,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 81,
+            "temperature_c_max": 81,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 23
+              }
+            ]
+          }
+        },
+        "-0.25": {
+          "start_epoch_seconds": 1791028180.749919,
+          "end_epoch_seconds": 1791028186.7425816,
+          "start_utc": "2026-10-03T11:49:40.749919+00:00",
+          "end_utc": "2026-10-03T11:49:46.742582+00:00",
+          "span_seconds": 5.992662668228149,
+          "sample_count": 22,
+          "first_sample_line": 29466,
+          "last_sample_line": 29487,
+          "first_sample_epoch_seconds": 1791028180.842,
+          "last_sample_epoch_seconds": 1791028186.514,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 22,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 22,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 83,
+            "temperature_c_max": 83,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 22
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 22,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 81,
+            "temperature_c_max": 81,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 22
+              }
+            ]
+          }
+        },
+        "0.25": {
+          "start_epoch_seconds": 1791028181.249919,
+          "end_epoch_seconds": 1791028187.2425816,
+          "start_utc": "2026-10-03T11:49:41.249919+00:00",
+          "end_utc": "2026-10-03T11:49:47.242582+00:00",
+          "span_seconds": 5.992662668228149,
+          "sample_count": 22,
+          "first_sample_line": 29468,
+          "last_sample_line": 29489,
+          "first_sample_epoch_seconds": 1791028181.375,
+          "last_sample_epoch_seconds": 1791028187.047,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 22,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 22,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 83,
+            "temperature_c_max": 83,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 22
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 22,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 81,
+            "temperature_c_max": 81,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 22
+              }
+            ]
+          }
+        },
+        "1": {
+          "start_epoch_seconds": 1791028181.999919,
+          "end_epoch_seconds": 1791028187.9925816,
+          "start_utc": "2026-10-03T11:49:41.999919+00:00",
+          "end_utc": "2026-10-03T11:49:47.992582+00:00",
+          "span_seconds": 5.992662668228149,
+          "sample_count": 22,
+          "first_sample_line": 29471,
+          "last_sample_line": 29492,
+          "first_sample_epoch_seconds": 1791028182.177,
+          "last_sample_epoch_seconds": 1791028187.849,
+          "clock_log_spans_window": true,
+          "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+          "both_at_850_1370_count": 22,
+          "both_at_850_1370_sample_fraction": 1.0,
+          "gpu0": {
+            "at_850_1370_count": 22,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 82,
+            "temperature_c_max": 83,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 22
+              }
+            ]
+          },
+          "gpu1": {
+            "at_850_1370_count": 22,
+            "at_850_1370_sample_fraction": 1.0,
+            "sclk_mhz_min": 850,
+            "sclk_mhz_max": 850,
+            "mclk_mhz_min": 1370,
+            "mclk_mhz_max": 1370,
+            "temperature_c_min": 80,
+            "temperature_c_max": 81,
+            "clock_pair_sample_counts": [
+              {
+                "sclk_mhz": 850,
+                "mclk_mhz": 1370,
+                "samples": 22
+              }
+            ]
+          }
+        }
+      },
+      "legacy_local_whole_second_decode_anchor": {
+        "start_epoch_seconds": 1791028180.0073373,
+        "end_epoch_seconds": 1791028186.0,
+        "start_utc": "2026-10-03T11:49:40.007337+00:00",
+        "end_utc": "2026-10-03T11:49:46+00:00",
+        "span_seconds": 5.992662668228149,
+        "sample_count": 23,
+        "first_sample_line": 29463,
+        "last_sample_line": 29485,
+        "first_sample_epoch_seconds": 1791028180.012,
+        "last_sample_epoch_seconds": 1791028185.981,
+        "clock_log_spans_window": true,
+        "maximum_internal_sample_gap_seconds": 0.2820000648498535,
+        "both_at_850_1370_count": 23,
+        "both_at_850_1370_sample_fraction": 1.0,
+        "gpu0": {
+          "at_850_1370_count": 23,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 83,
+          "temperature_c_max": 83,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 23
+            }
+          ]
+        },
+        "gpu1": {
+          "at_850_1370_count": 23,
+          "at_850_1370_sample_fraction": 1.0,
+          "sclk_mhz_min": 850,
+          "sclk_mhz_max": 850,
+          "mclk_mhz_min": 1370,
+          "mclk_mhz_max": 1370,
+          "temperature_c_min": 81,
+          "temperature_c_max": 81,
+          "clock_pair_sample_counts": [
+            {
+              "sclk_mhz": 850,
+              "mclk_mhz": 1370,
+              "samples": 23
+            }
+          ]
+        }
+      }
+    }
+  }
+}

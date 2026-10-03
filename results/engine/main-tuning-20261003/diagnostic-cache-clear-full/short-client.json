@@ -1,0 +1,2120 @@
+{
+  "url": "http://127.0.0.1:18164",
+  "replay_report": null,
+  "requests": [
+    {
+      "request_index_in_harness": 1,
+      "name": "warmup",
+      "request": {
+        "input": "Say hello.",
+        "temperature": 0,
+        "max_output_tokens": 1,
+        "store": false,
+        "stream": false
+      },
+      "epoch_started": 1791025176.844312,
+      "seconds": 0.4295967739999469,
+      "memory_before": {
+        "epoch_started": 1791025176.8406353,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123372 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60904408 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025176.8443093
+      },
+      "memory_after": {
+        "epoch_started": 1791025177.2739148,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123376 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60903352 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025177.2807214
+      },
+      "headers_seconds": 0.42928325700268033,
+      "first_delta_seconds": null,
+      "response_id": "resp_18daffe8bb47f38e28",
+      "response": {
+        "created_at": 1791025176,
+        "error": null,
+        "id": "resp_18daffe8bb47f38e28",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 1,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "Hello",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18daffe8d31e5fb129",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 16,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 1,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 17
+        }
+      },
+      "events": [],
+      "matches_saved_visible_text": null
+    },
+    {
+      "request_index_in_harness": 2,
+      "name": "stochastic_first",
+      "request": {
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "store": false,
+        "temperature": 1,
+        "seed": 7,
+        "top_k": 32,
+        "stream": false
+      },
+      "epoch_started": 1791025177.2885313,
+      "seconds": 5.12941786599913,
+      "memory_before": {
+        "epoch_started": 1791025177.281825,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123376 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60903352 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025177.2885237
+      },
+      "memory_after": {
+        "epoch_started": 1791025182.4179535,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123376 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60892308 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025182.4216008
+      },
+      "headers_seconds": 5.129231289000018,
+      "first_delta_seconds": null,
+      "response_id": "resp_18daffe8d44a2efb2a",
+      "response": {
+        "created_at": 1791025177,
+        "error": null,
+        "id": "resp_18daffe8d44a2efb2a",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18daffe8ef7c1f472b",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      },
+      "events": [],
+      "matches_saved_visible_text": null
+    },
+    {
+      "request_index_in_harness": 3,
+      "name": "stochastic_repeat",
+      "request": {
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "store": false,
+        "temperature": 1,
+        "seed": 7,
+        "top_k": 32,
+        "stream": true
+      },
+      "epoch_started": 1791025182.4258208,
+      "seconds": 5.330942175001837,
+      "memory_before": {
+        "epoch_started": 1791025182.4223628,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123376 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60891904 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025182.4258175
+      },
+      "memory_after": {
+        "epoch_started": 1791025187.7567654,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123380 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60884360 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025187.760414
+      },
+      "headers_seconds": 0.002272921999974642,
+      "first_delta_seconds": 0.4520313650027674,
+      "response_id": "resp_18daffea0665a5c52c",
+      "response": {
+        "created_at": 1791025182,
+        "error": null,
+        "id": "resp_18daffea0665a5c52c",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18daffea213256b52d",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      },
+      "events": [
+        {
+          "seconds": 0.002391889000136871,
+          "event": {
+            "response": {
+              "created_at": 1791025182,
+              "error": null,
+              "id": "resp_18daffea0665a5c52c",
+              "incomplete_details": null,
+              "max_output_tokens": 32,
+              "model": "gemma-4-12b",
+              "object": "response",
+              "output": [],
+              "parallel_tool_calls": true,
+              "status": "in_progress",
+              "store": false,
+              "temperature": 1.0,
+              "tool_choice": "auto",
+              "tools": [],
+              "top_p": 0.949999988079071,
+              "usage": null
+            },
+            "sequence_number": 0,
+            "type": "response.created"
+          }
+        },
+        {
+          "seconds": 0.0024647340032970533,
+          "event": {
+            "response": {
+              "created_at": 1791025182,
+              "error": null,
+              "id": "resp_18daffea0665a5c52c",
+              "incomplete_details": null,
+              "max_output_tokens": 32,
+              "model": "gemma-4-12b",
+              "object": "response",
+              "output": [],
+              "parallel_tool_calls": true,
+              "status": "in_progress",
+              "store": false,
+              "temperature": 1.0,
+              "tool_choice": "auto",
+              "tools": [],
+              "top_p": 0.949999988079071,
+              "usage": null
+            },
+            "sequence_number": 1,
+            "type": "response.in_progress"
+          }
+        },
+        {
+          "seconds": 0.4518904830001702,
+          "event": {
+            "item": {
+              "content": [],
+              "id": "msg_18daffea213256b52d",
+              "role": "assistant",
+              "status": "in_progress",
+              "type": "message"
+            },
+            "output_index": 0,
+            "sequence_number": 2,
+            "type": "response.output_item.added"
+          }
+        },
+        {
+          "seconds": 0.45196836400282336,
+          "event": {
+            "content_index": 0,
+            "item_id": "msg_18daffea213256b52d",
+            "output_index": 0,
+            "part": {
+              "annotations": [],
+              "logprobs": [],
+              "text": "",
+              "type": "output_text"
+            },
+            "sequence_number": 3,
+            "summary_index": 0,
+            "type": "response.content_part.added"
+          }
+        },
+        {
+          "seconds": 0.4520313650027674,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 4,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.5781977610022295,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 5,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.7461534190006205,
+          "event": {
+            "content_index": 0,
+            "delta": "2",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 6,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.8939298820005206,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 7,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.0200251759997627,
+          "event": {
+            "content_index": 0,
+            "delta": "3",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 8,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.146208761001617,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 9,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.2722403540028608,
+          "event": {
+            "content_index": 0,
+            "delta": "4",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 10,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.3984477470003185,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 11,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.5245463310020568,
+          "event": {
+            "content_index": 0,
+            "delta": "5",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 12,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.6507679269998334,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 13,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.7768575090012746,
+          "event": {
+            "content_index": 0,
+            "delta": "6",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 14,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.9030113510016236,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 15,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.0291081169998506,
+          "event": {
+            "content_index": 0,
+            "delta": "7",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 16,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.1551510550016246,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 17,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.2812805880021187,
+          "event": {
+            "content_index": 0,
+            "delta": "8",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 18,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.4074310040014097,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 19,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.533416885002225,
+          "event": {
+            "content_index": 0,
+            "delta": "9",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 20,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.6595200940028008,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 21,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 2.8655888270004652,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 22,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 3.104235898001207,
+          "event": {
+            "content_index": 0,
+            "delta": "0",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 23,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 3.3430956130032428,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 24,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 3.5817606760028866,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 25,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 3.820602832001896,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 26,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 4.059366787001636,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 27,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 4.2981339400030265,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 28,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 4.5369115810026415,
+          "event": {
+            "content_index": 0,
+            "delta": "2",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 29,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 4.699971172001824,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 30,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 4.826115091000247,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 31,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 4.952195008001581,
+          "event": {
+            "content_index": 0,
+            "delta": "3",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 32,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 5.078269580000779,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 33,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 5.204342185999849,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 34,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 5.330500681000558,
+          "event": {
+            "content_index": 0,
+            "delta": "4",
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 35,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 5.330587642001774,
+          "event": {
+            "content_index": 0,
+            "item_id": "msg_18daffea213256b52d",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 36,
+            "summary_index": 0,
+            "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+            "type": "response.output_text.done"
+          }
+        },
+        {
+          "seconds": 5.3306421150009555,
+          "event": {
+            "content_index": 0,
+            "item_id": "msg_18daffea213256b52d",
+            "output_index": 0,
+            "part": {
+              "annotations": [],
+              "logprobs": [],
+              "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+              "type": "output_text"
+            },
+            "sequence_number": 37,
+            "summary_index": 0,
+            "type": "response.content_part.done"
+          }
+        },
+        {
+          "seconds": 5.330718288001663,
+          "event": {
+            "item": {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_18daffea213256b52d",
+              "role": "assistant",
+              "status": "incomplete",
+              "type": "message"
+            },
+            "output_index": 0,
+            "sequence_number": 38,
+            "type": "response.output_item.done"
+          }
+        },
+        {
+          "seconds": 5.330804631001229,
+          "event": {
+            "response": {
+              "created_at": 1791025182,
+              "error": null,
+              "id": "resp_18daffea0665a5c52c",
+              "incomplete_details": {
+                "reason": "max_output_tokens"
+              },
+              "max_output_tokens": 32,
+              "model": "gemma-4-12b",
+              "object": "response",
+              "output": [
+                {
+                  "content": [
+                    {
+                      "annotations": [],
+                      "logprobs": [],
+                      "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                      "type": "output_text"
+                    }
+                  ],
+                  "id": "msg_18daffea213256b52d",
+                  "role": "assistant",
+                  "status": "incomplete",
+                  "type": "message"
+                }
+              ],
+              "parallel_tool_calls": true,
+              "status": "incomplete",
+              "store": false,
+              "temperature": 1.0,
+              "tool_choice": "auto",
+              "tools": [],
+              "top_p": 0.949999988079071,
+              "usage": {
+                "input_tokens": 47,
+                "input_tokens_details": {
+                  "cache_write_tokens": 0,
+                  "cached_tokens": 0
+                },
+                "output_tokens": 32,
+                "output_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "total_tokens": 79
+              }
+            },
+            "sequence_number": 39,
+            "type": "response.incomplete"
+          }
+        }
+      ],
+      "matches_saved_visible_text": null
+    },
+    {
+      "request_index_in_harness": 4,
+      "name": "greedy_first",
+      "request": {
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "store": false,
+        "temperature": 0,
+        "stream": false
+      },
+      "epoch_started": 1791025187.765074,
+      "seconds": 1.7067650690005394,
+      "memory_before": {
+        "epoch_started": 1791025187.7616491,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123380 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60884360 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025187.765071
+      },
+      "memory_after": {
+        "epoch_started": 1791025189.4718423,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123380 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60893452 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025189.4787135
+      },
+      "headers_seconds": 1.706467985000927,
+      "first_delta_seconds": null,
+      "response_id": "resp_18daffeb44a3da3e2e",
+      "response": {
+        "created_at": 1791025187,
+        "error": null,
+        "id": "resp_18daffeb44a3da3e2e",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18daffeb5fb7ace22f",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      },
+      "events": [],
+      "matches_saved_visible_text": null
+    },
+    {
+      "request_index_in_harness": 5,
+      "name": "greedy_repeat",
+      "request": {
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "store": false,
+        "temperature": 0,
+        "stream": true
+      },
+      "epoch_started": 1791025189.4879446,
+      "seconds": 1.714380864999839,
+      "memory_before": {
+        "epoch_started": 1791025189.481263,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123380 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60893452 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025189.487939
+      },
+      "memory_after": {
+        "epoch_started": 1791025191.2023277,
+        "drm_memory": {
+          "/sys/class/drm/card0/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card0/device/mem_info_gtt_used": 256647168,
+          "/sys/class/drm/card0/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vis_vram_used": 268435456,
+          "/sys/class/drm/card0/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card0/device/mem_info_vram_used": 4717305856,
+          "/sys/class/drm/card1/device/mem_info_gtt_total": 33701752832,
+          "/sys/class/drm/card1/device/mem_info_gtt_used": 239099904,
+          "/sys/class/drm/card1/device/mem_info_preempt_used": 0,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_total": 268435456,
+          "/sys/class/drm/card1/device/mem_info_vis_vram_used": 268431360,
+          "/sys/class/drm/card1/device/mem_info_vram_total": 6442450944,
+          "/sys/class/drm/card1/device/mem_info_vram_used": 4692996096
+        },
+        "processes": {
+          "315823": {
+            "Name": "sudo",
+            "Pid": "315823",
+            "PPid": "315822",
+            "VmSize": "21340 kB",
+            "VmRSS": "8348 kB",
+            "VmData": "748 kB",
+            "VmPTE": "80 kB",
+            "Threads": "1"
+          },
+          "315825": {
+            "Name": "python3",
+            "Pid": "315825",
+            "PPid": "315823",
+            "VmSize": "17888 kB",
+            "VmRSS": "13468 kB",
+            "VmData": "7332 kB",
+            "VmPTE": "68 kB",
+            "Threads": "1"
+          },
+          "315836": {
+            "Name": "trashcan",
+            "Pid": "315836",
+            "PPid": "315825",
+            "VmSize": "8276328 kB",
+            "VmRSS": "7123380 kB",
+            "VmData": "310620 kB",
+            "VmPTE": "14668 kB",
+            "Threads": "12"
+          }
+        },
+        "system_memory": {
+          "MemTotal": "65823740 kB",
+          "MemAvailable": "60890244 kB",
+          "SwapTotal": "82772472 kB",
+          "SwapFree": "82772472 kB"
+        },
+        "epoch_finished": 1791025191.2059278
+      },
+      "headers_seconds": 0.004233594998368062,
+      "first_delta_seconds": 0.45922679100112873,
+      "response_id": "resp_18daffebab70c77d30",
+      "response": {
+        "created_at": 1791025189,
+        "error": null,
+        "id": "resp_18daffebab70c77d30",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18daffebc68be05f31",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      },
+      "events": [
+        {
+          "seconds": 0.004410333000123501,
+          "event": {
+            "response": {
+              "created_at": 1791025189,
+              "error": null,
+              "id": "resp_18daffebab70c77d30",
+              "incomplete_details": null,
+              "max_output_tokens": 32,
+              "model": "gemma-4-12b",
+              "object": "response",
+              "output": [],
+              "parallel_tool_calls": true,
+              "status": "in_progress",
+              "store": false,
+              "temperature": 0.0,
+              "tool_choice": "auto",
+              "tools": [],
+              "top_p": 0.949999988079071,
+              "usage": null
+            },
+            "sequence_number": 0,
+            "type": "response.created"
+          }
+        },
+        {
+          "seconds": 0.004531505001068581,
+          "event": {
+            "response": {
+              "created_at": 1791025189,
+              "error": null,
+              "id": "resp_18daffebab70c77d30",
+              "incomplete_details": null,
+              "max_output_tokens": 32,
+              "model": "gemma-4-12b",
+              "object": "response",
+              "output": [],
+              "parallel_tool_calls": true,
+              "status": "in_progress",
+              "store": false,
+              "temperature": 0.0,
+              "tool_choice": "auto",
+              "tools": [],
+              "top_p": 0.949999988079071,
+              "usage": null
+            },
+            "sequence_number": 1,
+            "type": "response.in_progress"
+          }
+        },
+        {
+          "seconds": 0.4589797219996399,
+          "event": {
+            "item": {
+              "content": [],
+              "id": "msg_18daffebc68be05f31",
+              "role": "assistant",
+              "status": "in_progress",
+              "type": "message"
+            },
+            "output_index": 0,
+            "sequence_number": 2,
+            "type": "response.output_item.added"
+          }
+        },
+        {
+          "seconds": 0.4591320090003137,
+          "event": {
+            "content_index": 0,
+            "item_id": "msg_18daffebc68be05f31",
+            "output_index": 0,
+            "part": {
+              "annotations": [],
+              "logprobs": [],
+              "text": "",
+              "type": "output_text"
+            },
+            "sequence_number": 3,
+            "summary_index": 0,
+            "type": "response.content_part.added"
+          }
+        },
+        {
+          "seconds": 0.45922679100112873,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 4,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.4989454479982669,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 5,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.5389805230006459,
+          "event": {
+            "content_index": 0,
+            "delta": "2",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 6,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.5789901700009068,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 7,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.6190987500012852,
+          "event": {
+            "content_index": 0,
+            "delta": "3",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 8,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.659103750000213,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 9,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.6991039070016996,
+          "event": {
+            "content_index": 0,
+            "delta": "4",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 10,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.739163591999386,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 11,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.7792107409986784,
+          "event": {
+            "content_index": 0,
+            "delta": "5",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 12,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.819266318998416,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 13,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.8592622959986329,
+          "event": {
+            "content_index": 0,
+            "delta": "6",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 14,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.8992775369988522,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 15,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.939270471000782,
+          "event": {
+            "content_index": 0,
+            "delta": "7",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 16,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 0.9792828270001337,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 17,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.0197477110014006,
+          "event": {
+            "content_index": 0,
+            "delta": "8",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 18,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.060276314998191,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 19,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.1008972999989055,
+          "event": {
+            "content_index": 0,
+            "delta": "9",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 20,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.1416103550000116,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 21,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.1823802920007438,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 22,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.2233046569999715,
+          "event": {
+            "content_index": 0,
+            "delta": "0",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 23,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.2642326720015262,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 24,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.3051453480002237,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 25,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.3459961640000984,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 26,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.386833480999485,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 27,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.4275406660017325,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 28,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.468397823999112,
+          "event": {
+            "content_index": 0,
+            "delta": "2",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 29,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.509245147000911,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 30,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.550101426000765,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 31,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.591058553000039,
+          "event": {
+            "content_index": 0,
+            "delta": "3",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 32,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.6320361889993364,
+          "event": {
+            "content_index": 0,
+            "delta": " ",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 33,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.6730186060012784,
+          "event": {
+            "content_index": 0,
+            "delta": "1",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 34,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.7138963010002044,
+          "event": {
+            "content_index": 0,
+            "delta": "4",
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 35,
+            "summary_index": 0,
+            "type": "response.output_text.delta"
+          }
+        },
+        {
+          "seconds": 1.7140209429999231,
+          "event": {
+            "content_index": 0,
+            "item_id": "msg_18daffebc68be05f31",
+            "logprobs": [],
+            "output_index": 0,
+            "sequence_number": 36,
+            "summary_index": 0,
+            "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+            "type": "response.output_text.done"
+          }
+        },
+        {
+          "seconds": 1.7140942740006722,
+          "event": {
+            "content_index": 0,
+            "item_id": "msg_18daffebc68be05f31",
+            "output_index": 0,
+            "part": {
+              "annotations": [],
+              "logprobs": [],
+              "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+              "type": "output_text"
+            },
+            "sequence_number": 37,
+            "summary_index": 0,
+            "type": "response.content_part.done"
+          }
+        },
+        {
+          "seconds": 1.7141526359991985,
+          "event": {
+            "item": {
+              "content": [
+                {
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                  "type": "output_text"
+                }
+              ],
+              "id": "msg_18daffebc68be05f31",
+              "role": "assistant",
+              "status": "incomplete",
+              "type": "message"
+            },
+            "output_index": 0,
+            "sequence_number": 38,
+            "type": "response.output_item.done"
+          }
+        },
+        {
+          "seconds": 1.7142460610011767,
+          "event": {
+            "response": {
+              "created_at": 1791025189,
+              "error": null,
+              "id": "resp_18daffebab70c77d30",
+              "incomplete_details": {
+                "reason": "max_output_tokens"
+              },
+              "max_output_tokens": 32,
+              "model": "gemma-4-12b",
+              "object": "response",
+              "output": [
+                {
+                  "content": [
+                    {
+                      "annotations": [],
+                      "logprobs": [],
+                      "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                      "type": "output_text"
+                    }
+                  ],
+                  "id": "msg_18daffebc68be05f31",
+                  "role": "assistant",
+                  "status": "incomplete",
+                  "type": "message"
+                }
+              ],
+              "parallel_tool_calls": true,
+              "status": "incomplete",
+              "store": false,
+              "temperature": 0.0,
+              "tool_choice": "auto",
+              "tools": [],
+              "top_p": 0.949999988079071,
+              "usage": {
+                "input_tokens": 47,
+                "input_tokens_details": {
+                  "cache_write_tokens": 0,
+                  "cached_tokens": 0
+                },
+                "output_tokens": 32,
+                "output_tokens_details": {
+                  "reasoning_tokens": 0
+                },
+                "total_tokens": 79
+              }
+            },
+            "sequence_number": 39,
+            "type": "response.incomplete"
+          }
+        }
+      ],
+      "matches_saved_visible_text": null
+    }
+  ],
+  "passed": true,
+  "visible_text_equal": true
+}

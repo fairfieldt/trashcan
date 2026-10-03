@@ -1,0 +1,5 @@
+warmup: 0.493098s, first_delta=None, input=16 cached=0 output=1 response=resp_18dafeff342fac1f0
+stochastic_first: 1.851020s, first_delta=None, input=47 cached=4 output=32 response=resp_18dafeff4fd2ae4f2
+stochastic_repeat: 1.209859s, first_delta=0.00278934699963429, input=47 cached=47 output=32 response=resp_18dafeffbe17aa9c4
+greedy_first: 1.313224s, first_delta=None, input=47 cached=46 output=32 response=resp_18daff000640822b6
+greedy_repeat: 1.202274s, first_delta=0.002687422002054518, input=47 cached=47 output=32 response=resp_18daff00549922e38

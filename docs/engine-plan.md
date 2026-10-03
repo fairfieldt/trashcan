@@ -47,15 +47,20 @@ operations and exclude dequantization, norms, softmax and reductions.
 | physical peak at sustained clocks | 263.04 GB/s; weights alone take at least 15.36 ms | 3.4816 TFLOP/s; counted work alone takes at least 3.170 ms/token |
 | ideal bound, omitted overheads | weight-only 65.10 tok/s | counted-compute-only 315.50 tok/s |
 | transport sensitivity | 96 × 42 us = 4.032 ms; adding this assumption to weights gives 51.57 tok/s | 754,974,720 bytes sent in each direction per chunk; about 81 ms at the isolated 9.3 GB/s copy rate |
-| recorded engine, 2026-10-03 | tg128 22.14; separate tg256 21.88; ordinary 128-token chat 23.82–24.25 tok/s | pp512 160.87; repeat 161.05 tok/s |
+| historical engine at ceiling-audit snapshot, 2026-10-03 | tg128 22.14; separate tg256 21.88; ordinary 128-token chat 23.82–24.25 tok/s | pp512 160.87; repeat 161.05 tok/s |
+| latest measured build `5b62aa40`, 2026-10-03 | pooled tg256 **23.42 tok/s**; fresh pp4096/tg128 **21.36 tok/s** | pooled pp512 **159.94 tok/s** |
 | experiment goals | beat the measured baseline first; 40–50 remains an unvalidated stretch goal | first test 175–190 tok/s; 200 requires almost the whole graph to match the best FFN GEMM |
 | recorded llama.cpp reference | 12.3 (layer split), about 9 (tensor split) | 36 (layer), 118 (tensor) |
 
 **51.57 and 315.50 tok/s are not practical performance predictions.** The old “52 tok/s ceiling” combined
 ideal bandwidth with a fixed historical hop measurement, while omitting attention and all kernel
-inefficiency. In the recorded final-token profile, GPU segment work takes 41.74–41.77 ms and accumulated
+inefficiency. In the ceiling audit's historical final-token profile, GPU segment work takes 41.74–41.77 ms and accumulated
 semaphore gaps take 2.65–2.75 ms. These are one-token timestamp samples, not run-wide averages; even
-eliminating every measured gap saves only about 6% of that sample. Kernel work is the main opportunity.
+eliminating every measured gap saves only about 6% of that sample. Kernel work dominated that sample.
+The [main-branch tuning report](../results/engine/main-tuning-20261003/README.md) separates the latest
+fixed-dimension build from its fresh shared-KV baseline and the earlier shared-KV/core phases. The latest
+fixed rates pool two runs by total tokens/time; long-context rates use one pair. These explicit-batch
+measurements do not by themselves validate the batch512 default or long-lived server behavior.
 
 For prefill, the best isolated FFN GEMM reaches about 2.2 TFLOP/s. Applying that rate to all counted
 pp512 work gives **199.36 tok/s before transport and other overheads**. That is an optimistic sensitivity
@@ -63,10 +68,16 @@ calculation, because other shapes and attention do not necessarily reach the sam
 no fp16 arithmetic, integer dot product or matrix units; dequantization and fp32 GEMM efficiency matter.
 
 Memory traffic grows with context. At 8K, unique live K/V payload is 288 MiB per GPU (160 MiB sliding,
-128 MiB global); at 32K it is 672 MiB. The present attention kernels request shared K/V separately for
-each query head: logical f16 payload requests are 1.3125 GiB and 4.3125 GiB, respectively, before cache
-reuse. Unique-cache bytes are a lower bound, not actual DRAM traffic. Long-context throughput requires
-its own measurement; a short-context decode target cannot be carried over unchanged.
+128 MiB global); at 32K it is 672 MiB. The scalar attention baseline requests K/V separately for
+each query head: logical f16 payload requests are 1.3125 GiB and 4.3125 GiB, respectively, before
+cache reuse. The selected split-attention decode kernels now share each K/V load across two query
+heads in sliding layers and eight in global layers. At these full-context lengths, their logical
+K/V payload requests reduce to one read of the unique payload: 288 MiB at 8K and 672 MiB at 32K,
+excluding scratch and other traffic. The eight-partition short path and large-prefill attention
+remain scalar. Logical payload counts are not hardware DRAM measurements: cache lines, cache reuse,
+and execution details matter. The 32K figure is calculated, not validated by a 32K execution.
+Long-context throughput requires its own measurement; a short-context decode target cannot be
+carried over unchanged.
 
 Optimize in this order, retaining changes only with correctness and sustained-clock measurements:
 
@@ -81,7 +92,7 @@ Optimize in this order, retaining changes only with correctness and sustained-cl
 4. Prefill GEMM/attention and repeated-history work: optimize the complete prompt path and validate
    sliding-window wrap. Prefix caching changes cache lifetime and needs separate correctness coverage.
 
-## Memory per GPU (5888 MiB VRAM)
+## Memory per GPU (5888 MiB non-visible heap plus 256 MiB visible heap)
 
 | item | size |
 |---|---|
@@ -97,9 +108,13 @@ Optimize in this order, retaining changes only with correctness and sustained-cl
 The earlier fixed-32-partition build measured 4552 MiB of target allocations at 8K context / batch 512,
 or about 4967 MiB with the assistant. Increasing attention scratch to 64 partitions changes its payload
 from 4.02 to 8.03 MiB per GPU. The current target measures **4556.1 MiB per GPU** at 8K / batch 512
-in `results/engine/main-tuning-20261003/final-{1,2}.json`; adding the assistant gives a calculated
+in the core `final-{1,2}.json`, shared-KV phase, and final `fixed-dim/decode-fixed-{1,2}.json` under
+`results/engine/main-tuning-20261003/`; adding the assistant gives a calculated
 combined total of about 4971 MiB (4.85 GiB). At 32K the calculated combined total
-is about 5355 MiB (5.23 GiB), leaving about 533 MiB for the driver/display and transient allocations.
+is about 5355 MiB (5.23 GiB). Against 6144 MiB across both VRAM heaps, that leaves an arithmetic
+789 MiB before uncounted driver/display/transient allocations. This aggregate does not establish
+visible-heap headroom: the measured 8K default-MTP workload leaves only 7.176 MiB visible on the
+fuller card.
 Scratch is shared with the assistant and reserves the maximum eight verification columns regardless of
 configured batch capacity. These allocation totals are not a residency guarantee; 32K execution has not
 been validated. Imported aliases are counted only on the owning GPU. Mapped host staging and
@@ -222,8 +237,10 @@ M3 and M5 have working implementations, but their performance thresholds remain 
   and pp512 sustains >=150 tok/s (llama.cpp tensor split: 118).
 - **M5: MTP speculative decoding** (above). **Done when** acceptance and rollback preserve the target continuation,
   and a recorded typical-chat benchmark shows >=1.5x M3's tg.
-- **Later:** long-context tuning. Global-layer K/V at 32K contains 0.5 GiB of unique payload per GPU;
-  the current eight local query heads request 4 GiB of logical f16 payload before cache reuse.
+- **Later:** long-context tuning. Global-layer K/V at 32K contains 0.5 GiB of unique payload per GPU.
+  The scalar baseline's eight local query heads request 4 GiB of logical f16 payload before cache
+  reuse; the selected shared-KV global kernel requests 0.5 GiB by loading once for all eight heads.
+  This is payload accounting, not measured DRAM traffic or validated 32K throughput.
   The OpenAI-style HTTP endpoint is implemented; see `server.md`.
 
 ## Open questions and risks

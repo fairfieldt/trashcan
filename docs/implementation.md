@@ -9,10 +9,26 @@ speculative gain (M5) remain performance work; their original targets are retain
 
 ## Recorded acceptance
 
-The 2026-10-03 tuning run raises tg128 from 21.33 to 22.14 tok/s and reduces one-column top-64
-selection from about 2.20 ms to 0.51 ms per GPU. Prefill remains about 161 tok/s. Current measurements
-and validation are retained in `results/engine/performance-20261003/`; the acceptance table below
-preserves the original implementation measurements. M3 and M5 remain open.
+The latest main-branch measurements are in `results/engine/main-tuning-20261003/`. Fixed-dimension
+shared-KV attention raises repeated tg256 from 22.78 to **23.42 tok/s (+2.8%)** against a freshly rerun
+shared-KV baseline; decode after 4096 input tokens rises from 20.55 to **21.36 tok/s (+3.9%)**.
+Its three ordinary chats improve 1.3–4.0%, with all twelve ordinary/MTP outputs matching exactly.
+These chat and long-context comparisons are single pairs; pp512 remains near 160 tok/s.
+
+The preceding shared-KV iteration raised tg256 from 22.03 to 22.69 tok/s (+3.0%) against its freshly rerun
+core baseline. Short ordinary chat is essentially unchanged in that pair,
+and all twelve ordinary/speculative outputs match exactly. Decode after 4096 input tokens improves
+from 19.15 to 20.37 tok/s (+6.3%) in the same iteration. Earlier Q4/adaptive-partition work raised
+ordinary chat by 3.1–4.5% and decode after a 4096-token prefill by 6.6%, while leaving the fixed
+pp512/tg256 workload unchanged. These are separate experiment phases, with their own source hashes.
+Resident serving reuses an exact prompt or conversation prefix while sliding history survives;
+bounded execution-graph storage prevents the measured visible-VRAM allocation cliff. The final binary
+also passes 36 default-batch ordinary/MTP requests and both protocol suites, with peak observed
+visible VRAM below 256 MiB. M3 and M5 remain open.
+
+The preceding performance branch (`results/engine/performance-20261003/`) raised tg128 from 21.33
+to 22.14 tok/s and reduced one-column top-64 selection from about 2.20 to 0.51 ms per GPU. The
+acceptance table below preserves the original implementation measurements.
 The final small-batch selector also improves eight-column Q4 verification to about 0.546 ms versus
 the original 0.945 ms in the FFN microbenchmark. Its seven-draft chat comparison and focused validation
 are recorded separately from the main benchmark table; the default remains three drafts.
@@ -76,7 +92,8 @@ Generation stops at EOS/end-of-turn/end-of-function. A context overflow reports 
 `trashcan serve "$model"` runs an optional OpenAI Responses HTTP server with SSE, reasoning and
 tools. See [server setup](server.md) for client examples, defaults and supported features.
 
-`--batch` is the maximum prefill/verification capacity (1–512). Verification supports at most eight
+`--batch` is the maximum prefill/verification capacity (1–512), defaulting to 512 in chat and serving.
+Actual prompt chunks determine dispatch size; short prompts are not padded. Verification supports at most eight
 columns. `--draft-tokens` is 1–7, default 3, and requires `--batch` larger than that value. The main model's
 sliding ring has 1024 + batch slots, so batched writes and rejected drafts do not erase needed history.
 
@@ -146,7 +163,8 @@ at ranks 1, 8 and 64, including tied scores, an incomplete final chunk, softcap 
 the model's two shapes: dimension 256 / four KV heads and dimension 512 / one KV head. It sweeps 8, 16,
 32, 64 and 128 specialized partitions by default; `--partitions` selects one count. Each case warms for
 300 ms and checks six output values against a CPU softmax with f64 accumulation. `--tokens` accepts
-1–32768 and defaults to 768. These synthetic cases attend to the entire requested sequence, without
+1–32768 and defaults to 768. `--kernel selected` (default) uses the production shape selector;
+`--kernel scalar` retains independent per-head loads for comparison. These synthetic cases attend to the entire requested sequence, without
 the model's sliding-window clamp; full-model timing and cache validation remain separate checks.
 
 ## Weight formats and GPU schedule
@@ -181,7 +199,7 @@ staging: after each pair of fences, the CPU copies each partial to the peer's st
 pre-recorded segment uploads and sums it.
 
 The current target measures **4556.1 MiB per GPU** at context 8192 / batch 512 in
-`results/engine/main-tuning-20261003/final-{1,2}.json`. The earlier fixed-32-partition build measured
+`results/engine/main-tuning-20261003/fixed-dim/decode-fixed-{1,2}.json`. The earlier fixed-32-partition build measured
 4552 MiB; increasing scratch capacity to 64 partitions adds 4.02 MiB. The assistant adds about 415 MiB,
 giving a calculated combined total of about 4971 MiB at that configuration.
 At context 32768 the calculated combined total is about 5355 MiB. Imports alias the peer allocations
@@ -203,6 +221,20 @@ The partial kernels combine online-softmax maxima, denominators and weighted sum
 kernel. Vulkan specialization constants keep partition arithmetic fixed at pipeline compilation.
 Recorded target graphs include both sliding and global partition counts in their cache key. The
 assistant uses the same buckets for its committed target keys and caches its graphs separately.
+For the measured shapes, groups of two sliding query heads or eight global query heads share K/V
+loads through workgroup memory at 16 or more partitions; the eight-partition path retains scalar
+loads. Dispatches include only active head groups. The online-softmax arithmetic and scratch layout
+remain the same. The selected kernels compile head dimensions 256/512 into their loops and
+accumulator arrays, with exactly one K/V plane per workgroup. This reduces shared storage to
+2 KiB for sliding groups and 4 KiB for global groups.
+
+The target retains at most four graph pairs, evicting the least recently used pair before recording
+another. In the batch128 diagnostic, each pair adds about 9.1 MiB of visible command storage per GPU. Unbounded
+growth filled the 256 MiB PCIe aperture and increased semaphore gaps even though shader execution
+times and clocks stayed stable. Freeing command buffers permits driver-pool reuse; limiting growth
+before allocation matters because a later clear does not necessarily shrink those pools. This graph
+cache is separate from retained token/KV prefixes and does not discard their contents.
+
 Scratch reserves eight tokens × eight heads × 64 partitions × 514 f32 values, or 8.03 MiB per GPU;
 the assistant reuses this target scratch. Prefill batches above eight retain a wave per query/head
 without key partitioning. Global RoPE rotates pairs 0–63 (dimensions 0–63 and 256–319), using the checkpoint's frequency factors.

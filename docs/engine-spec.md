@@ -290,7 +290,9 @@ From `trashcan devices` (identical cards):
   10 wave slots per SIMD, 256 VGPRs per SIMD (occupancy = min(10, 256 / VGPRs per wave)), 512 SGPRs.
 - **Workgroups:** at most 1024 invocations, 32 KiB shared memory (Tahiti has 64 KiB of LDS per CU, so two such
   workgroups fit). Subgroup size 64, with arithmetic, ballot, shuffle and clustered ops.
-- **Peaks:** 850 MHz x 2048 lanes x 2 = 3.48 TFLOPS fp32 per GPU, 264 GB/s GDDR5 (384-bit).
+- **Peaks at measured clocks:** 850 MHz × 2048 lanes × 2 = 3.4816 TFLOP/s fp32 per GPU;
+  1370 MHz × 4 × 384/8 = 263.04 GB/s GDDR5. Apple rounds these to 3.5 TFLOP/s and 264 GB/s.
+  These are physical upper bounds, not achieved model throughput.
 - **Precision:** no fp16 arithmetic and no integer dot product. 16-bit storage (`storageBuffer16BitAccess`), int16 and
   int64 are supported. Unpack f16 with `unpackHalf2x16`.
 - **Memory types:**
@@ -417,8 +419,14 @@ safetensors are read directly; llama.cpp is not linked or needed at runtime.
   This stays within the BAR without CPU fence waits. `--cpu-reduce` retains the persistent host relay path.
 - For P2P, submit all 97 timeline-dependent segments in one `vkQueueSubmit` API call per GPU. This preserves the
   per-allreduce semaphore dependencies and avoids 194 CPU submission calls per token.
-- Decode and verification attention use 32 cache partitions followed by a stable max/sum reduction. Large
-  prefill batches use one online-softmax wave per query/head. All score scales remain exactly 1.0.
+- Decode and verification attention use 8/16/32/64 cache partitions according to visible length, followed
+  by a stable max/sum reduction. Sliding layers cap visibility at 1024. At 16 or more partitions, measured
+  sliding/global shapes share K/V loads between two/eight query heads; the shortest path keeps scalar
+  loads. The selected kernels compile dimensions 256/512 and allocate one K/V plane per workgroup.
+  Large prefill batches use one online-softmax wave per query/head. All score scales remain exactly 1.0.
+- Bound the target execution cache to four graph pairs and free the least recently used pair before
+  recording a replacement. Command storage also consumes visible VRAM: unbounded shape/sampler caches
+  can exhaust the 256 MiB aperture and inflate inter-GPU waits despite unchanged shader times.
 - Assistant revision `18934064dd4c5c6cc3621f6381e7d377fc8cb7bd` reads target layers 46 (sliding) and 47
   (global). Draft steps keep the same query position and see only committed target KV. Verification rewinds
   the logical position to the accepted prefix; the sliding ring includes the full verification capacity.

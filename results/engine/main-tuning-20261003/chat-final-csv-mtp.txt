@@ -1,0 +1,16 @@
+To handle CSV files in Python, the built-in `csv` module is the standard approach. Below is a clean, reusable function to filter rows based on an age requirement.
+
+### The Python Code
+
+```python
+import csv
+
+def filter_adults_from_csv(file_path):
+    """
+    Reads a CSV file and returns a list of rows where the 
+    'age' column is 18 or greater.
+    """
+    adults = []
+    
+    try:
+        with open(file_path, mode='r', encoding='utf-8') as

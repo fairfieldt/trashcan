@@ -1,0 +1,79 @@
+{
+  "captured_at_utc": "2026-10-03T11:59:35.648462+00:00",
+  "source_commit": "01bcbfe49bb5009130bcd8aaab3c70a7d9c88b2c",
+  "source_sha256": {
+    "Cargo.lock": "86e8db55ee801702baf4752ae81accc178e21aab6e6e067efa34a9145e7b5247",
+    "Cargo.toml": "73e9483bd79f8a6cc0f7ccb86d05db14aa1791a11e63cc09c431ec1ddbb5365d",
+    "engine/Cargo.toml": "9e6682526e932a5eb6a07db2eac5db05d46230123bc94183b23a0fa2b13aefdc",
+    "engine/build.rs": "2f878a93787aea000595fb2cdd1037585c1db7266c073a318ba56d5beb18e06e",
+    "engine/shaders/LICENSE.llama.cpp": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+    "engine/shaders/attention.comp": "23dce69e779e8e66ceb1793fd4d0a3d13fca786e820f180dad50ce10b69a04d5",
+    "engine/shaders/attention_merge.comp": "94ef61990c8bda40b22a076af128d7de760c15e4cda3c7af38b47151fab1df9a",
+    "engine/shaders/attention_partial.comp": "f2c9c85a1961639927de944f98a5fd1a1813548a442c6a83461a3db57ab2407b",
+    "engine/shaders/attention_partial_heads2.comp": "fbb25d24b1a5777721b99a9805a377d4268ab9eba3c0cce0e28e717b9d2008ad",
+    "engine/shaders/attention_partial_heads8.comp": "1391ce0a2b60082eebbb106a07c0343988a172c514ece85e30d224f3e5088e05",
+    "engine/shaders/attention_shared_body.glsl": "21b50201a59285f001407e8e75db2b0d787d91bc14164ad17c8e4ffa77077b8a",
+    "engine/shaders/common.glsl": "5edc34a1fcbd093e7eb5d18cf66ca1002bba9048340371ce7befc55caa5fb847",
+    "engine/shaders/geglu.comp": "27d50f5c098b859569d871c71b813e5d1f27ab66aa3b90c27efd060c1f2315a0",
+    "engine/shaders/gemm.comp": "197b29a8be87d2b679833cd1865232de1c606758627b16bfe3f046a60203d54b",
+    "engine/shaders/headvec.comp": "8cdda48e3b6d36ad13d80bb6df026d27d979b97cc7198834fc289be085cb9d3b",
+    "engine/shaders/matvec.comp": "c7810482a76c0a43bee9c36ee4a03d12b9876fc4cadd806b5d87b7bfd1e20596",
+    "engine/shaders/matvecq4.comp": "8b6a2386ea4b03d87a8d89a9ed1bbb73a0a7dfec40b8fb4781e9966382a9292f",
+    "engine/shaders/matvecq4narrow.comp": "d2f524f37e955b38eda5ce201b039df3f7ccbb1cf82bec40a17e12d7c128db3d",
+    "engine/shaders/merge.comp": "66a4ec9a69d48b081a1a8afc6a7f3d896e2dfa1dfa870964bbe57e74eadb4f8b",
+    "engine/shaders/multivec.comp": "c01172ddb41abc1a21c17f9ba5ca545aa4f298d5b3d6840797068cdaa664b680",
+    "engine/shaders/multivec2.comp": "64c82a60494ed6edd311e26f512b048fd0b6ceaab1f7d81cf9a5b6068c4f6ab2",
+    "engine/shaders/multivec4.comp": "0ed66ad9d7b54ad1665e220c9b952124a83cfec372ed91673b5e2c0ec4f197bc",
+    "engine/shaders/multivec_body.glsl": "00186046551d0e48e9689e270406509f6f441e8691762ef401e1532af827d341",
+    "engine/shaders/norm.comp": "fab3b365393db83df7ffbe5ca47c101b84aa4e70c0043c174fee670d1bfe4ce0",
+    "engine/shaders/norm_rope.comp": "5a23be9f9f7af556db8737ae5c8d97f941fc04c2222cd0d41da57272e3687c8d",
+    "engine/shaders/rope.comp": "6050e34c720d19e9c73b8bdaa8b447da8479568a235a4636304aaf5b652f43b7",
+    "engine/shaders/topk.comp": "0b428dc5eca6f61d0ba2a50315c6ff2ac9ebdc2817465fc828430acf644c1175",
+    "engine/shaders/visibility.comp": "9bc39c4afd54ba7d273e190229429f8ee3a074375eb9f41abdb2d16223ab2715",
+    "engine/src/assistant.rs": "ba3628240533f1a5d98f9d8cf8cc11bf46718de07883e2e05d90f465f4aa5355",
+    "engine/src/generation.rs": "121570a57cefa23087733b9a5899e393dc0e50674f64e952ed31202327adf432",
+    "engine/src/gguf.rs": "3da4af4f5c1589c4b170404ead9e934f755defe908000d0544f2c08dbf95cee9",
+    "engine/src/gpu.rs": "04b2c2013faececf4b78b7f2d4185750545ea75c570849a793269b555a4c8009",
+    "engine/src/main.rs": "85b74729670adb8061fd879186c9aff90b8ac952ca2947ddbd748b06c7d68321",
+    "engine/src/micro.rs": "c1d5ad9af8c6aba1e83751760eb7ad5d5119385b660fb86122f83fee1a48c98b",
+    "engine/src/model.rs": "43ea5e37dcfc3390f41aed1bb0ade8cb1dde597bed5aaedb9303926d74cc175a",
+    "engine/src/quant.rs": "b2cf80198bbf1721da82b9b12f88f1cbbd278b20678752c920030120851704c4",
+    "engine/src/responses.rs": "cf3621811eb117405395294e169d6c99f1f2a32c06dd200ccec869f4c0e9a919",
+    "engine/src/server.rs": "08d2ebd510e17d6e3571f01c38d4fa374d1b92e423f8d6186ea57ca17d1f0972",
+    "engine/src/tokenizer.rs": "1e33e52e3c1defe2010523582e80ea4505ee4584c45ae50ed746f8a0d5e0028b",
+    "engine/src/visibility.rs": "d683cda1366297ce05b049dd1abba5cff8a3dfd327322e25dd470bde58dfcf91",
+    "engine/src/vulkan.rs": "460df48b3521aee4c5bbdf15a4cb466d2f14a4b20f3d5e038bbeac692a205db0"
+  },
+  "all_41_sources_match_commit": true,
+  "binary_sha256": "5b62aa4082717a95eae881219fc258a90879ea9b35b546c149153af3e6bb0b6e",
+  "previous_shared_source_commit": "cc3f50feca851d84c10a90d37561190863649026",
+  "accepted_summary": "summary-fixed-dim.json",
+  "summary_sha256": "6eb288e194ea3f634c0462f38eda53e20cda4d25d1738878603670bc82871507",
+  "all_recorded_suites_complete": true,
+  "final_clock_log": {
+    "file": "clocks.txt",
+    "size_bytes": 1201858,
+    "sha256": "8498e70351bbe1fdb00174befdcf3d1a6d78b32047774e7156678b5d89856c55",
+    "monitor_stopped": true
+  },
+  "historical_clock_snapshots": [
+    {
+      "manifest": "measurement-windows.json",
+      "bytes": 537088,
+      "sha256": "18aeda79abc2e7bb6ec483d53006abf5a85101b0981d8996b6e549bf45a2991d",
+      "matches_prefix": true
+    },
+    {
+      "manifest": "fixed-dim-clock-analysis.json",
+      "bytes": 1162731,
+      "sha256": "bac416f9179af8c25a3e893c53ec54734b789bd3ec7a03547dcdb0fa8645606d",
+      "matches_prefix": true
+    }
+  ],
+  "note": "The source commit exactly identifies measured engine code. A following documentation/evidence commit does not change engine sources. Benchmark clock monitor was stopped after all GPU tests and both scoped server cleanups completed.",
+  "remote_verification": {
+    "binary_sha256": "5b62aa4082717a95eae881219fc258a90879ea9b35b546c149153af3e6bb0b6e",
+    "all_41_sources_match_tested_manifest": true,
+    "remaining_engine_processes": []
+  }
+}

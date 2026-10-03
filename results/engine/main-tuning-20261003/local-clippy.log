@@ -1,0 +1,2 @@
+warning: trashcan@0.1.0: glslc missing; GPU execution needs a build on incite
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.02s

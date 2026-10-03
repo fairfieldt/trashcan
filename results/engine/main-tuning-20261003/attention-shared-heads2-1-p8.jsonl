@@ -1,0 +1,4 @@
+{"dim":256,"gpu":0,"iterations":100,"kv_heads":4,"milliseconds":0.04487111093994141,"partitions":8,"pass":true,"tokens":1}
+{"dim":512,"gpu":0,"iterations":100,"kv_heads":1,"milliseconds":0.0640014812373352,"partitions":8,"pass":true,"tokens":1}
+{"dim":256,"gpu":1,"iterations":100,"kv_heads":4,"milliseconds":0.04478518501434326,"partitions":8,"pass":true,"tokens":1}
+{"dim":512,"gpu":1,"iterations":100,"kv_heads":1,"milliseconds":0.06410074049621582,"partitions":8,"pass":true,"tokens":1}

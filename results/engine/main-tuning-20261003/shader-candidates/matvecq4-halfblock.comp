@@ -1,0 +1,28 @@
+#version 460
+#include "common.glsl"
+layout(binding=0,std430) readonly restrict buffer WeightPairs { uvec2 words2[]; } w2;
+// Two lanes share a block: halve scale/address work with less register pressure.
+layout(local_size_x=256) in;
+void main() {
+    uint lane=gl_SubgroupInvocationID;
+    uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4, blocks=p.k/32, part0=lane%2*2;
+    vec4 sums=vec4(0);
+    for(uint b=lane/2;b<blocks;b+=32) {
+        uvec2 qs[4]; vec4 scales;
+        [[unroll]] for(uint r=0;r<4;r++) {
+            uint block=(first+r)*blocks+b;
+            scales[r]=uintBitsToFloat(ww.words[block]);
+            qs[r]=w2.words2[p.stride/2+block*2+lane%2];
+        }
+        vec4 dots=vec4(0);
+        [[unroll]] for(uint part=0;part<2;part++) {
+            vec4 x0=b_v4.v[b*8+part0+part],x1=b_v4.v[b*8+part0+part+4];
+            [[unroll]] for(uint r=0;r<4;r++)
+                dots[r]+=dot(q4_lo(qs[r][part]),x0)+dot(q4_hi(qs[r][part]),x1);
+        }
+        sums=fma(dots,scales,sums);
+    }
+    sums=subgroupAdd(sums);
+    if(lane==0) [[unroll]] for(uint r=0;r<4;r++)
+        if(first+r<p.n)c_f.v[first+r]=sums[r];
+}

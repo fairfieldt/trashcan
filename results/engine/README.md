@@ -2,7 +2,12 @@
 
 These are recorded outputs from incite. Model weights and build binaries are not stored here.
 
-- `performance-20261003/` contains the latest kernel/server tuning comparisons, warmed microbenchmarks,
+- `main-tuning-20261003/` contains the latest main-branch Q4/attention and resident-prefix experiments,
+  repeated benchmarks, matching chat outputs, long-context checks and complete validation evidence.
+  Its README distinguishes measured gains, unchanged workloads and rejected candidates.
+- `ceiling-audit-20261003/` validates exact tensor costs and separates theoretical bounds from practical
+  targets. The roughly 52 tok/s bandwidth/transport scenario is not a demonstrated ceiling.
+- `performance-20261003/` contains the preceding performance-branch tuning comparisons, warmed microbenchmarks,
   seven-draft selector measurements, repeated decode runs, reference/cache checks and Responses tests.
   Its README explains which source hashes belong to each measurement phase.
 Run instructions and acceptance status are in `docs/implementation.md`.

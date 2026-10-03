@@ -1,0 +1,1454 @@
+{
+  "url": "http://127.0.0.1:18143",
+  "batch": 128,
+  "cold": false,
+  "draft": true,
+  "requests": [
+    {
+      "name": "warmup",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Say hello.",
+        "max_output_tokens": 1,
+        "stream": false
+      },
+      "seconds": 0.4422092929999053,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022368,
+        "error": null,
+        "id": "resp_18dafd5ae93186e90",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 1,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "Hello",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd5b033fbb951",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 16,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 1,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 17
+        }
+      }
+    },
+    {
+      "name": "boundary_128_first",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 128,
+        "stream": false
+      },
+      "seconds": 16.86050983200039,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022369,
+        "error": null,
+        "id": "resp_18dafd5b040598bc2",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 128,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd5e1debfb713",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4
+          },
+          "output_tokens": 128,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1531
+        }
+      }
+    },
+    {
+      "name": "boundary_128_repeat",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 128,
+        "stream": true
+      },
+      "seconds": 16.78334116699989,
+      "first_delta_seconds": 13.223947122998652,
+      "response": {
+        "created_at": 1791022386,
+        "error": null,
+        "id": "resp_18dafd5ef0f565444",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 128,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd62048343bd5",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 128,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1531
+        }
+      }
+    },
+    {
+      "name": "boundary_129_first",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 129,
+        "stream": false
+      },
+      "seconds": 16.76183886000217,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022402,
+        "error": null,
+        "id": "resp_18dafd62d98b134c6",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 129,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 ",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd65e84279607",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 129,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1532
+        }
+      }
+    },
+    {
+      "name": "boundary_129_repeat",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 129,
+        "stream": true
+      },
+      "seconds": 16.738952735002385,
+      "first_delta_seconds": 13.143648646000656,
+      "response": {
+        "created_at": 1791022419,
+        "error": null,
+        "id": "resp_18dafd66c14cb0998",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 129,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 ",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd69cf5f926e9",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 129,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1532
+        }
+      }
+    },
+    {
+      "name": "boundary_130_first",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 130,
+        "stream": false
+      },
+      "seconds": 16.976417290003155,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022436,
+        "error": null,
+        "id": "resp_18dafd6aa6f8dcc8a",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 130,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 4",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd6db56ee720b",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 130,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1533
+        }
+      }
+    },
+    {
+      "name": "boundary_130_repeat",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 130,
+        "stream": true
+      },
+      "seconds": 16.793925770998612,
+      "first_delta_seconds": 13.139143880998745,
+      "response": {
+        "created_at": 1791022453,
+        "error": null,
+        "id": "resp_18dafd6e9a72bba7c",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 130,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 4",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd71a8d2356ad",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 130,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1533
+        }
+      }
+    },
+    {
+      "name": "stochastic_first",
+      "request": {
+        "temperature": 1,
+        "store": false,
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "seed": 7,
+        "top_k": 32,
+        "max_output_tokens": 32,
+        "stream": false
+      },
+      "seconds": 2.3808520599995973,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022470,
+        "error": null,
+        "id": "resp_18dafd7282e5d0e4e",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd72ba9273ebf",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      }
+    },
+    {
+      "name": "stochastic_repeat",
+      "request": {
+        "temperature": 1,
+        "store": false,
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "seed": 7,
+        "top_k": 32,
+        "max_output_tokens": 32,
+        "stream": true
+      },
+      "seconds": 2.1871235280013934,
+      "first_delta_seconds": 0.596811046001676,
+      "response": {
+        "created_at": 1791022472,
+        "error": null,
+        "id": "resp_18dafd7310e43c0010",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd73344dd0ff11",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 1.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 46
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      }
+    },
+    {
+      "name": "greedy_again_first",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "stream": false
+      },
+      "seconds": 2.8275831040009507,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022474,
+        "error": null,
+        "id": "resp_18dafd739353be6912",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd73c68167da13",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 46
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      }
+    },
+    {
+      "name": "greedy_again_repeat",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "List all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "stream": true
+      },
+      "seconds": 1.7126242570011527,
+      "first_delta_seconds": 0.44374337200133596,
+      "response": {
+        "created_at": 1791022477,
+        "error": null,
+        "id": "resp_18dafd743c1f1fa714",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd74564ec29115",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 47,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 46
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 79
+        }
+      }
+    },
+    {
+      "name": "ring_wrap_first",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "stream": false
+      },
+      "seconds": 13.955588246000843,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022479,
+        "error": null,
+        "id": "resp_18dafd74a2c50fbf16",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd77b1d024bc17",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 4
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1435
+        }
+      }
+    },
+    {
+      "name": "ring_wrap_repeat",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "stream": true
+      },
+      "seconds": 1.746975713998836,
+      "first_delta_seconds": 0.9178801869966264,
+      "response": {
+        "created_at": 1791022493,
+        "error": null,
+        "id": "resp_18dafd77e35fbb5918",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd7818b18e5019",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1403,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 1402
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1435
+        }
+      }
+    },
+    {
+      "name": "long_history",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": [
+          {
+            "role": "user",
+            "content": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations."
+          },
+          {
+            "role": "assistant",
+            "content": "1 2 3 4 5 6 7 8 9 10 11 12 13 14"
+          },
+          {
+            "role": "user",
+            "content": "What color are the workshop doors? Reply in one word."
+          }
+        ],
+        "max_output_tokens": 32,
+        "stream": true
+      },
+      "seconds": 1.3416372569990926,
+      "first_delta_seconds": 1.3413459479997982,
+      "response": {
+        "created_at": 1791022494,
+        "error": null,
+        "id": "resp_18dafd784bc3754b1a",
+        "incomplete_details": null,
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "Red",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd789a4098521b",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "completed",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1457,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 1399
+          },
+          "output_tokens": 2,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1459
+        }
+      }
+    },
+    {
+      "name": "changed_system",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Reference notes:\nThe workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. The workshop has red doors and blue windows. \nList all integers from 1 to 1000 in order, separated by spaces. Print only the full list, with no introduction, summary, or abbreviations.",
+        "max_output_tokens": 32,
+        "instructions": "Answer all questions concisely.",
+        "stream": false
+      },
+      "seconds": 14.816798864998418,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022496,
+        "error": null,
+        "id": "resp_18dafd789b1cbb041c",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 32,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "1 2 3 4 5 6 7 8 9 10 11 12 13 14",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd7bddf18ffa1d",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 1413,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 32,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 1445
+        }
+      }
+    },
+    {
+      "name": "shorter_prompt",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": "Say hello.",
+        "max_output_tokens": 8,
+        "stream": true
+      },
+      "seconds": 0.6232568650011672,
+      "first_delta_seconds": 0.5310238130005018,
+      "response": {
+        "created_at": 1791022511,
+        "error": null,
+        "id": "resp_18dafd7c0df6280a1e",
+        "incomplete_details": {
+          "reason": "max_output_tokens"
+        },
+        "max_output_tokens": 8,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "Hello! How can I help you today",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd7c2d60febb1f",
+            "role": "assistant",
+            "status": "incomplete",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "incomplete",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 16,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 8,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 24
+        }
+      }
+    },
+    {
+      "name": "tool_first",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": [
+          {
+            "role": "user",
+            "content": "Call the weather tool with city set to Paris. Do not answer without calling it."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "weather",
+            "description": "Get the weather for a city.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ]
+            }
+          }
+        ],
+        "max_output_tokens": 128,
+        "stream": false
+      },
+      "seconds": 1.3079504090019327,
+      "first_delta_seconds": null,
+      "response": {
+        "created_at": 1791022511,
+        "error": null,
+        "id": "resp_18dafd7c3320b7a820",
+        "incomplete_details": null,
+        "max_output_tokens": 128,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "arguments": "{\"city\":\"Paris\"}",
+            "call_id": "call_18dafd7c80ee247822",
+            "id": "fc_18dafd7c80ee164921",
+            "name": "weather",
+            "status": "completed",
+            "type": "function_call"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "completed",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "description": "Get the weather for a city.",
+            "name": "weather",
+            "parameters": {
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 77,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 2
+          },
+          "output_tokens": 13,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 90
+        }
+      }
+    },
+    {
+      "name": "tool_repeat",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": [
+          {
+            "role": "user",
+            "content": "Call the weather tool with city set to Paris. Do not answer without calling it."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "weather",
+            "description": "Get the weather for a city.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ]
+            }
+          }
+        ],
+        "max_output_tokens": 128,
+        "stream": true
+      },
+      "seconds": 0.5826729309992515,
+      "first_delta_seconds": 0.5824634919990785,
+      "response": {
+        "created_at": 1791022513,
+        "error": null,
+        "id": "resp_18dafd7c812a65a923",
+        "incomplete_details": null,
+        "max_output_tokens": 128,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "arguments": "{\"city\":\"Paris\"}",
+            "call_id": "call_18dafd7ca3c0e8d425",
+            "id": "fc_18dafd7ca3c0db7c24",
+            "name": "weather",
+            "status": "completed",
+            "type": "function_call"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "completed",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "description": "Get the weather for a city.",
+            "name": "weather",
+            "parameters": {
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 77,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 76
+          },
+          "output_tokens": 13,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 90
+        }
+      }
+    },
+    {
+      "name": "tool_continuation",
+      "request": {
+        "temperature": 0,
+        "store": false,
+        "input": [
+          {
+            "role": "user",
+            "content": "Call the weather tool with city set to Paris. Do not answer without calling it."
+          },
+          {
+            "arguments": "{\"city\":\"Paris\"}",
+            "call_id": "call_18dafd7ca3c0e8d425",
+            "id": "fc_18dafd7ca3c0db7c24",
+            "name": "weather",
+            "status": "completed",
+            "type": "function_call"
+          },
+          {
+            "type": "function_call_output",
+            "call_id": "call_18dafd7ca3c0e8d425",
+            "output": "{\"city\":\"Paris\",\"temperature_c\":18,\"condition\":\"sunny\"}"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "name": "weather",
+            "description": "Get the weather for a city.",
+            "parameters": {
+              "type": "object",
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ]
+            }
+          }
+        ],
+        "max_output_tokens": 128,
+        "stream": true
+      },
+      "seconds": 1.3377786470009596,
+      "first_delta_seconds": 0.7841916869983834,
+      "response": {
+        "created_at": 1791022513,
+        "error": null,
+        "id": "resp_18dafd7ca4000c2c26",
+        "incomplete_details": null,
+        "max_output_tokens": 128,
+        "model": "gemma-4-12b",
+        "object": "response",
+        "output": [
+          {
+            "content": [
+              {
+                "annotations": [],
+                "logprobs": [],
+                "text": "The weather in Paris is currently sunny with a temperature of 18\u00b0C.",
+                "type": "output_text"
+              }
+            ],
+            "id": "msg_18dafd7cd29849ac27",
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "parallel_tool_calls": true,
+        "status": "completed",
+        "store": false,
+        "temperature": 0.0,
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "description": "Get the weather for a city.",
+            "name": "weather",
+            "parameters": {
+              "properties": {
+                "city": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "city"
+              ],
+              "type": "object"
+            },
+            "type": "function"
+          }
+        ],
+        "top_p": 0.949999988079071,
+        "usage": {
+          "input_tokens": 110,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 73
+          },
+          "output_tokens": 22,
+          "output_tokens_details": {
+            "reasoning_tokens": 2
+          },
+          "total_tokens": 132
+        }
+      }
+    }
+  ],
+  "repeat_checks": [
+    {
+      "name": "boundary_128",
+      "exact_output": true,
+      "same_output_tokens": true
+    },
+    {
+      "name": "boundary_129",
+      "exact_output": true,
+      "same_output_tokens": true
+    },
+    {
+      "name": "boundary_130",
+      "exact_output": true,
+      "same_output_tokens": true
+    },
+    {
+      "name": "stochastic",
+      "exact_output": true,
+      "same_output_tokens": true
+    },
+    {
+      "name": "greedy_again",
+      "exact_output": true,
+      "same_output_tokens": true
+    },
+    {
+      "name": "ring_wrap",
+      "exact_output": true,
+      "same_output_tokens": true
+    },
+    {
+      "name": "tool",
+      "exact_output": true,
+      "same_output_tokens": true
+    }
+  ],
+  "passed": true,
+  "cold_comparison": [
+    {
+      "name": "warmup",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 0.4345042659988394,
+      "seconds": 0.4422092929999053,
+      "speedup": 0.9825760626856217
+    },
+    {
+      "name": "boundary_128_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 16.92235155399976,
+      "seconds": 16.86050983200039,
+      "speedup": 1.0036678441290072
+    },
+    {
+      "name": "boundary_128_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 16.74369741099872,
+      "seconds": 16.78334116699989,
+      "speedup": 0.9976379103775166
+    },
+    {
+      "name": "boundary_129_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 16.72899745900213,
+      "seconds": 16.76183886000217,
+      "speedup": 0.9980407041688959
+    },
+    {
+      "name": "boundary_129_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 16.711617451001075,
+      "seconds": 16.738952735002385,
+      "speedup": 0.9983669656976717
+    },
+    {
+      "name": "boundary_130_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 16.91703457800031,
+      "seconds": 16.976417290003155,
+      "speedup": 0.9965020468695823
+    },
+    {
+      "name": "boundary_130_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 16.77335367699925,
+      "seconds": 16.793925770998612,
+      "speedup": 0.9987750276927573
+    },
+    {
+      "name": "stochastic_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 1.4123298880003858,
+      "seconds": 2.3808520599995973,
+      "speedup": 0.5932035474730945
+    },
+    {
+      "name": "stochastic_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 1.2569149029986875,
+      "seconds": 2.1871235280013934,
+      "speedup": 0.5746885746994198
+    },
+    {
+      "name": "greedy_again_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 2.1212617789969954,
+      "seconds": 2.8275831040009507,
+      "speedup": 0.7502031597216257
+    },
+    {
+      "name": "greedy_again_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 1.662162893997447,
+      "seconds": 1.7126242570011527,
+      "speedup": 0.9705356485537203
+    },
+    {
+      "name": "ring_wrap_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 13.975333794001926,
+      "seconds": 13.955588246000843,
+      "speedup": 1.0014148846793858
+    },
+    {
+      "name": "ring_wrap_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 13.98668364400146,
+      "seconds": 1.746975713998836,
+      "speedup": 8.006226721942157
+    },
+    {
+      "name": "long_history",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 14.66161294700214,
+      "seconds": 1.3416372569990926,
+      "speedup": 10.928149818823984
+    },
+    {
+      "name": "changed_system",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 14.64749535699957,
+      "seconds": 14.816798864998418,
+      "speedup": 0.9885735434798408
+    },
+    {
+      "name": "shorter_prompt",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 1.3673599869980535,
+      "seconds": 0.6232568650011672,
+      "speedup": 2.1938947868556458
+    },
+    {
+      "name": "tool_first",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 1.488018807998742,
+      "seconds": 1.3079504090019327,
+      "speedup": 1.1376721913594685
+    },
+    {
+      "name": "tool_repeat",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 1.3386029510002118,
+      "seconds": 0.5826729309992515,
+      "speedup": 2.2973487865732536
+    },
+    {
+      "name": "tool_continuation",
+      "exact_output": true,
+      "same_request": true,
+      "same_output_tokens": true,
+      "cold_seconds": 2.1768547700012277,
+      "seconds": 1.3377786470009596,
+      "speedup": 1.6272159634789463
+    }
+  ],
+  "cold_comparison_exact": true,
+  "repeat_output_exact": true
+}

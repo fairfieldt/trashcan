@@ -1,0 +1,35 @@
+warning: trashcan@0.1.0: glslc missing; GPU execution needs a build on incite
+   Compiling trashcan v0.1.0 (/Users/fairfieldt/dev/trashcan/engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.55s
+     Running unittests src/main.rs (target/debug/deps/trashcan-d23d88c620797002)
+
+running 26 tests
+test model::kv_history_tests::retention_includes_writes_beyond_speculative_rollback ... ok
+test model::kv_history_tests::rewind_limit_counts_all_decode_steps_and_resets_for_new_sequence ... ok
+test model::kv_history_tests::any_prefix_survives_before_the_first_sliding_ring_wrap ... ok
+test model::attention_partition_tests::decode_thresholds_and_sliding_window_choose_distinct_graph_buckets ... ok
+test model::attention_partition_tests::verification_uses_final_visible_token_and_large_prefill_has_one_bucket ... ok
+test quant::tests::q4_shard ... ok
+test server::tests::committed_speculative_tokens_include_stop_and_unemitted_tail ... ok
+test server::tests::changed_sampler_or_drafter_recomputes_the_last_prompt_token ... ok
+test server::tests::repeated_prompt_reuses_saved_logits_and_excludes_unprocessed_output ... ok
+test server::tests::exact_prefix_matching_handles_changes_shortening_and_empty_prompts ... ok
+test server::tests::taking_cache_invalidates_failures_until_successful_replacement ... ok
+test assistant::tests::acceptance_and_correction ... ok
+test assistant::tests::rejection_consumes_only_committed_samples ... ok
+test quant::tests::q6_signed_scales_and_planes ... ok
+test responses::tests::messages_sampling_and_reasoning ... ok
+test responses::tests::native_nested_arguments_and_strings ... ok
+test responses::tests::client_disconnect_propagates_and_stops_output ... ok
+test generation::tests::greedy_and_seed ... ok
+test responses::tests::tool_replay_preserves_multiple_rounds_and_out_of_order_results ... ok
+test responses::tests::token_limit_never_completes_a_partial_tool ... ok
+test responses::tests::rejects_unsupported_and_invalid_requests ... ok
+test responses::tests::hidden_reasoning_and_generation_failure ... ok
+test responses::tests::client_tool_search_returns_native_items_and_loads_discovered_tools ... ok
+test responses::tests::streaming_unicode_reasoning_and_tools_match_terminal_items ... ok
+test assistant::tests::stochastic_verification_preserves_target_mass ... ok
+test model::kv_history_tests::accepted_rewinds_keep_every_required_sliding_key_after_ring_wrap ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+

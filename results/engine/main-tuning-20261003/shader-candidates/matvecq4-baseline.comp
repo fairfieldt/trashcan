@@ -1,0 +1,33 @@
+#version 460
+#include "common.glsl"
+// Four rows per wave; four lanes share each packed block. Reuse both input vectors.
+layout(local_size_x=256) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
+uint part=lane%4;
+vec4 sum=vec4(0);
+for(uint b=lane/4;b<p.k/32;b+=16){
+    vec4 x0=b_v4.v[b*8+part],x1=b_v4.v[b*8+part+4];
+    {uint block=(first+0)*(p.k/32)+b;
+    float d=uintBitsToFloat(ww.words[block]);uint qs=ww.words[p.stride+block*4+part];
+    vec4 lo=q4_lo(qs);
+    vec4 hi=q4_hi(qs);
+    sum.x=fma(dot(lo,x0)+dot(hi,x1),d,sum.x);}
+    {uint block=(first+1)*(p.k/32)+b;
+    float d=uintBitsToFloat(ww.words[block]);uint qs=ww.words[p.stride+block*4+part];
+    vec4 lo=q4_lo(qs);
+    vec4 hi=q4_hi(qs);
+    sum.y=fma(dot(lo,x0)+dot(hi,x1),d,sum.y);}
+    {uint block=(first+2)*(p.k/32)+b;
+    float d=uintBitsToFloat(ww.words[block]);uint qs=ww.words[p.stride+block*4+part];
+    vec4 lo=q4_lo(qs);
+    vec4 hi=q4_hi(qs);
+    sum.z=fma(dot(lo,x0)+dot(hi,x1),d,sum.z);}
+    {uint block=(first+3)*(p.k/32)+b;
+    float d=uintBitsToFloat(ww.words[block]);uint qs=ww.words[p.stride+block*4+part];
+    vec4 lo=q4_lo(qs);
+    vec4 hi=q4_hi(qs);
+    sum.w=fma(dot(lo,x0)+dot(hi,x1),d,sum.w);}
+}
+sum=subgroupAdd(sum);if(lane==0)for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[first+r]=sum[r];
+}

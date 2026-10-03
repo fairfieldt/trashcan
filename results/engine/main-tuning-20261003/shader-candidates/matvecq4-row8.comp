@@ -1,0 +1,18 @@
+#version 460
+#include "common.glsl"
+// 8 rows/wave, 128 threads/group; preserve sixteen output rows/group.
+#define ROWS 8
+layout(local_size_x=128) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,first=gl_WorkGroupID.x*16+gl_SubgroupID*ROWS;
+uint part=lane%4;float sums[ROWS];
+[[unroll]]for(uint r=0;r<ROWS;r++)sums[r]=0;
+for(uint b=lane/4;b<p.k/32;b+=16){
+    vec4 x0=b_v4.v[b*8+part],x1=b_v4.v[b*8+part+4];
+    [[unroll]]for(uint r=0;r<ROWS;r++){uint block=(first+r)*(p.k/32)+b;
+    float d=uintBitsToFloat(ww.words[block]);uint qs=ww.words[p.stride+block*4+part];
+    sums[r]=fma(dot(q4_lo(qs),x0)+dot(q4_hi(qs),x1),d,sums[r]);}
+}
+[[unroll]]for(uint r=0;r<ROWS;r++){float sum=subgroupAdd(sums[r]);
+if(lane==0&&first+r<p.n)c_f.v[first+r]=sum;}
+}
