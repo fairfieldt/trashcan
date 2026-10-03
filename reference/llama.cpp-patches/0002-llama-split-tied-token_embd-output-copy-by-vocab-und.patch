@@ -1,0 +1,37 @@
+From 226f2232d9587a4f9f8d29d565fa1e29d9b3a014 Mon Sep 17 00:00:00 2001
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Fri, 2 Oct 2026 19:57:45 -0700
+Subject: [PATCH] llama: split tied token_embd output copy by vocab under -sm
+ tensor
+
+Assisted-by: Claude
+---
+ src/llama-model.cpp | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/llama-model.cpp b/src/llama-model.cpp
+index 97e0cee70..30705617c 100644
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -425,6 +425,7 @@ struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const str
+     static const std::regex pattern_ffn_down_shexp_weight ("blk\\.\\d*\\.ffn_down_shexp.weight");
+ 
+     static const std::regex pattern_output_weight("output\\.weight");
++    static const std::regex pattern_tok_embd_weight("token_embd\\.weight");
+     static const std::regex pattern_output_bias  ("output\\.bias");
+ 
+     struct tensor_config {
+@@ -589,8 +590,8 @@ struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const str
+             return get_tensor_config_impl(GGML_BACKEND_SPLIT_AXIS_PARTIAL, "ffn_down_exps.weight");
+         }
+ 
+-        // output
+-        if (std::regex_match(tensor_name, pattern_output_weight)) {
++        // output; a tied token_embd here is the output copy, the input layer stays on the CPU
++        if (std::regex_match(tensor_name, pattern_output_weight) || std::regex_match(tensor_name, pattern_tok_embd_weight)) {
+             if (is_dsv4) {
+                 return get_tensor_config_impl(GGML_BACKEND_SPLIT_AXIS_MIRRORED);
+             }
+-- 
+2.52.0
+

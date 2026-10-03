@@ -12,3 +12,4 @@
 
 # rust
 /target/
+/tools/dump-activations/dump

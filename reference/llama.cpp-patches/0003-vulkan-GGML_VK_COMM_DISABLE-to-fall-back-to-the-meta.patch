@@ -1,0 +1,28 @@
+From c5dc48ada3ada2de0b8043730b93c65c11f5d4d2 Mon Sep 17 00:00:00 2001
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Fri, 2 Oct 2026 20:17:10 -0700
+Subject: [PATCH] vulkan: GGML_VK_COMM_DISABLE to fall back to the meta
+ backend's generic allreduce
+
+Assisted-by: Claude
+---
+ ggml/src/ggml-vulkan/ggml-vulkan.cpp | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/ggml/src/ggml-vulkan/ggml-vulkan.cpp b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+index 724021f26..3c7483d49 100644
+--- a/ggml/src/ggml-vulkan/ggml-vulkan.cpp
++++ b/ggml/src/ggml-vulkan/ggml-vulkan.cpp
+@@ -16298,6 +16298,9 @@ static bool ggml_vk_comm_opaque_fd_supported(ggml_backend_vk_comm_context * comm
+ }
+ 
+ static void * ggml_backend_vk_comm_init(ggml_backend_t * backends, size_t n_backends) {
++    if (getenv("GGML_VK_COMM_DISABLE") != nullptr) {
++        return nullptr;
++    }
+     ggml_backend_vk_comm_context * comm = new ggml_backend_vk_comm_context;
+     comm->backends.assign(backends, backends + n_backends);
+     comm->vkctx.resize(n_backends);
+-- 
+2.52.0
+

@@ -1,0 +1,838 @@
+[
+ {
+  "text": "Hello there",
+  "ids": [
+   2,
+   9259,
+   993
+  ],
+  "pieces": [
+   "<bos>",
+   "Hello",
+   " there"
+  ],
+  "detokenized": "<bos>Hello there"
+ },
+ {
+  "text": "In two sentences, what is a cache in computer architecture?",
+  "ids": [
+   2,
+   902,
+   1156,
+   23974,
+   236764,
+   1144,
+   563,
+   496,
+   15612,
+   528,
+   5194,
+   13217,
+   236881
+  ],
+  "pieces": [
+   "<bos>",
+   "In",
+   " two",
+   " sentences",
+   ",",
+   " what",
+   " is",
+   " a",
+   " cache",
+   " in",
+   " computer",
+   " architecture",
+   "?"
+  ],
+  "detokenized": "<bos>In two sentences, what is a cache in computer architecture?"
+ },
+ {
+  "text": " leading space",
+  "ids": [
+   2,
+   5830,
+   2557
+  ],
+  "pieces": [
+   "<bos>",
+   " leading",
+   " space"
+  ],
+  "detokenized": "<bos> leading space"
+ },
+ {
+  "text": "trailing space ",
+  "ids": [
+   2,
+   136697,
+   2557,
+   236743
+  ],
+  "pieces": [
+   "<bos>",
+   "trailing",
+   " space",
+   " "
+  ],
+  "detokenized": "<bos>trailing space "
+ },
+ {
+  "text": "  two leading spaces",
+  "ids": [
+   2,
+   138,
+   13498,
+   5830,
+   9952
+  ],
+  "pieces": [
+   "<bos>",
+   "  ",
+   "two",
+   " leading",
+   " spaces"
+  ],
+  "detokenized": "<bos>  two leading spaces"
+ },
+ {
+  "text": "multiple   internal    spaces",
+  "ids": [
+   2,
+   43819,
+   139,
+   21621,
+   140,
+   35220
+  ],
+  "pieces": [
+   "<bos>",
+   "multiple",
+   "   ",
+   "internal",
+   "    ",
+   "spaces"
+  ],
+  "detokenized": "<bos>multiple   internal    spaces"
+ },
+ {
+  "text": "line one\nline two",
+  "ids": [
+   2,
+   1257,
+   886,
+   107,
+   1257,
+   1156
+  ],
+  "pieces": [
+   "<bos>",
+   "line",
+   " one",
+   "\n",
+   "line",
+   " two"
+  ],
+  "detokenized": "<bos>line one\nline two"
+ },
+ {
+  "text": "para one\n\npara two\n\n\n\nfour newlines",
+  "ids": [
+   2,
+   16847,
+   886,
+   108,
+   16847,
+   1156,
+   110,
+   19025,
+   861,
+   8721
+  ],
+  "pieces": [
+   "<bos>",
+   "para",
+   " one",
+   "\n\n",
+   "para",
+   " two",
+   "\n\n\n\n",
+   "four",
+   " new",
+   "lines"
+  ],
+  "detokenized": "<bos>para one\n\npara two\n\n\n\nfour newlines"
+ },
+ {
+  "text": "\n",
+  "ids": [
+   2,
+   107
+  ],
+  "pieces": [
+   "<bos>",
+   "\n"
+  ],
+  "detokenized": "<bos>\n"
+ },
+ {
+  "text": "\n\n\n",
+  "ids": [
+   2,
+   109
+  ],
+  "pieces": [
+   "<bos>",
+   "\n\n\n"
+  ],
+  "detokenized": "<bos>\n\n\n"
+ },
+ {
+  "text": "tabs\tand\t\tdouble tabs",
+  "ids": [
+   2,
+   39218,
+   255968,
+   624,
+   255969,
+   7902,
+   42364
+  ],
+  "pieces": [
+   "<bos>",
+   "tabs",
+   "\t",
+   "and",
+   "\t\t",
+   "double",
+   " tabs"
+  ],
+  "detokenized": "<bos>tabs\tand\t\tdouble tabs"
+ },
+ {
+  "text": "CRLF line\r\nnext",
+  "ids": [
+   2,
+   6459,
+   43102,
+   1757,
+   251,
+   107,
+   4874
+  ],
+  "pieces": [
+   "<bos>",
+   "CR",
+   "LF",
+   " line",
+   "\r",
+   "\n",
+   "next"
+  ],
+  "detokenized": "<bos>CRLF line\r\nnext"
+ },
+ {
+  "text": "Numbers: 0 7 42 1234567890 3.14159 -2e10",
+  "ids": [
+   2,
+   37091,
+   236787,
+   236743,
+   236771,
+   236743,
+   236832,
+   236743,
+   236812,
+   236778,
+   236743,
+   236770,
+   236778,
+   236800,
+   236812,
+   236810,
+   236825,
+   236832,
+   236828,
+   236819,
+   236771,
+   236743,
+   236800,
+   236761,
+   236770,
+   236812,
+   236770,
+   236810,
+   236819,
+   753,
+   236778,
+   236744,
+   236770,
+   236771
+  ],
+  "pieces": [
+   "<bos>",
+   "Numbers",
+   ":",
+   " ",
+   "0",
+   " ",
+   "7",
+   " ",
+   "4",
+   "2",
+   " ",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9",
+   "0",
+   " ",
+   "3",
+   ".",
+   "1",
+   "4",
+   "1",
+   "5",
+   "9",
+   " -",
+   "2",
+   "e",
+   "1",
+   "0"
+  ],
+  "detokenized": "<bos>Numbers: 0 7 42 1234567890 3.14159 -2e10"
+ },
+ {
+  "text": "fn main() { println!(\"hi {}\", x[3] + y); } // rust",
+  "ids": [
+   2,
+   15059,
+   1689,
+   825,
+   642,
+   32374,
+   36492,
+   2202,
+   63288,
+   1123,
+   236840,
+   236800,
+   236842,
+   900,
+   570,
+   626,
+   682,
+   973,
+   16432
+  ],
+  "pieces": [
+   "<bos>",
+   "fn",
+   " main",
+   "()",
+   " {",
+   " println",
+   "!(\"",
+   "hi",
+   " {}\",",
+   " x",
+   "[",
+   "3",
+   "]",
+   " +",
+   " y",
+   ");",
+   " }",
+   " //",
+   " rust"
+  ],
+  "detokenized": "<bos>fn main() { println!(\"hi {}\", x[3] + y); } // rust"
+ },
+ {
+  "text": "def f(x):\n    return x ** 2  # python",
+  "ids": [
+   2,
+   2063,
+   517,
+   236769,
+   236781,
+   1473,
+   107,
+   140,
+   2060,
+   1123,
+   5213,
+   236743,
+   236778,
+   138,
+   236865,
+   23181
+  ],
+  "pieces": [
+   "<bos>",
+   "def",
+   " f",
+   "(",
+   "x",
+   "):",
+   "\n",
+   "    ",
+   "return",
+   " x",
+   " **",
+   " ",
+   "2",
+   "  ",
+   "#",
+   " python"
+  ],
+  "detokenized": "<bos>def f(x):\n    return x ** 2  # python"
+ },
+ {
+  "text": "SELECT * FROM t WHERE a <> 'b';",
+  "ids": [
+   2,
+   12874,
+   808,
+   10912,
+   494,
+   17347,
+   496,
+   32296,
+   756,
+   236763,
+   2134
+  ],
+  "pieces": [
+   "<bos>",
+   "SELECT",
+   " *",
+   " FROM",
+   " t",
+   " WHERE",
+   " a",
+   " <>",
+   " '",
+   "b",
+   "';"
+  ],
+  "detokenized": "<bos>SELECT * FROM t WHERE a <> 'b';"
+ },
+ {
+  "text": "Ünïcödé café naïve façade",
+  "ids": [
+   2,
+   238194,
+   236749,
+   238527,
+   236755,
+   55515,
+   236859,
+   33443,
+   120362,
+   96008
+  ],
+  "pieces": [
+   "<bos>",
+   "Ü",
+   "n",
+   "ï",
+   "c",
+   "öd",
+   "é",
+   " café",
+   " naïve",
+   " façade"
+  ],
+  "detokenized": "<bos>Ünïcödé café naïve façade"
+ },
+ {
+  "text": "日本語のテキストと中文和한국어",
+  "ids": [
+   2,
+   94951,
+   236945,
+   95830,
+   237032,
+   55041,
+   237206,
+   114216,
+   237430
+  ],
+  "pieces": [
+   "<bos>",
+   "日本語",
+   "の",
+   "テキスト",
+   "と",
+   "中文",
+   "和",
+   "한국",
+   "어"
+  ],
+  "detokenized": "<bos>日本語のテキストと中文和한국어"
+ },
+ {
+  "text": "Emoji: 😀🚀🔥 and a family 👨‍👩‍👧",
+  "ids": [
+   2,
+   127268,
+   236787,
+   163543,
+   242015,
+   240785,
+   532,
+   496,
+   2523,
+   236743,
+   243874,
+   237243,
+   243767,
+   237243,
+   244814
+  ],
+  "pieces": [
+   "<bos>",
+   "Emoji",
+   ":",
+   " 😀",
+   "🚀",
+   "🔥",
+   " and",
+   " a",
+   " family",
+   " ",
+   "👨",
+   "‍",
+   "👩",
+   "‍",
+   "👧"
+  ],
+  "detokenized": "<bos>Emoji: 😀🚀🔥 and a family 👨‍👩‍👧"
+ },
+ {
+  "text": "Math: ∑ ∫ √ ≤ ≥ ≠ ∞ π",
+  "ids": [
+   2,
+   5044,
+   236787,
+   76689,
+   71999,
+   40370,
+   38010,
+   57846,
+   193600,
+   95713,
+   4609
+  ],
+  "pieces": [
+   "<bos>",
+   "Math",
+   ":",
+   " ∑",
+   " ∫",
+   " √",
+   " ≤",
+   " ≥",
+   " ≠",
+   " ∞",
+   " π"
+  ],
+  "detokenized": "<bos>Math: ∑ ∫ √ ≤ ≥ ≠ ∞ π"
+ },
+ {
+  "text": "Zero-width: a​b, nbsp: x",
+  "ids": [
+   2,
+   29337,
+   236772,
+   2690,
+   236787,
+   496,
+   237141,
+   236763,
+   236764,
+   203757,
+   236787,
+   432,
+   398,
+   236781
+  ],
+  "pieces": [
+   "<bos>",
+   "Zero",
+   "-",
+   "width",
+   ":",
+   " a",
+   "​",
+   "b",
+   ",",
+   " nbsp",
+   ":",
+   [
+    194
+   ],
+   [
+    160
+   ],
+   "x"
+  ],
+  "detokenized": "<bos>Zero-width: a​b, nbsp: x"
+ },
+ {
+  "text": "mixed CASE and camelCaseWords and snake_case_words",
+  "ids": [
+   2,
+   63258,
+   69203,
+   532,
+   51657,
+   9818,
+   34282,
+   532,
+   22825,
+   236779,
+   4925,
+   236779,
+   8992
+  ],
+  "pieces": [
+   "<bos>",
+   "mixed",
+   " CASE",
+   " and",
+   " camel",
+   "Case",
+   "Words",
+   " and",
+   " snake",
+   "_",
+   "case",
+   "_",
+   "words"
+  ],
+  "detokenized": "<bos>mixed CASE and camelCaseWords and snake_case_words"
+ },
+ {
+  "text": "URL https://example.com/path?q=1&r=two#frag",
+  "ids": [
+   2,
+   6738,
+   4560,
+   1411,
+   8358,
+   236761,
+   854,
+   236786,
+   2337,
+   236881,
+   236809,
+   236784,
+   236770,
+   236880,
+   236750,
+   236784,
+   13498,
+   236865,
+   45265
+  ],
+  "pieces": [
+   "<bos>",
+   "URL",
+   " https",
+   "://",
+   "example",
+   ".",
+   "com",
+   "/",
+   "path",
+   "?",
+   "q",
+   "=",
+   "1",
+   "&",
+   "r",
+   "=",
+   "two",
+   "#",
+   "frag"
+  ],
+  "detokenized": "<bos>URL https://example.com/path?q=1&r=two#frag"
+ },
+ {
+  "text": "repeated aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "ids": [
+   2,
+   181261,
+   496,
+   128820,
+   128820,
+   128820,
+   128820,
+   50354,
+   72004
+  ],
+  "pieces": [
+   "<bos>",
+   "repeated",
+   " a",
+   "aaaaaaaa",
+   "aaaaaaaa",
+   "aaaaaaaa",
+   "aaaaaaaa",
+   "aaaa",
+   "aaa"
+  ],
+  "detokenized": "<bos>repeated aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "text": "<|turn>user\nHello there<turn|>\n<|turn>model\n",
+  "ids": [
+   2,
+   105,
+   2364,
+   107,
+   9259,
+   993,
+   106,
+   107,
+   105,
+   4368,
+   107
+  ],
+  "pieces": [
+   "<bos>",
+   "<|turn>",
+   "user",
+   "\n",
+   "Hello",
+   " there",
+   "<turn|>",
+   "\n",
+   "<|turn>",
+   "model",
+   "\n"
+  ],
+  "detokenized": "<bos><|turn>user\nHello there<turn|>\n<|turn>model\n"
+ },
+ {
+  "text": "<|turn>user\nHello there<turn|>\n<|turn>model\n<|channel>thought\n<channel|>",
+  "ids": [
+   2,
+   105,
+   2364,
+   107,
+   9259,
+   993,
+   106,
+   107,
+   105,
+   4368,
+   107,
+   100,
+   45518,
+   107,
+   101
+  ],
+  "pieces": [
+   "<bos>",
+   "<|turn>",
+   "user",
+   "\n",
+   "Hello",
+   " there",
+   "<turn|>",
+   "\n",
+   "<|turn>",
+   "model",
+   "\n",
+   "<|channel>",
+   "thought",
+   "\n",
+   "<channel|>"
+  ],
+  "detokenized": "<bos><|turn>user\nHello there<turn|>\n<|turn>model\n<|channel>thought\n<channel|>"
+ },
+ {
+  "text": "literal <eos> and <bos> in text",
+  "ids": [
+   2,
+   82951,
+   236743,
+   1,
+   532,
+   236743,
+   2,
+   528,
+   1816
+  ],
+  "pieces": [
+   "<bos>",
+   "literal",
+   " ",
+   "<eos>",
+   " and",
+   " ",
+   "<bos>",
+   " in",
+   " text"
+  ],
+  "detokenized": "<bos>literal <eos> and <bos> in text"
+ },
+ {
+  "text": "a<unused0>b",
+  "ids": [
+   2,
+   236746,
+   236820,
+   63634,
+   236771,
+   236813,
+   236763
+  ],
+  "pieces": [
+   "<bos>",
+   "a",
+   "<",
+   "unused",
+   "0",
+   ">",
+   "b"
+  ],
+  "detokenized": "<bos>a<unused0>b"
+ },
+ {
+  "text": "\u0001control\u0007chars",
+  "ids": [
+   2,
+   249732,
+   8607,
+   245,
+   50472
+  ],
+  "pieces": [
+   "<bos>",
+   "\u0001",
+   "control",
+   "\u0007",
+   "chars"
+  ],
+  "detokenized": "<bos>\u0001control\u0007chars"
+ },
+ {
+  "text": "",
+  "ids": [
+   2
+  ],
+  "pieces": [
+   "<bos>"
+  ],
+  "detokenized": "<bos>"
+ }
+]

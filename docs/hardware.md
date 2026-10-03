@@ -55,9 +55,11 @@ idle; under load it should reach 850/1370. **Check those clocks during every ben
 `kernel/build.sh` builds Debian's 6.12.111 source plus the D700 patches and PCI P2P, as `6.12.111-p2p` (about 28
 minutes on incite). It was installed 2026-10-02.
 
-- `/etc/default/grub` pins the **stock** kernel as `GRUB_DEFAULT` (backup in `/etc/default/grub.bak-trashcan`).
-- The P2P kernel was booted once with `grub-reboot`, so **a plain reboot returns to the stock kernel** (no P2P).
-- To boot it again: `sudo grub-reboot "gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-6.12.111-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"`.
+- Since 2026-10-02 it's the **default** boot entry: `GRUB_DEFAULT="gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-6.12.111-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"`.
+- The original `/etc/default/grub` is in `/etc/default/grub.bak-trashcan`. The stock kernel (`6.12.111+deb13-amd64`) is still in the GRUB menu under Advanced options.
+- To boot stock once: `sudo grub-reboot "gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-6.12.111+deb13-amd64-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"`.
+- A Debian kernel upgrade won't replace the P2P kernel as default, because the default is pinned by entry id. If the
+  `6.12.111+deb13` packages are removed, re-run `update-grub` and check the default still exists.
 - Under it, each card gets its own VBIOS (02:00.0 `113-C3861XA-028`, 06:00.0 `113-C3861XB-028`), so the D700
   patches are in effect.
 - The `apple-gmux` WARN at boot also happens on the stock kernel.
