@@ -30,7 +30,7 @@ enum Cmd {
     Serve(server::Options),
     /// Show both GPUs and check every Vulkan feature and extension the engine depends on.
     Devices,
-    /// Measure the repacked decode kernel and check selected rows against a CPU dot product.
+    /// Measure a repacked matrix kernel; check small batches against the original GPU kernel and CPU rows.
     MatvecBench {
         model: PathBuf,
         #[arg(long, default_value_t = 100)]
@@ -39,7 +39,7 @@ enum Cmd {
         batch: usize,
         #[arg(long)]
         kernel: Option<String>,
-        /// Q4 projection to measure with the same tensor-parallel shard as the engine.
+        /// Q4 projection or Q6 token embedding/head, with the engine's tensor-parallel shard.
         #[arg(long, default_value = "blk.0.ffn_gate.weight")]
         tensor: String,
         /// Sustain GPU load before collecting timestamps (D700 clocks ramp from idle).

@@ -34,6 +34,10 @@ validated improvements, rejected experiments, and corrected hardware bounds.
 The [norm and attention-merge follow-up](results/engine/validated-followup-20261003/README.md)
 raises repeated tg256 from 23.32 to 28.72 tok/s, with prefill unchanged, and records the recovered
 unfinished investigation lenses.
+The [MTP verification follow-up](results/engine/mtp-exploration-20261003/README.md)
+raises repeated pooled MTP from 31.73 to 39.96 tok/s, preserving outputs and acceptance.
+The [80K context measurement](results/engine/context-80000-20261003/README.md)
+records 28.75 tok/s prefill and 12.35 tok/s decode, with long prefill still a major target.
 
 To serve the model through the OpenAI Responses API:
 

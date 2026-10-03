@@ -202,6 +202,9 @@ whole verification batch in addition to the 1024-token window.
   omitted these heads. The original 18 ms estimate assumed much higher small-batch compute throughput: the implemented
   transformer-chat measurement takes about 84 ms per verification and 4 ms per draft proposal. Small-batch
   kernel throughput is still the main optimization needed for the gain target.
+  The validated 2026-10-03 load-first multi-column kernels lower weighted verification
+  to 57.87 ms and give pooled 39.96 tok/s MTP versus 30.60 ordinary (1.306x) on
+  three greedy prompts, two runs each. M5's typical-chat 1.5x goal remains open.
 - **Before starting:**
   - Which target layers' caches the drafter reads. Find the mapping in llama.cpp's MTP context sharing
     (`src/llama-context.cpp`, `ctx_other`, `common/speculative.cpp` `draft-mtp`).

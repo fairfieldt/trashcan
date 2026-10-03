@@ -1,0 +1,10 @@
+To understand a Transformer, it helps to think of it as a machine that excels at **understanding context.** 
+
+Unlike older models (like RNNs) that read sentences word-by-word from left to right, a Transformer looks at the **entire sentence all at once.** Here is the step-by-step process of how it works.
+
+---
+
+### 1. Input Embedding (Turning words into numbers)
+Computers cannot understand letters; they only understand numbers. 
+*   **Tokenization:** The sentence is broken into "tokens" (words or parts of words).
+*   **Embedding:** Each token

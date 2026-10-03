@@ -1,0 +1,20 @@
+DONE candidate bench-1
+DONE candidate transformer-d0-1
+DONE candidate transformer-d3-1
+DONE candidate photosynthesis-d0-1
+DONE candidate photosynthesis-d3-1
+DONE candidate csv-d0-1
+DONE candidate csv-d3-1
+DONE candidate bench-2
+DONE candidate transformer-d0-2
+DONE candidate transformer-d3-2
+DONE candidate photosynthesis-d0-2
+DONE candidate photosynthesis-d3-2
+DONE candidate csv-d0-2
+DONE candidate csv-d3-2
+DONE candidate b2
+PASS b2: 134 files byte-identical
+DONE candidate b3
+PASS b3: 134 files byte-identical
+DONE candidate b4
+PASS b4: 134 files byte-identical

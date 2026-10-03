@@ -527,10 +527,12 @@ impl Engine {
             let shader = if kind == 0 && n > 8 {
                 "gemm"
             } else if cols > 1 {
-                if cols <= 4 || kind == 0 {
-                    "multivec4"
+                if cols == 2 {
+                    "multivec4x2"
+                } else if cols == 3 {
+                    "multivec4x3"
                 } else {
-                    "multivec"
+                    "multivec4"
                 }
             } else if kind == 0 {
                 crate::vulkan::q4_decode_shader(rows, k)
@@ -545,7 +547,12 @@ impl Engine {
                     rows.div_ceil(64)
                 } else if matches!(
                     shader,
-                    "matvecq4" | "matvecq4narrow" | "headvec" | "multivec4"
+                    "matvecq4"
+                        | "matvecq4narrow"
+                        | "headvec"
+                        | "multivec4"
+                        | "multivec4x2"
+                        | "multivec4x3"
                 ) {
                     rows.div_ceil(16)
                 } else {
@@ -555,6 +562,10 @@ impl Engine {
                     cols.div_ceil(64)
                 } else if shader == "multivec4" {
                     cols.div_ceil(4)
+                } else if shader == "multivec4x2" {
+                    cols.div_ceil(2)
+                } else if shader == "multivec4x3" {
+                    cols.div_ceil(3)
                 } else {
                     cols.div_ceil(8)
                 } as u32,

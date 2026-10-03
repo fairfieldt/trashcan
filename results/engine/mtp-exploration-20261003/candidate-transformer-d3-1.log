@@ -1,0 +1,10 @@
+CPU latency request: 0 us, scoped to this command
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4556.1 MiB
+GPU1: target allocations 4556.1 MiB
+MTP loaded: native BF16; full vocabulary head (checkpoint has no centroid tensors)
+GPU0: target + MTP allocations 4971.4 MiB
+GPU1: target + MTP allocations 4971.4 MiB
+prefill: 26 tokens, 59.43 tok/s; decode: 128 tokens, 39.80 tok/s
+MTP: accepted 82/138 proposals in 46 rounds; draft 3.79 ms/proposal, verify 58.23 ms/round

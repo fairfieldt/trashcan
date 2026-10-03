@@ -285,6 +285,18 @@ impl Device {
                 include_bytes!(concat!(env!("OUT_DIR"), "/multivec4.spv")).as_slice(),
             ),
             (
+                "multivec4x2",
+                include_bytes!(concat!(env!("OUT_DIR"), "/multivec4x2.spv")).as_slice(),
+            ),
+            (
+                "multivec4x3",
+                include_bytes!(concat!(env!("OUT_DIR"), "/multivec4x3.spv")).as_slice(),
+            ),
+            (
+                "multivec4_reference",
+                include_bytes!(concat!(env!("OUT_DIR"), "/multivec4_reference.spv")).as_slice(),
+            ),
+            (
                 "visibility",
                 include_bytes!(concat!(env!("OUT_DIR"), "/visibility.spv")).as_slice(),
             ),

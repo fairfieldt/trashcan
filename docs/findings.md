@@ -2,6 +2,25 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-03: measured MTP verification improvement
+
+`results/engine/mtp-exploration-20261003/` records load-first Q4/Q6 multi-column
+kernels and two/three-column specializations, preserving every output bit in
+196 candidate matrix checks and fresh real-activation checks. Two runs per
+prompt give pooled MTP **31.73 -> 39.96 tok/s (+25.9%)**, verification **75.77 ->
+57.87 ms**, and MTP/ordinary **1.035x -> 1.306x**. Ordinary rates remain within
+variation. The original 1.5x typical-chat target stays open.
+
+The revised four-column kernel also beats the old eight-column Q6 head at
+batches five through eight by 15.8–41.0%; production selects it there. Real
+depth-four chat rates remain within variation. Depth one/two help explanation
+prompts, while depth three wins CSV; keep the default policy. The existing
+scalar 128-partition global attention path is 2.7x slower than selected shared
+64 at 80K, so keep that selector too. Final acceptance includes six reference
+paths, ring wrap/rollback, eight-column greedy64 and seeded stochastic parity,
+with sustained 850/1370 MHz. Bounded-memory tiled prefill is the next structural
+lead for the measured 80K workload.
+
 ## 2026-10-03: 80,000-token context measurement
 
 `results/engine/context-80000-20261003/` records one fresh 4K/80K pair using the

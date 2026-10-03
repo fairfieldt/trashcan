@@ -186,8 +186,8 @@ pub fn attention(
     kernel: &str,
 ) -> Result<()> {
     ensure!(
-        iterations > 0 && (1..=32768).contains(&tokens),
-        "positive iterations, tokens 1..32768"
+        iterations > 0 && (1..=131072).contains(&tokens),
+        "positive iterations, tokens 1..131072"
     );
     ensure!(
         matches!(kernel, "scalar" | "selected"),
@@ -382,37 +382,26 @@ pub fn bench(
             "multivec",
             "multivec2",
             "multivec4",
+            "multivec4x2",
+            "multivec4x3",
+            "multivec4_reference",
+            "headvec",
             "gemm"
         ]
         .contains(&shader),
         "unsupported kernel"
     );
     ensure!(
-        batch == 1 || !matches!(shader, "matvecq4" | "matvecq4narrow"),
+        batch == 1 || !matches!(shader, "matvecq4" | "matvecq4narrow" | "headvec"),
         "single-column kernel needs batch 1"
     );
-    let group_rows = if shader == "gemm" {
-        64
-    } else if matches!(shader, "matvecq4" | "matvecq4narrow" | "multivec4") {
-        16
-    } else {
-        4
-    };
-    let group_cols = if shader == "gemm" {
-        64
-    } else if shader == "multivec4" {
-        4
-    } else if shader == "multivec2" {
-        2
-    } else {
-        8
-    };
     let g = Gguf::open(path)?;
     let t = g.tensor(tensor).context("benchmark tensor not found")?;
     ensure!(
-        t.ty == GgmlType::Q4_0 && t.dims.len() == 2,
-        "benchmark needs a Q4_0 matrix"
+        matches!(t.ty, GgmlType::Q4_0 | GgmlType::Q6K) && t.dims.len() == 2,
+        "benchmark needs a Q4_0 or Q6_K matrix"
     );
+    let kind = u32::from(t.ty == GgmlType::Q6K);
     let (full_k, full_n) = (t.dims[0] as usize, t.dims[1] as usize);
     let column_split =
         tensor.ends_with("ffn_down.weight") || tensor.ends_with("attn_output.weight");
@@ -425,21 +414,80 @@ pub fn bench(
     } else {
         (full_k, full_n / 2)
     };
-    let shader = if batch == 1 && kernel.is_none() {
-        crate::vulkan::q4_decode_shader(n, k)
-    } else {
+    let shader = if kernel.is_some() {
         shader
+    } else if batch == 1 {
+        if kind == 1 {
+            "headvec"
+        } else {
+            crate::vulkan::q4_decode_shader(n, k)
+        }
+    } else if batch == 2 {
+        "multivec4x2"
+    } else if batch == 3 {
+        "multivec4x3"
+    } else if batch <= 8 {
+        "multivec4"
+    } else {
+        "gemm"
+    };
+    let group_rows = if shader == "gemm" {
+        64
+    } else if matches!(
+        shader,
+        "matvecq4"
+            | "matvecq4narrow"
+            | "headvec"
+            | "multivec4"
+            | "multivec4x2"
+            | "multivec4x3"
+            | "multivec4_reference"
+    ) {
+        16
+    } else {
+        4
+    };
+    let group_cols = if shader == "gemm" {
+        64
+    } else if matches!(shader, "multivec4" | "multivec4_reference") {
+        4
+    } else if shader == "multivec4x2" {
+        2
+    } else if shader == "multivec4x3" {
+        3
+    } else if shader == "multivec2" {
+        2
+    } else {
+        8
     };
     ensure!(
         k.is_multiple_of(32) && n.is_multiple_of(group_rows),
         "unsupported benchmark shape"
     );
-    let data = quant::repack_q4(g.data(t), full_k, full_n, 0, n, 0, k);
+    ensure!(
+        kind == 0 || (k == full_k && shader != "gemm"),
+        "Q6 head needs complete rows and a vector kernel"
+    );
+    ensure!(
+        shader != "headvec" || kind == 1,
+        "headvec needs a Q6_K matrix"
+    );
+    let data = if kind == 0 {
+        quant::repack_q4(g.data(t), full_k, full_n, 0, n, 0, k)
+    } else {
+        quant::repack_q6(&g.data(t)[..n * k / 256 * 210])
+    };
+    let mut state = 0x12345678u32;
     let inputs: Vec<f32> = (0..k * batch)
-        .map(|i| ((i * 13 + i / k * 7) % 29) as f32 / 16. - 0.875)
+        .map(|i| {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            (state as f64 / u32::MAX as f64 * 2. - 1.) as f32 * [0.001, 0.1, 1., 10.][i % 4]
+        })
         .collect();
     let inst = Rc::new(Instance::new()?);
-    for pd in inst.amd_gpus()? {
+    for (gpu, pd) in inst.amd_gpus()?.into_iter().enumerate() {
         let d = Device::new(inst.clone(), pd)?;
         let w = d.upload_matrix(&data)?;
         let x = d.upload(bytemuck::cast_slice(&inputs))?;
@@ -460,7 +508,8 @@ pub fn bench(
         p.ptr[6] = params.address;
         p.u[0] = n as u32;
         p.u[1] = k as u32;
-        p.u[3] = (n * k / 32) as u32;
+        p.u[3] = (n * k / if kind == 0 { 32 } else { 16 }) as u32;
+        p.u[9] = kind;
         let dispatch = |cmd| -> Result<()> {
             d.dispatch_matrix(
                 cmd,
@@ -503,24 +552,54 @@ pub fn bench(
         }
         let seconds = (ts[1] - ts[0]) as f64 * d.period as f64 * 1e-9 / iterations as f64;
         let result = y.download()?;
+        // Keep weights, inputs and both outputs alive until the Device is dropped;
+        // its cached weight descriptors must never see a recycled VkBuffer handle.
+        let reference = d.buffer(n * batch * 4, false, false, None)?;
+        let compare_bits = (2..=8).contains(&batch) && shader != "gemm";
+        if compare_bits {
+            let mut rp = p;
+            rp.ptr[2] = reference.address;
+            let cmd = d.begin()?;
+            d.dispatch_matrix(
+                cmd,
+                "multivec4_reference",
+                rp,
+                n.div_ceil(16) as u32,
+                batch.div_ceil(4) as u32,
+                &w,
+            )?;
+            d.finish(cmd)?;
+            d.run(cmd)?;
+            ensure!(result == reference.download()?, "matrix output bits differ from original multivec4: GPU {gpu}, {tensor}, batch {batch}, {shader}");
+        }
         for row in [0, n / 2, n - 1] {
             for col in 0..batch {
                 let mut expected = 0f64;
-                for b in 0..k / 32 {
-                    let block = row * k / 32 + b;
-                    let scale =
-                        f32::from_le_bytes(data[block * 4..block * 4 + 4].try_into()?) as f64;
-                    for (j, q) in data
-                        [n * k / 32 * 4 + block * 16..n * k / 32 * 4 + (block + 1) * 16]
-                        .iter()
-                        .enumerate()
-                    {
-                        expected += scale
-                            * ((q & 15) as i32 - 8) as f64
-                            * inputs[col * k + b * 32 + j] as f64;
-                        expected += scale
-                            * ((q >> 4) as i32 - 8) as f64
-                            * inputs[col * k + b * 32 + j + 16] as f64;
+                if kind == 1 {
+                    for j in 0..k {
+                        let scale_at = (row * k / 16 + j / 16) * 4;
+                        let scale =
+                            f32::from_le_bytes(data[scale_at..scale_at + 4].try_into()?) as f64;
+                        let q = data[n * k / 4 + row * k + j] as i8;
+                        expected += scale * q as f64 * inputs[col * k + j] as f64;
+                    }
+                } else {
+                    for b in 0..k / 32 {
+                        let block = row * k / 32 + b;
+                        let scale =
+                            f32::from_le_bytes(data[block * 4..block * 4 + 4].try_into()?) as f64;
+                        for (j, q) in data
+                            [n * k / 32 * 4 + block * 16..n * k / 32 * 4 + (block + 1) * 16]
+                            .iter()
+                            .enumerate()
+                        {
+                            expected += scale
+                                * ((q & 15) as i32 - 8) as f64
+                                * inputs[col * k + b * 32 + j] as f64;
+                            expected += scale
+                                * ((q >> 4) as i32 - 8) as f64
+                                * inputs[col * k + b * 32 + j + 16] as f64;
+                        }
                     }
                 }
                 let at = (col * n + row) * 4;
@@ -533,7 +612,7 @@ pub fn bench(
         }
         println!(
             "{}",
-            serde_json::json!({"matrix_GFLOP_s":(n*k*batch*2) as f64/seconds/1e9,"kernel":shader,"tensor":tensor,"batch":batch,"rows":n,"cols":k,"milliseconds":seconds*1e3,"repacked_GB_s":data.len()as f64/seconds/1e9,"original_GB_s":(n*k/32*18)as f64/seconds/1e9,"iterations":iterations,"warmup_ms":warmup_ms})
+            serde_json::json!({"gpu":gpu,"matrix_GFLOP_s":(n*k*batch*2) as f64/seconds/1e9,"kernel":shader,"tensor":tensor,"batch":batch,"rows":n,"cols":k,"milliseconds":seconds*1e3,"repacked_GB_s":data.len()as f64/seconds/1e9,"original_GB_s":(n*k/if kind == 0 {32} else {256}*if kind == 0 {18} else {210})as f64/seconds/1e9,"iterations":iterations,"warmup_ms":warmup_ms,"reference_bit_identical":compare_bits,"cpu_rows_checked":3})
         );
     }
     Ok(())

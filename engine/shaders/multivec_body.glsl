@@ -1,21 +1,33 @@
 #include "common.glsl"
 #ifdef MULTI_ROWS
 #define ROWS 4
+#if COLS == 2
+#define SUM vec2
+#elif COLS == 3
+#define SUM vec3
+#else
+#define SUM vec4
+#endif
 layout(local_size_x=256) in;
-void main(){uint nb=batch(),lane=gl_SubgroupInvocationID,first=gl_WorkGroupID.x*(4*ROWS)+gl_SubgroupID*ROWS,t=gl_WorkGroupID.y*4;
-if(first>=p.n||t>=nb)return;vec4 sums[ROWS];[[unroll]]for(uint r=0;r<ROWS;r++)sums[r]=vec4(0);
+// Issue all independent loads before decoding and accumulating. Keep the original
+// dot products, per-lane FMA chains and subgroup reduction order.
+void main(){uint nb=batch(),lane=gl_SubgroupInvocationID,first=gl_WorkGroupID.x*(4*ROWS)+gl_SubgroupID*ROWS,t=gl_WorkGroupID.y*COLS;
+if(first>=p.n||t>=nb)return;SUM sums[ROWS];[[unroll]]for(uint r=0;r<ROWS;r++)sums[r]=SUM(0);
+uint colbase[COLS];[[unroll]]for(uint z=0;z<COLS;z++)colbase[z]=min(t+z,nb-1)*(p.k/4);
 if(p.kind==0){uint part=lane%4;
-for(uint b=lane/4;b<p.k/32;b+=16){vec4 lo[ROWS],hi[ROWS];float d[ROWS];
-[[unroll]]for(uint r=0;r<ROWS;r++){uint block=(first+r)*(p.k/32)+b,v=ww.words[p.stride+block*4+part];d[r]=uintBitsToFloat(ww.words[block]);
-lo[r]=q4_lo(v);hi[r]=q4_hi(v);}
-[[unroll]]for(uint z=0;z<4;z++)if(t+z<nb){uint x=(t+z)*(p.k/4)+b*8+part;vec4 a=b_v4.v[x],c=b_v4.v[x+4];
-[[unroll]]for(uint r=0;r<ROWS;r++)sums[r][z]=fma(dot(lo[r],a)+dot(hi[r],c),d[r],sums[r][z]);}}
+for(uint b=lane/4;b<p.k/32;b+=16){uint qs[ROWS];float d[ROWS];
+[[unroll]]for(uint r=0;r<ROWS;r++){uint block=(first+r)*(p.k/32)+b;qs[r]=ww.words[p.stride+block*4+part];d[r]=uintBitsToFloat(ww.words[block]);}
+vec4 a[COLS],c[COLS];[[unroll]]for(uint z=0;z<COLS;z++){uint x=colbase[z]+b*8+part;a[z]=b_v4.v[x];c[z]=b_v4.v[x+4];}
+[[unroll]]for(uint r=0;r<ROWS;r++){vec4 lo=q4_lo(qs[r]),hi=q4_hi(qs[r]);
+[[unroll]]for(uint z=0;z<COLS;z++)sums[r][z]=fma(dot(lo,a[z])+dot(hi,c[z]),d[r],sums[r][z]);}}
 }else{
-for(uint i=lane;i<p.k/4;i+=64){vec4 q[ROWS];float d[ROWS];
-[[unroll]]for(uint r=0;r<ROWS;r++){uint row=first+r,v=ww.words[p.stride+row*(p.k/4)+i];q[r]=vec4(ivec4(v<<24,v<<16,v<<8,v)>>24);d[r]=uintBitsToFloat(ww.words[row*(p.k/16)+i/4]);}
-[[unroll]]for(uint z=0;z<4;z++)if(t+z<nb){vec4 x=b_v4.v[(t+z)*(p.k/4)+i];[[unroll]]for(uint r=0;r<ROWS;r++)sums[r][z]=fma(dot(q[r],x),d[r],sums[r][z]);}}
+for(uint i=lane;i<p.k/4;i+=64){uint qs[ROWS];float d[ROWS];
+[[unroll]]for(uint r=0;r<ROWS;r++){uint row=first+r;qs[r]=ww.words[p.stride+row*(p.k/4)+i];d[r]=uintBitsToFloat(ww.words[row*(p.k/16)+i/4]);}
+vec4 x[COLS];[[unroll]]for(uint z=0;z<COLS;z++)x[z]=b_v4.v[colbase[z]+i];
+[[unroll]]for(uint r=0;r<ROWS;r++){uint v=qs[r];vec4 q=vec4(ivec4(v<<24,v<<16,v<<8,v)>>24);
+[[unroll]]for(uint z=0;z<COLS;z++)sums[r][z]=fma(dot(q,x[z]),d[r],sums[r][z]);}}
 }
-[[unroll]]for(uint r=0;r<ROWS;r++){vec4 v=subgroupAdd(sums[r]);if(lane==0&&first+r<p.n)[[unroll]]for(uint z=0;z<4;z++)if(t+z<nb)c_f.v[(t+z)*p.n+first+r]=v[z];}}
+[[unroll]]for(uint r=0;r<ROWS;r++){SUM v=subgroupAdd(sums[r]);if(lane==0&&first+r<p.n)[[unroll]]for(uint z=0;z<COLS;z++)if(t+z<nb)c_f.v[(t+z)*p.n+first+r]=v[z];}}
 
 #else
 layout(local_size_x=256) in;
