@@ -19,8 +19,8 @@ const L: usize = 48;
 // 96 receive buffers at 128 tokens occupy 180 MiB, within the 256 MiB peer BAR.
 const P2P_BATCH: usize = 128;
 const ATTENTION_32_MAX_TOKENS: usize = 1024;
-// Four target graph pairs bound their measured command-storage contribution to
-// about 38 MiB/card at 8K context / batch512; this is not a total-memory bound.
+// Four target graph pairs used 36.375 MiB/card of command storage at batch128
+// in the measured workload; the cache count does not bound total driver memory.
 const GRAPH_CACHE_CAPACITY: usize = 4;
 
 pub(crate) struct Layer {
