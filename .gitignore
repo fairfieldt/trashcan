@@ -1,6 +1,11 @@
 # upstream checkout (and later our fork) lives here as its own git repo
 /llama.cpp/
 
-# models and bench output stay out of git
+# models stay out of git; bench results under results/ are tracked
 *.gguf
 .DS_Store
+
+# build outputs and fetched originals
+/bench/xgpu/xgpu
+/bench/xgpu/spin.spv
+/kernel/orig/

@@ -1,0 +1,53 @@
+#version 450
+// Ping-pong between two roles through a shared flag buffer. Role 0 writes round k, then waits for role 1 to echo
+// k back; role 1 waits for k, then echoes it. Each round is two one-way hops. The spin is bounded so a flag that
+// never becomes visible fails cleanly instead of hanging the GPU.
+// Dispatch 1 workgroup per GPU for cross-GPU (role from push constant), or 2 workgroups on one GPU for loopback.
+
+layout(local_size_x = 64) in;
+
+layout(std430, binding = 0) coherent volatile buffer Flags { uint v[]; } flags;
+layout(std430, binding = 1) buffer Result { uint r[]; } result;
+
+layout(push_constant) uniform PC {
+    uint role_base;
+    uint rounds;
+    uint max_spin;
+    uint stride;    // flag slots are this many uints apart, to keep them on separate cache lines
+} pc;
+
+void main() {
+    if (gl_LocalInvocationIndex != 0) {
+        return;
+    }
+    const uint role = pc.role_base + gl_WorkGroupID.x;
+    const uint mine = role * pc.stride;
+    const uint peer = (1 - role) * pc.stride;
+
+    uint failed_round = 0;
+    uint spins = 0;
+    for (uint k = 1; k <= pc.rounds; k++) {
+        if (role == 0) {
+            flags.v[mine] = k;
+            memoryBarrierBuffer();
+        }
+        uint s = 0;
+        while (flags.v[peer] < k) {
+            s++;
+            if (s >= pc.max_spin) {
+                break;
+            }
+        }
+        if (s >= pc.max_spin) {
+            failed_round = k;
+            break;
+        }
+        spins += s;
+        if (role == 1) {
+            flags.v[mine] = k;
+            memoryBarrierBuffer();
+        }
+    }
+    result.r[role * 4 + 0] = failed_round;
+    result.r[role * 4 + 1] = spins;
+}

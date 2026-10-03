@@ -1,0 +1,61 @@
+diff --git a/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c b/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c
+index e665430..c293e92 100644
+--- a/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c
++++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c
+@@ -362,7 +362,8 @@ static bool amdgpu_read_disabled_bios(struct amdgpu_device *adev)
+  * Returns: 0 on match, -ENODEV on no match
+  */
+ static int amdgpu_acpi_vfct_match(struct amdgpu_device *adev,
+-				  VFCT_IMAGE_HEADER *vhdr)
++				  VFCT_IMAGE_HEADER *vhdr,
++				  bool allow_bus_mismatch)
+ {
+ 	/* Vendor and device IDs must always match */
+ 	if (vhdr->VendorID != adev->pdev->vendor ||
+@@ -376,6 +377,8 @@ static int amdgpu_acpi_vfct_match(struct amdgpu_device *adev,
+ 	/* Exact bus number match - preferred */
+ 	if (vhdr->PCIBus == adev->pdev->bus->number)
+ 		return 0;
++	if (!allow_bus_mismatch)
++		return -ENODEV;
+ 
+ 	/* Bus mismatch but device identity matches (PCI renumbering case) */
+ 	dev_notice(adev->dev,
+@@ -391,6 +394,7 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+ 	acpi_size tbl_size;
+ 	UEFI_ACPI_VFCT *vfct;
+ 	unsigned int offset;
++	bool allow_bus_mismatch = false;
+ 
+ 	if (!ACPI_SUCCESS(acpi_get_table("VFCT", 1, &hdr)))
+ 		return false;
+@@ -401,6 +405,7 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+ 	}
+ 
+ 	vfct = (UEFI_ACPI_VFCT *)hdr;
++retry:
+ 	offset = vfct->VBIOSImageOffset;
+ 
+ 	while (offset < tbl_size) {
+@@ -420,7 +425,7 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+ 		}
+ 
+ 		if (vhdr->ImageLength &&
+-		    !amdgpu_acpi_vfct_match(adev, vhdr)) {
++		    !amdgpu_acpi_vfct_match(adev, vhdr, allow_bus_mismatch)) {
+ 			adev->bios = kmemdup(&vbios->VbiosContent,
+ 					     vhdr->ImageLength,
+ 					     GFP_KERNEL);
+@@ -434,6 +439,12 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+ 		}
+ 	}
+ 
++	/* Do not let an early relaxed match hide a later exact match. */
++	if (!allow_bus_mismatch) {
++		allow_bus_mismatch = true;
++		goto retry;
++	}
++
+ 	dev_info(adev->dev, "ACPI VFCT table present but broken (too short #2),skipping\n");
+ 	return false;
+ }
