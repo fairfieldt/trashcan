@@ -76,10 +76,10 @@ struct gpu {
     PFN_vkGetMemoryFdPropertiesKHR          get_mem_fd_props   = nullptr;
 
     // spin pipeline
-    vk::ShaderModule        spin_module;
+    vk::ShaderModule        spin_module[4];
     vk::DescriptorSetLayout dsl;
     vk::PipelineLayout      pl;
-    vk::Pipeline            spin_pipeline;
+    vk::Pipeline            spin_pipeline[4];
     vk::DescriptorPool      dpool;
 };
 
@@ -144,8 +144,14 @@ static gpu make_gpu(vk::Instance inst, vk::PhysicalDevice pd) {
         "VK_EXT_external_memory_host", "VK_KHR_external_memory_fd", "VK_EXT_external_memory_dma_buf",
         "VK_KHR_external_semaphore_fd",
     };
+    vk::PhysicalDeviceVulkan12Features have12;
+    vk::PhysicalDeviceFeatures2        have2;
+    have2.pNext = &have12;
+    pd.getFeatures2(&have2);
     vk::PhysicalDeviceVulkan12Features f12;
-    f12.timelineSemaphore = VK_TRUE;
+    f12.timelineSemaphore             = VK_TRUE;
+    f12.vulkanMemoryModel             = have12.vulkanMemoryModel;
+    f12.vulkanMemoryModelDeviceScope  = have12.vulkanMemoryModelDeviceScope;
     vk::DeviceCreateInfo dci{ {}, qci, {}, exts };
     dci.pNext = &f12;
     g.dev     = pd.createDevice(dci);
@@ -488,8 +494,7 @@ struct spin_pc {
     uint32_t role_base, rounds, max_spin, stride;
 };
 
-static void init_spin(gpu & g, const std::vector<uint32_t> & code) {
-    g.spin_module = g.dev.createShaderModule({ {}, code.size() * 4, code.data() });
+static void init_spin(gpu & g, const std::string & dir) {
     std::vector<vk::DescriptorSetLayoutBinding> b = {
         { 0, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute },
         { 1, vk::DescriptorType::eStorageBuffer, 1, vk::ShaderStageFlagBits::eCompute },
@@ -497,13 +502,17 @@ static void init_spin(gpu & g, const std::vector<uint32_t> & code) {
     g.dsl = g.dev.createDescriptorSetLayout({ {}, b });
     vk::PushConstantRange pcr{ vk::ShaderStageFlagBits::eCompute, 0, sizeof(spin_pc) };
     g.pl = g.dev.createPipelineLayout({ {}, g.dsl, pcr });
-    vk::ComputePipelineCreateInfo cpci{ {}, { {}, vk::ShaderStageFlagBits::eCompute, g.spin_module, "main" }, g.pl };
-    g.spin_pipeline = g.dev.createComputePipeline({}, cpci).value;
+    for (int mode = 0; mode < 4; mode++) {
+        const auto code = read_spv((dir + "spin" + std::to_string(mode) + ".spv").c_str());
+        g.spin_module[mode] = g.dev.createShaderModule({ {}, code.size() * 4, code.data() });
+        vk::ComputePipelineCreateInfo cpci{ {}, { {}, vk::ShaderStageFlagBits::eCompute, g.spin_module[mode], "main" }, g.pl };
+        g.spin_pipeline[mode] = g.dev.createComputePipeline({}, cpci).value;
+    }
     vk::DescriptorPoolSize ps{ vk::DescriptorType::eStorageBuffer, 64 };
     g.dpool = g.dev.createDescriptorPool({ vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 32, ps });
 }
 
-static vk::CommandBuffer spin_cb(gpu & g, const buffer & flags, const buffer & result, spin_pc pc, uint32_t n_groups) {
+static vk::CommandBuffer spin_cb(gpu & g, int mode, const buffer & flags, const buffer & result, spin_pc pc, uint32_t n_groups) {
     auto ds = g.dev.allocateDescriptorSets({ g.dpool, g.dsl })[0];
     vk::DescriptorBufferInfo fi{ flags.buf, 0, VK_WHOLE_SIZE }, ri{ result.buf, 0, VK_WHOLE_SIZE };
     std::vector<vk::WriteDescriptorSet> w = {
@@ -512,7 +521,7 @@ static vk::CommandBuffer spin_cb(gpu & g, const buffer & flags, const buffer & r
     };
     g.dev.updateDescriptorSets(w, {});
     auto cb = begin_cb(g);
-    cb.bindPipeline(vk::PipelineBindPoint::eCompute, g.spin_pipeline);
+    cb.bindPipeline(vk::PipelineBindPoint::eCompute, g.spin_pipeline[mode]);
     cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g.pl, 0, ds, {});
     cb.pushConstants(g.pl, vk::ShaderStageFlagBits::eCompute, 0, sizeof(pc), &pc);
     cb.dispatch(n_groups, 1, 1);
@@ -532,8 +541,12 @@ static void report_spin(const char * what, const uint32_t * r, double t_us, uint
 
 // Shader ping-pong through flags in memory both GPUs can see. The flag memory is a host allocation imported into
 // both devices, or (p2p test) a dma-buf exported by one GPU.
-static void run_spin(std::vector<gpu> & gpus, buffer & f0, buffer & f1, volatile uint32_t * host_view, const char * what,
+static const char * k_spin_modes[4] = { "volatile", "vmm-atomic-ld/st", "rmw-atomics", "nontemporal" };
+
+static void run_spin(std::vector<gpu> & gpus, int mode, buffer & f0, buffer & f1, volatile uint32_t * host_view, const char * what_base,
                      uint32_t rounds) {
+    char what[96];
+    snprintf(what, sizeof(what), "%s [%s]", what_base, k_spin_modes[mode]);
     buffer r0 = make_buffer(gpus[0], 4096, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     buffer r1 = make_buffer(gpus[1], 4096, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     const uint32_t max_spin = 2000000;
@@ -562,15 +575,38 @@ static void run_spin(std::vector<gpu> & gpus, buffer & f0, buffer & f1, volatile
         zero_flags_gpu(gpus[0], f0);
     }
     {
-        auto cb0 = spin_cb(gpus[0], f0, r0, { 0, rounds, max_spin, stride }, 1);
-        auto cb1 = spin_cb(gpus[1], f1, r1, { 1, rounds, max_spin, stride }, 1);
+        auto cb0 = spin_cb(gpus[0], mode, f0, r0, { 0, rounds, max_spin, stride }, 1);
+        auto cb1 = spin_cb(gpus[1], mode, f1, r1, { 1, rounds, max_spin, stride }, 1);
         auto fe0 = gpus[0].dev.createFence({}), fe1 = gpus[1].dev.createFence({});
+
+        // A CPU thread watches the flags in host memory: shows whether each GPU's store reaches memory while the
+        // shaders run (writer side) independent of whether the other GPU can see it (reader side).
+        std::atomic<bool> stop{ false };
+        double seen0 = -1, seen1 = -1;
+        uint32_t max0 = 0, max1 = 0;
         const auto t0 = clk::now();
+        std::thread observer;
+        if (host_view) {
+            observer = std::thread([&]() {
+                while (!stop.load(std::memory_order_relaxed)) {
+                    const uint32_t a = host_view[0], b = host_view[stride];
+                    if (a && seen0 < 0) seen0 = us_since(t0);
+                    if (b && seen1 < 0) seen1 = us_since(t0);
+                    max0 = std::max(max0, a);
+                    max1 = std::max(max1, b);
+                }
+            });
+        }
         submit(gpus[1], cb1, {}, {}, fe1);
         submit(gpus[0], cb0, {}, {}, fe0);
         (void) gpus[0].dev.waitForFences(fe0, VK_TRUE, UINT64_MAX);
         (void) gpus[1].dev.waitForFences(fe1, VK_TRUE, UINT64_MAX);
         const double t = us_since(t0);
+        stop = true;
+        if (observer.joinable()) {
+            observer.join();
+            printf("  %-44s CPU saw GPU0's flag at %.0f us (max %u), GPU1's at %.0f us (max %u)\n", "", seen0, max0, seen1, max1);
+        }
         uint32_t r[8];
         memcpy(r, r0.ptr, 16);
         memcpy(r + 4, (uint32_t *) r1.ptr + 4, 16);
@@ -589,7 +625,7 @@ static void run_spin(std::vector<gpu> & gpus, buffer & f0, buffer & f1, volatile
         if (!host_view) {
             zero_flags_gpu(gpus[i], f);
         }
-        auto cb = spin_cb(gpus[i], f, r, { 0, rounds, max_spin, stride }, 2);
+        auto cb = spin_cb(gpus[i], mode, f, r, { 0, rounds, max_spin, stride }, 2);
         auto fe = gpus[i].dev.createFence({});
         const auto t0 = clk::now();
         submit(gpus[i], cb, {}, {}, fe);
@@ -612,10 +648,30 @@ static void test_spin(std::vector<gpu> & gpus) {
     memset(host, 0, 4096);
     buffer f0 = import_host(gpus[0], host, 4096, true);
     buffer f1 = import_host(gpus[1], host, 4096, true);
-    run_spin(gpus, f0, f1, (volatile uint32_t *) host, "host memory", 20000);
+    for (int mode = 0; mode < 4; mode++) {
+        run_spin(gpus, mode, f0, f1, (volatile uint32_t *) host, "host memory", 20000);
+    }
     free_buffer(gpus[0], f0);
     free_buffer(gpus[1], f1);
     free(host);
+}
+
+// Same ping-pong, but the flags live in GTT memory that RADV allocates as write-combined (not snooped, not
+// HOST_CACHED) on GPU0 and shares with GPU1 as a dma-buf. Host-pointer imports can only use the snooped, cached
+// type, and GCN 1.0's L2 may treat the two differently.
+static void test_spin_wc(std::vector<gpu> & gpus) {
+    printf("\n[spin-wc] shader ping-pong on write-combined GTT memory from GPU0, shared with GPU1 as a dma-buf\n");
+    buffer f0 = make_buffer(gpus[0], 4096, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, true,
+                            vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eDeviceLocal);
+    printf("  GPU0 allocation: %s\n", mem_type_str(gpus[0], find_mem_type(gpus[0], gpus[0].dev.getBufferMemoryRequirements(f0.buf).memoryTypeBits,
+           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
+           vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eDeviceLocal)).c_str());
+    buffer f1 = import_dmabuf(gpus[1], export_dmabuf(gpus[0], f0), 4096);
+    for (int mode = 0; mode < 4; mode++) {
+        run_spin(gpus, mode, f0, f1, (volatile uint32_t *) f0.ptr, "WC GTT", 20000);
+    }
+    free_buffer(gpus[1], f1);
+    free_buffer(gpus[0], f0);
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -692,7 +748,9 @@ static void test_p2p(std::vector<gpu> & gpus) {
         print_copy("GPU1 local copy of its own export", sz, time_copy(gpus[1], exp1, vram1, sz));
     }
     printf("  (local copy speed tells where the exported buffer lives now: VRAM-speed means it stayed in VRAM)\n");
-    run_spin(gpus, imp0, exp1, nullptr, "flags in GPU1 export", 20000);
+    for (int mode = 0; mode < 4; mode++) {
+        run_spin(gpus, mode, imp0, exp1, nullptr, "flags in GPU1 export", 20000);
+    }
     free_buffer(gpus[0], imp0);
     free_buffer(gpus[0], vram0);
     free_buffer(gpus[1], vram1);
@@ -705,7 +763,7 @@ int main(int argc, char ** argv) {
         tests.push_back(argv[i]);
     }
     if (tests.empty()) {
-        tests = { "fence", "relay", "proxy", "xsem", "spin", "copy", "p2p" };
+        tests = { "fence", "relay", "proxy", "xsem", "spin", "spin-wc", "copy", "p2p" };
     }
 
     vk::ApplicationInfo ai{ "xgpu", 1, nullptr, 0, VK_API_VERSION_1_3 };
@@ -726,10 +784,9 @@ int main(int argc, char ** argv) {
     }
 
     std::string exe = argv[0];
-    const std::string spv = exe.substr(0, exe.find_last_of('/') + 1) + "spin.spv";
-    const auto code = read_spv(spv.c_str());
+    const std::string dir = exe.substr(0, exe.find_last_of('/') + 1);
     for (auto & g : gpus) {
-        init_spin(g, code);
+        init_spin(g, dir);
     }
 
     for (const auto & t : tests) {
@@ -738,6 +795,7 @@ int main(int argc, char ** argv) {
         else if (t == "proxy") test_proxy(gpus);
         else if (t == "xsem") test_xsem(gpus);
         else if (t == "spin") test_spin(gpus);
+        else if (t == "spin-wc") test_spin_wc(gpus);
         else if (t == "copy") test_copy(gpus);
         else if (t == "p2p") test_p2p(gpus);
         else fprintf(stderr, "unknown test %s\n", t.c_str());

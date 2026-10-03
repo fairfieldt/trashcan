@@ -1,0 +1,9 @@
+GPU0: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0, queue family 1, timestamp period 37.04 ns
+GPU1: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 02:00.0, queue family 1, timestamp period 37.04 ns
+
+[spin] shader ping-pong on a host allocation imported into both GPUs (VK_EXT_external_memory_host)
+  host import on AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0: type 5 heap 1 [ HOST_VISIBLE HOST_COHERENT HOST_CACHED ]
+  host import on AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 02:00.0: type 5 heap 1 [ HOST_VISIBLE HOST_COHERENT HOST_CACHED ]
+  host memory, GPU0 <-> GPU1                   FAILED (role0 stuck at round 1, role1 at round 1) after 774429 us
+  host memory, loopback on GPU0                    0.71 us per hop (20000 rounds, avg spins/round 1.2 + 1.4)
+  host memory, loopback on GPU1                    0.87 us per hop (20000 rounds, avg spins/round 2.0 + 2.0)

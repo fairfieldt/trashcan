@@ -3,10 +3,27 @@
 // k back; role 1 waits for k, then echoes it. Each round is two one-way hops. The spin is bounded so a flag that
 // never becomes visible fails cleanly instead of hanging the GPU.
 // Dispatch 1 workgroup per GPU for cross-GPU (role from push constant), or 2 workgroups on one GPU for loopback.
+//
+// MODE 0: coherent volatile loads and stores
+// MODE 1: Vulkan memory model device-scope atomic load (acquire) and store (release)
+// MODE 2: read-modify-write atomics (atomicAdd(x, 0) to read, atomicExchange to write)
+// MODE 3: Vulkan memory model, buffer declared nontemporal volatile coherent (asks for SLC on every access)
+
+#if MODE == 1 || MODE == 3
+#pragma use_vulkan_memory_model
+#extension GL_KHR_memory_scope_semantics : require
+#extension GL_EXT_nontemporal_keyword : require
+#endif
 
 layout(local_size_x = 64) in;
 
+#if MODE == 0
 layout(std430, binding = 0) coherent volatile buffer Flags { uint v[]; } flags;
+#elif MODE == 3
+layout(std430, binding = 0) nontemporal volatile coherent buffer Flags { uint v[]; } flags;
+#else
+layout(std430, binding = 0) buffer Flags { uint v[]; } flags;
+#endif
 layout(std430, binding = 1) buffer Result { uint r[]; } result;
 
 layout(push_constant) uniform PC {
@@ -15,6 +32,27 @@ layout(push_constant) uniform PC {
     uint max_spin;
     uint stride;    // flag slots are this many uints apart, to keep them on separate cache lines
 } pc;
+
+uint read_flag(uint i) {
+#if MODE == 0 || MODE == 3
+    return flags.v[i];
+#elif MODE == 1
+    return atomicLoad(flags.v[i], gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsAcquire | gl_SemanticsMakeVisible);
+#else
+    return atomicAdd(flags.v[i], 0);
+#endif
+}
+
+void write_flag(uint i, uint k) {
+#if MODE == 0 || MODE == 3
+    flags.v[i] = k;
+    memoryBarrierBuffer();
+#elif MODE == 1
+    atomicStore(flags.v[i], k, gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsRelease | gl_SemanticsMakeAvailable);
+#else
+    atomicExchange(flags.v[i], k);
+#endif
+}
 
 void main() {
     if (gl_LocalInvocationIndex != 0) {
@@ -28,11 +66,10 @@ void main() {
     uint spins = 0;
     for (uint k = 1; k <= pc.rounds; k++) {
         if (role == 0) {
-            flags.v[mine] = k;
-            memoryBarrierBuffer();
+            write_flag(mine, k);
         }
         uint s = 0;
-        while (flags.v[peer] < k) {
+        while (read_flag(peer) < k) {
             s++;
             if (s >= pc.max_spin) {
                 break;
@@ -44,8 +81,7 @@ void main() {
         }
         spins += s;
         if (role == 1) {
-            flags.v[mine] = k;
-            memoryBarrierBuffer();
+            write_flag(mine, k);
         }
     }
     result.r[role * 4 + 0] = failed_round;

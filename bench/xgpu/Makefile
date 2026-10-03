@@ -1,9 +1,11 @@
 # Build on incite: make
-xgpu: xgpu.cpp spin.spv
-	g++ -O2 -g -std=c++17 -Wall -o xgpu xgpu.cpp -lvulkan -lpthread
+SPV = spin0.spv spin1.spv spin2.spv spin3.spv
 
-spin.spv: spin.comp
-	glslc -O --target-env=vulkan1.2 -fshader-stage=compute spin.comp -o spin.spv
+xgpu: xgpu.cpp $(SPV)
+	g++ -O2 -g -std=c++17 -Wall -Wno-format-truncation -o xgpu xgpu.cpp -lvulkan -lpthread
+
+spin%.spv: spin.comp
+	glslc -O --target-env=vulkan1.2 -fshader-stage=compute -DMODE=$* spin.comp -o $@
 
 clean:
-	rm -f xgpu spin.spv
+	rm -f xgpu $(SPV)

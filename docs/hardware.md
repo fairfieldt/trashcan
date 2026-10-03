@@ -50,6 +50,24 @@ installed at 19:14 on 2026-10-02.
 Idle reads 300/150 in `/sys/class/drm/card{0,1}/device/hwmon/hwmon*/freq{1,2}_input`. That's expected at
 idle; under load it should reach 850/1370. **Check those clocks during every benchmark.**
 
+## Kernel
+
+`kernel/build.sh` builds Debian's 6.12.111 source plus the D700 patches and PCI P2P, as `6.12.111-p2p` (about 28
+minutes on incite). It was installed 2026-10-02.
+
+- `/etc/default/grub` pins the **stock** kernel as `GRUB_DEFAULT` (backup in `/etc/default/grub.bak-trashcan`).
+- The P2P kernel was booted once with `grub-reboot`, so **a plain reboot returns to the stock kernel** (no P2P).
+- To boot it again: `sudo grub-reboot "gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-6.12.111-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"`.
+- Under it, each card gets its own VBIOS (02:00.0 `113-C3861XA-028`, 06:00.0 `113-C3861XB-028`), so the D700
+  patches are in effect.
+- The `apple-gmux` WARN at boot also happens on the stock kernel.
+
+The `trashcan devices` report confirms the shape: 32 CUs (2 SE x 2 SA x 8), 4 SIMD16 per CU, wave64, 10 waves per
+SIMD, 256 VGPRs per SIMD, 32 KiB shared memory per workgroup, 5888 MiB VRAM heap, plus a 256 MiB CPU-visible BAR
+heap.
+
+The machine also logged a corrected ECC error on CPU0 channel 0 DIMM 0 during testing.
+
 ## Baseline so far
 
 `llama-bench` on upstream 99b9548 (Vulkan, `-ngl 99`, default layer split), Gemma 4 12B QAT Q4_0:

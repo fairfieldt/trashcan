@@ -1,0 +1,18 @@
+GPU0: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0, queue family 1, timestamp period 37.04 ns
+GPU1: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 02:00.0, queue family 1, timestamp period 37.04 ns
+
+[p2p] dma-buf: GPU1 exports a DEVICE_LOCAL buffer, GPU0 imports it
+  dma-buf import on AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0: type 2 heap 1 [ HOST_VISIBLE HOST_COHERENT ] (allowed types 0x4)
+  GPU0 VRAM -> GPU1 buffer (GPU0 writes)             16 KiB       6.8 us     2.40 GB/s
+  GPU1 buffer -> GPU0 VRAM (GPU0 reads)              16 KiB       9.3 us     1.76 GB/s
+  GPU1 local copy of its own export                  16 KiB       5.2 us     3.16 GB/s
+  GPU0 VRAM -> GPU1 buffer (GPU0 writes)            256 KiB       4.3 us    61.02 GB/s
+  GPU1 buffer -> GPU0 VRAM (GPU0 reads)             256 KiB      32.7 us     8.01 GB/s
+  GPU1 local copy of its own export                 256 KiB      52.3 us     5.01 GB/s
+  GPU0 VRAM -> GPU1 buffer (GPU0 writes)           1024 KiB    4305.6 us     0.24 GB/s
+  GPU1 buffer -> GPU0 VRAM (GPU0 reads)            1024 KiB     120.3 us     8.72 GB/s
+  GPU1 local copy of its own export                1024 KiB     190.2 us     5.51 GB/s
+  GPU0 VRAM -> GPU1 buffer (GPU0 writes)           8192 KiB   61859.0 us     0.14 GB/s
+  GPU1 buffer -> GPU0 VRAM (GPU0 reads)            8192 KiB     900.0 us     9.32 GB/s
+  GPU1 local copy of its own export                8192 KiB     980.7 us     8.55 GB/s
+  (local copy speed tells where the exported buffer lives now: VRAM-speed means it stayed in VRAM)

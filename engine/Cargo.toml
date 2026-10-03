@@ -1,0 +1,14 @@
+[package]
+name = "trashcan"
+version = "0.1.0"
+edition = "2021"
+description = "Gemma 4 12B inference on two FirePro D700s: Vulkan, tensor parallel"
+publish = false
+
+[dependencies]
+anyhow = "1.0.104"
+ash = { version = "0.38.0", features = ["loaded"] }
+bytemuck = "1.25.2"
+clap = { version = "4.6.7", features = ["derive"] }
+half = "2.7.1"
+memmap2 = "0.9.11"

@@ -1,0 +1,5 @@
+label: master-stock
+bin: /home/fairfieldt/llama.cpp/build/bin (99b9548 model: add support for clef decision model (text-only) (#29831))
+kernel: 6.12.111+deb13-amd64
+env: 
+args: 

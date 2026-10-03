@@ -5,4 +5,10 @@ Vulkan tensor parallelism for Gemma 4 12B QAT Q4_0.
 
 - `docs/hardware.md`: the machine, the D700 clock bug, baseline numbers
 - `docs/upstream-survey.md`: upstream TP/meta-backend state, Vulkan PRs and forks
-- `llama.cpp/`: upstream clone (own git repo, not tracked here; PR branches fetched as local refs)
+- `docs/engine-plan.md`: the Rust engine design (TP layout, schedule, kernels, milestones)
+- `docs/findings.md`: measurements and bugs, newest first
+- `engine/`: the engine (`cargo build --release` on incite; `trashcan devices`, `trashcan info MODEL`)
+- `bench/xgpu/`: cross-GPU sync and copy microbenchmark
+- `kernel/`: custom kernel build (D700 fixes + PCI P2P)
+- `scripts/`: incite helpers (`sync.sh` pushes the workspace and pulls `results/`)
+- `llama.cpp/`: upstream clone used as reference (own git repo, not tracked here; PR branches fetched as local refs)
