@@ -3,11 +3,15 @@ use crate::{
     gguf::{GgmlType, Gguf},
     gpu::Instance,
     quant,
-    vulkan::{attention_shaders, Buffer, Device, Push},
+    vulkan::{selected_attention_shaders, Buffer, Device, Push},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
-use std::{collections::HashMap, path::Path, rc::Rc};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::Path,
+    rc::Rc,
+};
 const D: usize = 3840;
 const F: usize = 7680;
 const V: usize = 131072;
@@ -15,6 +19,9 @@ const L: usize = 48;
 // 96 receive buffers at 128 tokens occupy 180 MiB, within the 256 MiB peer BAR.
 const P2P_BATCH: usize = 128;
 const ATTENTION_32_MAX_TOKENS: usize = 1024;
+// Four target graph pairs bound their measured command-storage contribution to
+// about 38 MiB/card at 8K context / batch512; this is not a total-memory bound.
+const GRAPH_CACHE_CAPACITY: usize = 4;
 
 pub(crate) struct Layer {
     w: HashMap<String, Buffer>,
@@ -74,8 +81,62 @@ struct Capture {
     merge: u8,
 }
 struct Graph {
+    gpu: Rc<Device>,
     cmds: Vec<vk::CommandBuffer>,
     captures: Vec<Capture>,
+}
+impl Drop for Graph {
+    fn drop(&mut self) {
+        // Cached graphs are removed only between completed forwards. A graph
+        // that failed recording has never been submitted and can also be freed.
+        if !self.cmds.is_empty() {
+            unsafe {
+                self.gpu.dev.free_command_buffers(self.gpu.pool, &self.cmds);
+            }
+        }
+    }
+}
+type GraphKey = (usize, bool, bool, usize, AttentionPartitions);
+
+struct GraphCache<T> {
+    entries: HashMap<GraphKey, T>,
+    recent: VecDeque<GraphKey>,
+}
+impl<T> Default for GraphCache<T> {
+    fn default() -> Self {
+        Self {
+            entries: HashMap::new(),
+            recent: VecDeque::new(),
+        }
+    }
+}
+impl<T> GraphCache<T> {
+    fn touch(&mut self, key: GraphKey) -> bool {
+        if !self.entries.contains_key(&key) {
+            return false;
+        }
+        self.recent.retain(|old| *old != key);
+        self.recent.push_back(key);
+        true
+    }
+    fn make_room(&mut self) {
+        if self.entries.len() == GRAPH_CACHE_CAPACITY {
+            let oldest = self.recent.pop_front().expect("graph cache recency");
+            // Drop command storage before recording the replacement, including
+            // when recording fails and no replacement will be inserted.
+            drop(self.entries.remove(&oldest));
+        }
+    }
+    fn insert(&mut self, key: GraphKey, value: T) {
+        debug_assert!(self.entries.len() < GRAPH_CACHE_CAPACITY);
+        debug_assert!(!self.entries.contains_key(&key));
+        self.entries.insert(key, value);
+        self.recent.push_back(key);
+    }
+    fn clear(&mut self) {
+        self.entries.clear();
+        self.recent.clear();
+    }
 }
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
 pub(crate) struct AttentionPartitions {
@@ -127,7 +188,8 @@ impl KvHistory {
 pub struct Engine {
     pub gguf: Gguf,
     pub(crate) cards: Vec<Card>,
-    graphs: HashMap<(usize, bool, bool, usize, AttentionPartitions), Vec<Graph>>,
+    graphs: GraphCache<Vec<Graph>>,
+    forward_in_flight: bool,
     max_batch: usize,
     context: usize,
     pub pos: usize,
@@ -363,7 +425,8 @@ impl Engine {
         Ok(Self {
             gguf,
             cards,
-            graphs: HashMap::new(),
+            graphs: GraphCache::default(),
+            forward_in_flight: false,
             max_batch,
             context,
             pos: 0,
@@ -394,10 +457,12 @@ impl Engine {
         let c = &self.cards[g];
         let gpu = &c.gpu;
         let mut graph = Graph {
+            gpu: gpu.clone(),
             cmds: vec![],
             captures: vec![],
         };
         let mut cmd = gpu.begin()?;
+        graph.cmds.push(cmd);
         unsafe {
             gpu.dev.cmd_reset_query_pool(cmd, c.queries, 0, 194);
             gpu.dev
@@ -715,10 +780,10 @@ impl Engine {
             } else {
                 attention.global
             };
-            let (partial_shader, merge_shader) = if parts > 0 {
-                attention_shaders(parts)?
+            let (partial_shader, merge_shader, heads_per_group) = if parts > 0 {
+                selected_attention_shaders(parts, l.dim, l.kv)?
             } else {
-                ("attention", "")
+                ("attention", "", 1)
             };
             gpu.dispatch(
                 cmd,
@@ -734,7 +799,11 @@ impl Engine {
                     ],
                     u,
                 ),
-                if parts > 0 { 8 * parts } else { 8 },
+                if parts > 0 {
+                    8u32.div_ceil(heads_per_group) * parts
+                } else {
+                    8
+                },
                 n as u32,
             );
             if parts > 0 {
@@ -760,8 +829,9 @@ impl Engine {
                 false,
                 true,
             )?;
-            self.end_segment(c, cmd, 2 * il, &mut graph, n)?;
+            self.end_segment(c, cmd, 2 * il, n)?;
             cmd = self.begin_segment(c, 2 * il + 1, n)?;
+            graph.cmds.push(cmd);
             norm(
                 cmd,
                 &c.partial,
@@ -820,8 +890,9 @@ impl Engine {
             if detail {
                 capture(cmd, &mut graph, format!("ffn_out-{il}"), &c.partial, D, 2)?;
             }
-            self.end_segment(c, cmd, 2 * il + 1, &mut graph, n)?;
+            self.end_segment(c, cmd, 2 * il + 1, n)?;
             cmd = self.begin_segment(c, 2 * il + 2, n)?;
+            graph.cmds.push(cmd);
         }
         norm(
             cmd,
@@ -891,7 +962,6 @@ impl Engine {
             );
         }
         gpu.finish(cmd)?;
-        graph.cmds.push(cmd);
         Ok(graph)
     }
     fn layer_scale(&self, il: usize) -> Result<f32> {
@@ -917,14 +987,7 @@ impl Engine {
         }
         Ok(cmd)
     }
-    fn end_segment(
-        &self,
-        c: &Card,
-        cmd: vk::CommandBuffer,
-        i: usize,
-        graph: &mut Graph,
-        n: usize,
-    ) -> Result<()> {
+    fn end_segment(&self, c: &Card, cmd: vk::CommandBuffer, i: usize, n: usize) -> Result<()> {
         if !self.uses_relay(n) {
             let peer = if self.uses_stream(n) {
                 &c.wide_peer[i % 2]
@@ -944,7 +1007,6 @@ impl Engine {
             );
         }
         c.gpu.finish(cmd)?;
-        graph.cmds.push(cmd);
         Ok(())
     }
     pub fn forward(
@@ -953,6 +1015,10 @@ impl Engine {
         dump: Option<&Path>,
         all_logits: bool,
     ) -> Result<Vec<Vec<(f32, u32)>>> {
+        ensure!(
+            !self.forward_in_flight,
+            "previous GPU forward did not complete; recreate the engine before retrying"
+        );
         let n = tokens.len();
         ensure!(
             n > 0 && n <= self.max_batch,
@@ -982,18 +1048,22 @@ impl Engine {
         }
         let attention = AttentionPartitions::for_batch(self.pos, n);
         let key = (n, dump.is_some(), all_logits, self.top_k, attention);
-        if !self.graphs.contains_key(&key) {
+        if !self.graphs.touch(key) {
+            self.graphs.make_room();
             let a = self.record(0, n, dump.is_some(), all_logits, attention)?;
             let b = self.record(1, n, dump.is_some(), all_logits, attention)?;
             self.graphs.insert(key, vec![a, b]);
         }
-        let graphs = &self.graphs[&key];
+        let graphs = &self.graphs.entries[&key];
         for c in &self.cards {
             unsafe {
                 c.gpu.dev.reset_fences(&[c.fence])?;
             }
         }
         let started = std::time::Instant::now();
+        // A failed submission/wait may leave commands pending. Keep this set on
+        // error so a later request cannot evict or reuse those command buffers.
+        self.forward_in_flight = true;
         if !self.uses_relay(n) && !self.uses_stream(n) {
             for (g, c) in self.cards.iter().enumerate() {
                 c.gpu.submit_sequence(
@@ -1063,6 +1133,7 @@ impl Engine {
                 }
             }
         }
+        self.forward_in_flight = false;
         self.timing[1] = started.elapsed().as_secs_f64() * 1e3 - self.timing[0];
         self.counter += 96;
         self.kv_history.record(self.pos, n);
@@ -1203,12 +1274,8 @@ impl Drop for Engine {
                 let _ = c.gpu.dev.device_wait_idle();
             }
         }
-        for (g, c) in self.cards.iter().enumerate() {
-            for graphs in self.graphs.values() {
-                unsafe {
-                    c.gpu.dev.free_command_buffers(c.gpu.pool, &graphs[g].cmds);
-                }
-            }
+        self.graphs.clear();
+        for c in &self.cards {
             unsafe {
                 c.gpu.dev.destroy_query_pool(c.queries, None);
                 c.gpu.dev.destroy_fence(c.fence, None);
@@ -1329,6 +1396,88 @@ fn validate(g: &Gguf) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod graph_cache_tests {
+    use super::{AttentionPartitions, GraphCache, GraphKey, GRAPH_CACHE_CAPACITY};
+    use std::{cell::RefCell, rc::Rc};
+
+    fn key(batch: usize) -> GraphKey {
+        (
+            batch,
+            false,
+            false,
+            1,
+            AttentionPartitions::for_batch(0, batch),
+        )
+    }
+
+    struct Tracked {
+        batch: usize,
+        freed: Rc<RefCell<Vec<usize>>>,
+    }
+    impl Drop for Tracked {
+        fn drop(&mut self) {
+            self.freed.borrow_mut().push(self.batch);
+        }
+    }
+
+    #[test]
+    fn hot_decode_graph_survives_prompt_shape_eviction() {
+        let freed = Rc::new(RefCell::new(Vec::new()));
+        let mut cache = GraphCache::default();
+        for batch in 1..=GRAPH_CACHE_CAPACITY {
+            cache.insert(
+                key(batch),
+                Tracked {
+                    batch,
+                    freed: freed.clone(),
+                },
+            );
+        }
+        for _ in 0..20 {
+            assert!(cache.touch(key(1)));
+        }
+        assert_eq!(cache.recent.len(), GRAPH_CACHE_CAPACITY);
+        assert!(!cache.touch(key(512)));
+        cache.make_room();
+        // The victim's resources are gone before the replacement is recorded.
+        assert_eq!(*freed.borrow(), vec![2]);
+        assert!(cache.entries.contains_key(&key(1)));
+        cache.insert(
+            key(512),
+            Tracked {
+                batch: 512,
+                freed: freed.clone(),
+            },
+        );
+        assert_eq!(cache.entries.len(), GRAPH_CACHE_CAPACITY);
+        cache.clear();
+        let mut dropped = freed.borrow().clone();
+        dropped.sort_unstable();
+        assert_eq!(dropped, vec![1, 2, 3, 4, 512]);
+        assert!(cache.recent.is_empty());
+    }
+
+    #[test]
+    fn failed_replacement_leaves_consistent_recency_and_no_extra_eviction() {
+        let mut cache = GraphCache::default();
+        for batch in 1..=GRAPH_CACHE_CAPACITY {
+            cache.insert(key(batch), batch);
+        }
+        cache.make_room();
+        // A recording failure inserts nothing; retry must reuse the free slot.
+        assert_eq!(cache.entries.len(), GRAPH_CACHE_CAPACITY - 1);
+        assert!(cache.touch(key(2)));
+        cache.make_room();
+        assert_eq!(cache.entries.len(), GRAPH_CACHE_CAPACITY - 1);
+        cache.insert(key(512), 512);
+        cache.make_room();
+        assert!(!cache.entries.contains_key(&key(3)));
+        assert!(cache.entries.contains_key(&key(2)));
+        assert!(cache.entries.contains_key(&key(512)));
+    }
 }
 
 #[cfg(test)]

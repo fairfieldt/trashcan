@@ -2,7 +2,7 @@
 use crate::{
     generation::Sampler,
     model::{AttentionPartitions, Engine},
-    vulkan::{attention_shaders, Buffer, Device, Push},
+    vulkan::{selected_attention_shaders, Buffer, Device, Push},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
@@ -440,7 +440,8 @@ impl Assistant {
             } else {
                 attention.global
             };
-            let (partial_shader, merge_shader) = attention_shaders(parts)?;
+            let (partial_shader, merge_shader, heads_per_group) =
+                selected_attention_shaders(parts, layer.dim, layer.kv)?;
             gpu.dispatch(
                 cmd,
                 partial_shader,
@@ -455,7 +456,7 @@ impl Assistant {
                     ],
                     u,
                 ),
-                8 * parts,
+                8u32.div_ceil(heads_per_group) * parts,
                 1,
             );
             gpu.dispatch(

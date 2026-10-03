@@ -31,7 +31,7 @@ pub struct Options {
     cors: bool,
     #[arg(long, default_value_t = 8192)]
     context: usize,
-    #[arg(long, default_value_t = 32)]
+    #[arg(long, default_value_t = 512)]
     batch: usize,
     #[arg(long, default_value_t = 256)]
     max_tokens: usize,

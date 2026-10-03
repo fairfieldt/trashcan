@@ -51,7 +51,7 @@ impl Push {
     }
 }
 
-/// Matching pipelines must use the same partition count and scratch layout.
+/// Choose the measured single-column Q4 layout from the sharded dimensions.
 pub fn q4_decode_shader(rows: usize, cols: usize) -> &'static str {
     if rows <= 4096 && cols <= 4096 {
         "matvecq4narrow"
@@ -60,6 +60,7 @@ pub fn q4_decode_shader(rows: usize, cols: usize) -> &'static str {
     }
 }
 
+/// Scalar reference pipelines with matching partition counts and scratch layout.
 pub fn attention_shaders(parts: u32) -> Result<(&'static str, &'static str)> {
     match parts {
         8 => Ok(("attention_partial8", "attention_merge8")),
@@ -69,6 +70,25 @@ pub fn attention_shaders(parts: u32) -> Result<(&'static str, &'static str)> {
         128 => Ok(("attention_partial128", "attention_merge128")),
         _ => anyhow::bail!("attention partitions must be 8, 16, 32, 64 or 128"),
     }
+}
+
+/// Share KV across the eight local query heads for measured model shapes.
+/// Tiny contexts and unmeasured shape/partition combinations retain scalar loads.
+pub fn selected_attention_shaders(
+    parts: u32,
+    dim: usize,
+    kv_heads: usize,
+) -> Result<(&'static str, &'static str, u32)> {
+    let (scalar, merge) = attention_shaders(parts)?;
+    let (partial, heads_per_group) = match (parts, dim, kv_heads) {
+        (16, 256, 4) => ("attention_partial_heads2_16", 2),
+        (32, 256, 4) => ("attention_partial_heads2", 2),
+        (16, 512, 1) => ("attention_partial_heads8_16", 8),
+        (32, 512, 1) => ("attention_partial_heads8", 8),
+        (64, 512, 1) => ("attention_partial_heads8_64", 8),
+        _ => (scalar, 1),
+    };
+    Ok((partial, merge, heads_per_group))
 }
 
 impl Device {
@@ -210,6 +230,16 @@ impl Device {
                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_partial.spv")).as_slice(),
             ),
             (
+                "attention_partial_heads2",
+                include_bytes!(concat!(env!("OUT_DIR"), "/attention_partial_heads2.spv"))
+                    .as_slice(),
+            ),
+            (
+                "attention_partial_heads8",
+                include_bytes!(concat!(env!("OUT_DIR"), "/attention_partial_heads8.spv"))
+                    .as_slice(),
+            ),
+            (
                 "attention_merge",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge.spv")).as_slice(),
             ),
@@ -269,6 +299,15 @@ impl Device {
                     ("attention_partial16", Some(16)),
                     ("attention_partial64", Some(64)),
                     ("attention_partial128", Some(128)),
+                ],
+                "attention_partial_heads2" => &[
+                    ("attention_partial_heads2", None),
+                    ("attention_partial_heads2_16", Some(16)),
+                ],
+                "attention_partial_heads8" => &[
+                    ("attention_partial_heads8", None),
+                    ("attention_partial_heads8_16", Some(16)),
+                    ("attention_partial_heads8_64", Some(64)),
                 ],
                 "attention_merge" => &[
                     ("attention_merge", None),
@@ -975,5 +1014,43 @@ impl Drop for Buffer {
             self.gpu.dev.destroy_buffer(self.buf, None);
             self.gpu.dev.free_memory(self.memory, None);
         }
+    }
+}
+
+#[cfg(test)]
+mod attention_selection_tests {
+    use super::{attention_shaders, selected_attention_shaders};
+
+    #[test]
+    fn shared_shapes_keep_the_matching_partition_merge() {
+        for (parts, dim, kv, expected) in [
+            (16, 256, 4, "attention_partial_heads2_16"),
+            (32, 256, 4, "attention_partial_heads2"),
+            (16, 512, 1, "attention_partial_heads8_16"),
+            (32, 512, 1, "attention_partial_heads8"),
+            (64, 512, 1, "attention_partial_heads8_64"),
+        ] {
+            let (partial, merge, group_heads) = selected_attention_shaders(parts, dim, kv).unwrap();
+            assert_eq!(group_heads, if kv == 4 { 2 } else { 8 });
+            assert_eq!(partial, expected);
+            assert_eq!(merge, attention_shaders(parts).unwrap().1);
+        }
+    }
+
+    #[test]
+    fn tiny_and_unmeasured_cases_retain_scalar_loads() {
+        for (parts, dim, kv) in [
+            (8, 256, 4),
+            (8, 512, 1),
+            (64, 256, 4),
+            (128, 512, 1),
+            (32, 256, 1),
+        ] {
+            assert_eq!(selected_attention_shaders(parts, dim, kv).unwrap(), {
+                let (partial, merge) = attention_shaders(parts).unwrap();
+                (partial, merge, 1)
+            });
+        }
+        assert!(selected_attention_shaders(17, 512, 1).is_err());
     }
 }

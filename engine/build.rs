@@ -14,6 +14,8 @@ fn main() {
         "rope",
         "attention",
         "attention_partial",
+        "attention_partial_heads2",
+        "attention_partial_heads8",
         "attention_merge",
         "geglu",
         "topk",

@@ -61,6 +61,9 @@ enum Cmd {
         tokens: usize,
         #[arg(long)]
         partitions: Option<u32>,
+        /// Compare scalar KV loads with the production shape-based kernel choice.
+        #[arg(long, default_value = "selected", value_parser = ["scalar", "selected"])]
+        kernel: String,
     },
     /// Stress P2P receiver cache visibility on both GPUs.
     P2pTest {
@@ -81,7 +84,7 @@ enum Cmd {
         max_tokens: usize,
         #[arg(long, default_value_t = 8192)]
         context: usize,
-        #[arg(long, default_value_t = 32)]
+        #[arg(long, default_value_t = 512)]
         batch: usize,
         #[arg(long, default_value_t = 1.0)]
         temperature: f32,
@@ -328,7 +331,8 @@ fn main() -> Result<()> {
             iterations,
             tokens,
             partitions,
-        } => micro::attention(iterations, tokens, partitions),
+            kernel,
+        } => micro::attention(iterations, tokens, partitions, &kernel),
         Cmd::P2pTest { rounds, elements } => visibility::test(rounds, elements),
         Cmd::Render {
             model,

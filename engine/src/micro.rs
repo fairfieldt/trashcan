@@ -12,10 +12,19 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub fn attention(iterations: u32, tokens: usize, partitions: Option<u32>) -> Result<()> {
+pub fn attention(
+    iterations: u32,
+    tokens: usize,
+    partitions: Option<u32>,
+    kernel: &str,
+) -> Result<()> {
     ensure!(
         iterations > 0 && (1..=32768).contains(&tokens),
         "positive iterations, tokens 1..32768"
+    );
+    ensure!(
+        matches!(kernel, "scalar" | "selected"),
+        "attention kernel must be scalar or selected"
     );
     let partition_counts = partitions.map_or_else(|| vec![8, 16, 32, 64, 128], |n| vec![n]);
     ensure!(
@@ -84,7 +93,12 @@ pub fn attention(iterations: u32, tokens: usize, partitions: Option<u32>) -> Res
                 )?
             };
             for &parts in &partition_counts {
-                let (partial_shader, merge_shader) = crate::vulkan::attention_shaders(parts)?;
+                let (partial_shader, merge_shader, heads_per_group) = if kernel == "selected" {
+                    crate::vulkan::selected_attention_shaders(parts, dim, kv)?
+                } else {
+                    let (partial, merge) = crate::vulkan::attention_shaders(parts)?;
+                    (partial, merge, 1)
+                };
                 let mut p = Push {
                     ptr: [
                         qbuf.address,
@@ -109,7 +123,13 @@ pub fn attention(iterations: u32, tokens: usize, partitions: Option<u32>) -> Res
                         .cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, query, 0);
                 }
                 for _ in 0..iterations {
-                    d.dispatch(cmd, partial_shader, p, 8 * parts, 1);
+                    d.dispatch(
+                        cmd,
+                        partial_shader,
+                        p,
+                        8u32.div_ceil(heads_per_group) * parts,
+                        1,
+                    );
                     d.dispatch(cmd, merge_shader, p, 8, 1);
                 }
                 unsafe {
@@ -145,7 +165,7 @@ pub fn attention(iterations: u32, tokens: usize, partitions: Option<u32>) -> Res
                 }
                 println!(
                     "{}",
-                    serde_json::json!({"gpu":gpu,"tokens":tokens,"dim":dim,"kv_heads":kv,"partitions":parts,"iterations":iterations,"milliseconds":(times[1]-times[0]) as f64 * d.period as f64 / 1e6 / iterations as f64,"pass":true})
+                    serde_json::json!({"gpu":gpu,"tokens":tokens,"dim":dim,"kv_heads":kv,"partitions":parts,"kernel":kernel,"partial_shader":partial_shader,"heads_per_group":heads_per_group,"iterations":iterations,"milliseconds":(times[1]-times[0]) as f64 * d.period as f64 / 1e6 / iterations as f64,"pass":true})
                 );
             }
             unsafe {
