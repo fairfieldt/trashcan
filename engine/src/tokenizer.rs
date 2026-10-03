@@ -211,6 +211,14 @@ impl Tokenizer {
         .into_owned()
     }
     pub fn render(&self, messages: &[serde_json::Value], thinking: bool) -> Result<String> {
+        self.render_with_tools(messages, thinking, &[])
+    }
+    pub fn render_with_tools(
+        &self,
+        messages: &[serde_json::Value],
+        thinking: bool,
+        tools: &[serde_json::Value],
+    ) -> Result<String> {
         let mut env = minijinja::Environment::new();
         env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
         env.add_function(
@@ -223,7 +231,7 @@ impl Tokenizer {
             },
         );
         env.add_template("chat", &self.template)?;
-        Ok(env.get_template("chat")?.render(minijinja::context!{messages=>messages,add_generation_prompt=>true,enable_thinking=>thinking,bos_token=>"",eos_token=>"<eos>",tools=>minijinja::Value::UNDEFINED})?)
+        Ok(env.get_template("chat")?.render(minijinja::context!{messages=>messages,add_generation_prompt=>true,enable_thinking=>thinking,bos_token=>"",eos_token=>"<eos>",tools=>tools})?)
     }
     pub fn fixture(&self, path: &std::path::Path) -> Result<()> {
         let cases: Vec<serde_json::Value> = serde_json::from_slice(&std::fs::read(path)?)?;

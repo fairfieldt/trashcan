@@ -65,6 +65,9 @@ Sampling defaults are temperature 1, top-k 64, top-p 0.95, seed 1. Temperature 0
 and only ranks one candidate on the GPU, including the assistant.
 Generation stops at EOS/end-of-turn/end-of-function. A context overflow reports an error.
 
+`trashcan serve "$model"` runs an optional OpenAI Responses HTTP server with SSE, reasoning and
+tools. See [server setup](server.md) for client examples, defaults and supported features.
+
 `--batch` is the maximum prefill/verification capacity (1–512). Verification supports at most eight
 columns. `--draft-tokens` is 1–7, default 3, and requires `--batch` larger than that value. The main model's
 sliding ring has 1024 + batch slots, so batched writes and rejected drafts do not erase needed history.

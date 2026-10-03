@@ -5,6 +5,8 @@ mod gpu;
 mod micro;
 mod model;
 mod quant;
+mod responses;
+mod server;
 mod tokenizer;
 mod visibility;
 mod vulkan;
@@ -23,6 +25,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Cmd {
+    /// Serve the loaded model through the OpenAI Responses API.
+    #[command(alias = "server")]
+    Serve(server::Options),
     /// Show both GPUs and check every Vulkan feature and extension the engine depends on.
     Devices,
     /// Measure the repacked decode kernel and check selected rows against a CPU dot product.
@@ -279,6 +284,7 @@ fn validate_draft(path: Option<&std::path::PathBuf>, k: usize, batch: usize) -> 
 
 fn main() -> Result<()> {
     match Cli::parse().cmd {
+        Cmd::Serve(options) => server::serve(options),
         Cmd::Devices => gpu::report(),
         Cmd::MatvecBench {
             model,

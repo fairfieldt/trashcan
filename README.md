@@ -28,3 +28,12 @@ target/release/trashcan chat ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4
 
 Add `--draft ~/models/gemma-4-12b-assistant/model.safetensors` for the matched assistant. The functional paths
 are implemented. M1, M2 and M4 pass; decode and MTP performance targets in M3/M5 remain open.
+
+To serve the model through the OpenAI Responses API:
+
+```sh
+target/release/trashcan serve ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf --port 8000
+```
+
+The server supports text, SSE streaming, reasoning, function/custom tools and full-history tool
+continuations. See [server setup and client examples](docs/server.md).
