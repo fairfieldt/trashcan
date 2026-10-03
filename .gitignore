@@ -1,0 +1,6 @@
+# upstream checkout (and later our fork) lives here as its own git repo
+/llama.cpp/
+
+# models and bench output stay out of git
+*.gguf
+.DS_Store
