@@ -1,0 +1,42 @@
+#version 460
+#include "common.glsl"
+// p.r1 is the first query in a bounded 64-token score slab. All LDS
+// producer/consumer phases use workgroup barriers; no wave scheduling assumptions.
+// Batched attention scores S = K Q^T: 64 keys x 64 query rows per workgroup, 32 dims per step.
+// a: Q f32 [token][head][dim]; b: K cache f16 [slot][kvhead][dim]; e: S f32 [token*heads+head][p.n].
+// p.k = log2(query heads per KV head). WorkGroupID.x = key tile relative to the query tile's
+// first visible key; WorkGroupID.y = kvhead * query_tiles + query_tile.
+layout(local_size_x=256) in;
+shared vec4 tile_k[64][9],tile_q[64][9];
+void main(){
+uint nb=min(batch()-p.r1,64u),lane=gl_LocalInvocationID.x,group=lane/16;
+uint rr=(group%4)*4+(lane%4),tt=(group/4)*4+((lane%16)/4);
+uint hq=1u<<p.k,tq=64u>>p.k,qt=(nb+tq-1)/tq;
+uint kh=gl_WorkGroupID.y/qt,t0=(gl_WorkGroupID.y%qt)*tq;
+uint pos=position()+p.r1+t0;
+uint kstart=p.window>0&&pos+1>p.window?pos+1-p.window:0;
+uint key0=kstart+gl_WorkGroupID.x*64;
+uint last=position()+p.r1+min(t0+tq,nb)-1;
+if(key0>last)return;
+uint r=lane/4,j=lane%4;
+uint kword=(((key0+r)%p.cap)*p.kvheads+kh)*p.dim/2+j*4;
+uint qrow[2];bool qvalid[2];
+[[unroll]]for(uint s=0;s<2;s++){uint i=lane+s*256,c=i/8,tok=t0+(c>>p.k);qvalid[s]=tok<nb;
+qrow[s]=(((p.r1+tok)*p.heads+kh*hq+(c&(hq-1)))*p.dim)/4+i%8;}
+vec4 a0=vec4(0),a1=vec4(0),a2=vec4(0),a3=vec4(0);
+for(uint kb=0;kb<p.dim;kb+=32){
+uint w=kword+kb/2;
+tile_k[r][2*j]=vec4(unpackHalf2x16(b_u.v[w]),unpackHalf2x16(b_u.v[w+1]));
+tile_k[r][2*j+1]=vec4(unpackHalf2x16(b_u.v[w+2]),unpackHalf2x16(b_u.v[w+3]));
+[[unroll]]for(uint s=0;s<2;s++){uint i=lane+s*256;vec4 x=vec4(0);if(qvalid[s])x=a_v4.v[qrow[s]+kb/4];tile_q[i/8][i%8]=x;}
+barrier();
+[[unroll]]for(uint jj=0;jj<8;jj++){
+vec4 b0=tile_q[tt][jj],b1=tile_q[tt+16][jj],b2=tile_q[tt+32][jj],b3=tile_q[tt+48][jj];
+vec4 w0=tile_k[rr][jj],w1=tile_k[rr+16][jj],w2=tile_k[rr+32][jj],w3=tile_k[rr+48][jj];
+[[unroll]]for(uint v=0;v<4;v++){vec4 x=vec4(b0[v],b1[v],b2[v],b3[v]);
+a0=fma(vec4(w0[v]),x,a0);a1=fma(vec4(w1[v]),x,a1);a2=fma(vec4(w2[v]),x,a2);a3=fma(vec4(w3[v]),x,a3);}
+}barrier();}
+for(uint t=0;t<4;t++){uint c=tt+t*16,tok=t0+(c>>p.k);if(tok<nb){
+uint base=(tok*p.heads+kh*hq+(c&(hq-1)))*p.n+gl_WorkGroupID.x*64+rr;
+e_f.v[base]=a0[t];e_f.v[base+16]=a1[t];e_f.v[base+32]=a2[t];e_f.v[base+48]=a3[t];
+}}}

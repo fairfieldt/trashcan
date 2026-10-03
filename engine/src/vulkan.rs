@@ -60,6 +60,23 @@ pub fn q4_decode_shader(rows: usize, cols: usize) -> &'static str {
     }
 }
 
+/// Reuse a bounded score slab across query blocks. Every dispatch keeps the
+/// normal compute barrier, including the value read before scratch is reused.
+pub fn prefill_attention(d: &Device, cmd: vk::CommandBuffer, mut p: Push, n: usize) {
+    let kv = p.u[5];
+    let tq = 64 / (p.u[4] / kv);
+    p.u[1] = (p.u[4] / kv).ilog2();
+    let keys = if p.u[8] > 0 { p.u[8] + tq - 1 } else { p.u[7] };
+    for first in (0..n).step_by(64) {
+        p.u[13] = first as u32;
+        let nb = (n - first).min(64) as u32;
+        let groups = kv * nb.div_ceil(tq);
+        d.dispatch(cmd, "attn_scores", p, keys.div_ceil(64), groups);
+        d.dispatch(cmd, "attn_softmax", p, p.u[4], nb);
+        d.dispatch(cmd, "attn_values", p, p.u[6] / 64, groups);
+    }
+}
+
 /// Scalar reference pipelines with matching partition counts and scratch layout.
 pub fn attention_shaders(parts: u32) -> Result<(&'static str, &'static str)> {
     match parts {
@@ -246,6 +263,18 @@ impl Device {
             (
                 "attention_merge",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge.spv")).as_slice(),
+            ),
+            (
+                "attn_scores",
+                include_bytes!(concat!(env!("OUT_DIR"), "/attn_scores.spv")).as_slice(),
+            ),
+            (
+                "attn_softmax",
+                include_bytes!(concat!(env!("OUT_DIR"), "/attn_softmax.spv")).as_slice(),
+            ),
+            (
+                "attn_values",
+                include_bytes!(concat!(env!("OUT_DIR"), "/attn_values.spv")).as_slice(),
             ),
             (
                 "attention_merge_reference",

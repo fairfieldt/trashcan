@@ -158,8 +158,13 @@ Prefill processes the prompt in chunks of up to 512 tokens through the same laye
   - Implemented tile: 64x64 outputs per 256-thread workgroup, 4x4 accumulators per thread, a K step of 32
     (one Q4_0 block), with padded vec4 shared tiles (18 KiB). The FFN microbenchmark reaches about 2.2 TFLOP/s
     per GPU. A tested 128x64 tile was slower on this compiler/hardware.
-- **Attention:** causal, with the 1024 window on sliding layers, over the chunk plus the cached prefix (tiled,
-  flash-attention style, fp32).
+- **Attention:** causal, with the 1024 window on sliding layers, over the chunk plus the cached prefix.
+  Batches64+ use fp32 tiled scores, softmax and probability/value multiplication,
+  reusing a64-token score slab while retaining full-chunk projection/FFN GEMMs.
+  At80K capacity this adds156.7 MiB/GPU. Repeated4K prefill improves43.6%; the
+  interrupted73,216-token prefix runs3.55x faster than the saved baseline.
+  Small batches keep the prior attention path. Full80K/decode and final assistant
+  acceptance were cancelled at the user's request; see the measured report.
 - **Allreduce:** the same push-and-signal, with `N x 3840` f32 partials. Overlapping the transfer with the next
   layer's work can come later. The isolated-copy estimate is about 2.5% of the recorded 3.18-second
   pp512 run, but copy throughput and semaphore gaps must be measured in the complete graph.

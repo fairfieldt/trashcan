@@ -4,6 +4,7 @@ mod gguf;
 mod gpu;
 mod micro;
 mod model;
+mod prefill_micro;
 mod quant;
 mod responses;
 mod server;
@@ -69,6 +70,17 @@ enum Cmd {
         /// Compare scalar KV loads with the production shape-based kernel choice.
         #[arg(long, default_value = "selected", value_parser = ["scalar", "selected"])]
         kernel: String,
+    },
+    /// Compare bounded tiled prefill with scalar attention and an f64 CPU softmax.
+    PrefillAttentionBench {
+        #[arg(long, default_value_t = 4096)]
+        position: usize,
+        #[arg(long, default_value_t = 128)]
+        batch: usize,
+        #[arg(long, default_value_t = 2)]
+        iterations: u32,
+        #[arg(long)]
+        sliding: bool,
     },
     /// Stress P2P receiver cache visibility on both GPUs.
     P2pTest {
@@ -342,6 +354,12 @@ fn main() -> Result<()> {
             partitions,
             kernel,
         } => micro::attention(iterations, tokens, partitions, &kernel),
+        Cmd::PrefillAttentionBench {
+            position,
+            batch,
+            iterations,
+            sliding,
+        } => prefill_micro::bench(position, batch, iterations, sliding),
         Cmd::P2pTest { rounds, elements } => visibility::test(rounds, elements),
         Cmd::Render {
             model,

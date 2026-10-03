@@ -38,6 +38,9 @@ The [MTP verification follow-up](results/engine/mtp-exploration-20261003/README.
 raises repeated pooled MTP from 31.73 to 39.96 tok/s, preserving outputs and acceptance.
 The [80K context measurement](results/engine/context-80000-20261003/README.md)
 records 28.75 tok/s prefill and 12.35 tok/s decode, with long prefill still a major target.
+The [bounded tiled prefill round](results/engine/prefill-tiled-20261003/README.md)
+raises repeated 4K prefill by43.6% and reaches73,216 tokens3.55× faster than the
+saved baseline. The user stopped that 80K run before completion and decode.
 
 To serve the model through the OpenAI Responses API:
 

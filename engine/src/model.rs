@@ -53,6 +53,7 @@ pub(crate) struct Card {
     rk: Buffer,
     o: Buffer,
     pub attn_scratch: Buffer,
+    attn_scores: Buffer,
     gate: Buffer,
     up: Buffer,
     geglu: Buffer,
@@ -198,6 +199,7 @@ pub struct Engine {
     top_k: usize,
     counter: u64,
     cpu_reduce: bool,
+    tiled_prefill: bool,
     pub profile: Vec<[f64; 2]>,
     pub gaps: Vec<[f64; 2]>,
     pub timing: [f64; 3],
@@ -205,6 +207,12 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(path: &Path, context: usize, max_batch: usize, cpu_reduce: bool) -> Result<Self> {
+        let mode = std::env::var("TRASHCAN_PREFILL_ATTENTION").unwrap_or_else(|_| "tiled".into());
+        ensure!(
+            matches!(mode.as_str(), "scalar" | "tiled"),
+            "invalid prefill attention mode"
+        );
+        let tiled_prefill = mode == "tiled";
         ensure!(
             context > 0 && context <= 262144 && max_batch > 0 && max_batch <= 512,
             "invalid context (1..262144) or batch (1..512)"
@@ -351,6 +359,18 @@ impl Engine {
                 rk: alloc(1024)?,
                 o: alloc(4096)?,
                 attn_scratch: gpu.buffer(8 * 8 * 64 * 514 * 4, false, false, None)?,
+                // Global capacity dominates at long context. Sliding tiles cover
+                // at most 1024 + 31 keys. Scores are reused for 64 queries.
+                attn_scores: gpu.buffer(
+                    if tiled_prefill && max_batch >= 64 {
+                        max_batch.min(64) * 8 * (context.max(1055).div_ceil(64) * 64 + 16) * 4
+                    } else {
+                        4
+                    },
+                    false,
+                    false,
+                    None,
+                )?,
                 gate: alloc(F)?,
                 up: alloc(F)?,
                 geglu: alloc(F)?,
@@ -435,6 +455,7 @@ impl Engine {
             top_k: 64,
             counter: 0,
             cpu_reduce,
+            tiled_prefill,
             profile: vec![[0.; 2]; 97],
             gaps: vec![[0.; 2]; 97],
             timing: [0.; 3],
@@ -796,35 +817,55 @@ impl Engine {
             } else {
                 ("attention", "", 1)
             };
-            gpu.dispatch(
-                cmd,
-                partial_shader,
-                push(
-                    [
-                        c.rq.address,
-                        l.k.address,
-                        l.v.address,
-                        c.o.address,
-                        c.attn_scratch.address,
-                        0,
-                    ],
-                    u,
-                ),
-                if parts > 0 {
-                    8u32.div_ceil(heads_per_group) * parts
-                } else {
-                    8
-                },
-                n as u32,
-            );
-            if parts > 0 {
+            if self.tiled_prefill && n >= 64 {
+                u[0] = (if l.sliding { 1055usize } else { l.cap }).div_ceil(64) as u32 * 64 + 16;
+                crate::vulkan::prefill_attention(
+                    gpu,
+                    cmd,
+                    push(
+                        [
+                            c.rq.address,
+                            l.k.address,
+                            l.v.address,
+                            c.o.address,
+                            c.attn_scores.address,
+                            c.attn_scratch.address,
+                        ],
+                        u,
+                    ),
+                    n,
+                );
+            } else {
                 gpu.dispatch(
                     cmd,
-                    merge_shader,
-                    push([0, 0, 0, c.o.address, c.attn_scratch.address, 0], u),
-                    8,
+                    partial_shader,
+                    push(
+                        [
+                            c.rq.address,
+                            l.k.address,
+                            l.v.address,
+                            c.o.address,
+                            c.attn_scratch.address,
+                            0,
+                        ],
+                        u,
+                    ),
+                    if parts > 0 {
+                        8u32.div_ceil(heads_per_group) * parts
+                    } else {
+                        8
+                    },
                     n as u32,
                 );
+                if parts > 0 {
+                    gpu.dispatch(
+                        cmd,
+                        merge_shader,
+                        push([0, 0, 0, c.o.address, c.attn_scratch.address, 0], u),
+                        8,
+                        n as u32,
+                    );
+                }
             }
             if detail {
                 capture(cmd, &mut graph, format!("kqv_out-{il}"), &c.o, 8 * l.dim, 1)?;

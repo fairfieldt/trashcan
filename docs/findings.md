@@ -2,6 +2,29 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-03: bounded tiled long-context prefill
+
+`results/engine/prefill-tiled-20261003/` records three-pass tiled attention with
+64-query scratch reuse. The 80K-capacity slab adds 156.7 MiB/GPU and fits the
+D700s, unlike the recovered full-score prototype's 1.22 GiB/GPU.
+
+- Repeated pp512: **160.60 ->174.40 tok/s (+8.6%)**; pp4096:
+  **117.60 ->168.89 (+43.6%)**, with reversed phase order. Decode remains within
+  variation. Every reported chunk/decode top-token ID matches.
+- The user stopped the 80K run at **73,216 tokens**: **2365.50 ->667.21 s (3.55×)**
+  at that matched position. The last chunk improves29.714 ->5.584 s. All143
+  checkpoint IDs match and scores remain finite. This is a partial prefill
+  measurement; new full80K/decode totals are unavailable.
+- Global80K/batch512 attention micro: **3575.7 ->359.3 ms (9.95×)**. All-output
+  scalar checks and selected f64 softmax checks pass, including poisoned unused
+  cache slots, partial blocks and ring wrap. Real1700-token batch64/128/512
+  tests preserve64 serial continuation tokens; relative logits about0.00256.
+- Peak physical VRAM5889/5873 MiB fits6144 per card. Most compute holds850/1370;
+  slow intervals near40K/65K include one card at450 MHz. Temperatures peak100/97°C,
+  no new reset occurs, and the timing includes the intervals. Their cause remains
+  unresolved. Final reference/assistant/4096 checks were queued and cancelled
+  at the user's request; no final candidate acceptance is claimed.
+
 ## 2026-10-03: measured MTP verification improvement
 
 `results/engine/mtp-exploration-20261003/` records load-first Q4/Q6 multi-column
