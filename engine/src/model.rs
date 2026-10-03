@@ -3,7 +3,7 @@ use crate::{
     gguf::{GgmlType, Gguf},
     gpu::Instance,
     quant,
-    vulkan::{Buffer, Device, Push},
+    vulkan::{attention_shaders, Buffer, Device, Push},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
@@ -14,6 +14,7 @@ const V: usize = 131072;
 const L: usize = 48;
 // 96 receive buffers at 128 tokens occupy 180 MiB, within the 256 MiB peer BAR.
 const P2P_BATCH: usize = 128;
+const ATTENTION_32_MAX_TOKENS: usize = 1024;
 
 pub(crate) struct Layer {
     w: HashMap<String, Buffer>,
@@ -76,14 +77,62 @@ struct Graph {
     cmds: Vec<vk::CommandBuffer>,
     captures: Vec<Capture>,
 }
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+pub(crate) struct AttentionPartitions {
+    pub(crate) sliding: u32,
+    pub(crate) global: u32,
+}
+impl AttentionPartitions {
+    pub(crate) fn for_batch(pos: usize, batch: usize) -> Self {
+        // Large prefill uses the unsplit attention shader; its graph is reusable
+        // at every position. Small batches choose for the final visible token.
+        if batch > 8 {
+            return Self {
+                sliding: 0,
+                global: 0,
+            };
+        }
+        let select = |visible| match visible {
+            0..=32 => 8,
+            33..=256 => 16,
+            257..=ATTENTION_32_MAX_TOKENS => 32,
+            _ => 64,
+        };
+        let visible = pos + batch;
+        Self {
+            sliding: select(visible.min(1024)),
+            global: select(visible),
+        }
+    }
+}
+#[derive(Default)]
+struct KvHistory {
+    written: usize,
+}
+impl KvHistory {
+    fn record(&mut self, pos: usize, n: usize) {
+        // Position zero starts a new sequence. A speculative rollback must not
+        // forget later writes: those slots may have overwritten older history.
+        self.written = if pos == 0 {
+            n
+        } else {
+            self.written.max(pos + n)
+        };
+    }
+    fn retains(&self, current: usize, pos: usize, max_batch: usize) -> bool {
+        pos <= current
+            && (self.written <= 1024 + max_batch || self.written.saturating_sub(pos) <= max_batch)
+    }
+}
 pub struct Engine {
     pub gguf: Gguf,
     pub(crate) cards: Vec<Card>,
-    graphs: HashMap<(usize, bool, bool, usize), Vec<Graph>>,
+    graphs: HashMap<(usize, bool, bool, usize, AttentionPartitions), Vec<Graph>>,
     max_batch: usize,
     context: usize,
     pub pos: usize,
     last_batch: usize,
+    kv_history: KvHistory,
     top_k: usize,
     counter: u64,
     cpu_reduce: bool,
@@ -239,7 +288,7 @@ impl Engine {
                 rq: alloc(4096)?,
                 rk: alloc(1024)?,
                 o: alloc(4096)?,
-                attn_scratch: gpu.buffer(8 * 8 * 32 * 514 * 4, false, false, None)?,
+                attn_scratch: gpu.buffer(8 * 8 * 64 * 514 * 4, false, false, None)?,
                 gate: alloc(F)?,
                 up: alloc(F)?,
                 geglu: alloc(F)?,
@@ -319,6 +368,7 @@ impl Engine {
             context,
             pos: 0,
             last_batch: 0,
+            kv_history: KvHistory::default(),
             top_k: 64,
             counter: 0,
             cpu_reduce,
@@ -333,7 +383,14 @@ impl Engine {
     fn uses_stream(&self, n: usize) -> bool {
         !self.cpu_reduce && n > P2P_BATCH
     }
-    fn record(&self, g: usize, n: usize, dump: bool, all_logits: bool) -> Result<Graph> {
+    fn record(
+        &self,
+        g: usize,
+        n: usize,
+        dump: bool,
+        all_logits: bool,
+        attention: AttentionPartitions,
+    ) -> Result<Graph> {
         let c = &self.cards[g];
         let gpu = &c.gpu;
         let mut graph = Graph {
@@ -411,7 +468,7 @@ impl Engine {
                     "multivec"
                 }
             } else if kind == 0 {
-                "matvecq4"
+                crate::vulkan::q4_decode_shader(rows, k)
             } else {
                 "headvec"
             };
@@ -421,7 +478,10 @@ impl Engine {
                 push([0, input, y.address, 0, 0, 0], u).defer_barrier(defer),
                 if shader == "gemm" {
                     rows.div_ceil(64)
-                } else if matches!(shader, "matvecq4" | "headvec" | "multivec4") {
+                } else if matches!(
+                    shader,
+                    "matvecq4" | "matvecq4narrow" | "headvec" | "multivec4"
+                ) {
                     rows.div_ceil(16)
                 } else {
                     rows.div_ceil(4)
@@ -650,13 +710,19 @@ impl Engine {
             u[6] = l.dim as u32;
             u[7] = l.cap as u32;
             u[8] = if l.sliding { 1024 } else { 0 };
+            let parts = if l.sliding {
+                attention.sliding
+            } else {
+                attention.global
+            };
+            let (partial_shader, merge_shader) = if parts > 0 {
+                attention_shaders(parts)?
+            } else {
+                ("attention", "")
+            };
             gpu.dispatch(
                 cmd,
-                if n <= 8 {
-                    "attention_partial"
-                } else {
-                    "attention"
-                },
+                partial_shader,
                 push(
                     [
                         c.rq.address,
@@ -668,13 +734,13 @@ impl Engine {
                     ],
                     u,
                 ),
-                if n <= 8 { 8 * 32 } else { 8 },
+                if parts > 0 { 8 * parts } else { 8 },
                 n as u32,
             );
-            if n <= 8 {
+            if parts > 0 {
                 gpu.dispatch(
                     cmd,
-                    "attention_merge",
+                    merge_shader,
                     push([0, 0, 0, c.o.address, c.attn_scratch.address, 0], u),
                     8,
                     n as u32,
@@ -914,10 +980,11 @@ impl Engine {
             c.params_host
                 .write(bytemuck::cast_slice(&[self.pos as u32, n as u32, 0, 0]))?;
         }
-        let key = (n, dump.is_some(), all_logits, self.top_k);
+        let attention = AttentionPartitions::for_batch(self.pos, n);
+        let key = (n, dump.is_some(), all_logits, self.top_k, attention);
         if !self.graphs.contains_key(&key) {
-            let a = self.record(0, n, dump.is_some(), all_logits)?;
-            let b = self.record(1, n, dump.is_some(), all_logits)?;
+            let a = self.record(0, n, dump.is_some(), all_logits, attention)?;
+            let b = self.record(1, n, dump.is_some(), all_logits, attention)?;
             self.graphs.insert(key, vec![a, b]);
         }
         let graphs = &self.graphs[&key];
@@ -998,6 +1065,7 @@ impl Engine {
         }
         self.timing[1] = started.elapsed().as_secs_f64() * 1e3 - self.timing[0];
         self.counter += 96;
+        self.kv_history.record(self.pos, n);
         self.pos += n;
         self.last_batch = n;
         for (g, c) in self.cards.iter().enumerate() {
@@ -1093,6 +1161,14 @@ impl Engine {
         ensure!(
             self.pos - pos <= self.last_batch && self.pos - pos <= self.max_batch,
             "rewind exceeds the last batch retained by the sliding cache"
+        );
+        self.rewind_prefix(pos)
+    }
+    /// Reuse an exact token prefix only while its sliding-window history survives.
+    pub fn rewind_prefix(&mut self, pos: usize) -> Result<()> {
+        ensure!(
+            self.kv_history.retains(self.pos, pos, self.max_batch),
+            "prefix is outside retained sliding-cache history"
         );
         self.pos = pos;
         Ok(())
@@ -1253,4 +1329,137 @@ fn validate(g: &Gguf) -> Result<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod attention_partition_tests {
+    use super::{AttentionPartitions, ATTENTION_32_MAX_TOKENS};
+
+    #[test]
+    fn decode_thresholds_and_sliding_window_choose_distinct_graph_buckets() {
+        for (visible, expected) in [
+            (1, 8),
+            (32, 8),
+            (33, 16),
+            (256, 16),
+            (257, 32),
+            (1024, 32),
+            (ATTENTION_32_MAX_TOKENS, 32),
+            (ATTENTION_32_MAX_TOKENS + 1, 64),
+            (262144, 64),
+        ] {
+            let selected = AttentionPartitions::for_batch(visible - 1, 1);
+            assert_eq!(selected.global, expected, "visible={visible}");
+            assert_eq!(selected.sliding, expected.min(32), "visible={visible}");
+        }
+        for boundary in [32, 256, ATTENTION_32_MAX_TOKENS] {
+            assert_ne!(
+                AttentionPartitions::for_batch(boundary - 1, 1),
+                AttentionPartitions::for_batch(boundary, 1)
+            );
+        }
+    }
+
+    #[test]
+    fn verification_uses_final_visible_token_and_large_prefill_has_one_bucket() {
+        assert_eq!(AttentionPartitions::for_batch(24, 8).global, 8);
+        assert_eq!(AttentionPartitions::for_batch(25, 8).global, 16);
+        assert_eq!(AttentionPartitions::for_batch(248, 8).global, 16);
+        assert_eq!(AttentionPartitions::for_batch(249, 8).global, 32);
+        let before = AttentionPartitions::for_batch(ATTENTION_32_MAX_TOKENS - 8, 8);
+        let after = AttentionPartitions::for_batch(ATTENTION_32_MAX_TOKENS - 7, 8);
+        assert_eq!(before.global, 32);
+        assert_eq!(after.global, 64);
+        assert_eq!(before.sliding, after.sliding);
+        for batch in [9, 32, 128, 512] {
+            assert_eq!(
+                AttentionPartitions::for_batch(0, batch),
+                AttentionPartitions::for_batch(32768, batch)
+            );
+            assert_eq!(AttentionPartitions::for_batch(0, batch).global, 0);
+            assert_eq!(AttentionPartitions::for_batch(0, batch).sliding, 0);
+        }
+    }
+}
+
+#[cfg(test)]
+mod kv_history_tests {
+    use super::KvHistory;
+
+    #[test]
+    fn retention_includes_writes_beyond_speculative_rollback() {
+        let mut history = KvHistory::default();
+        history.record(0, 1536);
+        history.record(1536, 8);
+        // Accept two tokens, then write three. The rejected tail still exists.
+        history.record(1538, 3);
+        assert!(history.retains(1541, 1541, 8));
+        assert!(history.retains(1541, 1536, 8));
+        assert!(!history.retains(1541, 1535, 8));
+        assert!(!history.retains(1541, 1542, 8));
+    }
+
+    #[test]
+    fn rewind_limit_counts_all_decode_steps_and_resets_for_new_sequence() {
+        let mut history = KvHistory::default();
+        history.record(0, 1600);
+        for pos in 1600..1728 {
+            history.record(pos, 1);
+        }
+        assert!(history.retains(1728, 1600, 128));
+        assert!(!history.retains(1728, 1599, 128));
+        history.record(0, 8);
+        assert!(history.retains(8, 0, 128));
+    }
+
+    #[test]
+    fn any_prefix_survives_before_the_first_sliding_ring_wrap() {
+        let mut history = KvHistory::default();
+        history.record(0, 100);
+        for pos in 100..1056 {
+            history.record(pos, 1);
+        }
+        assert!(history.retains(1056, 100, 32));
+        assert!(history.retains(1056, 0, 32));
+        assert!(!history.retains(1056, 1057, 32));
+        history.record(1056, 1);
+        assert!(!history.retains(1057, 100, 32));
+        assert!(history.retains(1057, 1025, 32));
+    }
+
+    #[test]
+    fn accepted_rewinds_keep_every_required_sliding_key_after_ring_wrap() {
+        for batch in [1, 8, 32, 128, 512] {
+            let cap = 1024 + batch;
+            for end in [7, cap / 2, cap, cap + 1, cap * 3 + 27] {
+                let mut slots = vec![usize::MAX; cap];
+                let mut history = KvHistory::default();
+                for pos in 0..end {
+                    slots[pos % cap] = pos;
+                    history.record(pos, 1);
+                }
+                for pos in 0..=end {
+                    if !history.retains(end, pos, batch) {
+                        continue;
+                    }
+                    // The next query consumes at most 1023 preceding keys.
+                    for key in pos.saturating_sub(1023)..pos {
+                        assert_eq!(slots[key % cap], key);
+                    }
+                    // A new full batch may overwrite rejected positions, but
+                    // must preserve history for its first query as well.
+                    let mut next = slots.clone();
+                    for key in pos..pos + batch {
+                        next[key % cap] = key;
+                    }
+                    for key in pos.saturating_sub(1023)..pos + batch {
+                        assert_eq!(next[key % cap], key);
+                    }
+                }
+                if end > cap {
+                    assert!(!history.retains(end, end - batch - 1, batch));
+                }
+            }
+        }
+    }
 }

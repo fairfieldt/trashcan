@@ -1,8 +1,8 @@
 //! Native BF16 Gemma4 drafter using the target's last sliding/global KV caches.
 use crate::{
     generation::Sampler,
-    model::Engine,
-    vulkan::{Buffer, Device, Push},
+    model::{AttentionPartitions, Engine},
+    vulkan::{attention_shaders, Buffer, Device, Push},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
@@ -150,7 +150,7 @@ struct DraftCard {
     top_scratch: Buffer,
     top: Buffer,
     next_h: Buffer,
-    cmds: Vec<vk::CommandBuffer>,
+    cmds: HashMap<(AttentionPartitions, usize), Vec<vk::CommandBuffer>>,
     own: vk::Semaphore,
     other: vk::Semaphore,
     fence: vk::Fence,
@@ -247,7 +247,7 @@ impl Assistant {
                 top_scratch: gpu.buffer(128 * 64 * 8, false, false, None)?,
                 top: gpu.buffer(64 * 8, true, false, None)?,
                 next_h: gpu.buffer(3840 * 4, true, false, None)?,
-                cmds: vec![],
+                cmds: HashMap::new(),
                 own,
                 other,
                 fence,
@@ -283,7 +283,7 @@ impl Assistant {
             }
             cards[g].peer = imported;
         }
-        let mut this = Self {
+        let this = Self {
             cards,
             counter: 0,
             proposed: 0,
@@ -294,9 +294,6 @@ impl Assistant {
             pending_h: None,
             top_k,
         };
-        for g in 0..2 {
-            this.cards[g].cmds = this.record(g, target)?;
-        }
         eprintln!(
             "MTP loaded: native BF16; full vocabulary head (checkpoint has no centroid tensors)"
         );
@@ -308,7 +305,12 @@ impl Assistant {
         }
         Ok(this)
     }
-    fn record(&self, g: usize, target: &Engine) -> Result<Vec<vk::CommandBuffer>> {
+    fn record(
+        &self,
+        g: usize,
+        target: &Engine,
+        attention: AttentionPartitions,
+    ) -> Result<Vec<vk::CommandBuffer>> {
         let c = &self.cards[g];
         let gpu = &c.gpu;
         let mut commands = Vec::new();
@@ -433,9 +435,15 @@ impl Assistant {
             u[6] = dim as u32;
             u[7] = layer.cap as u32;
             u[8] = if il < 3 { 1024 } else { 0 };
+            let parts = if layer.sliding {
+                attention.sliding
+            } else {
+                attention.global
+            };
+            let (partial_shader, merge_shader) = attention_shaders(parts)?;
             gpu.dispatch(
                 cmd,
-                "attention_partial",
+                partial_shader,
                 push(
                     [
                         c.rq.address,
@@ -447,12 +455,12 @@ impl Assistant {
                     ],
                     u,
                 ),
-                8 * 32,
+                8 * parts,
                 1,
             );
             gpu.dispatch(
                 cmd,
-                "attention_merge",
+                merge_shader,
                 push(
                     [
                         0,
@@ -541,6 +549,17 @@ impl Assistant {
     pub fn draft(&mut self, target: &Engine, token: u32, h: &[f32]) -> Result<DraftOutput> {
         let started = std::time::Instant::now();
         ensure!(h.len() == 3840 && target.pos > 0, "invalid draft input");
+        // Draft queries use position `target.pos`, but can only read the
+        // `target.pos` keys already cached by the target. Reuse its policy for
+        // that visible key count, with independent sliding/global graph keys.
+        let attention = AttentionPartitions::for_batch(target.pos - 1, 1);
+        let key = (attention, self.top_k);
+        for g in 0..self.cards.len() {
+            if !self.cards[g].cmds.contains_key(&key) {
+                let commands = self.record(g, target, attention)?;
+                self.cards[g].cmds.insert(key, commands);
+            }
+        }
         let mut input = target.embedding(token)?;
         input.extend_from_slice(h);
         for c in &self.cards {
@@ -557,7 +576,7 @@ impl Assistant {
         }
         for c in &self.cards {
             c.gpu
-                .submit_sequence(&c.cmds, c.other, c.own, self.counter, c.fence)?;
+                .submit_sequence(&c.cmds[&key], c.other, c.own, self.counter, c.fence)?;
         }
         for c in &self.cards {
             unsafe {
@@ -587,6 +606,11 @@ impl Assistant {
         candidates.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
         candidates.truncate(self.top_k);
         Ok((candidates, next))
+    }
+    pub fn set_top_k(&mut self, k: usize) -> Result<()> {
+        ensure!((1..=64).contains(&k), "draft top-k must be 1..64");
+        self.top_k = k;
+        Ok(())
     }
     pub fn reset(&mut self) {
         self.pending_h = None;
@@ -638,7 +662,9 @@ impl Drop for Assistant {
         for c in &self.cards {
             unsafe {
                 let _ = c.gpu.dev.device_wait_idle();
-                c.gpu.dev.free_command_buffers(c.gpu.pool, &c.cmds);
+                for commands in c.cmds.values() {
+                    c.gpu.dev.free_command_buffers(c.gpu.pool, commands);
+                }
                 c.gpu.dev.destroy_semaphore(c.own, None);
                 c.gpu.dev.destroy_semaphore(c.other, None);
                 c.gpu.dev.destroy_fence(c.fence, None);

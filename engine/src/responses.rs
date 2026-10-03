@@ -663,6 +663,7 @@ impl<W: Write> Output<W> {
     pub fn finish(
         &mut self,
         input_tokens: usize,
+        cached_tokens: usize,
         output_tokens: usize,
         reasoning_tokens: usize,
         limited: bool,
@@ -672,7 +673,7 @@ impl<W: Write> Output<W> {
         if limited {
             self.response["incomplete_details"] = json!({"reason":"max_output_tokens"});
         }
-        self.response["usage"] = json!({"input_tokens":input_tokens,"input_tokens_details":{"cached_tokens":0,"cache_write_tokens":0},
+        self.response["usage"] = json!({"input_tokens":input_tokens,"input_tokens_details":{"cached_tokens":cached_tokens,"cache_write_tokens":0},
             "output_tokens":output_tokens,"output_tokens_details":{"reasoning_tokens":reasoning_tokens},"total_tokens":input_tokens+output_tokens});
         self.event(
             if limited {
@@ -1105,10 +1106,20 @@ mod tests {
             native.token(token, bytes, &mut out, &r.tools).unwrap();
         }
         native.finish(&mut out, false).unwrap();
-        let response = out.finish(12, 20, native.reasoning_tokens, false).unwrap();
+        let response = out
+            .finish(12, 7, 20, native.reasoning_tokens, false)
+            .unwrap();
         let events = events(&out.writer);
         assert_eq!(events.first().unwrap()["type"], "response.created");
         assert_eq!(events.last().unwrap()["type"], "response.completed");
+        assert_eq!(
+            response["usage"]["input_tokens_details"]["cached_tokens"],
+            7
+        );
+        assert_eq!(
+            events.last().unwrap()["response"]["usage"],
+            response["usage"]
+        );
         assert_eq!(events.last().unwrap()["response"], response);
         assert!(events
             .iter()
@@ -1143,7 +1154,7 @@ mod tests {
             .token(5, b"call:unfinished{x:", &mut out, &r.tools)
             .unwrap();
         native.finish(&mut out, true).unwrap();
-        let response = out.finish(2, 3, 0, true).unwrap();
+        let response = out.finish(2, 0, 3, 0, true).unwrap();
         assert_eq!(response["status"], "incomplete");
         assert_eq!(
             response["incomplete_details"]["reason"],
@@ -1167,7 +1178,7 @@ mod tests {
         out.start().unwrap();
         out.tool("tool_search", json!({"query":"weather"}), &r.tools)
             .unwrap();
-        let response = out.finish(2, 4, 0, false).unwrap();
+        let response = out.finish(2, 0, 4, 0, false).unwrap();
         assert_eq!(response["tools"], json!([search]));
         assert_eq!(response["parallel_tool_calls"], false);
         assert_eq!(

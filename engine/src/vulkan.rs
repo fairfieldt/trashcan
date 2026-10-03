@@ -51,6 +51,26 @@ impl Push {
     }
 }
 
+/// Matching pipelines must use the same partition count and scratch layout.
+pub fn q4_decode_shader(rows: usize, cols: usize) -> &'static str {
+    if rows <= 4096 && cols <= 4096 {
+        "matvecq4narrow"
+    } else {
+        "matvecq4"
+    }
+}
+
+pub fn attention_shaders(parts: u32) -> Result<(&'static str, &'static str)> {
+    match parts {
+        8 => Ok(("attention_partial8", "attention_merge8")),
+        16 => Ok(("attention_partial16", "attention_merge16")),
+        32 => Ok(("attention_partial", "attention_merge")),
+        64 => Ok(("attention_partial64", "attention_merge64")),
+        128 => Ok(("attention_partial128", "attention_merge128")),
+        _ => anyhow::bail!("attention partitions must be 8, 16, 32, 64 or 128"),
+    }
+}
+
 impl Device {
     pub fn new(inst: Rc<Instance>, pd: vk::PhysicalDevice) -> Result<Rc<Self>> {
         let mut subgroup = vk::PhysicalDeviceSubgroupProperties::default();
@@ -210,6 +230,10 @@ impl Device {
                 include_bytes!(concat!(env!("OUT_DIR"), "/matvecq4.spv")).as_slice(),
             ),
             (
+                "matvecq4narrow",
+                include_bytes!(concat!(env!("OUT_DIR"), "/matvecq4narrow.spv")).as_slice(),
+            ),
+            (
                 "multivec",
                 include_bytes!(concat!(env!("OUT_DIR"), "/multivec.spv")).as_slice(),
             ),
@@ -238,20 +262,50 @@ impl Device {
             let module = unsafe {
                 dev.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&words), None)?
             };
-            let stage = vk::PipelineShaderStageCreateInfo::default()
-                .stage(vk::ShaderStageFlags::COMPUTE)
-                .module(module)
-                .name(c"main");
-            let ci = [vk::ComputePipelineCreateInfo::default()
-                .stage(stage)
-                .layout(layout)];
-            let pipe =
-                unsafe { dev.create_compute_pipelines(vk::PipelineCache::null(), &ci, None) }
-                    .map_err(|(_, e)| anyhow::anyhow!("{name}: {e}"))?[0];
+            let variants: &[(&'static str, Option<u32>)] = match name {
+                "attention_partial" => &[
+                    ("attention_partial", None),
+                    ("attention_partial8", Some(8)),
+                    ("attention_partial16", Some(16)),
+                    ("attention_partial64", Some(64)),
+                    ("attention_partial128", Some(128)),
+                ],
+                "attention_merge" => &[
+                    ("attention_merge", None),
+                    ("attention_merge8", Some(8)),
+                    ("attention_merge16", Some(16)),
+                    ("attention_merge64", Some(64)),
+                    ("attention_merge128", Some(128)),
+                ],
+                _ => &[(name, None)],
+            };
+            for &(variant, parts) in variants {
+                let entries = [vk::SpecializationMapEntry::default()
+                    .constant_id(0)
+                    .offset(0)
+                    .size(std::mem::size_of::<u32>())];
+                let data = parts.unwrap_or(32).to_ne_bytes();
+                let specialization = vk::SpecializationInfo::default()
+                    .map_entries(&entries)
+                    .data(&data);
+                let mut stage = vk::PipelineShaderStageCreateInfo::default()
+                    .stage(vk::ShaderStageFlags::COMPUTE)
+                    .module(module)
+                    .name(c"main");
+                if parts.is_some() {
+                    stage = stage.specialization_info(&specialization);
+                }
+                let ci = [vk::ComputePipelineCreateInfo::default()
+                    .stage(stage)
+                    .layout(layout)];
+                let pipe =
+                    unsafe { dev.create_compute_pipelines(vk::PipelineCache::null(), &ci, None) }
+                        .map_err(|(_, e)| anyhow::anyhow!("{variant}: {e}"))?[0];
+                pipelines.insert(variant, pipe);
+            }
             unsafe {
                 dev.destroy_shader_module(module, None);
             }
-            pipelines.insert(name, pipe);
         }
         let mem = unsafe { inst.instance.get_physical_device_memory_properties(pd) };
         let period = unsafe { inst.instance.get_physical_device_properties(pd) }

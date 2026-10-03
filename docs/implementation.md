@@ -112,6 +112,9 @@ python3 tools/compare_activations.py results/engine/check results/reference-vulk
 ```sh
 target/release/trashcan matvec-bench "$model" --iterations 100
 target/release/trashcan matvec-bench "$model" --tensor blk.0.ffn_down.weight --iterations 1000
+target/release/trashcan matvec-bench "$model" --tensor blk.0.attn_q.weight --kernel matvecq4narrow --iterations 1000
+target/release/trashcan attention-bench --tokens 768 --iterations 100
+target/release/trashcan attention-bench --tokens 8192 --partitions 64 --iterations 100
 target/release/trashcan topk-bench --batch 8
 target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --profile results/engine/bench.tsv
 target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --draft "$assistant"
@@ -135,8 +138,16 @@ without it. The third argument selects the result directory.
 `matvec-bench` warms each GPU for 500 ms before measuring, so an idle D700 has time to ramp its clocks.
 `--warmup-ms` changes that duration. `--tensor` selects a Q4 projection with the engine's row/column
 sharding; the default is layer 0's FFN gate. Every column uses a different nonuniform input, and three
-output rows are checked against a CPU dot product. `topk-bench` checks GPU selection against a CPU sort
+output rows are checked against a CPU dot product. Single-column runs use the same shape-based wide/narrow
+kernel choice as the model unless `--kernel` explicitly selects a variant. `topk-bench` checks GPU selection against a CPU sort
 at ranks 1, 8 and 64, including tied scores, an incomplete final chunk, softcap and suppressed token IDs.
+
+`attention-bench` measures partial attention plus its merge on both GPUs, using eight query heads and
+the model's two shapes: dimension 256 / four KV heads and dimension 512 / one KV head. It sweeps 8, 16,
+32, 64 and 128 specialized partitions by default; `--partitions` selects one count. Each case warms for
+300 ms and checks six output values against a CPU softmax with f64 accumulation. `--tokens` accepts
+1–32768 and defaults to 768. These synthetic cases attend to the entire requested sequence, without
+the model's sliding-window clamp; full-model timing and cache validation remain separate checks.
 
 ## Weight formats and GPU schedule
 
@@ -144,6 +155,13 @@ Q4_0 is repacked on upload into all f32 block scales followed by all 16-byte pac
 retain GGUF nibble order. The cost is 20 bytes per 32 weights versus GGUF's 18. Decode, verification and
 prefill share this representation. The output head expands Q6_K into signed 8-bit quants plus f32 signed
 scales per 16 weights (320 versus 210 bytes per 256); embedding lookup remains original Q6_K on CPU.
+
+Single-column Q4 decoding unpacks unsigned nibble values through byte conversions, then subtracts
+the shared zero-point contribution `8 × sum(x)` before applying each block scale. `matvecq4` reuses
+activations across four rows per wave in a 256-thread workgroup. For a sharded matrix with both row
+count and input width at most 4096, `matvecq4narrow` uses two rows per wave and 512 threads. Both produce
+16 rows per workgroup and read the same weight layout. The four-column verification kernel retains
+signed nibble extraction; batches 5–8 use two column tiles. Large prefill retains the existing GEMM.
 
 Matrices, activations and peer receive buffers use cached fixed descriptor sets. `Buffer.address` is a
 CPU-side handle plus byte offset used to select descriptors, not a Vulkan device address. Buffer device
@@ -162,13 +180,32 @@ pass. This uses 195 MiB of P2P buffers at batch 512. `--cpu-reduce` instead uses
 staging: after each pair of fences, the CPU copies each partial to the peer's staging, then the next
 pre-recorded segment uploads and sums it.
 
-At context 8192 / batch 512 the target allocates 4552 MiB per GPU and the assistant adds 415 MiB.
-At context 32768 the calculated combined total is about 5351 MiB. Imports alias the peer allocations
-and are not counted twice. Host staging is separate; 32K execution has not been validated.
+The current target measures **4556.1 MiB per GPU** at context 8192 / batch 512 in
+`results/engine/main-tuning-20261003/final-{1,2}.json`. The earlier fixed-32-partition build measured
+4552 MiB; increasing scratch capacity to 64 partitions adds 4.02 MiB. The assistant adds about 415 MiB,
+giving a calculated combined total of about 4971 MiB at that configuration.
+At context 32768 the calculated combined total is about 5355 MiB. Imports alias the peer allocations
+and are not counted twice. Host staging and driver-managed pipeline/command storage are separate;
+these totals do not establish residency, and 32K execution has not been validated.
 
-Attention uses scale 1.0 and f16 KV. Decode/small verification batches partition keys into 32 chunks and
-combine online-softmax maxima, denominators and weighted sums. Prefill uses a wave per query/head. Global
-RoPE rotates pairs 0–63 (dimensions 0–63 and 256–319), using the checkpoint's frequency factors.
+Attention uses scale 1.0 and f16 KV. Decode and verification batches of at most eight tokens select
+specialized partition counts from the final visible position in the batch:
+
+| visible keys | partitions |
+|---|---:|
+| 1–32 | 8 |
+| 33–256 | 16 |
+| 257–1024 | 32 |
+| over 1024 | 64 |
+
+Sliding layers clamp the count to their 1024-token window, while global layers use the full prefix.
+The partial kernels combine online-softmax maxima, denominators and weighted sums in a matching merge
+kernel. Vulkan specialization constants keep partition arithmetic fixed at pipeline compilation.
+Recorded target graphs include both sliding and global partition counts in their cache key. The
+assistant uses the same buckets for its committed target keys and caches its graphs separately.
+Scratch reserves eight tokens × eight heads × 64 partitions × 514 f32 values, or 8.03 MiB per GPU;
+the assistant reuses this target scratch. Prefill batches above eight retain a wave per query/head
+without key partitioning. Global RoPE rotates pairs 0–63 (dimensions 0–63 and 256–319), using the checkpoint's frequency factors.
 Independent Q/K/V and gate/up operations share a trailing barrier. The target fuses post-normalization,
 the residual update / layer scaling and the next RMS normalization while preserving their reduction order.
 

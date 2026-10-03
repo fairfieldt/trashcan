@@ -51,6 +51,56 @@ pub struct Options {
     draft: Option<PathBuf>,
     #[arg(long, default_value_t = 3)]
     draft_tokens: usize,
+    /// Replay every prompt from position zero instead of reusing resident KV.
+    #[arg(long)]
+    no_prefix_cache: bool,
+}
+
+/// One resident sequence, containing only tokens actually processed by the target.
+/// A pending sampled token is not KV state until a forward pass consumes it.
+#[derive(Default)]
+struct PrefixCache {
+    tokens: Vec<u32>,
+    prompt_len: usize,
+    logits: Vec<(f32, u32)>,
+    top_k: usize,
+}
+
+impl PrefixCache {
+    fn new(ids: &[u32], logits: &[(f32, u32)], top_k: usize) -> Self {
+        Self {
+            tokens: ids.to_vec(),
+            prompt_len: ids.len(),
+            logits: logits.to_vec(),
+            top_k,
+        }
+    }
+    fn plan(&self, ids: &[u32], pos: usize, top_k: usize, draft: bool) -> (usize, bool) {
+        if self.tokens.len() != pos || ids.is_empty() {
+            return (0, false);
+        }
+        let common = self
+            .tokens
+            .iter()
+            .zip(ids)
+            .take_while(|(a, b)| a == b)
+            .count();
+        // The original prompt logits remain exact across repeated requests. A
+        // drafter also needs the final hidden row, so it must replay a token.
+        let saved_logits = !draft
+            && common == ids.len()
+            && ids.len() == self.prompt_len
+            && self.top_k == top_k
+            && !self.logits.is_empty();
+        (
+            if saved_logits {
+                common
+            } else {
+                common.min(ids.len() - 1)
+            },
+            saved_logits,
+        )
+    }
 }
 
 fn header(name: &str, value: &str) -> Header {
@@ -111,6 +161,7 @@ pub fn serve(options: Options) -> Result<()> {
         seed: options.seed,
         thinking: options.thinking,
     };
+    let mut prefix_cache = PrefixCache::default();
     eprintln!(
         "Responses server listening on http://{} (model: {})",
         http.server_addr(),
@@ -124,8 +175,11 @@ pub fn serve(options: Options) -> Result<()> {
             &mut engine,
             &tokenizer,
             assistant.as_mut(),
+            &mut prefix_cache,
         ) {
-            // Failed writes cancel generation, and the next request starts from a clean KV position.
+            // Also discard a completed nonstreaming generation if its final
+            // HTTP write failed, or an SSE disconnect occurred before generation.
+            prefix_cache = PrefixCache::default();
             eprintln!("request failed: {e:#}");
         }
     }
@@ -171,6 +225,7 @@ fn prepare(
     Ok((parsed, ids))
 }
 
+#[allow(clippy::too_many_arguments)] // Resident engine/cache and HTTP protocol state.
 fn handle(
     mut request: tiny_http::Request,
     options: &Options,
@@ -178,6 +233,7 @@ fn handle(
     engine: &mut Engine,
     tokenizer: &Tokenizer,
     assistant: Option<&mut Assistant>,
+    prefix_cache: &mut PrefixCache,
 ) -> Result<()> {
     let path = request.url().split('?').next().unwrap_or("").to_owned();
     if request.method() == &Method::Options && options.cors {
@@ -231,6 +287,7 @@ fn handle(
             &parsed,
             &ids,
             &mut output,
+            prefix_cache,
         ) {
             // If the client disconnected this write fails too; inference has already stopped.
             let _ = output.fail(&format!("{e:#}"));
@@ -246,6 +303,7 @@ fn handle(
             &parsed,
             &ids,
             &mut output,
+            prefix_cache,
         ) {
             Ok(response) => respond(request, 200, response, options.cors)?,
             Err(e) => error(request, 500, &format!("{e:#}"), options.cors)?,
@@ -263,15 +321,33 @@ fn generate<W: Write>(
     request: &Request,
     ids: &[u32],
     output: &mut Output<W>,
+    prefix_cache: &mut PrefixCache,
 ) -> Result<Value> {
-    engine.pos = 0;
+    // Keep the shared cache empty until the complete request succeeds. Any GPU,
+    // parsing or socket failure then forces the next request to rebuild its KV.
+    let previous = std::mem::take(prefix_cache);
+    let params = request.sampling;
+    let top_k = if params.temperature == 0. { 1 } else { 64 };
     if let Some(draft) = assistant.as_mut() {
         draft.reset();
+        draft.set_top_k(top_k)?;
     }
-    let params = request.sampling;
-    engine.set_top_k(if params.temperature == 0. { 1 } else { 64 })?;
+    engine.set_top_k(top_k)?;
     let mut sampler = Sampler::new(params.temperature, params.top_k, params.top_p, params.seed)?;
-    let logits = generation::prefill(engine, ids, options.batch)?;
+    let (candidate, saved_logits) = previous.plan(ids, engine.pos, top_k, assistant.is_some());
+    let cached =
+        if !options.no_prefix_cache && candidate > 0 && engine.rewind_prefix(candidate).is_ok() {
+            candidate
+        } else {
+            engine.pos = 0;
+            0
+        };
+    let logits = if cached > 0 && saved_logits {
+        previous.logits
+    } else {
+        generation::prefill(engine, &ids[cached..], options.batch)?
+    };
+    let mut next_cache = PrefixCache::new(ids, &logits, top_k);
     let mut pending = sampler.sample(&logits);
     let budget = params.max_tokens.min(engine.remaining());
     let mut native = NativeOutput::default();
@@ -289,6 +365,10 @@ fn generate<W: Write>(
             .min(engine.remaining().saturating_sub(1));
         if let Some(draft) = assistant.as_mut().filter(|_| k > 0) {
             let (chunk, next) = draft.step(engine, pending, &mut sampler, k)?;
+            // step returns only the committed prefix, after rejected proposals
+            // have been rewound. Even tokens after an early protocol stop were
+            // actually processed and therefore belong to the resident sequence.
+            next_cache.tokens.extend_from_slice(&chunk);
             pending = next;
             for token in chunk {
                 generated += 1;
@@ -320,10 +400,74 @@ fn generate<W: Write>(
                 break;
             }
             if generated < budget {
-                pending = sampler.sample(&engine.forward(&[pending], None, false)?.remove(0));
+                let logits = engine.forward(&[pending], None, false)?.remove(0);
+                next_cache.tokens.push(pending);
+                pending = sampler.sample(&logits);
             }
         }
     }
     native.finish(output, !stopped)?;
-    output.finish(ids.len(), generated, native.reasoning_tokens, !stopped)
+    let response = output.finish(
+        ids.len(),
+        cached,
+        generated,
+        native.reasoning_tokens,
+        !stopped,
+    )?;
+    if !options.no_prefix_cache && next_cache.tokens.len() == engine.pos {
+        *prefix_cache = next_cache;
+    }
+    Ok(response)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PrefixCache;
+
+    #[test]
+    fn repeated_prompt_reuses_saved_logits_and_excludes_unprocessed_output() {
+        let mut cache = PrefixCache::new(&[2, 3, 4], &[(1., 5)], 1);
+        // Token 5 was forwarded; a final sampled token 6 was only emitted.
+        cache.tokens.push(5);
+        assert_eq!(cache.plan(&[2, 3, 4], 4, 1, false), (3, true));
+        assert_eq!(cache.plan(&[2, 3, 4, 5, 6, 7], 4, 1, false), (4, false));
+        assert_eq!(cache.plan(&[2, 3, 4], 5, 1, false), (0, false));
+    }
+
+    #[test]
+    fn changed_sampler_or_drafter_recomputes_the_last_prompt_token() {
+        let cache = PrefixCache::new(&[2, 3, 4], &[(1., 5)], 1);
+        assert_eq!(cache.plan(&[2, 3, 4], 3, 64, false), (2, false));
+        assert_eq!(cache.plan(&[2, 3, 4], 3, 1, true), (2, false));
+        let sampled = PrefixCache::new(&[2, 3, 4], &[(1., 5), (0., 6)], 64);
+        assert_eq!(sampled.plan(&[2, 3, 4], 3, 64, false), (3, true));
+    }
+
+    #[test]
+    fn exact_prefix_matching_handles_changes_shortening_and_empty_prompts() {
+        let cache = PrefixCache::new(&[2, 3, 4, 5], &[(1., 6)], 1);
+        assert_eq!(cache.plan(&[2, 3], 4, 1, false), (1, false));
+        assert_eq!(cache.plan(&[2, 3, 9, 5], 4, 1, false), (2, false));
+        assert_eq!(cache.plan(&[9, 3, 4, 5], 4, 1, false), (0, false));
+        assert_eq!(cache.plan(&[], 4, 1, false), (0, false));
+        assert_eq!(PrefixCache::default().plan(&[2], 0, 1, false), (0, false));
+    }
+
+    #[test]
+    fn committed_speculative_tokens_include_stop_and_unemitted_tail() {
+        let mut cache = PrefixCache::new(&[2, 3, 4], &[(1., 5)], 1);
+        // All returned tokens were processed, even if a tool-call stop caused
+        // protocol output to stop after token 5. Rejected proposals are absent.
+        cache.tokens.extend_from_slice(&[5, 6, 106]);
+        assert_eq!(cache.plan(&[2, 3, 4, 5, 7], 6, 1, true), (4, false));
+        assert_eq!(cache.plan(&[2, 3, 4, 5, 6, 106, 8], 6, 1, true), (6, false));
+    }
+
+    #[test]
+    fn taking_cache_invalidates_failures_until_successful_replacement() {
+        let mut cache = PrefixCache::new(&[2, 3], &[(1., 4)], 1);
+        let previous = std::mem::take(&mut cache);
+        assert_eq!(previous.plan(&[2, 3], 2, 1, false), (2, true));
+        assert_eq!(cache.plan(&[2, 3], 2, 1, false), (0, false));
+    }
 }

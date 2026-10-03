@@ -11,6 +11,151 @@ use std::{
     rc::Rc,
     time::{Duration, Instant},
 };
+
+pub fn attention(iterations: u32, tokens: usize, partitions: Option<u32>) -> Result<()> {
+    ensure!(
+        iterations > 0 && (1..=32768).contains(&tokens),
+        "positive iterations, tokens 1..32768"
+    );
+    let partition_counts = partitions.map_or_else(|| vec![8, 16, 32, 64, 128], |n| vec![n]);
+    ensure!(
+        partition_counts
+            .iter()
+            .all(|n| [8, 16, 32, 64, 128].contains(n)),
+        "partitions must be 8, 16, 32, 64 or 128"
+    );
+    let inst = Rc::new(Instance::new()?);
+    for (gpu, pd) in inst.amd_gpus()?.into_iter().enumerate() {
+        let d = Device::new(inst.clone(), pd)?;
+        for (dim, kv) in [(256usize, 4usize), (512, 1)] {
+            let inputs: Vec<f32> = (0..8 * dim)
+                .map(|i| ((i * 13 % 47) as f32 - 23.) / 64.)
+                .collect();
+            let keys: Vec<u16> = (0..tokens * kv * dim)
+                .map(|i| {
+                    half::f16::from_f32(((i * 17 + i / dim * 7) % 67) as f32 / 128. - 0.25)
+                        .to_bits()
+                })
+                .collect();
+            let values: Vec<u16> = (0..keys.len())
+                .map(|i| {
+                    half::f16::from_f32(((i * 19 + i / dim * 3) % 71) as f32 / 64. - 0.5).to_bits()
+                })
+                .collect();
+            let qbuf = d.upload(bytemuck::cast_slice(&inputs))?;
+            let kbuf = d.upload(bytemuck::cast_slice(&keys))?;
+            let vbuf = d.upload(bytemuck::cast_slice(&values))?;
+            let output = d.buffer(8 * dim * 4, false, false, None)?;
+            let scratch = d.buffer(8 * 128 * (dim + 2) * 4, false, false, None)?;
+            let params = d.upload(bytemuck::cast_slice(&[(tokens - 1) as u32, 1u32, 0, 0]))?;
+            let mut expected = Vec::new();
+            for head in [0, 7] {
+                let kh = head / (8 / kv);
+                let scores: Vec<f64> = (0..tokens)
+                    .map(|t| {
+                        (0..dim)
+                            .map(|j| {
+                                inputs[head * dim + j] as f64
+                                    * half::f16::from_bits(keys[(t * kv + kh) * dim + j]).to_f64()
+                            })
+                            .sum::<f64>()
+                    })
+                    .collect();
+                let max = scores.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                let weights: Vec<f64> = scores.iter().map(|s| (s - max).exp()).collect();
+                let denominator: f64 = weights.iter().sum();
+                for j in [0, dim / 2, dim - 1] {
+                    let sum: f64 = weights
+                        .iter()
+                        .enumerate()
+                        .map(|(t, w)| {
+                            w * half::f16::from_bits(values[(t * kv + kh) * dim + j]).to_f64()
+                        })
+                        .sum();
+                    expected.push((head * dim + j, sum / denominator));
+                }
+            }
+            let query = unsafe {
+                d.dev.create_query_pool(
+                    &vk::QueryPoolCreateInfo::default()
+                        .query_type(vk::QueryType::TIMESTAMP)
+                        .query_count(2),
+                    None,
+                )?
+            };
+            for &parts in &partition_counts {
+                let (partial_shader, merge_shader) = crate::vulkan::attention_shaders(parts)?;
+                let mut p = Push {
+                    ptr: [
+                        qbuf.address,
+                        kbuf.address,
+                        vbuf.address,
+                        output.address,
+                        scratch.address,
+                        0,
+                        params.address,
+                        0,
+                    ],
+                    ..Push::default()
+                };
+                p.u[4] = 8;
+                p.u[5] = kv as u32;
+                p.u[6] = dim as u32;
+                p.u[7] = tokens as u32;
+                let cmd = d.begin()?;
+                unsafe {
+                    d.dev.cmd_reset_query_pool(cmd, query, 0, 2);
+                    d.dev
+                        .cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, query, 0);
+                }
+                for _ in 0..iterations {
+                    d.dispatch(cmd, partial_shader, p, 8 * parts, 1);
+                    d.dispatch(cmd, merge_shader, p, 8, 1);
+                }
+                unsafe {
+                    d.dev.cmd_write_timestamp(
+                        cmd,
+                        vk::PipelineStageFlags::BOTTOM_OF_PIPE,
+                        query,
+                        1,
+                    );
+                }
+                d.finish(cmd)?;
+                let warmup = Instant::now();
+                while warmup.elapsed() < Duration::from_millis(300) {
+                    d.run_reusable(cmd)?;
+                }
+                d.run(cmd)?;
+                let mut times = [0u64; 2];
+                unsafe {
+                    d.dev.get_query_pool_results(
+                        query,
+                        0,
+                        &mut times,
+                        vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+                    )?;
+                }
+                let result = output.download()?;
+                for &(i, wanted) in &expected {
+                    let got = f32::from_le_bytes(result[i * 4..i * 4 + 4].try_into()?) as f64;
+                    ensure!(
+                        got.is_finite() && (got - wanted).abs() < 0.0002,
+                        "attention dim {dim}, partitions {parts}, value {i}: {got} vs {wanted}"
+                    );
+                }
+                println!(
+                    "{}",
+                    serde_json::json!({"gpu":gpu,"tokens":tokens,"dim":dim,"kv_heads":kv,"partitions":parts,"iterations":iterations,"milliseconds":(times[1]-times[0]) as f64 * d.period as f64 / 1e6 / iterations as f64,"pass":true})
+                );
+            }
+            unsafe {
+                d.dev.destroy_query_pool(query, None);
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn bench(
     path: &Path,
     iterations: u32,
@@ -31,16 +176,24 @@ pub fn bench(
         "gemm"
     });
     ensure!(
-        ["matvecq4", "multivec", "multivec2", "multivec4", "gemm"].contains(&shader),
+        [
+            "matvecq4",
+            "matvecq4narrow",
+            "multivec",
+            "multivec2",
+            "multivec4",
+            "gemm"
+        ]
+        .contains(&shader),
         "unsupported kernel"
     );
     ensure!(
-        batch == 1 || shader != "matvecq4",
+        batch == 1 || !matches!(shader, "matvecq4" | "matvecq4narrow"),
         "single-column kernel needs batch 1"
     );
     let group_rows = if shader == "gemm" {
         64
-    } else if matches!(shader, "matvecq4" | "multivec4") {
+    } else if matches!(shader, "matvecq4" | "matvecq4narrow" | "multivec4") {
         16
     } else {
         4
@@ -71,6 +224,11 @@ pub fn bench(
         (full_k, full_n)
     } else {
         (full_k, full_n / 2)
+    };
+    let shader = if batch == 1 && kernel.is_none() {
+        crate::vulkan::q4_decode_shader(n, k)
+    } else {
+        shader
     };
     ensure!(
         k.is_multiple_of(32) && n.is_multiple_of(group_rows),

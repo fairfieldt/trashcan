@@ -91,14 +91,19 @@ Optimize in this order, retaining changes only with correctness and sustained-cl
 | global KV: 1 head × 512 × (K,V) × f16 × 8 layers, replicated | 16 KiB/token: 128 MiB at 8K, 512 MiB at 32K |
 | 96 dedicated P2P receive slots, capped at 128 tokens | 180 MiB |
 | two reusable wide P2P slots | 15 MiB at batch 512 |
-| relay receive, activations, norms, scratch and allocation padding | about 136 MiB at batch 512 |
+| relay receive, activations, norms, scratch and allocation padding | about 140 MiB at batch 512, including 8.03 MiB attention scratch |
 | optional matched BF16 assistant | 415 MiB |
 
-Measured target allocations at 8K context / batch 512 are 4552 MiB per GPU. With the assistant they are
-about 4967 MiB (4.85 GiB); at 32K the calculated total is about 5351 MiB (5.23 GiB), leaving about 537 MiB
-for the driver/display and transient allocations. This is allocated memory, not a residency guarantee;
-32K execution has not been validated. Imported aliases are counted only on the owning GPU, and mapped
-host staging buffers are separate.
+The earlier fixed-32-partition build measured 4552 MiB of target allocations at 8K context / batch 512,
+or about 4967 MiB with the assistant. Increasing attention scratch to 64 partitions changes its payload
+from 4.02 to 8.03 MiB per GPU. The current target measures **4556.1 MiB per GPU** at 8K / batch 512
+in `results/engine/main-tuning-20261003/final-{1,2}.json`; adding the assistant gives a calculated
+combined total of about 4971 MiB (4.85 GiB). At 32K the calculated combined total
+is about 5355 MiB (5.23 GiB), leaving about 533 MiB for the driver/display and transient allocations.
+Scratch is shared with the assistant and reserves the maximum eight verification columns regardless of
+configured batch capacity. These allocation totals are not a residency guarantee; 32K execution has not
+been validated. Imported aliases are counted only on the owning GPU. Mapped host staging and
+driver-managed pipelines and cached command buffers are outside these totals.
 
 The original budget omitted repack expansion and treated receive buffers as small. Full 512-token P2P
 slots require 720 MiB per GPU, exceeding the 256 MiB peer-visible BAR. The implemented schedule caps the

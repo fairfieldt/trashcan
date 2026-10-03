@@ -53,6 +53,15 @@ enum Cmd {
         #[arg(long, default_value_t = 1)]
         batch: usize,
     },
+    /// Sweep decode attention partitions and compare outputs with a CPU softmax.
+    AttentionBench {
+        #[arg(long, default_value_t = 100)]
+        iterations: u32,
+        #[arg(long, default_value_t = 768)]
+        tokens: usize,
+        #[arg(long)]
+        partitions: Option<u32>,
+    },
     /// Stress P2P receiver cache visibility on both GPUs.
     P2pTest {
         #[arg(long, default_value_t = 10000)]
@@ -315,6 +324,11 @@ fn main() -> Result<()> {
             warmup_ms,
         ),
         Cmd::TopkBench { iterations, batch } => micro::selection(iterations, batch),
+        Cmd::AttentionBench {
+            iterations,
+            tokens,
+            partitions,
+        } => micro::attention(iterations, tokens, partitions),
         Cmd::P2pTest { rounds, elements } => visibility::test(rounds, elements),
         Cmd::Render {
             model,

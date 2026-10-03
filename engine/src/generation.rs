@@ -161,15 +161,14 @@ pub fn chat(
             let k = draft_tokens
                 .min(max_tokens - generated.len() - 1)
                 .min(e.remaining().saturating_sub(1));
+            let mut speculative = false;
             let chunk = if let Some(d) = drafter.as_mut().filter(|_| k > 0) {
+                speculative = true;
                 let (ids, next) = d.step(e, pending, sampler, k)?;
                 pending = next;
                 ids
             } else {
-                let id = pending;
-                logits = e.forward(&[id], None, false)?.remove(0);
-                pending = sampler.sample(&logits);
-                vec![id]
+                vec![pending]
             };
             for id in chunk {
                 if matches!(id, 1 | 106 | 50) {
@@ -192,6 +191,13 @@ pub fn chat(
                         bytes.drain(..valid);
                     }
                 }
+            }
+            // The pending token is already sampled. Print it before computing
+            // its successor, and avoid a forward whose logits would be unused
+            // after the output budget. MTP steps have already processed theirs.
+            if !speculative && generated.len() < max_tokens {
+                logits = e.forward(&[pending], None, false)?.remove(0);
+                pending = sampler.sample(&logits);
             }
         }
         if !bytes.is_empty() {

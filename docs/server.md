@@ -8,16 +8,27 @@ target/release/trashcan serve ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q
 ```
 
 `server` is an alias for `serve`. The model stays loaded and requests run serially through one
-resident engine. Each request replays its full prompt from position zero. This version does not
-cache conversations or KV prefixes between requests.
+resident engine. It reuses an exact token prefix from the last successful request when that
+prefix's sliding-window KV is still resident. Before the first ring wrap, all processed prefixes
+remain available. After wrap, the furthest KV write must be no more than `--batch` positions
+beyond the reused prefix; rejected speculative writes count too. Older or changed prefixes safely
+fall back to a full replay. This is a single resident sequence, not durable conversation storage;
+clients still send the full history.
+
+Identical prompts also reuse their saved logits when the target candidate count matches and
+the drafter is disabled. Other cache hits recompute the changed suffix and at least the final
+prompt token. Replaying a suffix with different batch boundaries may produce the same small
+floating-point differences as ordinary serial versus chunked prefill. Generation failures and
+streaming disconnects invalidate the sequence. Response usage reports the reused positions in
+`input_tokens_details.cached_tokens`; `--no-prefix-cache` disables reuse for cold comparisons.
 
 `--model-id` defaults to `gemma-4-12b`. `--thinking`, `--max-tokens`, `--temperature`, `--top-k`,
 `--top-p` and `--seed` set request defaults. Requests override them with `reasoning.effort`,
 `max_output_tokens`, `temperature`, `top_k`, `top_p` and `seed`. `top_k` is limited to 1–64.
 Temperature zero selects greedy sampling. `--draft FILE` enables the same matched assistant as
 chat, with `--draft-tokens` (default 3). `--cpu-reduce` selects the CPU relay path.
-The target ranks one candidate for greedy requests and 64 for stochastic requests. Both graph
-variants stay cached in the resident engine, so requests can alternate sampling modes.
+The target and assistant each rank one candidate for greedy requests and 64 for stochastic requests.
+Both graph variants stay cached in the resident models, so requests can alternate sampling modes.
 
 | Endpoint | Behavior |
 | --- | --- |
@@ -125,6 +136,17 @@ Run `python3 scripts/test-server.py --url http://127.0.0.1:8000` to check a runn
 JSON/SSE output, token limits, reasoning, request validation and a real tool-result continuation.
 Add `--sdk` when the OpenAI Python SDK is installed to validate every response and event against
 its schemas as well.
+
+Run `python3 scripts/bench-prefix-cache.py --url http://127.0.0.1:8000 --batch 128 --output results/prefix.json`
+against a server started with `--batch 128` for repeated prompts, cache-retention boundaries,
+sampler changes, long histories and tool continuations. Add `--cold` when the server uses
+`--no-prefix-cache`, or `--draft` when it uses an assistant. The report includes request bodies,
+latency, output, cache usage and correctness assertions for reproduction. Run the cold server
+first, then pass `--compare-cold results/prefix-cold.json` to the cached run to compare every
+corresponding response and latency. The report marks any output differences explicitly, including
+possible rounding changes when the drafter replays its final hidden row; `passed` records the
+protocol and cache-boundary checks, while `repeat_output_exact` and `cold_comparison_exact`
+record exact output equivalence separately.
 
 The protocol follows [OpenAI's Responses streaming events](https://developers.openai.com/api/docs/guides/streaming-responses),
 with `../ds4` as the local reference for serving and stateless tool replay.

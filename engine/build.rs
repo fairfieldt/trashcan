@@ -23,6 +23,7 @@ fn main() {
         "multivec2",
         "multivec4",
         "matvecq4",
+        "matvecq4narrow",
         "merge",
     ] {
         let dest = out.join(format!("{name}.spv"));
