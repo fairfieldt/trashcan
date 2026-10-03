@@ -79,7 +79,7 @@ struct Graph {
 pub struct Engine {
     pub gguf: Gguf,
     pub(crate) cards: Vec<Card>,
-    graphs: HashMap<(usize, bool, bool), Vec<Graph>>,
+    graphs: HashMap<(usize, bool, bool, usize), Vec<Graph>>,
     max_batch: usize,
     context: usize,
     pub pos: usize,
@@ -912,7 +912,7 @@ impl Engine {
             c.params_host
                 .write(bytemuck::cast_slice(&[self.pos as u32, n as u32, 0, 0]))?;
         }
-        let key = (n, dump.is_some(), all_logits);
+        let key = (n, dump.is_some(), all_logits, self.top_k);
         if !self.graphs.contains_key(&key) {
             let a = self.record(0, n, dump.is_some(), all_logits)?;
             let b = self.record(1, n, dump.is_some(), all_logits)?;
@@ -1079,10 +1079,7 @@ impl Engine {
         Ok(result)
     }
     pub fn set_top_k(&mut self, k: usize) -> Result<()> {
-        ensure!(
-            (1..=64).contains(&k) && self.graphs.is_empty(),
-            "top-k must be set before first forward, in 1..64"
-        );
+        ensure!((1..=64).contains(&k), "top-k must be in 1..64");
         self.top_k = k;
         Ok(())
     }

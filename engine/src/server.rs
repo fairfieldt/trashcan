@@ -95,7 +95,7 @@ pub fn serve(options: Options) -> Result<()> {
         options.batch,
         options.cpu_reduce,
     )?;
-    // Candidate capacity is fixed once graphs are recorded. Requests can sample any top-k up to 64.
+    // Buffers hold 64 candidates; greedy requests can cache a separate one-candidate graph.
     engine.set_top_k(64)?;
     let tokenizer = Tokenizer::new(&engine.gguf)?;
     let mut assistant = options
@@ -269,6 +269,7 @@ fn generate<W: Write>(
         draft.reset();
     }
     let params = request.sampling;
+    engine.set_top_k(if params.temperature == 0. { 1 } else { 64 })?;
     let mut sampler = Sampler::new(params.temperature, params.top_k, params.top_p, params.seed)?;
     let logits = generation::prefill(engine, ids, options.batch)?;
     let mut pending = sampler.sample(&logits);

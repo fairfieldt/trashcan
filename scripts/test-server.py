@@ -74,6 +74,16 @@ def main():
     assert send("GET", "/v1/models")[0] == 200
     print("PASS: discovery, JSON, SSE, deterministic parity and persistent HTTP", flush=True)
 
+    # Switch candidate counts in a resident engine, then reuse both recorded graphs.
+    sampled = create(input="Tell a short story about a lost robot.", temperature=1,
+                     seed=7, max_output_tokens=32)
+    greedy_again = create(input=prompt, max_output_tokens=64)
+    sampled_again = create(input="Tell a short story about a lost robot.", temperature=1,
+                           seed=7, max_output_tokens=32, stream=True)
+    assert text(greedy_again) == text(plain)
+    assert text(sampled) and text(sampled) == text(sampled_again)
+    print("PASS: alternating greedy/stochastic graphs and seeded parity", flush=True)
+
     limited = create(input="Explain how photosynthesis works in detail.", max_output_tokens=1, stream=True)
     assert limited["status"] == "incomplete"
     assert limited["incomplete_details"]["reason"] == "max_output_tokens"

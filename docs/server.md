@@ -16,6 +16,8 @@ cache conversations or KV prefixes between requests.
 `max_output_tokens`, `temperature`, `top_k`, `top_p` and `seed`. `top_k` is limited to 1–64.
 Temperature zero selects greedy sampling. `--draft FILE` enables the same matched assistant as
 chat, with `--draft-tokens` (default 3). `--cpu-reduce` selects the CPU relay path.
+The target ranks one candidate for greedy requests and 64 for stochastic requests. Both graph
+variants stay cached in the resident engine, so requests can alternate sampling modes.
 
 | Endpoint | Behavior |
 | --- | --- |
