@@ -41,5 +41,6 @@ first identity match when no bus matches. `kernel/patches/0001` is the same chan
   - radeon-new: both initialize, with no VFCT warning and no mismatch notice. radeon doesn't log its VBIOS
     source, but both drivers try ATRM then VFCT, and amdgpu took VFCT on this machine.
   - Hot-loading radeon with `insmod` into a running multi-user boot (no GPU driver at boot) hung incite hard
-    on the first load. Test drivers at boot instead. That boot's log was lost because journald is volatile
-    (FreedomBox plinth switched it on 2026-10-02).
+    on the first load. Test drivers at boot instead. That boot's log was lost because journald was volatile
+    (FreedomBox plinth switched it on 2026-10-02). FreedomBox was removed and persistent logging restored
+    the same evening.
