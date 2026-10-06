@@ -1,0 +1,8 @@
+#version 460
+#include "common.glsl"
+// In-place activation of p.n values per token: kind 0: silu(x * scale) (the mixer bottleneck),
+// kind 1: 2 * sigmoid(x * scale) (the mixer write weights). a: x [t][n], p.r0 = scale bits.
+layout(local_size_x=64) in;
+void main(){uint i=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y;if(i>=p.n||t>=batch())return;
+float x=a_f.v[t*p.n+i]*uintBitsToFloat(p.r0);
+a_f.v[t*p.n+i]=p.kind==0?x/(1.0+exp(-x)):2.0/(1.0+exp(-x));}

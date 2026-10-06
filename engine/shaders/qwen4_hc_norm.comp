@@ -1,0 +1,19 @@
+#version 460
+#include "common.glsl"
+// Hyper-connection mixer input: per token and stream, xn = RMS(x_s) * gamma_s. With flags & 1 the previous
+// sublayer is combined first: x_s += w_s * y (w from the previous mixer's write weights).
+// One workgroup per token. a: x [t][hc][n] (read/write), b: y [t][n], c: xn [t][hc][n] (0: combine only),
+// d: gamma [hc][n], e: w [t][hc]. p.n = width of one stream (2560), p.heads = streams (4), p.r0 = eps bits.
+layout(local_size_x=256) in;
+shared float part[4][4];
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint w=p.n*p.heads,base=t*w;float ss[4]={0,0,0,0};
+for(uint s=0;s<p.heads;s++){float ws=(p.flags&1)!=0?e_f.v[t*p.heads+s]:0;
+for(uint i=l;i<p.n;i+=256){float x=a_f.v[base+s*p.n+i];
+if((p.flags&1)!=0){x=fma(ws,b_f.v[t*p.n+i],x);a_f.v[base+s*p.n+i]=x;}ss[s]=fma(x,x,ss[s]);}}
+if(p.c==0)return;
+for(uint s=0;s<p.heads;s++){float v=subgroupAdd(ss[s]);if(gl_SubgroupInvocationID==0)part[gl_SubgroupID][s]=v;}
+barrier();
+float eps=uintBitsToFloat(p.r0);
+for(uint s=0;s<p.heads;s++){float inv=inversesqrt((part[0][s]+part[1][s]+part[2][s]+part[3][s])/float(p.n)+eps);
+for(uint i=l;i<p.n;i+=256)c_f.v[base+s*p.n+i]=a_f.v[base+s*p.n+i]*inv*d_f.v[s*p.n+i];}}

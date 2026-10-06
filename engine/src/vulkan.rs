@@ -377,6 +377,16 @@ impl Device {
                 "qwen_q4c4",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_q4c4.spv")).as_slice(),
             ),
+            // Qwen3.8-Flash-Next (qwen4exp)
+            ("qwen4_hc_norm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_norm.spv")).as_slice()),
+            ("qwen4_hc_mix", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_mix.spv")).as_slice()),
+            ("qwen4_act", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_act.spv")).as_slice()),
+            ("qwen4_gated_norm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gated_norm.spv")).as_slice()),
+            ("qwen4_topk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_topk.spv")).as_slice()),
+            ("qwen4_moe_gu", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu.spv")).as_slice()),
+            ("qwen4_moe_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_down.spv")).as_slice()),
+            ("qwen4_ple_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_gate.spv")).as_slice()),
+            ("qwen4_ple_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_conv.spv")).as_slice()),
         ] {
             ensure!(
                 !bytes.is_empty(),

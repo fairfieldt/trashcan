@@ -1,0 +1,25 @@
+#version 460
+#include "common.glsl"
+// N-gram (PLE) gates, one workgroup per token. Per stream s: a = (RMS(key_s) * gk_s) . (RMS(x_s) * gq_s) / sqrt(n),
+// g = sigmoid(sign(a) * sqrt(max(|a|, 1e-6))), gv_s = g * value, pn_s = RMS(gv_s) * gc_s (the convolution input).
+// a: key [t][hc][n], b: value [t][n], c: x [t][hc][n], d: gamma [3][hc][n] (key, query, conv), e: gv [t][hc][n],
+// f: pn [t][hc][n]. p.n = stream width, p.heads = streams, p.r0 = eps bits.
+layout(local_size_x=256) in;
+shared float part[4][13];
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint w=p.n*p.heads,base=t*w;float acc[13];[[unroll]]for(uint j=0;j<13;j++)acc[j]=0;
+for(uint i=l;i<p.n;i+=256){float v=b_f.v[t*p.n+i];acc[12]=fma(v,v,acc[12]);}
+[[unroll]]for(uint s=0;s<4;s++)if(s<p.heads)for(uint i=l;i<p.n;i+=256){
+    float k=a_f.v[base+s*p.n+i],x=c_f.v[base+s*p.n+i];
+    acc[3*s]=fma(k,k,acc[3*s]);acc[3*s+1]=fma(x,x,acc[3*s+1]);
+    acc[3*s+2]=fma(k*d_f.v[s*p.n+i],x*d_f.v[w+s*p.n+i],acc[3*s+2]);}
+[[unroll]]for(uint j=0;j<13;j++){float v=subgroupAdd(acc[j]);if(gl_SubgroupInvocationID==0)part[gl_SubgroupID][j]=v;}
+barrier();
+float tot[13];[[unroll]]for(uint j=0;j<13;j++)tot[j]=part[0][j]+part[1][j]+part[2][j]+part[3][j];
+float eps=uintBitsToFloat(p.r0),n=float(p.n),vms=tot[12]/n;
+[[unroll]]for(uint s=0;s<4;s++)if(s<p.heads){
+    float a=tot[3*s+2]*inversesqrt(tot[3*s]/n+eps)*inversesqrt(tot[3*s+1]/n+eps)/sqrt(n);
+    float g=1.0/(1.0+exp(-sign(a)*sqrt(max(abs(a),1e-6))));
+    float inv=inversesqrt(g*g*vms+eps);
+    for(uint i=l;i<p.n;i+=256){float gv=g*b_f.v[t*p.n+i];
+        e_f.v[base+s*p.n+i]=gv;f_f.v[base+s*p.n+i]=gv*inv*d_f.v[2*w+s*p.n+i];}}}

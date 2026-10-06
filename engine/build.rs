@@ -46,6 +46,16 @@ fn main() {
         "qwen_q4c2",
         "qwen_q4c3",
         "qwen_q4c4",
+        // Qwen3.8-Flash-Next (qwen4exp)
+        "qwen4_hc_norm",
+        "qwen4_hc_mix",
+        "qwen4_act",
+        "qwen4_gated_norm",
+        "qwen4_topk",
+        "qwen4_moe_gu",
+        "qwen4_moe_down",
+        "qwen4_ple_gate",
+        "qwen4_ple_conv",
     ] {
         let dest = out.join(format!("{name}.spv"));
         if available {

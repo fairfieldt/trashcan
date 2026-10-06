@@ -7,6 +7,10 @@
 //! layer as `n x d` floats.
 pub mod cli;
 pub mod cpu;
+pub mod gpu;
+pub mod net;
+pub mod ngram;
+pub mod pipeline;
 
 use crate::gguf::{Gguf, TensorInfo, Value};
 use anyhow::{ensure, Context, Result};
@@ -126,7 +130,15 @@ impl Config {
             k_heads: u("ssm.group_count")?,
             v_heads: u("ssm.time_step_rank")?,
             state: u("ssm.state_size")?,
-            vocab: g.tensor("output.weight").context("missing output.weight")?.dims[1] as usize,
+            // The head's rows; a metadata-only shard falls back to the tokenizer's vocabulary.
+            vocab: match g.tensor("output.weight") {
+                Some(t) => t.dims[1] as usize,
+                None => g
+                    .get("tokenizer.ggml.tokens")?
+                    .as_arr()
+                    .context("tokenizer tokens")?
+                    .len(),
+            },
             hc: u("hyper_connection.count")?,
             hc_rank: u("hyper_connection.low_rank")?,
             experts: u("expert_count")?,

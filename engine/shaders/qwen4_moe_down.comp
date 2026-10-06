@@ -1,0 +1,30 @@
+#version 460
+#include "common.glsl"
+// Down projections of a token's experts, summed with the routing weights: y[t][i] = sum_j w[t][j] * W_e(j)[i] .
+// act[t][j]. One workgroup per 16 output rows and token; each wave owns 4 rows and walks the slots.
+// Weights: Q4_0 repacked; expert e's rows start at e * p.n, each p.k (= ff) long.
+// b: act [t][slots][ff], c: y [t][n], d: ids [t][slots] (u32), e: weights [t][slots].
+// p.n = d, p.m = slots, p.k = ff, p.stride = scale count.
+layout(local_size_x=256) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,part=lane%4,blocks=p.k/32,t=gl_WorkGroupID.y;
+if(t>=batch())return;
+uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
+vec4 acc=vec4(0);
+for(uint j=0;j<p.m;j++){
+    uint e=d_u.v[t*p.m+j],xb=(t*p.m+j)*(p.k/4);
+    vec4 s=vec4(0);
+    for(uint b=lane/4;b<blocks;b+=16){
+        vec4 x0=b_v4.v[xb+b*8+part],x1=b_v4.v[xb+b*8+part+4];
+        float bias=8.0*dot(x0+x1,vec4(1));
+        [[unroll]]for(uint r=0;r<4;r++){
+            uint blk=(e*p.n+first+r)*blocks+b,q=ww.words[p.stride+blk*4+part];
+            s[r]=fma(dot(unpackUnorm4x8(q&0x0f0f0f0fu)*255.0,x0)+dot(unpackUnorm4x8((q>>4)&0x0f0f0f0fu)*255.0,x1)-bias,
+                     uintBitsToFloat(ww.words[blk]),s[r]);
+        }
+    }
+    acc=fma(vec4(e_f.v[t*p.m+j]),s,acc);
+}
+acc=subgroupAdd(acc);
+if(lane==0)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[t*p.n+first+r]=acc[r];
+}

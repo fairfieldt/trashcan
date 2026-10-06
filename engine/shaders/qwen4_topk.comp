@@ -1,0 +1,26 @@
+#version 460
+#include "common.glsl"
+// MoE router: softmax over p.n expert logits, the p.m best (ties to the lower id) renormalized over their sum
+// (at least 2^-14, as ggml clamps it), then the shared expert as one more slot with weight sigmoid(logit p.n).
+// One wave per token. a: logits [t][p.n + 1], c: ids [t][p.m + 1] (u32), d: weights [t][p.m + 1].
+layout(local_size_x=64) in;
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint row=t*(p.n+1),per=p.n/64,slots=p.m+1;float v[8];float mx=-1e30;
+[[unroll]]for(uint j=0;j<8;j++){v[j]=j<per?a_f.v[row+j*64+l]:-1e30;mx=max(mx,v[j]);}
+mx=subgroupMax(mx);float sum=0;
+[[unroll]]for(uint j=0;j<8;j++){v[j]=j<per?exp(v[j]-mx):-1.0;sum+=max(v[j],0.0);}
+sum=subgroupAdd(sum);
+[[unroll]]for(uint j=0;j<8;j++)if(j<per)v[j]/=sum;
+float tot=0;
+for(uint k=0;k<p.m;k++){
+    float best=-1.0;uint bi=0xffffffffu;
+    [[unroll]]for(uint j=0;j<8;j++)if(v[j]>best){best=v[j];bi=j*64+l;}
+    float m=subgroupMax(best);
+    uint idx=subgroupMin(best==m?bi:0xffffffffu);
+    [[unroll]]for(uint j=0;j<8;j++)if(j*64+l==idx)v[j]=-1.0;
+    if(l==0){c_u.v[t*slots+k]=idx;d_f.v[t*slots+k]=m;}
+    tot+=m;
+}
+if(l==0){tot=max(tot,6.103515625e-5);
+for(uint k=0;k<p.m;k++)d_f.v[t*slots+k]/=tot;
+c_u.v[t*slots+p.m]=p.n;d_f.v[t*slots+p.m]=1.0/(1.0+exp(-a_f.v[row+p.n]));}}

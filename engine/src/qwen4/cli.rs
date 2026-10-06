@@ -43,6 +43,100 @@ pub enum Cmd {
     },
     /// Render a text file as one user turn (thinking off) and print the token ids.
     TokenizeChat { model: PathBuf, file: PathBuf },
+    /// Measure n-gram row reads: a resident table (ram-q4, ram-q8) or rows read from disk (buffered,
+    /// buffered-cold, direct). Prints one JSON line.
+    NgramBench {
+        /// A GGUF with the model metadata (the first shard is enough).
+        meta: PathBuf,
+        /// The GGUF file holding per_layer_token_embd (its shard of a split model is enough).
+        table: PathBuf,
+        #[arg(long)]
+        mode: String,
+        #[arg(long, default_value_t = 16)]
+        threads: usize,
+        /// Token ids to hash (whitespace separated, cycled); default uniformly random tokens.
+        #[arg(long)]
+        ids: Option<PathBuf>,
+        #[arg(long, default_value_t = 8192)]
+        tokens: usize,
+        #[arg(long, default_value_t = 512)]
+        batch: usize,
+    },
+    /// Serve layers to the previous machine in a chain.
+    Node {
+        model: PathBuf,
+        #[arg(long, default_value = "0.0.0.0:7071")]
+        listen: String,
+        #[arg(long)]
+        cpu: bool,
+        #[arg(long, value_delimiter = ',')]
+        gpus: Option<Vec<usize>>,
+    },
+    /// Run a prompt through the chain, dump the last token's activations in the reference format, decode greedily.
+    Validate {
+        model: PathBuf,
+        out: PathBuf,
+        #[command(flatten)]
+        run: Run,
+        #[arg(long, default_value_t = 10)]
+        greedy: usize,
+        #[arg(long)]
+        tokens_file: Option<PathBuf>,
+    },
+    /// Measure prefill and greedy decode.
+    Bench {
+        model: PathBuf,
+        #[command(flatten)]
+        run: Run,
+        #[arg(long, default_value_t = 512)]
+        pp: usize,
+        #[arg(long, default_value_t = 64)]
+        tg: usize,
+    },
+}
+
+/// This machine's devices and the rest of the chain.
+#[derive(clap::Args)]
+pub struct Run {
+    /// Further machines, in chain order (host:port of `trashcan qwen4 node`).
+    #[arg(long, value_delimiter = ',')]
+    nodes: Vec<String>,
+    #[arg(long)]
+    cpu: bool,
+    #[arg(long, value_delimiter = ',')]
+    gpus: Option<Vec<usize>>,
+    /// First layer of each stage after the first, in chain order (default: balance weight bytes).
+    #[arg(long, value_delimiter = ',')]
+    cuts: Vec<usize>,
+    #[arg(long, default_value_t = 2048)]
+    context: usize,
+    #[arg(long, default_value_t = 256)]
+    batch: usize,
+    /// N-gram rows: map (the GGUF mapping), ram-q4 or ram-q8 (a resident copy), disk (pread through the page
+    /// cache) or direct (O_DIRECT page reads).
+    #[arg(long, default_value = "map")]
+    ngram: String,
+}
+
+impl Run {
+    fn chain(self, model: &Path) -> Result<super::net::Chain> {
+        let devices = crate::qwen::chat::devices(self.cpu, self.gpus)?;
+        let rows = match self.ngram.as_str() {
+            "map" => super::net::Rows::Map,
+            mode => {
+                let g = crate::gguf::Gguf::open(model)?;
+                let t = g.tensor("per_layer_token_embd.weight").context("no n-gram table")?;
+                let table = super::ngram::Table::open(&g.paths[t.file], mode == "direct")?;
+                super::net::Rows::Table(match mode {
+                    "ram-q4" => table.to_ram(crate::gguf::GgmlType::Q4_0, 16)?,
+                    "ram-q8" => table.to_ram(crate::gguf::GgmlType::Q8_0, 16)?,
+                    "disk" | "direct" => table,
+                    other => anyhow::bail!("unknown --ngram {other}"),
+                })
+            }
+        };
+        super::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch, rows)
+    }
 }
 
 fn prompt(file: Option<&Path>, tokens: &[u32]) -> Result<Vec<u32>> {
@@ -82,6 +176,43 @@ pub fn run(cmd: Cmd) -> Result<()> {
         } => {
             super::cpu::EMULATE_GGML.store(emulate_ggml, std::sync::atomic::Ordering::Relaxed);
             layer_check(&model, &reference, first, last, dump.as_deref())
+        }
+        Cmd::NgramBench {
+            meta,
+            table,
+            mode,
+            threads,
+            ids,
+            tokens,
+            batch,
+        } => {
+            let r = super::ngram::bench(&meta, &table, &mode, threads, ids.as_deref(), tokens, batch)?;
+            println!("{r}");
+            Ok(())
+        }
+        Cmd::Node {
+            model,
+            listen,
+            cpu,
+            gpus,
+        } => super::net::serve(&model, &listen, crate::qwen::chat::devices(cpu, gpus)?),
+        Cmd::Validate {
+            model,
+            out,
+            run,
+            greedy,
+            tokens_file,
+        } => {
+            let tokens = prompt(tokens_file.as_deref(), &[])?;
+            let mut chain = run.chain(&model)?;
+            let ids = validate(&mut chain, &out, &tokens, greedy)?;
+            println!("greedy: {ids:?}");
+            Ok(())
+        }
+        Cmd::Bench { model, run, pp, tg } => {
+            let mut chain = run.chain(&model)?;
+            println!("{}", bench(&mut chain, pp, tg)?);
+            Ok(())
         }
         Cmd::TokenizeChat { model, file } => {
             let g = crate::gguf::Gguf::open(&model)?;
@@ -160,4 +291,66 @@ fn layer_check(model: &Path, dir: &Path, first: usize, last: Option<usize>, dump
         println!("{il}\t{ur:.3e}\t{uc:.6}\t{rr:.3e}\t{lr:.3e}");
     }
     Ok(())
+}
+
+/// Run a prompt (chunked by the batch size), dump the last token's activations and logits in the reference format,
+/// then decode greedily.
+fn validate(e: &mut super::net::Chain, out: &Path, tokens: &[u32], greedy: usize) -> Result<Vec<u32>> {
+    let mut caps = super::cpu::Captures::new();
+    e.pos = 0;
+    let chunks: Vec<_> = tokens.chunks(e.max_batch).collect();
+    let mut top = None;
+    for (i, chunk) in chunks.iter().enumerate() {
+        let last = i + 1 == chunks.len();
+        top = e.forward(chunk, last, if last { Some(&mut caps) } else { None })?;
+    }
+    let mut top = top.context("empty prompt")?;
+    std::fs::create_dir_all(out)?;
+    let mut index = String::new();
+    for (name, v) in &caps {
+        std::fs::write(out.join(format!("{name}.f32")), bytemuck::cast_slice(v))?;
+        index.push_str(&format!("{name}\t{},1,1,1\t{}\n", v.len(), v.len()));
+    }
+    std::fs::write(out.join("index.tsv"), index)?;
+    if let Some(l) = caps.get("result_output") {
+        std::fs::write(out.join("logits.f32"), bytemuck::cast_slice(l))?;
+    }
+    let mut ids = Vec::new();
+    while ids.len() < greedy {
+        ids.push(top[0].1);
+        if ids.len() < greedy {
+            top = e.forward(&[top[0].1], true, None)?.context("missing candidates")?;
+        }
+    }
+    std::fs::write(
+        out.join("greedy.txt"),
+        ids.iter().map(|x| format!("{x}\n")).collect::<String>(),
+    )?;
+    Ok(ids)
+}
+
+/// Prefill `pp` copies of one token, then decode `tg` tokens greedily.
+fn bench(e: &mut super::net::Chain, pp: usize, tg: usize) -> Result<serde_json::Value> {
+    let hello = 9419;
+    let start = std::time::Instant::now();
+    let mut top = e.prefill(&vec![hello; pp])?;
+    let pp_s = start.elapsed().as_secs_f64();
+    let start = std::time::Instant::now();
+    for _ in 0..tg {
+        top = e.forward(&[top[0].1], true, None)?.context("missing candidates")?;
+    }
+    let tg_s = start.elapsed().as_secs_f64();
+    let mib: Vec<f64> = e
+        .local
+        .stages
+        .iter()
+        .filter_map(|s| match s {
+            super::pipeline::Stage::Gpu(g) => Some(g.device_mib()),
+            _ => None,
+        })
+        .collect();
+    Ok(
+        serde_json::json!({"pp": pp, "pp_seconds": pp_s, "pp_tok_s": pp as f64 / pp_s, "tg": tg, "tg_seconds": tg_s,
+        "tg_tok_s": tg as f64 / tg_s, "plans": e.plans, "local_device_mib": mib}),
+    )
 }

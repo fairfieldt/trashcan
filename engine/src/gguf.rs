@@ -318,7 +318,8 @@ impl Gguf {
         Ok(g)
     }
 
-    fn open_one(path: &Path) -> Result<Self> {
+    /// Open one file of a split GGUF on its own (its metadata and its own tensors).
+    pub fn open_one(path: &Path) -> Result<Self> {
         let file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
         let mmap = unsafe { Mmap::map(&file)? };
         let mut c = Cursor { b: &mmap, pos: 0 };
