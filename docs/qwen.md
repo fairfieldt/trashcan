@@ -80,9 +80,30 @@ Attention uses the existing scalar kernels: split-K decode (`attention_partial*`
 columns and the unsplit `attention` for prefill. The tiled prefill kernels assume a power-of-two query
 group (Qwen has 6 query heads per KV head), so long prompts are not yet fast.
 
-The DeltaNet state is 128 x 128 f32 per value head (3 MiB per layer for the 27B), updated in place.
-Position 0 restarts it from zero. Unlike the KV cache it cannot be rolled back, so the Qwen path re-prefills
-each chat turn and has no prefix reuse or speculative rollback yet.
+## Recurrent state: rollback and checkpoints
+
+Each DeltaNet layer keeps a 128 x 128 f32 state per value head (3 MiB per layer for the 27B) and a
+three-row convolution window (120 KiB), updated in place; position 0 restarts both from zero. Attention KV
+is addressed by position, so rewinding it only moves the position. The recurrent state is made rewindable
+on every stage (GPU or CPU) and every machine of a chain:
+
+- **Verification snapshots.** A `verify` forward of at most `--verify` tokens (eight at most) has
+  `qwen_gdn` and `qwen_conv` also store the state after every token but the last, and ranks every column at
+  the head. `rollback` to an accepted prefix copies one snapshot back: about 1 ms for the 9B on two GPUs, so
+  rejected drafts are never recomputed. Snapshots take `verify - 1` state copies per DeltaNet layer
+  (6.2 MiB per layer for the 27B with two drafts).
+- **Checkpoint slots.** `save`/`restore` copy every DeltaNet state and convolution window (and the MTP
+  layer's pending hidden row) to host memory and back: 33.5 MiB per slot for the 9B's first GPU (16
+  DeltaNet layers), about 42 MiB per GPU for the 27B at 18 layers per GPU.
+
+The chain protocol carries both (`net.rs`): `forward` has a `verify` flag and the batch's token ids,
+`{"rollback": column}` keeps tokens `0..=column` of the latest verification batch on every machine, and
+`{"save"|"restore": slot}` copy checkpoints. None of them waits for a reply.
+
+`trashcan qwen-check MODEL [--mtp FILE]` checks all of this against ordinary greedy decoding after a long
+prompt: the continuation after restoring a checkpoint must be bitwise identical; verification batches of
+2..=verify tokens of that continuation, each followed by a rollback to a varying prefix, must rank the
+same top token in every column; speculative decoding must be token-identical.
 
 ## Machines
 
@@ -112,6 +133,85 @@ tokens and activations exactly, including streamed 4- and 5-token prompt chunks.
 Within a machine, the two GPUs hand off through host memory (one fence wait per stage per forward). P2P
 pushes with cross-device semaphores, as in the Gemma tensor-parallel path, are the obvious next step.
 
+## Speculative decoding with the MTP layer
+
+Qwen3.5 and Qwen3.8 ship one MTP (nextn) layer: `eh_proj` over `[RMS(embed(token)) * enorm |
+RMS(hidden) * hnorm]`, a full gated-attention block with its own KV cache, a SwiGLU FFN, `RMS *
+shared_head_norm`, then the shared LM head. As in llama.cpp's `graph_mtp`, position p pairs the token at p
+with the target's normed final hidden row p - 1 (zeros at position 0), and a chained draft feeds the layer
+its own normed output. `cpu::CpuMtp` is the reference; the GPU version runs on the last stage, next to the
+head:
+
+- every target batch also extends the MTP cache over its tokens (one more layer, 1-2 ms per verification
+  batch for the 9B);
+- a round drafts k tokens on the last machine (the drafted token's Q8_0 embedding row is dequantized on that
+  machine's CPU), verifies the pending token and the drafts in one batch through every stage, accepts the
+  matching prefix and rolls every stage back to the last accepted token. Above temperature 0 the drafts are
+  sampled from the MTP's candidates and accepted by rejection sampling (`assistant::verify_prefix`), so
+  the output follows the target distribution;
+- `--draft-vocab N` (default 65536) makes the draft head rank only token ids below N, a prefix of the
+  repacked head: 93% of generated tokens fall below 32768 and 98.5% below 65536 in our samples, and a 9B
+  draft step drops from 8.4 ms (full head) to 4.1 ms.
+
+The MTP weights come as a separate GGUF holding `blk.N.nextn.*` and the block's tensors (our trunk GGUFs
+have none). The 27B's is ggml-org's `mtp-Qwen3.8-27B-BF16.gguf`; the 9B's is converted from the `mtp.*`
+tensors of `Qwen/Qwen3.5-9B`, which `tools/fetch-mtp.py` downloads by HTTP range (4.2 GiB with the
+embedding and head the converter keeps). Quantize like the trunk; the importance matrix has no entries for
+the MTP layer, so its matrices are plain Q4_0:
+
+```sh
+tools/fetch-mtp.py Qwen/Qwen3.5-9B hf-mtp
+python convert_hf_to_gguf.py --mtp --outtype bf16 --outfile mtp-Qwen3.5-9B-BF16.gguf hf-mtp
+llama-quantize --pure --output-tensor-type q6_k --token-embedding-type q8_0 \
+  mtp-Qwen3.5-9B-BF16.gguf mtp-Qwen3.5-9B-trashcan-Q4_0.gguf q4_0
+```
+
+```sh
+trashcan qwen-chat MODEL --mtp MTP.gguf "Hello"      # two drafts per round (--draft-tokens)
+trashcan qwen-check MODEL --mtp MTP.gguf             # correctness gate against greedy decoding
+trashcan qwen-spec-bench MODEL --mtp MTP.gguf        # ms per decode, verification, rollback, draft, checkpoint
+# in a chain, the last machine loads its own copy; the driver's --mtp turns drafting on
+trashcan qwen-node MODEL --listen 0.0.0.0:7070 --mtp MTP.gguf
+```
+
+The cost model is `tok/s = (1 + a1 + a1 a2 + ...) / (T_verify(k + 1) + k T_draft)` with `a_i` the
+acceptance rate of draft i given the previous ones. On the D700s the multi-column Q4_0 kernels make
+verification grow quickly with width (see Measured), so two drafts win: three cost more than the third
+draft's acceptance returns. `results/qwen/spec-20261006/` holds the sweeps.
+
+## Prefix reuse
+
+The driver keeps the token history of its live state and up to `--checkpoints` (default 8, least
+recently used replaced) checkpoint slots. A new prompt continues from the live state, or restores the
+latest checkpoint at or before its common prefix with the history, then prefills only the rest; at least
+the final prompt token is recomputed for its candidates. Writing a position invalidates the checkpoints
+beyond it. `qwen-chat` and the server checkpoint the start of the newest assistant turn (just after
+`<|im_start|>assistant\n`) and the end of each reply; `--checkpoints 0` disables reuse.
+
+How much is reusable depends on the chat template. Qwen3.8's renders earlier assistant turns as they were
+generated (`preserve_thinking` defaults to true; reasoning goes in `reasoning_content`), so a follow-up
+turn reuses the whole processed history. Qwen3.5's drops the reasoning block of turns before the newest
+user message, so a follow-up turn restores the turn-start checkpoint and re-prefills the previous reply.
+Within a tool-calling loop both templates keep every turn after the newest user message, so a tool result
+continues the cached sequence.
+
+## Serving
+
+`trashcan serve` detects a `qwen35` GGUF and serves it through the same Responses API (`docs/server.md`):
+`--nodes`, `--cpu`, `--gpus`, `--cuts`, `--mtp`, `--draft-tokens` (default 2), `--draft-vocab` and
+`--checkpoints` work as for the Qwen commands, and `--model-id` defaults to the GGUF's name.
+
+```sh
+trashcan serve ~/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf --port 8000 \
+  --mtp ~/models/qwen3.5-9b/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf
+```
+
+Reasoning is the text inside `<think>`; the prompt opens it when thinking is on. Tool calls use Qwen's
+native `<tool_call>\n<function=NAME>\n<parameter=P>\nVALUE\n</parameter>\n</function>\n</tool_call>`:
+values of string-typed parameters stay text, others are parsed as JSON. Tool results become `tool`
+messages. `reasoning.effort` selects Qwen3.8's template `reasoning_effort` (low; medium; xhigh for high and
+above). `scripts/test-server.py` passes against Qwen3.5-9B on the GPUs with MTP drafting.
+
 ## Measured (incite, 2026-10-06)
 
 Kernel 7.2.9-p2p, schedutil with turbo, sustained 850/1370 MHz on both cards, `scripts/latency-run.py`.
@@ -131,6 +231,47 @@ head), so two Macs fit the 27B at 16 layers per GPU with room for context.
 
 Decode at 48% of the bandwidth ceiling is the starting point, not a tuned result. The obvious costs:
 the host relay between stages, one fence wait per stage, unfused norms and the scalar attention kernels.
+
+### Rollback, MTP and prefix reuse (incite, 2026-10-06)
+
+Same machine and clocks (850/1370 MHz sustained). Reports, outputs and clock logs:
+[results/qwen/spec-20261006](../results/qwen/spec-20261006/).
+
+| check | result |
+|---|---|
+| `qwen-check` 9B GPUs, 600-token prompt, 64 steps, MTP k=3 | pass: restore bitwise exact, 32 verification batches (2-4 tokens) with rollbacks match serial decode (top score error 1.6e-4), speculative output identical |
+| `qwen-check` 27B hybrid (CPU 0-30, GPU 30-48, 48-64 + head + MTP), 48 tokens, 24 steps, k=2 | pass: verification score error 3.5e-4, speculative output identical, 70% acceptance |
+| same checks on the CPU path, one process and a two-process TCP chain | pass, verification bitwise exact |
+| our MTP vs llama.cpp `--spec-type draft-mtp` (9B, k=3, same 48-token prompt, 20 tokens) | same text; 13/21 vs 12/19 drafts accepted |
+| `scripts/test-server.py`, 9B GPUs, MTP k=2 | pass (JSON, SSE, seeded sampling, tools, tool continuations) |
+
+Costs from `qwen-spec-bench` (9B, 600-token prompt, ms per call):
+
+| decode | verify 2 / 3 / 4 / 5 tokens | rollback | draft step: full head / 64K / 32K |
+|---|---|---|---|
+| 45.4 | 52.4 / 61.0 / 75.6 / 125.5 | 0.9-1.0 | 8.4 / 4.1 / 3.25 |
+
+Five columns run the four-column kernel twice, hence the jump. The MTP cache update inside each
+verification batch costs 1.5-2 ms (verification without the MTP layer: 50.9 / 59.2 / 73.6).
+
+Greedy decode rates (tok/s), three prompts from the Gemma MTP round, 128 tokens, thinking off. Every
+speculative output is byte-identical to plain decoding:
+
+| draft head | k | transformer | photosynthesis | CSV function |
+|---|---|---|---|---|
+| (plain decode) | 0 | 23.06 | 23.19 | 23.21 |
+| full | 1 / 2 / 3 | 31.08 / 31.49 / 27.91 | 27.16 / 27.74 / 23.03 | 32.57 / 36.44 / 33.09 |
+| first 65536 ids | 1 / 2 / 3 | 33.31 / **34.19** / 30.46 | 28.94 / **30.31** / 26.03 | 34.58 / **41.26** / 38.01 |
+| first 32768 ids | 1 / 2 / 3 | 31.29 / 31.86 / 27.86 | 29.48 / 30.95 / 27.12 | 34.49 / 40.36 / 38.33 |
+
+Two drafts from a 64K draft head (the defaults) give 30-41 tok/s, +31-78% over plain decoding: per round
+59.6 ms of verification, 7.9 ms of drafting and 0.4 ms of rollback for 2.37 tokens (77% of first drafts
+and 60% of both accepted). The 27B cannot be timed on one Mac (the hybrid chain spends seconds per token in
+its CPU stage).
+
+Prefix reuse, 9B, MTP k=2: a 2.7K-token document turn followed by three short questions. With reuse each
+follow-up prefills 84, 56 and 92 tokens (2675, 2755 and 2807 reused; about 1.4 s instead of 25 s), and the
+text is identical to the run without reuse.
 
 ## Building
 

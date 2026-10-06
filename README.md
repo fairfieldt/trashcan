@@ -5,7 +5,8 @@ written in Rust on raw Vulkan, with tensor parallelism across the two GPUs. llam
 
 - `docs/hardware.md`: the machine, the D700 clock bug, baseline numbers
 - `docs/upstream-survey.md`: upstream TP/meta-backend state, Vulkan PRs and forks
-- `docs/qwen.md`: Qwen3.8-27B / Qwen3.5-9B support, stages across GPUs and machines, Flash-Next plan
+- `docs/qwen.md`: Qwen3.8-27B / Qwen3.5-9B support, stages across GPUs and machines, MTP speculative
+  decoding, prefix reuse, Flash-Next plan
 - `docs/engine-plan.md`: the Rust engine design (TP layout, schedule, prefill, MTP, milestones)
 - `docs/engine-spec.md`: implementation reference: exact math, constants, formats, tokenizer, validation assets, GPU facts, conventions
 - `docs/findings.md`: measurements and bugs, newest first
@@ -51,6 +52,9 @@ and machines; see [docs/qwen.md](docs/qwen.md):
 target/release/trashcan qwen-chat ~/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf "Hello there"
 ```
 
+Add `--mtp ~/models/qwen3.5-9b/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf` for speculative decoding with the model's
+own MTP layer; follow-up turns reuse the cached prefix.
+
 To serve the model through the OpenAI Responses API:
 
 ```sh
@@ -58,4 +62,4 @@ target/release/trashcan serve ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q
 ```
 
 The server supports text, SSE streaming, reasoning, function/custom tools and full-history tool
-continuations. See [server setup and client examples](docs/server.md).
+continuations. It serves qwen35 GGUFs the same way. See [server setup and client examples](docs/server.md).

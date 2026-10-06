@@ -118,7 +118,8 @@ pub fn chat(
         let (top, reused) = e.prefill_cached(&ids, &[turn_start(t, &ids)])?;
         let pp = start.elapsed().as_secs_f64();
         let start = Instant::now();
-        let mut in_thought = false;
+        // With thinking on, the prompt itself opens the <think> block.
+        let mut in_thought = thinking;
         let mut bytes = Vec::new();
         let pending = sampler.sample(&top);
         let generated = generate(e, pending, max_tokens, sampler, &sp.stop, spec.as_deref_mut(), |id| {
@@ -385,5 +386,17 @@ pub fn spec_bench(e: &mut Chain, t: &Tokenizer, tokens: usize, reps: usize, voca
         let stages: Vec<f64> = busy(e).iter().zip(&b0).map(|(b, a)| per(b - a)).collect();
         rows.push(json!({"op": format!("draft{k}"), "ms": per(start.elapsed().as_secs_f64()), "stage_ms": stages}));
     }
+    const SLOT: usize = 1 << 20;
+    let pos = e.pos;
+    let (mut save, mut restore) = (0., 0.);
+    for _ in 0..reps {
+        let s = Instant::now();
+        e.save(SLOT)?;
+        let r = Instant::now();
+        e.restore(SLOT, pos)?;
+        save += (r - s).as_secs_f64();
+        restore += r.elapsed().as_secs_f64();
+    }
+    rows.push(json!({"op": "checkpoint", "save_ms": per(save), "restore_ms": per(restore)}));
     Ok(json!({"prompt_tokens": ids.len(), "reps": reps, "ops": rows}))
 }
