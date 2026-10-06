@@ -56,7 +56,8 @@ Stock amdgpu leaves both D700s at **300 MHz core / 150 MHz memory** even under l
 memory bandwidth. `~/D700macpro` on incite has two fixes: an exact-match VFCT VBIOS selection fix, plus a
 backport of Timur Kristóf's 2026-09-23 SI `HARDWAREDC` power-source patch. Without them the second GPU
 gets the wrong VBIOS and the cards stay in the battery power state. The patched module was built and
-installed at 19:14 on 2026-10-02.
+installed at 19:14 on 2026-10-02. The VFCT fix is prepared for upstream (amdgpu and radeon) in
+`kernel/upstream/vfct-exact-match/`.
 
 Idle reads 300/150 in `/sys/class/drm/card{0,1}/device/hwmon/hwmon*/freq{1,2}_input`. That's expected at
 idle; under load it should reach 850/1370. **Check those clocks during every benchmark.**

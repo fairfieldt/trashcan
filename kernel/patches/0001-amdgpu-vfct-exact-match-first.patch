@@ -1,61 +1,120 @@
-diff --git a/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c b/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c
-index e665430..c293e92 100644
 --- a/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c
 +++ b/drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c
-@@ -362,7 +362,8 @@ static bool amdgpu_read_disabled_bios(struct amdgpu_device *adev)
-  * Returns: 0 on match, -ENODEV on no match
+@@ -355,39 +355,28 @@
+  * On systems where the kernel renumbers PCI buses (e.g. pci=realloc or
+  * resource conflicts), the runtime bus number may differ from the POST
+  * value.  Match by device identity (vendor + device + function) and use
+- * the bus number as a preference: exact bus match is preferred, but when
+- * the bus numbers disagree we accept the entry if the device identity
+- * matches.
++ * the bus number as a preference: the caller takes an entry whose bus
++ * number also matches, and falls back to an entry with only a matching
++ * device identity.  Systems with several identical GPUs (e.g. Mac Pro 6,1)
++ * have one entry per GPU that differ only in the bus number, so an exact
++ * bus match must win even when it is not the first identity match.
+  *
+- * Returns: 0 on match, -ENODEV on no match
++ * Returns: true if the device identity matches
   */
- static int amdgpu_acpi_vfct_match(struct amdgpu_device *adev,
+-static int amdgpu_acpi_vfct_match(struct amdgpu_device *adev,
 -				  VFCT_IMAGE_HEADER *vhdr)
-+				  VFCT_IMAGE_HEADER *vhdr,
-+				  bool allow_bus_mismatch)
++static bool amdgpu_acpi_vfct_match(struct amdgpu_device *adev,
++				   VFCT_IMAGE_HEADER *vhdr)
  {
- 	/* Vendor and device IDs must always match */
- 	if (vhdr->VendorID != adev->pdev->vendor ||
-@@ -376,6 +377,8 @@ static int amdgpu_acpi_vfct_match(struct amdgpu_device *adev,
- 	/* Exact bus number match - preferred */
- 	if (vhdr->PCIBus == adev->pdev->bus->number)
- 		return 0;
-+	if (!allow_bus_mismatch)
-+		return -ENODEV;
+-	/* Vendor and device IDs must always match */
+-	if (vhdr->VendorID != adev->pdev->vendor ||
+-	    vhdr->DeviceID != adev->pdev->device)
+-		return -ENODEV;
+-
+-	if (vhdr->PCIDevice != PCI_SLOT(adev->pdev->devfn) ||
+-	    vhdr->PCIFunction != PCI_FUNC(adev->pdev->devfn))
+-		return -ENODEV;
+-
+-	/* Exact bus number match - preferred */
+-	if (vhdr->PCIBus == adev->pdev->bus->number)
+-		return 0;
+-
+-	/* Bus mismatch but device identity matches (PCI renumbering case) */
+-	dev_notice(adev->dev,
+-		   "VFCT bus number mismatch: table %u != runtime %u, matching by device identity (vendor 0x%04x device 0x%04x)\n",
+-		   vhdr->PCIBus, adev->pdev->bus->number,
+-		   adev->pdev->vendor, adev->pdev->device);
+-	return 0;
++	return vhdr->VendorID == adev->pdev->vendor &&
++	       vhdr->DeviceID == adev->pdev->device &&
++	       vhdr->PCIDevice == PCI_SLOT(adev->pdev->devfn) &&
++	       vhdr->PCIFunction == PCI_FUNC(adev->pdev->devfn);
+ }
  
- 	/* Bus mismatch but device identity matches (PCI renumbering case) */
- 	dev_notice(adev->dev,
-@@ -391,6 +394,7 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+ {
++	GOP_VBIOS_CONTENT *vbios, *match = NULL;
+ 	struct acpi_table_header *hdr;
++	VFCT_IMAGE_HEADER *vhdr;
  	acpi_size tbl_size;
  	UEFI_ACPI_VFCT *vfct;
  	unsigned int offset;
-+	bool allow_bus_mismatch = false;
- 
- 	if (!ACPI_SUCCESS(acpi_get_table("VFCT", 1, &hdr)))
- 		return false;
-@@ -401,6 +405,7 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
- 	}
- 
- 	vfct = (UEFI_ACPI_VFCT *)hdr;
-+retry:
+@@ -404,8 +393,8 @@
  	offset = vfct->VBIOSImageOffset;
  
  	while (offset < tbl_size) {
-@@ -420,7 +425,7 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+-		GOP_VBIOS_CONTENT *vbios = (GOP_VBIOS_CONTENT *)((char *)hdr + offset);
+-		VFCT_IMAGE_HEADER *vhdr = &vbios->VbiosHeader;
++		vbios = (GOP_VBIOS_CONTENT *)((char *)hdr + offset);
++		vhdr = &vbios->VbiosHeader;
+ 
+ 		offset += sizeof(VFCT_IMAGE_HEADER);
+ 		if (offset > tbl_size) {
+@@ -419,23 +408,39 @@
+ 			return false;
  		}
  
- 		if (vhdr->ImageLength &&
+-		if (vhdr->ImageLength &&
 -		    !amdgpu_acpi_vfct_match(adev, vhdr)) {
-+		    !amdgpu_acpi_vfct_match(adev, vhdr, allow_bus_mismatch)) {
- 			adev->bios = kmemdup(&vbios->VbiosContent,
- 					     vhdr->ImageLength,
- 					     GFP_KERNEL);
-@@ -434,6 +439,12 @@ static bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
+-			adev->bios = kmemdup(&vbios->VbiosContent,
+-					     vhdr->ImageLength,
+-					     GFP_KERNEL);
++		if (!vhdr->ImageLength || !amdgpu_acpi_vfct_match(adev, vhdr))
++			continue;
+ 
+-			if (!check_atom_bios(adev->bios, vhdr->ImageLength)) {
+-				kfree(adev->bios);
+-				return false;
+-			}
+-			adev->bios_size = vhdr->ImageLength;
+-			return true;
++		/* Exact bus number match - preferred */
++		if (vhdr->PCIBus == adev->pdev->bus->number) {
++			match = vbios;
++			break;
  		}
++
++		/* Bus mismatch: keep the first one unless an exact match follows */
++		if (!match)
++			match = vbios;
  	}
  
-+	/* Do not let an early relaxed match hide a later exact match. */
-+	if (!allow_bus_mismatch) {
-+		allow_bus_mismatch = true;
-+		goto retry;
+-	dev_info(adev->dev, "ACPI VFCT table present but broken (too short #2),skipping\n");
+-	return false;
++	if (!match) {
++		dev_info(adev->dev, "ACPI VFCT table present but broken (too short #2),skipping\n");
++		return false;
 +	}
 +
- 	dev_info(adev->dev, "ACPI VFCT table present but broken (too short #2),skipping\n");
- 	return false;
++	vhdr = &match->VbiosHeader;
++	if (vhdr->PCIBus != adev->pdev->bus->number)
++		dev_notice(adev->dev,
++			   "VFCT bus number mismatch: table %u != runtime %u, matching by device identity (vendor 0x%04x device 0x%04x)\n",
++			   vhdr->PCIBus, adev->pdev->bus->number,
++			   adev->pdev->vendor, adev->pdev->device);
++
++	adev->bios = kmemdup(&match->VbiosContent, vhdr->ImageLength, GFP_KERNEL);
++	if (!check_atom_bios(adev->bios, vhdr->ImageLength)) {
++		kfree(adev->bios);
++		return false;
++	}
++	adev->bios_size = vhdr->ImageLength;
++	return true;
  }
+ #else
+ static inline bool amdgpu_acpi_vfct_bios(struct amdgpu_device *adev)
