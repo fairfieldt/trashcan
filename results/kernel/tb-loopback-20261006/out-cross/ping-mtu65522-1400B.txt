@@ -1,0 +1,5 @@
+PING 10.77.0.2 (10.77.0.2) 1400(1428) bytes of data.
+
+--- 10.77.0.2 ping statistics ---
+1000 packets transmitted, 1000 received, 0% packet loss, time 1998ms
+rtt min/avg/max/mdev = 0.098/0.168/0.197/0.022 ms

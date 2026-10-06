@@ -1,0 +1,16 @@
+[    1.428979] ACPI: bus type thunderbolt registered
+[    1.429490] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.486275] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.510674] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[   12.815687] Modules linked in: apple_gmux(+) apple_mfi_fastcharge evdev msr i2c_dev parport_pc ppdev lp parport configfs efi_pstore nfnetlink efivarfs ip_tables x_tables autofs4 ext4 mbcache jbd2 crc32c_generic amdgpu hid_generic usbhid hid drm_buddy amdxcp drm_exec gpu_sched crc16 radeon dm_mod video wmi i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_ttm_helper ttm drm_kms_helper xhci_pci xhci_hcd ehci_pci ehci_hcd drm nvme usbcore tg3 thunderbolt iTCO_wdt nvme_core intel_pmc_bxt iTCO_vendor_support watchdog libphy crc32_pclmul crc32c_intel ioatdma i2c_i801 lpc_ich nvme_auth i2c_smbus dca usb_common button
+[  222.818428] thunderbolt 1-3: new host found, vendor=0x8086 device=0x1
+[  222.818442] thunderbolt 1-3: Intel Corp. incite
+[  222.818922] thunderbolt 1-1: new host found, vendor=0x8086 device=0x1
+[  222.818929] thunderbolt 1-1: Intel Corp. incite
+[  289.724257] TCP: thunderbolt1: Driver has suspect GRO implementation, TCP performance may be compromised.
+[  377.527244] thunderbolt 1-1: host disconnected
+[  377.611406] thunderbolt 1-3: host disconnected
+[  389.000327] thunderbolt 0-3: new host found, vendor=0x8086 device=0x1
+[  389.000341] thunderbolt 0-3: Intel Corp. incite
+[  389.000412] thunderbolt 1-3: new host found, vendor=0x8086 device=0x1
+[  389.000424] thunderbolt 1-3: Intel Corp. incite
