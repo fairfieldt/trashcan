@@ -72,7 +72,6 @@ struct Head {
     logits: Buffer,
     scratch: Buffer,
     top: Buffer,
-    chunks: usize,
 }
 
 /// The MTP block on the head stage; `cpu::CpuMtp` documents the math.
@@ -149,13 +148,15 @@ pub struct GpuStage {
     act: Buffer,
     fence: vk::Fence,
     graphs: HashMap<Key, (Graph, u64)>,
-    drafts: HashMap<(u32, bool), Graph>,
+    drafts: HashMap<(u32, bool, usize), Graph>,
     tick: u64,
     /// Columns of the latest forward, and whether it kept per-column snapshots.
     last_n: usize,
     verified: bool,
     rollbacks: HashMap<usize, vk::CommandBuffer>,
     slots: HashMap<usize, Buffer>,
+    /// Seconds spent in submissions and their fence waits.
+    pub busy: std::cell::Cell<f64>,
 }
 
 /// Partition count of split decode attention, by visible tokens; large batches use the unsplit kernel.
@@ -487,12 +488,14 @@ impl<'a> Rec<'a> {
         self.matrix(&f.down, s.act.address, s.y.address, c.ff, c.d, false)
     }
 
-    /// LM head and top candidates of the last `cols` normed rows of `input`.
-    fn head(&mut self, hd: &Head, input: &Buffer, cols: usize) -> Result<()> {
+    /// LM head and top candidates of the last `cols` normed rows of `input`, over the first `rows` tokens
+    /// of the vocabulary.
+    fn head(&mut self, hd: &Head, input: &Buffer, cols: usize, rows: usize) -> Result<()> {
         let (s, c) = (self.s, &self.s.c);
         let (d, n) = (c.d, self.n);
+        let chunks = rows.div_ceil(1024);
         let mut u = [0; 16];
-        u[0] = c.vocab as u32;
+        u[0] = rows as u32;
         u[1] = d as u32;
         u[3] = (c.vocab * d / 16) as u32;
         u[9] = 1;
@@ -509,29 +512,29 @@ impl<'a> Rec<'a> {
             self.cmd,
             shader,
             self.push([0, x, hd.logits.address, 0, 0, 0], u),
-            c.vocab.div_ceil(16) as u32,
+            rows.div_ceil(16) as u32,
             gy as u32,
             &hd.w,
         )?;
         if self.dump {
-            let host = s.gpu.buffer(c.vocab * 4, true, false, None)?;
-            s.gpu.copy(self.cmd, &hd.logits, (cols - 1) * c.vocab * 4, &host, 0, c.vocab * 4);
-            self.graph.captures.push(("result_output".into(), host, c.vocab));
+            let host = s.gpu.buffer(rows * 4, true, false, None)?;
+            s.gpu.copy(self.cmd, &hd.logits, (cols - 1) * rows * 4, &host, 0, rows * 4);
+            self.graph.captures.push(("result_output".into(), host, rows));
         }
         let mut u = [0; 16];
-        u[0] = c.vocab as u32;
+        u[0] = rows as u32;
         u[1] = TOP_K as u32;
-        u[2] = (hd.chunks * TOP_K) as u32;
+        u[2] = (chunks * TOP_K) as u32;
         u[15] = single;
         s.gpu.dispatch(
             self.cmd,
             "topk",
             self.push([hd.logits.address, 0, hd.scratch.address, 0, 0, 0], u),
-            hd.chunks as u32,
+            chunks as u32,
             cols as u32,
         );
         let mut u = [0; 16];
-        u[0] = (hd.chunks * TOP_K) as u32;
+        u[0] = (chunks * TOP_K) as u32;
         u[1] = TOP_K as u32;
         u[15] = single;
         s.gpu.dispatch(
@@ -633,7 +636,6 @@ impl GpuStage {
                 logits: gpu.buffer(cols * c.vocab * 4, false, false, None)?,
                 scratch: gpu.buffer(cols * chunks * TOP_K * 8, false, false, None)?,
                 top: gpu.buffer(cols * TOP_K * 8, true, false, None)?,
-                chunks,
             })
         } else {
             None
@@ -697,6 +699,7 @@ impl GpuStage {
             verified: false,
             rollbacks: HashMap::new(),
             slots: HashMap::new(),
+            busy: std::cell::Cell::new(0.),
             c: c.clone(),
             gpu,
         })
@@ -737,7 +740,7 @@ impl GpuStage {
             r.add_norm(self.x.address, pending.then_some(self.y.address), Some(self.h.address), Some(&hd.norm), 0);
             r.capture(format!("l_out-{last}"), &self.x, d)?;
             r.capture("result_norm".into(), &self.h, d)?;
-            r.head(hd, &self.h, if verify { n } else { 1 })?;
+            r.head(hd, &self.h, if verify { n } else { 1 }, self.c.vocab)?;
             if let Some(m) = &self.mtp {
                 // Extend the MTP cache over this batch: token p pairs with the target's row p - 1.
                 r.split()?;
@@ -757,17 +760,19 @@ impl GpuStage {
     }
 
     /// One chained MTP draft step; the first takes the target's pending row, later ones the last output.
-    fn record_draft(&self, parts: u32, first: bool) -> Result<Graph> {
+    /// The draft head ranks the first `rows` tokens.
+    fn record_draft(&self, parts: u32, first: bool, rows: usize) -> Result<Graph> {
         let (m, hd) = (self.mtp.as_ref().context("no MTP block")?, self.head.as_ref().context("no head")?);
         let mut r = Rec::new(self, 1, false)?;
         r.mtp_inputs(m, if first { m.hin.address } else { m.out.address });
         r.mtp_block(m, parts)?;
         r.add_norm(self.x.address, Some(self.y.address), Some(m.out.address), Some(&m.head_norm), 0);
-        r.head(hd, &m.out, 1)?;
+        r.head(hd, &m.out, 1, rows)?;
         r.finish()
     }
 
     fn submit(&self, cmds: &[vk::CommandBuffer]) -> Result<()> {
+        let start = std::time::Instant::now();
         unsafe {
             self.gpu.dev.reset_fences(&[self.fence])?;
         }
@@ -781,6 +786,7 @@ impl GpuStage {
                 .dev
                 .wait_for_fences(&[self.fence], true, 600_000_000_000)?;
         }
+        self.busy.set(self.busy.get() + start.elapsed().as_secs_f64());
         Ok(())
     }
 
@@ -867,16 +873,17 @@ impl GpuStage {
     }
 
     /// One MTP draft step at `pos` for the token with embedding `emb`; `first` starts a chain from the
-    /// target's state. Returns the draft's top candidates.
-    pub fn draft(&mut self, emb: &[f32], pos: usize, first: bool) -> Result<Vec<(f32, u32)>> {
+    /// target's state. Returns the draft's top candidates among the first `rows` tokens (0: all).
+    pub fn draft(&mut self, emb: &[f32], pos: usize, first: bool, rows: usize) -> Result<Vec<(f32, u32)>> {
+        let rows = if rows == 0 { self.c.vocab } else { rows.min(self.c.vocab) };
         let m = self.mtp.as_ref().context("this stage has no MTP block")?;
         ensure!(pos < self.context, "context exhausted");
         m.emb.write(bytemuck::cast_slice(emb))?;
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, 1, 0, 0]))?;
-        let key = (partitions(pos, 1), first);
+        let key = (partitions(pos, 1), first, rows);
         if !self.drafts.contains_key(&key) {
-            let graph = self.record_draft(key.0, key.1)?;
+            let graph = self.record_draft(key.0, key.1, key.2)?;
             self.drafts.insert(key, graph);
         }
         self.submit(&self.drafts[&key].cmds)?;

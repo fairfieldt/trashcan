@@ -18,6 +18,14 @@ pub struct Defaults {
     pub thinking: bool,
 }
 
+/// Where a model's chat template expects tool results: Gemma attaches them to the calling assistant
+/// message; Qwen renders them as `tool` messages after it.
+#[derive(Clone, Copy, PartialEq)]
+pub enum Native {
+    Gemma,
+    Qwen,
+}
+
 #[derive(Debug)]
 pub struct Tool {
     pub name: String,
@@ -36,6 +44,8 @@ pub struct Request {
     pub parallel_tool_calls: bool,
     pub stream: bool,
     pub thinking: bool,
+    /// The requested reasoning effort, when given.
+    pub effort: Option<String>,
     pub summary: bool,
     pub sampling: Defaults,
 }
@@ -161,7 +171,7 @@ fn parse_tools(v: &Value, namespace: Option<&str>, out: &mut Vec<Tool>) -> Resul
 }
 
 impl Request {
-    pub fn parse(v: &Value, defaults: Defaults, model: &str) -> Result<Self> {
+    pub fn parse_native(v: &Value, defaults: Defaults, model: &str, native: Native) -> Result<Self> {
         ensure!(v.is_object(), "request must be a JSON object");
         if let Some(m) = v.get("model") {
             ensure!(m.as_str() == Some(model), "unknown model; use {model}");
@@ -229,6 +239,7 @@ impl Request {
             .transpose()?
             .unwrap_or(false);
         let mut thinking = defaults.thinking;
+        let mut effort_name = None;
         let mut summary = false;
         if let Some(reasoning) = v.get("reasoning").filter(|v| !v.is_null()) {
             ensure!(reasoning.is_object(), "reasoning must be an object");
@@ -244,6 +255,7 @@ impl Request {
                     "unknown reasoning effort"
                 );
                 thinking = effort != "none";
+                effort_name = Some(effort.to_owned());
             }
             if let Some(value) = reasoning.get("summary").filter(|v| !v.is_null()) {
                 ensure!(
@@ -324,6 +336,7 @@ impl Request {
                         if role == "system" || role == "developer" {
                             system.push(text);
                         } else if role == "assistant"
+                            && native == Native::Gemma
                             && messages
                                 .last()
                                 .is_some_and(|m| m.get("tool_responses").is_some())
@@ -401,7 +414,7 @@ impl Request {
                             .remove(id)
                             .with_context(|| format!("tool output has no preceding call: {id}"))?;
                         ensure!(
-                            index == messages.len() - 1,
+                            messages[index + 1..].iter().all(|m| m["role"] == "tool"),
                             "tool outputs must follow their assistant call turn"
                         );
                         let text = if kind == "tool_search_output" {
@@ -424,6 +437,10 @@ impl Request {
                         } else {
                             content(&item["output"])?
                         };
+                        if native == Native::Qwen {
+                            messages.push(json!({"role":"tool","content":text}));
+                            continue;
+                        }
                         // Older embedded Gemma templates require results on the calling assistant.
                         let message = &mut messages[index];
                         if message.get("tool_responses").is_none() {
@@ -459,6 +476,7 @@ impl Request {
             parallel_tool_calls,
             stream,
             thinking,
+            effort: effort_name,
             summary,
             sampling,
         })
@@ -931,7 +949,7 @@ mod tests {
         }
     }
     fn request(value: Value) -> Result<Request> {
-        Request::parse(&value, defaults(), "gemma-4-12b")
+        Request::parse_native(&value, defaults(), "gemma-4-12b", Native::Gemma)
     }
 
     #[test]

@@ -15,6 +15,9 @@ pub struct Stats {
     pub draft_s: f64,
     pub verify_s: f64,
     pub rollback_s: f64,
+    /// Rounds that drafted at least i + 1 tokens, and that accepted at least i + 1.
+    pub offered_at: Vec<usize>,
+    pub accepted_at: Vec<usize>,
 }
 
 impl Stats {
@@ -24,13 +27,16 @@ impl Stats {
             "tokens_per_round": (self.rounds + self.accepted) as f64 / self.rounds.max(1) as f64,
             "draft_ms_per_round": self.draft_s * 1e3 / self.rounds.max(1) as f64,
             "verify_ms_per_round": self.verify_s * 1e3 / self.rounds.max(1) as f64,
-            "rollback_ms_per_round": self.rollback_s * 1e3 / self.rounds.max(1) as f64})
+            "rollback_ms_per_round": self.rollback_s * 1e3 / self.rounds.max(1) as f64,
+            "offered_at": self.offered_at, "accepted_at": self.accepted_at})
     }
 }
 
 pub struct Spec {
     /// Drafts per round.
     pub k: usize,
+    /// Drafts come from the first `vocab` token ids (0: the whole vocabulary).
+    pub vocab: usize,
     pub stats: Stats,
 }
 
@@ -38,7 +44,7 @@ impl Spec {
     pub fn new(chain: &Chain, k: usize) -> Result<Self> {
         ensure!(chain.mtp, "speculative decoding needs --mtp");
         ensure!(k >= 1 && k < chain.verify, "--draft-tokens must be 1..{}", chain.verify.max(2) - 1);
-        Ok(Self { k, stats: Stats::default() })
+        Ok(Self { k, vocab: 0, stats: Stats::default() })
     }
 
     /// One round from `pending`, sampled but not yet processed. Returns the tokens now processed (`pending`
@@ -51,7 +57,7 @@ impl Spec {
         }
         let start = Instant::now();
         let seed = if sampler.temperature == 0. { 0 } else { (sampler.uniform() * 9007199254740992.) as u64 };
-        let drafts = chain.draft(pending, k, sampler, seed, stop)?;
+        let drafts = chain.draft(pending, k, self.vocab, sampler, seed, stop)?;
         let verify = Instant::now();
         let mut tokens = vec![pending];
         tokens.extend(drafts.iter().map(|d| d.0));
@@ -64,6 +70,12 @@ impl Spec {
         s.rounds += 1;
         s.proposed += drafts.len();
         s.accepted += accepted;
+        s.offered_at.resize(self.k, 0);
+        s.accepted_at.resize(self.k, 0);
+        for i in 0..drafts.len() {
+            s.offered_at[i] += 1;
+            s.accepted_at[i] += usize::from(i < accepted);
+        }
         s.draft_s += (verify - start).as_secs_f64();
         s.verify_s += (rollback - verify).as_secs_f64();
         s.rollback_s += rollback.elapsed().as_secs_f64();

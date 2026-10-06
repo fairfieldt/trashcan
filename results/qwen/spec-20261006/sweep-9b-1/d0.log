@@ -1,0 +1,9 @@
+CPU latency request: 0 us, scoped to this command
+plan: [[(0, 21), (21, 32)]]
+GPU0: layers 0..21
+GPU0: 3081.4 MiB allocated
+GPU1: layers 21..32 + head
+GPU1: 2914.9 MiB allocated
+prefill: 26 tokens (0 reused), 42.23 tok/s; decode: 128 tokens, 23.06 tok/s
+prefill: 26 tokens (0 reused), 45.10 tok/s; decode: 128 tokens, 23.19 tok/s
+prefill: 40 tokens (0 reused), 64.00 tok/s; decode: 128 tokens, 23.21 tok/s

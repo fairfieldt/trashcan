@@ -288,6 +288,16 @@ impl Tokenizer {
         thinking: bool,
         tools: &[serde_json::Value],
     ) -> Result<String> {
+        self.render_with_effort(messages, thinking, tools, None)
+    }
+    /// `effort` sets the template's `reasoning_effort` (Qwen3.8: low, medium or xhigh); others ignore it.
+    pub fn render_with_effort(
+        &self,
+        messages: &[serde_json::Value],
+        thinking: bool,
+        tools: &[serde_json::Value],
+        effort: Option<&str>,
+    ) -> Result<String> {
         let mut env = minijinja::Environment::new();
         env.set_unknown_method_callback(minijinja_contrib::pycompat::unknown_method_callback);
         env.add_function(
@@ -300,7 +310,12 @@ impl Tokenizer {
             },
         );
         env.add_template("chat", &self.template)?;
-        Ok(env.get_template("chat")?.render(minijinja::context!{messages=>messages,add_generation_prompt=>true,enable_thinking=>thinking,bos_token=>"",eos_token=>"<eos>",tools=>tools})?)
+        let context = minijinja::context! {messages=>messages,add_generation_prompt=>true,enable_thinking=>thinking,bos_token=>"",eos_token=>"<eos>",tools=>tools};
+        let context = match effort {
+            Some(e) => minijinja::context! {reasoning_effort=>e,..context},
+            None => context,
+        };
+        Ok(env.get_template("chat")?.render(context)?)
     }
     pub fn fixture(&self, path: &std::path::Path) -> Result<()> {
         let cases: Vec<serde_json::Value> = serde_json::from_slice(&std::fs::read(path)?)?;

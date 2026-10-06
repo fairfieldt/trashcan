@@ -215,6 +215,16 @@ enum Cmd {
         #[arg(long, default_value_t = 128)]
         tg: usize,
     },
+    /// Time decode, verification batches, rollback and MTP drafts.
+    QwenSpecBench {
+        model: PathBuf,
+        #[command(flatten)]
+        run: QwenRun,
+        #[arg(long, default_value_t = 600)]
+        tokens: usize,
+        #[arg(long, default_value_t = 20)]
+        reps: usize,
+    },
     /// Check checkpoint restore, verification rollback and speculative decoding against greedy decode.
     QwenCheck {
         model: PathBuf,
@@ -303,6 +313,9 @@ struct QwenRun {
     /// Drafted tokens per speculative round.
     #[arg(long, default_value_t = 3)]
     draft_tokens: usize,
+    /// Draft only among the first N token ids (0: the whole vocabulary); a smaller draft head is cheaper.
+    #[arg(long, default_value_t = 0)]
+    draft_vocab: usize,
     /// Largest rollback batch (default: draft tokens + 1 with --mtp, else 0).
     #[arg(long)]
     verify: Option<usize>,
@@ -321,10 +334,11 @@ impl QwenRun {
         Ok(chain)
     }
     fn spec(&self, chain: &qwen::net::Chain) -> Result<Option<qwen::spec::Spec>> {
-        self.mtp
-            .as_ref()
-            .map(|_| qwen::spec::Spec::new(chain, self.draft_tokens))
-            .transpose()
+        let mut spec = self.mtp.as_ref().map(|_| qwen::spec::Spec::new(chain, self.draft_tokens)).transpose()?;
+        if let Some(s) = spec.as_mut() {
+            s.vocab = self.draft_vocab;
+        }
+        Ok(spec)
     }
 }
 
@@ -821,6 +835,12 @@ fn main() -> Result<()> {
             let mut spec = run.spec(&chain)?;
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
             println!("{}", qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?);
+            Ok(())
+        }
+        Cmd::QwenSpecBench { model, run, tokens, reps } => {
+            let mut chain = run.chain(&model)?;
+            let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+            println!("{}", qwen::chat::spec_bench(&mut chain, &t, tokens, reps, run.draft_vocab)?);
             Ok(())
         }
         Cmd::QwenCheck {

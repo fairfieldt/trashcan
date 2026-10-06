@@ -332,3 +332,58 @@ pub fn check(e: &mut Chain, t: &Tokenizer, tokens: usize, steps: usize, spec: Op
         "verify_rounds": round, "column_mismatches": column_mismatches, "max_column_score_error": max_score_error,
         "speculative": speculative, "text": t.decode(&expected, false), "pass": pass}))
 }
+
+/// Cost of the speculative building blocks after a prompt, in ms per call (and per GPU stage):
+/// one-token decode, verification batches of 2..=verify tokens with their rollback to one token, and
+/// MTP drafts of 1..verify-1 tokens.
+pub fn spec_bench(e: &mut Chain, t: &Tokenizer, tokens: usize, reps: usize, vocab: usize) -> Result<Value> {
+    let ids = check_prompt(t, tokens)?;
+    let token = e.prefill(&ids)?[0].1;
+    let busy = |e: &Chain| -> Vec<f64> {
+        e.local
+            .stages
+            .iter()
+            .map(|s| match s {
+                super::pipeline::Stage::Gpu(g) => g.busy.get(),
+                _ => 0.,
+            })
+            .collect()
+    };
+    let per = |x: f64| x * 1e3 / reps as f64;
+    let mut rows = Vec::new();
+    e.forward(&[token], true, None)?;
+    let (start, b0) = (Instant::now(), busy(e));
+    for _ in 0..reps {
+        e.forward(&[token], true, None)?;
+    }
+    let stages: Vec<f64> = busy(e).iter().zip(&b0).map(|(b, a)| per(b - a)).collect();
+    rows.push(json!({"op": "decode", "ms": per(start.elapsed().as_secs_f64()), "stage_ms": stages}));
+    for n in 2..=e.verify {
+        e.verify(&vec![token; n])?;
+        e.rollback(1)?;
+        let (mut verify, mut rollback) = (0., 0.);
+        let b0 = busy(e);
+        for _ in 0..reps {
+            let s = Instant::now();
+            e.verify(&vec![token; n])?;
+            let r = Instant::now();
+            e.rollback(1)?;
+            verify += (r - s).as_secs_f64();
+            rollback += r.elapsed().as_secs_f64();
+        }
+        let stages: Vec<f64> = busy(e).iter().zip(&b0).map(|(b, a)| per(b - a)).collect();
+        rows.push(json!({"op": format!("verify{n}"), "ms": per(verify), "rollback_ms": per(rollback), "stage_ms": stages}));
+    }
+    let sampler = Sampler::new(0., 1, 1., 1)?;
+    let drafts = if e.mtp { e.verify.max(1) } else { 1 };
+    for k in 1..drafts {
+        e.draft(token, k, vocab, &sampler, 0, &[])?;
+        let (start, b0) = (Instant::now(), busy(e));
+        for _ in 0..reps {
+            e.draft(token, k, vocab, &sampler, 0, &[])?;
+        }
+        let stages: Vec<f64> = busy(e).iter().zip(&b0).map(|(b, a)| per(b - a)).collect();
+        rows.push(json!({"op": format!("draft{k}"), "ms": per(start.elapsed().as_secs_f64()), "stage_ms": stages}));
+    }
+    Ok(json!({"prompt_tokens": ids.len(), "reps": reps, "ops": rows}))
+}

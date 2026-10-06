@@ -218,9 +218,9 @@ impl Local {
         Ok(())
     }
 
-    /// Chain up to `k` MTP drafts from `token` at `pos`, sampling each from the MTP's candidates. Stops
-    /// after a token in `stop`.
-    pub fn draft(&mut self, token: u32, pos: usize, k: usize, sampler: &mut Sampler, stop: &[u32]) -> Result<Vec<Draft>> {
+    /// Chain up to `k` MTP drafts from `token` at `pos`, sampling each from the MTP's candidates among the
+    /// first `vocab` tokens (0: all). Stops after a token in `stop`.
+    pub fn draft(&mut self, token: u32, pos: usize, k: usize, vocab: usize, sampler: &mut Sampler, stop: &[u32]) -> Result<Vec<Draft>> {
         ensure!(self.mtp, "this machine has no MTP block");
         let (g, c) = (&self.gguf, &self.c);
         let mut drafts = Vec::new();
@@ -229,12 +229,12 @@ impl Local {
         for j in 0..k {
             let emb = embed(g, c, &[token])?;
             let top = match self.stages.last_mut().context("no stages")? {
-                Stage::Gpu(s) => s.draft(&emb, pos + j, j == 0)?,
+                Stage::Gpu(s) => s.draft(&emb, pos + j, j == 0, vocab)?,
                 Stage::Cpu(s) => {
                     let m = s.mtp.as_mut().context("no MTP block")?;
                     let (logits, h) = m.step(g, c, &emb, hidden.as_deref(), pos + j)?;
                     hidden = Some(h);
-                    top_k(&logits)
+                    top_k(&logits[..if vocab == 0 { logits.len() } else { vocab.min(logits.len()) }])
                 }
             };
             token = sampler.sample(&top);

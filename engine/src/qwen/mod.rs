@@ -7,6 +7,7 @@
 pub mod chat;
 pub mod cpu;
 pub mod gpu;
+pub mod native;
 pub mod net;
 pub mod pipeline;
 pub mod spec;

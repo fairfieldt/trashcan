@@ -13,7 +13,7 @@
 //!   recurrent states. `tokens` (the batch's ids) feed the MTP layer.
 //! - `{"rollback": column}`: keep tokens `0..=column` of the latest verification batch.
 //! - `{"save": slot}` / `{"restore": slot}`: copy the recurrent state into a checkpoint slot or back.
-//! - `{"draft": {"token", "pos", "k", "temperature", "top_k", "top_p", "seed", "stop"}}` ->
+//! - `{"draft": {"token", "pos", "k", "vocab", "temperature", "top_k", "top_p", "seed", "stop"}}` ->
 //!   `{"drafts": [[id, [[score, id], ...]], ...]}` from the MTP layer on the last machine.
 //!
 //! Requests without a reply stream on immediately, so prompt chunks pipeline across machines; a later
@@ -144,7 +144,8 @@ fn draft_here(l: &mut Local, r: &Value) -> Result<Vec<Draft>> {
     let num = |k: &str| r[k].as_f64().with_context(|| format!("draft {k}"));
     let mut sampler = Sampler::new(num("temperature")? as f32, num("top_k")? as usize, num("top_p")? as f32, r["seed"].as_u64().context("seed")?)?;
     let stop: Vec<u32> = serde_json::from_value(r["stop"].clone())?;
-    l.draft(num("token")? as u32, num("pos")? as usize, num("k")? as usize, &mut sampler, &stop)
+    let vocab = r["vocab"].as_u64().unwrap_or(0) as usize;
+    l.draft(num("token")? as u32, num("pos")? as usize, num("k")? as usize, vocab, &mut sampler, &stop)
 }
 
 fn drafts_json(drafts: &[Draft]) -> Value {
@@ -457,10 +458,11 @@ impl Chain {
         Ok(())
     }
 
-    /// Up to `k` MTP drafts following the sampled, not yet processed `token` at the current position.
-    pub fn draft(&mut self, token: u32, k: usize, sampler: &Sampler, seed: u64, stop: &[u32]) -> Result<Vec<Draft>> {
+    /// Up to `k` MTP drafts following the sampled, not yet processed `token` at the current position, from
+    /// the first `vocab` tokens of the vocabulary (0: all).
+    pub fn draft(&mut self, token: u32, k: usize, vocab: usize, sampler: &Sampler, seed: u64, stop: &[u32]) -> Result<Vec<Draft>> {
         ensure!(self.mtp, "drafting needs --mtp");
-        let r = json!({"token": token, "pos": self.pos, "k": k, "temperature": sampler.temperature,
+        let r = json!({"token": token, "pos": self.pos, "k": k, "vocab": vocab, "temperature": sampler.temperature,
             "top_k": sampler.top_k, "top_p": sampler.top_p, "seed": seed, "stop": stop});
         match self.next.as_mut() {
             Some(conn) => {
@@ -475,6 +477,14 @@ impl Chain {
     pub fn prefill(&mut self, ids: &[u32]) -> Result<Candidates> {
         self.pos = 0;
         self.extend(ids)
+    }
+
+    /// Drop the cached sequence and checkpoints, e.g. after a failed request.
+    pub fn forget(&mut self) {
+        self.history.clear();
+        self.checkpoints.clear();
+        self.pos = 0;
+        self.verified = 0;
     }
 
     /// Checkpoint the current position for prefix reuse, replacing the least recently used slot.

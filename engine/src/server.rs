@@ -3,7 +3,8 @@ use crate::{
     assistant::Assistant,
     generation::{self, Sampler},
     model::Engine,
-    responses::{Defaults, NativeOutput, Output, Request},
+    qwen,
+    responses::{Defaults, Native, NativeOutput, Output, Request},
     tokenizer::Tokenizer,
 };
 use anyhow::{ensure, Context, Result};
@@ -24,8 +25,9 @@ pub struct Options {
     host: String,
     #[arg(long, default_value_t = 8000)]
     port: u16,
-    #[arg(long, default_value = "gemma-4-12b")]
-    model_id: String,
+    /// Model name clients send (default: gemma-4-12b, or the Qwen model's name).
+    #[arg(long)]
+    model_id: Option<String>,
     /// Enable browser cross-origin requests.
     #[arg(long)]
     cors: bool,
@@ -54,6 +56,146 @@ pub struct Options {
     /// Replay every prompt from position zero instead of reusing resident KV.
     #[arg(long)]
     no_prefix_cache: bool,
+    /// Qwen: further machines in chain order (host:port of `trashcan qwen-node`).
+    #[arg(long, value_delimiter = ',')]
+    nodes: Vec<String>,
+    /// Qwen: run this machine's layers on the CPU reference path.
+    #[arg(long)]
+    cpu: bool,
+    /// Qwen: local GPU indices (default: all).
+    #[arg(long, value_delimiter = ',')]
+    gpus: Option<Vec<usize>>,
+    /// Qwen: first layer of each stage after the first.
+    #[arg(long, value_delimiter = ',')]
+    cuts: Vec<usize>,
+    /// Qwen: MTP layer GGUF; enables speculative decoding with --draft-tokens.
+    #[arg(long)]
+    mtp: Option<PathBuf>,
+    /// Qwen: checkpoints kept for prefix reuse.
+    #[arg(long, default_value_t = 8)]
+    checkpoints: usize,
+}
+
+/// A resident model behind the HTTP layer.
+trait Backend {
+    fn native(&self) -> Native;
+    /// The template's `reasoning_effort` for a requested effort, if the model has one.
+    fn effort(&self, _request: &Request) -> Option<&'static str> {
+        None
+    }
+    fn tokenizer(&self) -> &Tokenizer;
+    fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value>;
+    /// Forget reusable state after a failed request.
+    fn reset(&mut self);
+}
+
+struct Gemma {
+    engine: Engine,
+    assistant: Option<Assistant>,
+    tokenizer: Tokenizer,
+    prefix_cache: PrefixCache,
+}
+
+impl Backend for Gemma {
+    fn native(&self) -> Native {
+        Native::Gemma
+    }
+    fn tokenizer(&self) -> &Tokenizer {
+        &self.tokenizer
+    }
+    fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value> {
+        generate(
+            &mut self.engine,
+            &self.tokenizer,
+            self.assistant.as_mut(),
+            options,
+            request,
+            ids,
+            output,
+            &mut self.prefix_cache,
+        )
+    }
+    fn reset(&mut self) {
+        // Also discard a completed nonstreaming generation if its final
+        // HTTP write failed, or an SSE disconnect occurred before generation.
+        self.prefix_cache = PrefixCache::default();
+    }
+}
+
+struct Qwen {
+    chain: qwen::net::Chain,
+    spec: Option<qwen::spec::Spec>,
+    tokenizer: Tokenizer,
+    tokens: qwen::native::Tokens,
+    stop: Vec<u32>,
+}
+
+impl Backend for Qwen {
+    fn native(&self) -> Native {
+        Native::Qwen
+    }
+    fn effort(&self, request: &Request) -> Option<&'static str> {
+        match request.effort.as_deref()? {
+            "minimal" | "low" => Some("low"),
+            "medium" => Some("medium"),
+            "high" | "xhigh" | "max" => Some("xhigh"),
+            _ => None,
+        }
+    }
+    fn tokenizer(&self) -> &Tokenizer {
+        &self.tokenizer
+    }
+    fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value> {
+        let p = request.sampling;
+        let mut sampler = Sampler::new(p.temperature, p.top_k, p.top_p, p.seed)?;
+        let e = &mut self.chain;
+        if options.no_prefix_cache {
+            e.forget();
+        }
+        let (top, cached) = e.prefill_cached(ids, &[qwen::chat::turn_start(&self.tokenizer, ids)])?;
+        let mut native = qwen::native::QwenOutput::new(self.tokens, request.thinking);
+        let budget = p.max_tokens.min(e.context - e.pos);
+        let mut pending = sampler.sample(&top);
+        let (mut generated, mut stopped) = (0, false);
+        'decode: while generated < budget {
+            if self.stop.contains(&pending) {
+                generated += 1;
+                stopped = true;
+                break;
+            }
+            let (chunk, next) = match self.spec.as_mut() {
+                Some(s) if budget - generated > 1 => s.step(e, pending, &mut sampler, &self.stop)?,
+                _ if generated + 1 < budget => {
+                    let top = e.forward(&[pending], true, None)?.context("missing candidates")?;
+                    (vec![pending], sampler.sample(&top))
+                }
+                _ => (vec![pending], pending),
+            };
+            for token in chunk {
+                generated += 1;
+                if self.stop.contains(&token) {
+                    stopped = true;
+                    break 'decode;
+                }
+                native.token(token, &self.tokenizer.decode_bytes(token, true), output, &request.tools)?;
+                if !request.parallel_tool_calls && native.tool_calls > 0 {
+                    stopped = true;
+                    break 'decode;
+                }
+                if generated == budget {
+                    break 'decode;
+                }
+            }
+            pending = next;
+        }
+        native.finish(output, !stopped)?;
+        let response = output.finish(ids.len(), cached, generated, native.reasoning_tokens, !stopped)?;
+        e.checkpoint()?;
+        Ok(response)
+    }
+    fn reset(&mut self) {
+        self.chain.forget();
+    }
 }
 
 /// One resident sequence, containing only tokens actually processed by the target.
@@ -127,18 +269,48 @@ fn error(request: tiny_http::Request, status: u16, message: &str, cors: bool) ->
     )
 }
 
-pub fn serve(options: Options) -> Result<()> {
-    crate::validate_draft(options.draft.as_ref(), options.draft_tokens, options.batch)?;
+pub fn serve(mut options: Options) -> Result<()> {
     ensure!(options.max_tokens > 0, "max-tokens must be positive");
-    ensure!(!options.model_id.is_empty(), "model-id must be nonempty");
     Sampler::new(
         options.temperature,
         options.top_k,
         options.top_p,
         options.seed,
     )?;
-    let http = tiny_http::Server::http((options.host.as_str(), options.port))
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let gguf = crate::gguf::Gguf::open(&options.model)?;
+    if gguf.get_str("general.architecture")? == "qwen35" {
+        let name = gguf.get_str("general.name").unwrap_or("qwen").to_lowercase().replace(' ', "-");
+        options.model_id.get_or_insert(name);
+        drop(gguf);
+        let devices = qwen::chat::devices(options.cpu, options.gpus.clone())?;
+        let draft = options.mtp.is_some();
+        let verify = if draft { options.draft_tokens + 1 } else { 0 };
+        let mut chain = qwen::net::Chain::new(
+            &options.model,
+            devices,
+            &options.nodes,
+            &options.cuts,
+            options.context,
+            options.batch,
+            verify,
+            options.mtp.as_deref(),
+            draft,
+        )?;
+        chain.max_checkpoints = options.checkpoints;
+        let spec = if draft { Some(qwen::spec::Spec::new(&chain, options.draft_tokens)?) } else { None };
+        let tokenizer = Tokenizer::new(&chain.local.gguf)?;
+        let backend = Qwen {
+            tokens: qwen::native::Tokens::new(&tokenizer)?,
+            stop: qwen::chat::Specials::new(&tokenizer).stop,
+            chain,
+            spec,
+            tokenizer,
+        };
+        return run(options, backend);
+    }
+    drop(gguf);
+    crate::validate_draft(options.draft.as_ref(), options.draft_tokens, options.batch)?;
+    options.model_id.get_or_insert("gemma-4-12b".into());
     let mut engine = Engine::new(
         &options.model,
         options.context,
@@ -148,11 +320,19 @@ pub fn serve(options: Options) -> Result<()> {
     // Buffers hold 64 candidates; greedy requests can cache a separate one-candidate graph.
     engine.set_top_k(64)?;
     let tokenizer = Tokenizer::new(&engine.gguf)?;
-    let mut assistant = options
+    let assistant = options
         .draft
         .as_ref()
         .map(|path| Assistant::new(path, &engine, 64))
         .transpose()?;
+    run(options, Gemma { engine, assistant, tokenizer, prefix_cache: PrefixCache::default() })
+}
+
+fn run(options: Options, mut backend: impl Backend) -> Result<()> {
+    let model_id = options.model_id.clone().unwrap_or_default();
+    ensure!(!model_id.is_empty(), "model-id must be nonempty");
+    let http = tiny_http::Server::http((options.host.as_str(), options.port))
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let defaults = Defaults {
         max_tokens: options.max_tokens,
         temperature: options.temperature,
@@ -161,25 +341,13 @@ pub fn serve(options: Options) -> Result<()> {
         seed: options.seed,
         thinking: options.thinking,
     };
-    let mut prefix_cache = PrefixCache::default();
     eprintln!(
-        "Responses server listening on http://{} (model: {})",
+        "Responses server listening on http://{} (model: {model_id})",
         http.server_addr(),
-        options.model_id
     );
     for request in http.incoming_requests() {
-        if let Err(e) = handle(
-            request,
-            &options,
-            defaults,
-            &mut engine,
-            &tokenizer,
-            assistant.as_mut(),
-            &mut prefix_cache,
-        ) {
-            // Also discard a completed nonstreaming generation if its final
-            // HTTP write failed, or an SSE disconnect occurred before generation.
-            prefix_cache = PrefixCache::default();
+        if let Err(e) = handle(request, &options, &model_id, defaults, &mut backend) {
+            backend.reset();
             eprintln!("request failed: {e:#}");
         }
     }
@@ -189,9 +357,11 @@ pub fn serve(options: Options) -> Result<()> {
 fn prepare(
     request: &mut tiny_http::Request,
     options: &Options,
+    model_id: &str,
     defaults: Defaults,
-    tokenizer: &Tokenizer,
+    backend: &impl Backend,
 ) -> Result<(Request, Vec<u32>)> {
+    let (native, tokenizer, effort) = (backend.native(), backend.tokenizer(), |r: &Request| backend.effort(r));
     ensure!(
         request.body_length().is_none_or(|n| n as u64 <= MAX_BODY),
         "request body exceeds 8 MiB"
@@ -203,9 +373,9 @@ fn prepare(
         .read_to_end(&mut body)?;
     ensure!(body.len() as u64 <= MAX_BODY, "request body exceeds 8 MiB");
     let value = serde_json::from_slice(&body).context("invalid JSON request")?;
-    let parsed = Request::parse(&value, defaults, &options.model_id)?;
+    let parsed = Request::parse_native(&value, defaults, model_id, native)?;
     let tools: Vec<_> = parsed.tools.iter().map(|t| t.schema.clone()).collect();
-    let mut rendered = tokenizer.render_with_tools(&parsed.messages, parsed.thinking, &tools)?;
+    let mut rendered = tokenizer.render_with_effort(&parsed.messages, parsed.thinking, &tools, effort(&parsed))?;
     // Tool results continue the same model turn. Some embedded templates terminate it anyway.
     if parsed
         .messages
@@ -225,15 +395,12 @@ fn prepare(
     Ok((parsed, ids))
 }
 
-#[allow(clippy::too_many_arguments)] // Resident engine/cache and HTTP protocol state.
 fn handle(
     mut request: tiny_http::Request,
     options: &Options,
+    model_id: &str,
     defaults: Defaults,
-    engine: &mut Engine,
-    tokenizer: &Tokenizer,
-    assistant: Option<&mut Assistant>,
-    prefix_cache: &mut PrefixCache,
+    backend: &mut impl Backend,
 ) -> Result<()> {
     let path = request.url().split('?').next().unwrap_or("").to_owned();
     if request.method() == &Method::Options && options.cors {
@@ -258,14 +425,14 @@ fn handle(
             return respond(
                 request,
                 200,
-                json!({"object":"list","data":[{"id":options.model_id,"object":"model","created":0,"owned_by":"trashcan"}]}),
+                json!({"object":"list","data":[{"id":model_id,"object":"model","created":0,"owned_by":"trashcan"}]}),
                 options.cors,
             )
         }
         (&Method::Post, "/v1/responses" | "/responses") => {}
         _ => return error(request, 404, "unknown endpoint", options.cors),
     }
-    let (parsed, ids) = match prepare(&mut request, options, defaults, tokenizer) {
+    let (parsed, ids) = match prepare(&mut request, options, model_id, defaults, backend) {
         Ok(value) => value,
         Err(e) => return error(request, 400, &format!("{e:#}"), options.cors),
     };
@@ -277,34 +444,16 @@ fn handle(
         }
         write!(writer, "\r\n")?;
         writer.flush()?;
-        let mut output = Output::new(writer, true, &options.model_id, &parsed);
+        let mut output = Output::new(writer, true, model_id, &parsed);
         output.start()?;
-        if let Err(e) = generate(
-            engine,
-            tokenizer,
-            assistant,
-            options,
-            &parsed,
-            &ids,
-            &mut output,
-            prefix_cache,
-        ) {
+        if let Err(e) = backend.generate(options, &parsed, &ids, &mut output) {
             // If the client disconnected this write fails too; inference has already stopped.
             let _ = output.fail(&format!("{e:#}"));
             return Err(e);
         }
     } else {
-        let mut output = Output::new(std::io::sink(), false, &options.model_id, &parsed);
-        match generate(
-            engine,
-            tokenizer,
-            assistant,
-            options,
-            &parsed,
-            &ids,
-            &mut output,
-            prefix_cache,
-        ) {
+        let mut output = Output::new(std::io::sink(), false, model_id, &parsed);
+        match backend.generate(options, &parsed, &ids, &mut output) {
             Ok(response) => respond(request, 200, response, options.cors)?,
             Err(e) => error(request, 500, &format!("{e:#}"), options.cors)?,
         }
