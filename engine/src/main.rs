@@ -7,6 +7,7 @@ mod model;
 mod prefill_micro;
 mod quant;
 mod qwen;
+mod qwen4;
 mod responses;
 mod server;
 mod tokenizer;
@@ -269,6 +270,9 @@ enum Cmd {
         #[arg(required = true)]
         tokens: Vec<u32>,
     },
+    /// Qwen3.8-Flash-Next (qwen4exp) commands; see docs/qwen4.md.
+    #[command(subcommand)]
+    Qwen4(qwen4::cli::Cmd),
     /// Dump a GGUF file's metadata and tensor inventory.
     Info {
         model: PathBuf,
@@ -881,6 +885,7 @@ fn main() -> Result<()> {
             greedy,
             tokens,
         } => qwen_ref(&model, &out, greedy, &tokens),
+        Cmd::Qwen4(cmd) => qwen4::cli::run(cmd),
         Cmd::Info { model, layers } => info(&model, &layers),
         Cmd::Tensor { model, name, n } => tensor(&model, &name, n),
         Cmd::Vocab { model } => vocab(&model),
