@@ -401,6 +401,8 @@ impl Device {
             ),
             ("qwen4_q8_mv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mv.spv")).as_slice()),
             ("qwen4_q8_gemm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_gemm.spv")).as_slice()),
+            ("qwen4_mix_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down.spv")).as_slice()),
+            ("qwen4_mix_up", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_up.spv")).as_slice()),
         ] {
             ensure!(
                 !bytes.is_empty(),
@@ -428,6 +430,8 @@ impl Device {
                     ("attention_partial_heads8_64", Some(64)),
                 ],
                 "qwen4_q8_mv" => &[("qwen4_q8_mv", Some(1)), ("qwen4_q8_mv4", Some(4))],
+                "qwen4_mix_down" => &[("qwen4_mix_down", Some(0)), ("qwen4_mix_down_q8", Some(1))],
+                "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],
                 "qwen4_attention_sparse" => &[
                     ("qwen4_attention_sparse", None),
                     ("qwen4_attention_sparse8", Some(8)),

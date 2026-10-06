@@ -41,6 +41,8 @@ struct Mix {
     down: Dense,
     up: Dense,
     inject: Option<Buffer>,
+    /// The bottleneck rows followed by the write rows in one matrix, for the fused small-batch kernels.
+    fused: Option<Dense>,
 }
 
 enum Mixer {
@@ -147,6 +149,8 @@ pub struct GpuStage {
     x: Buffer,
     xn: Buffer,
     lo: Buffer,
+    /// Fused mixer outputs `[t][rank + 8]` (bottleneck | write weights | inverse norms), alternating per mixer.
+    mo: [Buffer; 2],
     hgate: Buffer,
     u: Buffer,
     w: Buffer,
@@ -268,6 +272,26 @@ impl GpuStage {
                 let full = format!("{prefix}_{name}.weight");
                 g.tensor(&full).with_context(|| format!("missing {full}"))
             };
+            let fused = if inject && c.hc == 4 {
+                let (dn, inj) = (tt("down")?, tt("inject")?);
+                match (dn.ty, inj.ty) {
+                    (GgmlType::Q4_0, GgmlType::Q4_0) => {
+                        let mut raw = g.data(dn).to_vec();
+                        raw.extend_from_slice(g.data(inj));
+                        let (k, n) = (dn.dims[0] as usize, dn.dims[1] as usize + inj.dims[1] as usize);
+                        Some(Dense::Q4(gpu.upload_matrix(&quant::repack_q4(&raw, k, n, 0, n, 0, k))?))
+                    }
+                    (GgmlType::Q8_0, GgmlType::Q8_0) => {
+                        let mut raw = g.data(dn).to_vec();
+                        raw.extend_from_slice(g.data(inj));
+                        let (packed, stride) = quant::repack_q8h(&raw);
+                        Some(Dense::Q8(gpu.upload_matrix(&packed)?, stride as u32))
+                    }
+                    _ => None,
+                }
+            } else {
+                None
+            };
             Ok(Mix {
                 norm: vecb(tt("norm")?)?,
                 down: q4(tt("down")?)?,
@@ -277,6 +301,7 @@ impl GpuStage {
                 } else {
                     None
                 },
+                fused,
             })
         };
         let mut layers = Vec::new();
@@ -427,6 +452,7 @@ impl GpuStage {
             x: alloc(w)?,
             xn: alloc(w)?,
             lo: alloc(c.hc_rank)?,
+            mo: [alloc(c.hc_rank + 8)?, alloc(c.hc_rank + 8)?],
             hgate: alloc(w)?,
             u: alloc(d)?,
             w: alloc(c.hc)?,
@@ -704,11 +730,21 @@ impl GpuStage {
                 n as u32,
             );
         };
+        // Where the pending write weights are: (buffer address, row stride, offset).
+        let wloc = std::cell::Cell::new((self.w.address, hc as u32, 0u32));
+        let mo_cur = std::cell::Cell::new(0usize);
+        let fused = n <= 8
+            && self
+                .layers
+                .iter()
+                .all(|l| l.attn_mix.fused.is_some() && l.ffn_mix.fused.is_some());
         // Norm all streams into xn (applying the pending combine first), or with `norm` None only combine.
         let hc_norm = |pending: bool, norm: Option<&Buffer>| {
             let mut u = [0; 16];
             u[0] = d as u32;
+            u[2] = wloc.get().1;
             u[4] = hc as u32;
+            u[10] = wloc.get().2;
             u[11] = u32::from(pending);
             u[12] = eps;
             gpu.dispatch(
@@ -720,7 +756,7 @@ impl GpuStage {
                         self.y.address,
                         norm.map_or(0, |_| self.xn.address),
                         norm.map_or(0, |b| b.address),
-                        self.w.address,
+                        wloc.get().0,
                         0,
                     ],
                     u,
@@ -729,8 +765,72 @@ impl GpuStage {
                 n as u32,
             );
         };
-        // A mixer: sublayer input in u and, with an inject matrix, write weights in w.
+        // A mixer: sublayer input in u and, with an inject matrix, write weights in w (or the fused output).
         let mixer = |graph: &mut Graph, m: &Mix, pending: bool, tag: &str| -> Result<()> {
+            if let (true, Some(fm)) = (fused, &m.fused) {
+                let (cur, next) = (mo_cur.get(), 1 - mo_cur.get());
+                let (mo_next, mo_prev) = (&self.mo[next], &self.mo[cur]);
+                let (wb, stride, q8) = match fm {
+                    Dense::Q4(b) => (b, ((c.hc_rank + 4) * w / 32) as u32, false),
+                    Dense::Q8(b, st) => (b, *st, true),
+                };
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[1] = w as u32;
+                u[2] = c.hc_rank as u32;
+                u[3] = stride;
+                u[11] = u32::from(pending);
+                u[12] = eps;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    if q8 { "qwen4_mix_down_q8" } else { "qwen4_mix_down" },
+                    push(
+                        [
+                            self.x.address,
+                            self.y.address,
+                            mo_next.address,
+                            mo_prev.address,
+                            m.norm.address,
+                            0,
+                        ],
+                        u,
+                    ),
+                    (c.hc_rank + 4).div_ceil(16) as u32,
+                    n as u32,
+                    wb,
+                )?;
+                let (ub, ustride, uq8) = match &m.up {
+                    Dense::Q4(b) => (b, (w * c.hc_rank / 32) as u32, false),
+                    Dense::Q8(b, st) => (b, *st, true),
+                };
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[2] = c.hc_rank as u32;
+                u[3] = ustride;
+                u[11] = u32::from(pending);
+                gpu.dispatch_matrix(
+                    current.get(),
+                    if uq8 { "qwen4_mix_up_q8" } else { "qwen4_mix_up" },
+                    push(
+                        [
+                            self.x.address,
+                            mo_next.address,
+                            self.u.address,
+                            mo_prev.address,
+                            m.norm.address,
+                            self.y.address,
+                        ],
+                        u,
+                    ),
+                    d.div_ceil(16) as u32,
+                    n as u32,
+                    ub,
+                )?;
+                capture(graph, format!("hc_mixed{tag}"), &self.u, d)?;
+                mo_cur.set(next);
+                wloc.set((mo_next.address, (c.hc_rank + 8) as u32, c.hc_rank as u32));
+                return Ok(());
+            }
             hc_norm(pending, Some(&m.norm));
             capture(graph, format!("hc_norm{tag}"), &self.xn, w)?;
             matrix(&m.down, &self.xn, &self.lo, w, c.hc_rank, false)?;
@@ -752,6 +852,7 @@ impl GpuStage {
                 matf32(inj, &self.xn, &self.w, w, hc, false)?;
                 capture(graph, format!("hc_inject{tag}"), &self.w, hc)?;
                 act(&self.w, hc, 1, 1. / hc as f32);
+                wloc.set((self.w.address, hc as u32, 0));
             }
             Ok(())
         };

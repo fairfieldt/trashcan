@@ -67,6 +67,8 @@ fn main() {
         "qwen4_attention_sparse_full",
         "qwen4_q8_mv",
         "qwen4_q8_gemm",
+        "qwen4_mix_down",
+        "qwen4_mix_up",
     ] {
         let dest = out.join(format!("{name}.spv"));
         if available {
