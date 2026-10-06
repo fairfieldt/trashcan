@@ -304,6 +304,11 @@ impl Gguf {
             .with_context(|| format!("{name}: a split GGUF must be opened through its first shard"))?;
         for k in 2..=count {
             let shard = std::path::PathBuf::from(format!("{prefix}-{k:05}-of-{count:05}.gguf"));
+            // A machine of a chain may hold only the shards with its own layers.
+            if !shard.exists() {
+                eprintln!("gguf: {} is absent; its tensors are unavailable", shard.display());
+                continue;
+            }
             let s = Self::open_one(&shard)?;
             ensure!(
                 s.meta.get("split.no").and_then(Value::as_u64) == Some(k as u64 - 1),

@@ -62,6 +62,36 @@ pub enum Cmd {
         #[arg(long, default_value_t = 512)]
         batch: usize,
     },
+    /// Time GPU stages alone (no chain): layer ranges on local GPUs, fed token embeddings, decode then prefill
+    /// chunks back to back; prints per-layer and per-phase GPU milliseconds.
+    StageBench {
+        model: PathBuf,
+        /// Layer ranges, one per GPU in order, e.g. 0:4,4:8.
+        #[arg(long, value_delimiter = ',')]
+        ranges: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        gpus: Option<Vec<usize>>,
+        /// Give the last stage the final mixer and the LM head.
+        #[arg(long)]
+        head: bool,
+        #[arg(long, default_value_t = 2048)]
+        context: usize,
+        #[arg(long, default_value_t = 256)]
+        batch: usize,
+        /// Decode steps timed, after a prefill of `start` tokens.
+        #[arg(long, default_value_t = 32)]
+        decode: usize,
+        #[arg(long, default_value_t = 64)]
+        start: usize,
+        /// Prefill chunks of `batch` tokens timed.
+        #[arg(long, default_value_t = 3)]
+        prefill: usize,
+    },
+    /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
+    VramProbe {
+        #[arg(long, default_value_t = 64)]
+        chunk_mib: usize,
+    },
     /// Serve layers to the previous machine in a chain.
     Node {
         model: PathBuf,
@@ -188,6 +218,80 @@ pub fn run(cmd: Cmd) -> Result<()> {
         } => {
             let r = super::ngram::bench(&meta, &table, &mode, threads, ids.as_deref(), tokens, batch)?;
             println!("{r}");
+            Ok(())
+        }
+        Cmd::StageBench {
+            model,
+            ranges,
+            gpus,
+            head,
+            context,
+            batch,
+            decode,
+            start,
+            prefill,
+        } => {
+            let ranges: Vec<(usize, usize)> = ranges
+                .iter()
+                .map(|r| {
+                    let (a, b) = r.split_once(':').context("ranges look like 0:4")?;
+                    Ok((a.parse()?, b.parse()?))
+                })
+                .collect::<Result<_>>()?;
+            let gpus = gpus.unwrap_or_else(|| (0..ranges.len()).collect());
+            let devices = crate::qwen::pipeline::Devices::Gpus(gpus);
+            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, head, context, batch)?;
+            println!(
+                "{}",
+                super::bench::stage_bench(&mut local, decode, start, prefill, batch)?
+            );
+            Ok(())
+        }
+        Cmd::VramProbe { chunk_mib } => {
+            // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
+            // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.
+            let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
+            for (i, pd) in inst.amd_gpus()?.into_iter().enumerate() {
+                let gpu = crate::vulkan::Device::new(inst.clone(), pd)?;
+                let budget = || {
+                    let mut b = ash::vk::PhysicalDeviceMemoryBudgetPropertiesEXT::default();
+                    let mut p = ash::vk::PhysicalDeviceMemoryProperties2::default().push_next(&mut b);
+                    unsafe { inst.instance.get_physical_device_memory_properties2(pd, &mut p) };
+                    (b.heap_budget, b.heap_usage)
+                };
+                let mem = gpu.mem;
+                let n = mem.memory_heap_count as usize;
+                let local = (0..n)
+                    .filter(|&h| {
+                        mem.memory_heaps[h]
+                            .flags
+                            .contains(ash::vk::MemoryHeapFlags::DEVICE_LOCAL)
+                    })
+                    .max_by_key(|&h| mem.memory_heaps[h].size)
+                    .context("no device-local heap")?;
+                let (b0, u0) = budget();
+                let mut held = Vec::new();
+                loop {
+                    let (b, u) = budget();
+                    if u[local] + ((chunk_mib as u64) << 20) > b[local].min(mem.memory_heaps[local].size) {
+                        break;
+                    }
+                    match gpu.buffer(chunk_mib << 20, false, false, None) {
+                        Ok(buf) => held.push(buf),
+                        Err(_) => break,
+                    }
+                }
+                let (b1, u1) = budget();
+                let mib = |v: u64| v as f64 / 1048576.;
+                println!(
+                    "{}",
+                    serde_json::json!({"gpu": i,
+                        "heaps_mib": (0..n).map(|h| mib(mem.memory_heaps[h].size)).collect::<Vec<_>>(),
+                        "device_local_heap": local, "budget_mib_before": mib(b0[local]), "usage_mib_before": mib(u0[local]),
+                        "allocated_mib": held.len() * chunk_mib, "budget_mib_after": mib(b1[local]),
+                        "usage_mib_after": mib(u1[local]), "chunk_mib": chunk_mib})
+                );
+            }
             Ok(())
         }
         Cmd::Node {
@@ -335,9 +439,27 @@ fn bench(e: &mut super::net::Chain, pp: usize, tg: usize) -> Result<serde_json::
     let start = std::time::Instant::now();
     let mut top = e.prefill(&vec![hello; pp])?;
     let pp_s = start.elapsed().as_secs_f64();
+    // Per-layer GPU milliseconds of the local stages: the last prefill chunk, then the mean over decode tokens.
+    let profile = |e: &super::net::Chain| -> Vec<Vec<f64>> {
+        e.local
+            .stages
+            .iter()
+            .filter_map(|s| match s {
+                super::pipeline::Stage::Gpu(g) => Some(g.profile.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let prefill_ms = profile(e);
+    let mut decode_ms: Vec<Vec<f64>> = prefill_ms.iter().map(|p| vec![0.; p.len()]).collect();
     let start = std::time::Instant::now();
     for _ in 0..tg {
         top = e.forward(&[top[0].1], true, None)?.context("missing candidates")?;
+        for (sum, p) in decode_ms.iter_mut().zip(profile(e)) {
+            for (a, b) in sum.iter_mut().zip(p) {
+                *a += b / tg as f64;
+            }
+        }
     }
     let tg_s = start.elapsed().as_secs_f64();
     let mib: Vec<f64> = e
@@ -351,6 +473,7 @@ fn bench(e: &mut super::net::Chain, pp: usize, tg: usize) -> Result<serde_json::
         .collect();
     Ok(
         serde_json::json!({"pp": pp, "pp_seconds": pp_s, "pp_tok_s": pp as f64 / pp_s, "tg": tg, "tg_seconds": tg_s,
-        "tg_tok_s": tg as f64 / tg_s, "plans": e.plans, "local_device_mib": mib}),
+        "tg_tok_s": tg as f64 / tg_s, "plans": e.plans, "local_device_mib": mib,
+        "prefill_last_chunk_layer_ms": prefill_ms, "decode_layer_ms": decode_ms}),
     )
 }

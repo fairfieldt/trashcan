@@ -5,6 +5,7 @@
 //! The residual is `hc` streams of `d` floats per token (stream-major, `[token][stream][d]`), all initialised to
 //! the token embedding. The n-gram rows are gathered on the host (`Ngram`) and enter the stage owning the PLE
 //! layer as `n x d` floats.
+pub mod bench;
 pub mod cli;
 pub mod cpu;
 pub mod gpu;

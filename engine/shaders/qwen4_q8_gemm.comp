@@ -1,0 +1,30 @@
+#version 460
+#include "common.glsl"
+// Q8_0 matrix times a batch (prefill): 64 x 64 outputs per 256-thread workgroup, 4 x 4 accumulators per thread,
+// K step 32 (one block), as gemm.comp does for Q4_0. Weights as in qwen4_q8_mv.
+// b: x [t][k], c: y [t][n]. p.n rows, p.k columns.
+layout(local_size_x=256) in;
+shared vec4 tile_w[64][9],tile_x[64][9];
+void main(){uint nb=batch(),lane=gl_LocalInvocationID.x,group=lane/16;
+uint rr=(group%4)*4+(lane%4),tt=(group/4)*4+((lane%16)/4);
+uint row0=gl_WorkGroupID.x*64,tok0=gl_WorkGroupID.y*64,blocks=p.k/32;
+vec4 a0=vec4(0),a1=vec4(0),a2=vec4(0),a3=vec4(0);
+for(uint kb=0;kb<p.k;kb+=32){
+uint r=lane/4,j=lane%4;vec4 lo=vec4(0),hi=vec4(0);
+if(row0+r<p.n){uint blk=(row0+r)*blocks+kb/32;float d=unpackHalf2x16(uint(wh.halves[blk])).x;
+uint w0=ww.words[p.stride+blk*8+2*j],w1=ww.words[p.stride+blk*8+2*j+1];
+lo=vec4(ivec4(w0<<24,w0<<16,w0<<8,w0)>>24)*d;hi=vec4(ivec4(w1<<24,w1<<16,w1<<8,w1)>>24)*d;}
+tile_w[r][2*j]=lo;tile_w[r][2*j+1]=hi;
+for(uint i=lane;i<512;i+=256){uint xr=i/8,xj=i%8;vec4 x=vec4(0);if(tok0+xr<nb)x=b_v4.v[(tok0+xr)*(p.k/4)+kb/4+xj];tile_x[xr][xj]=x;}barrier();
+[[unroll]]for(uint j=0;j<8;j++){
+vec4 b0=tile_x[tt][j],b1=tile_x[tt+16][j],b2=tile_x[tt+32][j],b3=tile_x[tt+48][j];
+vec4 w0=tile_w[rr][j],w1=tile_w[rr+16][j],w2=tile_w[rr+32][j],w3=tile_w[rr+48][j];
+[[unroll]]for(uint v=0;v<4;v++){vec4 x=vec4(b0[v],b1[v],b2[v],b3[v]);
+a0=fma(vec4(w0[v]),x,a0);a1=fma(vec4(w1[v]),x,a1);a2=fma(vec4(w2[v]),x,a2);a3=fma(vec4(w3[v]),x,a3);}
+}barrier();}
+for(uint t=0;t<4;t++){uint col=tok0+tt+t*16;if(col<nb){
+if(row0+rr<p.n)c_f.v[col*p.n+row0+rr]=a0[t];
+if(row0+rr+16<p.n)c_f.v[col*p.n+row0+rr+16]=a1[t];
+if(row0+rr+32<p.n)c_f.v[col*p.n+row0+rr+32]=a2[t];
+if(row0+rr+48<p.n)c_f.v[col*p.n+row0+rr+48]=a3[t];
+}}}

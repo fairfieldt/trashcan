@@ -5,8 +5,9 @@
 //! Every mixer applies the previous sublayer's write (`x_s += w_s * y`) in its norm kernel, so a layer ends with a
 //! pending combine that the next mixer, the head or the stage output resolves.
 //!
-//! Matrices are Q4_0, repacked with f32 scales (`quant::repack_q4`); experts are stacked into one gate/up and one
-//! down matrix per layer, with the shared expert appended as expert `experts`. Attention is dense, so a stage
+//! Dense matrices are Q4_0 repacked with f32 scales (`quant::repack_q4`, the Gemma kernels); experts keep the GGUF's
+//! f16 scales (`quant::repack_q4h`, 4.5 bits per weight) and are stacked into one gate/up and one down matrix per
+//! layer, with the shared expert appended as expert `experts`. Attention is dense, so a stage
 //! accepts at most `idx_budget + kpool - 1` visible tokens (the sparse block selection is not implemented here yet).
 use super::{cpu::Captures, Config};
 use crate::{
@@ -21,38 +22,61 @@ use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = crate::qwen::gpu::TOP_K;
 const GRAPH_CACHE_CAPACITY: usize = 6;
+/// Phase timestamps per layer (n-gram module, two mixers, sublayer, router, experts).
+const MARKS: usize = 6;
+/// Batches of at least this many tokens group expert slots by expert (each expert's rows decoded once).
+const GROUPED_MIN: usize = 16;
+
+/// A dense matrix: Q4_0 repacked with f32 scales (the Gemma kernels) or Q8_0 with f16 scales (`qwen4_q8_*`, the
+/// word offset of its blocks).
+enum Dense {
+    Q4(Buffer),
+    Q8(Buffer, u32),
+}
 
 /// A hyper-connection mixer: gamma `[hc][d]`, bottleneck down `rank x hc*d` and up `hc*d x rank` (Q4_0), write
 /// weights `hc x hc*d` (f32; absent for the final mixer).
 struct Mix {
     norm: Buffer,
-    down: Buffer,
-    up: Buffer,
+    down: Dense,
+    up: Dense,
     inject: Option<Buffer>,
 }
 
 enum Mixer {
     Delta {
-        qkv: Buffer,
-        z: Buffer,
+        qkv: Dense,
+        z: Dense,
         ab: Buffer,
         dt_a: Buffer,
         conv_w: Buffer,
         conv: Buffer,
         state: Buffer,
         norm: Buffer,
-        out: Buffer,
+        out: Dense,
     },
     Attention {
-        q: Buffer,
-        k: Buffer,
-        v: Buffer,
+        q: Dense,
+        k: Dense,
+        v: Dense,
         q_norm: Buffer,
         k_norm: Buffer,
-        out: Buffer,
+        out: Dense,
         kc: Buffer,
         vc: Buffer,
+        /// The indexer, for contexts past the dense range: f32 projections, norm weights, the raw key ring
+        /// `[context][idx_dim]` and pooled block keys `[context / kpool][idx_dim]`.
+        index: Option<Index>,
     },
+}
+
+struct Index {
+    q: Buffer,
+    k: Buffer,
+    q_norm: Buffer,
+    k_norm: Buffer,
+    raw: Buffer,
+    pooled: Buffer,
 }
 
 struct Layer {
@@ -62,13 +86,16 @@ struct Layer {
     mixer: Mixer,
     /// Router rows and the shared-expert gate as row `experts` (f32).
     router: Buffer,
+    /// Experts in Q4_0 with f16 scales (`quant::repack_q4h`) and the word offsets of their blocks.
     gate_up: Buffer,
     down: Buffer,
+    gu_stride: u32,
+    down_stride: u32,
 }
 
 struct Ple {
-    key: Buffer,
-    value: Buffer,
+    key: Dense,
+    value: Dense,
     /// `[key | query | conv]` norm weights, each `hc x d`.
     norms: Buffer,
     conv_w: Buffer,
@@ -88,6 +115,8 @@ struct Graph {
     gpu: Rc<Device>,
     cmds: Vec<vk::CommandBuffer>,
     captures: Vec<(String, Buffer, usize)>,
+    /// Phase timestamps after the layer stamps: (layer index in the stage, phase name).
+    marks: Vec<(usize, &'static str)>,
 }
 impl Drop for Graph {
     fn drop(&mut self) {
@@ -135,6 +164,15 @@ pub struct GpuStage {
     ids: Buffer,
     wts: Buffer,
     act: Buffer,
+    /// Prefill grouping: per-expert offsets, slot indices grouped by expert, and weighted per-slot outputs.
+    offsets: Buffer,
+    perm: Buffer,
+    ys: Buffer,
+    ik: Buffer,
+    iq: Buffer,
+    iqr: Buffer,
+    scores: Buffer,
+    sel: Buffer,
     pe: Buffer,
     pk: Buffer,
     pv: Buffer,
@@ -142,6 +180,11 @@ pub struct GpuStage {
     pn: Buffer,
     fence: vk::Fence,
     graphs: HashMap<(usize, u32, bool), Graph>,
+    queries: vk::QueryPool,
+    /// GPU milliseconds of each layer's submission in the last forward (the last includes the head or output).
+    pub profile: Vec<f64>,
+    /// GPU milliseconds per (layer index in the stage, phase) in the last forward.
+    pub phases: Vec<(usize, &'static str, f64)>,
 }
 
 fn partitions(pos: usize, n: usize) -> u32 {
@@ -200,15 +243,22 @@ impl GpuStage {
             "unsupported mixer or router shape"
         );
         ensure!(
-            context <= c.idx_budget + c.kpool - 1,
-            "dense attention only: context {context} exceeds {} tokens",
-            c.idx_budget + c.kpool - 1
+            context % c.kpool == 0 && c.idx_dim <= 128 && c.idx_heads * c.idx_dim <= 512,
+            "unsupported indexer"
         );
+        // Past this many visible tokens QSA attends to selected blocks; below it every block is selected.
+        let sparse = context > c.idx_budget + c.kpool - 1;
         let (d, w) = (c.d, c.width());
         let t = |il: usize, name: &str| c.layer_tensor(g, il, name);
-        let q4 = |t: &TensorInfo| -> Result<Buffer> {
+        let q4 = |t: &TensorInfo| -> Result<Dense> {
             let (k, n) = (t.dims[0] as usize, t.dims[1] as usize);
-            gpu.upload_matrix(&quant::repack_q4(q4_rows(g, t, 0, n)?, k, n, 0, n, 0, k))
+            Ok(match t.ty {
+                GgmlType::Q8_0 => {
+                    let (packed, stride) = quant::repack_q8h(g.data(t));
+                    Dense::Q8(gpu.upload_matrix(&packed)?, stride as u32)
+                }
+                _ => Dense::Q4(gpu.upload_matrix(&quant::repack_q4(q4_rows(g, t, 0, n)?, k, n, 0, n, 0, k))?),
+            })
         };
         let f32s = |v: &[f32]| gpu.upload(bytemuck::cast_slice(v));
         let mat32 = |v: &[f32]| gpu.upload_matrix(bytemuck::cast_slice(v));
@@ -258,6 +308,18 @@ impl GpuStage {
                     out: q4(t(il, "attn_output.weight")?)?,
                     kc: gpu.buffer(kv, false, false, None)?,
                     vc: gpu.buffer(kv, false, false, None)?,
+                    index: if sparse {
+                        Some(Index {
+                            q: mat32(&rows_f32(g, t(il, "indexer.q_proj.weight")?)?)?,
+                            k: mat32(&rows_f32(g, t(il, "indexer.k_proj.weight")?)?)?,
+                            q_norm: vecb(t(il, "indexer.q_norm.weight")?)?,
+                            k_norm: vecb(t(il, "indexer.k_norm.weight")?)?,
+                            raw: gpu.buffer(context * c.idx_dim * 4, false, false, None)?,
+                            pooled: gpu.buffer(context / c.kpool * c.idx_dim * 4, false, false, None)?,
+                        })
+                    } else {
+                        None
+                    },
                 }
             };
             // Experts stacked as [gate rows | up rows] per expert, the shared expert last.
@@ -280,15 +342,17 @@ impl GpuStage {
             }
             gu.extend_from_slice(q4_rows(g, gs, 0, ff)?);
             gu.extend_from_slice(q4_rows(g, us, 0, ff)?);
-            let rows = (ne + 1) * 2 * ff;
-            let gate_up = gpu.upload_matrix(&quant::repack_q4(&gu, d, rows, 0, rows, 0, d))?;
+            let (packed, gu_stride) = quant::repack_q4h(&gu);
             drop(gu);
+            let gate_up = gpu.upload_matrix(&packed)?;
+            drop(packed);
             let mut dn = Vec::with_capacity((ne + 1) * d * ff / 32 * 18);
             dn.extend_from_slice(q4_rows(g, dt, 0, ne * d)?);
             dn.extend_from_slice(q4_rows(g, ds, 0, d)?);
-            let rows = (ne + 1) * d;
-            let down = gpu.upload_matrix(&quant::repack_q4(&dn, ff, rows, 0, rows, 0, ff))?;
+            let (packed, down_stride) = quant::repack_q4h(&dn);
             drop(dn);
+            let down = gpu.upload_matrix(&packed)?;
+            drop(packed);
             let mut router = rows_f32(g, t(il, "ffn_gate_inp.weight")?)?;
             router.extend(vector(g, t(il, "ffn_gate_inp_shexp.weight")?)?);
             layers.push(Layer {
@@ -299,6 +363,8 @@ impl GpuStage {
                 router: mat32(&router)?,
                 gate_up,
                 down,
+                gu_stride: gu_stride as u32,
+                down_stride: down_stride as u32,
             });
         }
         let ple = match &c.ngram {
@@ -337,6 +403,14 @@ impl GpuStage {
         let qd = c.heads * c.head_dim;
         let slots = c.used + 1;
         let fence = unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
+        let queries = unsafe {
+            gpu.dev.create_query_pool(
+                &vk::QueryPoolCreateInfo::default()
+                    .query_type(vk::QueryType::TIMESTAMP)
+                    .query_count((2 + MARKS) as u32 * layers.len() as u32),
+                None,
+            )?
+        };
         Ok(Self {
             first,
             last,
@@ -370,6 +444,26 @@ impl GpuStage {
             ids: alloc(slots)?,
             wts: alloc(slots)?,
             act: alloc(slots * c.ff_exp)?,
+            offsets: gpu.buffer((c.experts + 2) * 4, false, false, None)?,
+            perm: alloc(slots)?,
+            ys: if max_batch >= GROUPED_MIN {
+                alloc(slots * c.d)?
+            } else {
+                gpu.buffer(4, false, false, None)?
+            },
+            ik: alloc(c.idx_dim)?,
+            iq: alloc(c.idx_heads * c.idx_dim)?,
+            iqr: alloc(c.idx_heads * c.idx_dim)?,
+            scores: if sparse {
+                alloc(context / c.kpool)?
+            } else {
+                gpu.buffer(4, false, false, None)?
+            },
+            sel: if sparse {
+                alloc(c.top_blocks())?
+            } else {
+                gpu.buffer(4, false, false, None)?
+            },
             pe: alloc(d)?,
             pk: alloc(w)?,
             pv: alloc(d)?,
@@ -377,9 +471,111 @@ impl GpuStage {
             pn: alloc(w)?,
             fence,
             graphs: HashMap::new(),
+            queries,
+            profile: Vec::new(),
+            phases: Vec::new(),
             c: c.clone(),
             gpu,
         })
+    }
+
+    /// Indexer upkeep and block selection for one QSA layer: raw keys into the ring, pooled keys of completed blocks,
+    /// the normed and rotated indexer queries, then each token's selected blocks in `sel`.
+    fn index_select(
+        &self,
+        current: &std::cell::Cell<vk::CommandBuffer>,
+        ix: &Index,
+        attn: &[u32; 16],
+        n: usize,
+    ) -> Result<()> {
+        let gpu = &self.gpu;
+        let c = &self.c;
+        let push = |ptr: [u64; 6], u: [u32; 16]| Push {
+            ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, 0],
+            u,
+        };
+        let (id, ih, d) = (c.idx_dim, c.idx_heads, c.d);
+        let matf32 = |wt: &Buffer, y: &Buffer, rows: usize| -> Result<()> {
+            let mut u = [0; 16];
+            u[0] = rows as u32;
+            u[1] = d as u32;
+            gpu.dispatch_matrix(
+                current.get(),
+                "qwen_matf32",
+                push([0, self.u.address, y.address, 0, 0, 0], u),
+                rows.div_ceil(4) as u32,
+                n.div_ceil(8) as u32,
+                wt,
+            )
+        };
+        matf32(&ix.k, &self.ik, id)?;
+        let mut u = [0; 16];
+        u[6] = id as u32;
+        u[7] = self.context as u32;
+        gpu.dispatch(
+            current.get(),
+            "qwen4_idx_store",
+            push([self.ik.address, 0, ix.raw.address, 0, 0, 0], u),
+            1,
+            n as u32,
+        );
+        let mut u = [0; 16];
+        u[1] = c.rot as u32;
+        u[6] = id as u32;
+        u[7] = self.context as u32;
+        u[8] = c.eps.to_bits();
+        u[9] = c.kpool as u32;
+        u[12] = c.rope_base.to_bits();
+        gpu.dispatch(
+            current.get(),
+            "qwen4_idx_pool",
+            push([ix.raw.address, ix.k_norm.address, ix.pooled.address, 0, 0, 0], u),
+            1,
+            n as u32,
+        );
+        matf32(&ix.q, &self.iq, ih * id)?;
+        let mut u = [0; 16];
+        u[1] = c.rot as u32;
+        u[2] = (ih * id) as u32;
+        u[3] = id as u32;
+        u[4] = ih as u32;
+        u[6] = id as u32;
+        u[7] = self.context as u32;
+        u[8] = c.eps.to_bits();
+        u[12] = c.rope_base.to_bits();
+        u[13] = 1f32.to_bits();
+        gpu.dispatch(
+            current.get(),
+            "qwen_qk",
+            push([self.iq.address, ix.q_norm.address, self.iqr.address, 0, 0, 0], u),
+            ih as u32,
+            n as u32,
+        );
+        let mut u = [0; 16];
+        u[2] = c.top_blocks() as u32;
+        u[4] = ih as u32;
+        u[6] = id as u32;
+        u[7] = self.context as u32;
+        u[9] = c.kpool as u32;
+        let _ = attn;
+        gpu.dispatch(
+            current.get(),
+            "qwen4_idx_select",
+            push(
+                [
+                    self.iqr.address,
+                    ix.pooled.address,
+                    self.scores.address,
+                    self.sel.address,
+                    0,
+                    0,
+                ],
+                u,
+            ),
+            1,
+            n as u32,
+        );
+        Ok(())
     }
 
     pub fn device_mib(&self) -> f64 {
@@ -399,8 +595,28 @@ impl GpuStage {
             gpu: gpu.clone(),
             cmds: vec![current.get()],
             captures: Vec::new(),
+            marks: Vec::new(),
         };
         let cmd = current.get();
+        // Timestamps around every layer's submission (the last one includes the head or the output copy).
+        let stamp = |cmd: vk::CommandBuffer, index: usize, end: bool| unsafe {
+            let stage = if end {
+                vk::PipelineStageFlags::BOTTOM_OF_PIPE
+            } else {
+                vk::PipelineStageFlags::TOP_OF_PIPE
+            };
+            gpu.dev.cmd_write_timestamp(cmd, stage, self.queries, index as u32);
+        };
+        unsafe {
+            gpu.dev
+                .cmd_reset_query_pool(cmd, self.queries, 0, (2 + MARKS) as u32 * self.layers.len() as u32)
+        };
+        let base = 2 * self.layers.len();
+        let mark = |graph: &mut Graph, layer: usize, name: &'static str| {
+            stamp(current.get(), base + graph.marks.len(), true);
+            graph.marks.push((layer, name));
+        };
+        stamp(cmd, 0, false);
         gpu.barrier(cmd);
         gpu.copy(cmd, &self.params_host, 0, &self.params, 0, 16);
         gpu.copy(cmd, &self.input, 0, &self.x, 0, n * w * 4);
@@ -420,18 +636,37 @@ impl GpuStage {
             }
             Ok(())
         };
-        // Q4_0 projections: the Gemma kernels (GEMM for prefill, multi-column for small batches).
-        let matrix = |wt: &Buffer, x: &Buffer, y: &Buffer, k: usize, rows: usize, defer: bool| -> Result<()> {
+        // Q4_0 projections use the Gemma kernels (GEMM for prefill, multi-column for small batches), Q8_0 ones the
+        // qwen4_q8 kernels.
+        let matrix = |wt: &Dense, x: &Buffer, y: &Buffer, k: usize, rows: usize, defer: bool| -> Result<()> {
             let mut u = [0; 16];
             u[0] = rows as u32;
             u[1] = k as u32;
-            u[3] = (rows * k / 32) as u32;
-            let (shader, gx, gy) = match n {
-                1 => (q4_decode_shader(rows, k), rows.div_ceil(16), 1),
-                2 => ("multivec4x2", rows.div_ceil(16), 1),
-                3 => ("multivec4x3", rows.div_ceil(16), 1),
-                4..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
-                _ => ("gemm", rows.div_ceil(64), n.div_ceil(64)),
+            let (wt, (shader, gx, gy)) = match wt {
+                Dense::Q4(b) => {
+                    u[3] = (rows * k / 32) as u32;
+                    (
+                        b,
+                        match n {
+                            1 => (q4_decode_shader(rows, k), rows.div_ceil(16), 1),
+                            2 => ("multivec4x2", rows.div_ceil(16), 1),
+                            3 => ("multivec4x3", rows.div_ceil(16), 1),
+                            4..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
+                            _ => ("gemm", rows.div_ceil(64), n.div_ceil(64)),
+                        },
+                    )
+                }
+                Dense::Q8(b, stride) => {
+                    u[3] = *stride;
+                    (
+                        b,
+                        match n {
+                            1 => ("qwen4_q8_mv", rows.div_ceil(16), 1),
+                            2..=8 => ("qwen4_q8_mv4", rows.div_ceil(16), n.div_ceil(4)),
+                            _ => ("qwen4_q8_gemm", rows.div_ceil(64), n.div_ceil(64)),
+                        },
+                    )
+                }
             };
             gpu.dispatch_matrix(
                 current.get(),
@@ -571,7 +806,12 @@ impl GpuStage {
                     1,
                 );
             }
+            let li = il - self.first;
+            if c.ngram.as_ref().is_some_and(|p| p.layer == il) && self.ple.is_some() {
+                mark(&mut graph, li, "ngram");
+            }
             mixer(&mut graph, &l.attn_mix, pending, &format!("-{il}"))?;
+            mark(&mut graph, li, "mixer");
             match &l.mixer {
                 Mixer::Delta {
                     qkv,
@@ -658,6 +898,7 @@ impl GpuStage {
                     out,
                     kc,
                     vc,
+                    index,
                 } => {
                     let (hd, kvd) = (c.head_dim, c.kv_heads * c.head_dim);
                     let qd = c.heads * hd;
@@ -714,7 +955,51 @@ impl GpuStage {
                     u[5] = c.kv_heads as u32;
                     u[6] = hd as u32;
                     u[7] = self.context as u32;
-                    if parts == 0 {
+                    if let Some(ix) = index {
+                        self.index_select(&current, ix, &u, n)?;
+                        capture(
+                            &mut graph,
+                            format!("indexer_q-{il}"),
+                            &self.iqr,
+                            c.idx_heads * c.idx_dim,
+                        )?;
+                        let mut u = u;
+                        u[9] = c.kpool as u32;
+                        u[2] = c.top_blocks() as u32;
+                        let ptr = [
+                            self.rq.address,
+                            kc.address,
+                            vc.address,
+                            self.o.address,
+                            self.scratch.address,
+                            self.sel.address,
+                        ];
+                        if parts == 0 {
+                            gpu.dispatch(
+                                current.get(),
+                                "qwen4_attention_sparse_full",
+                                push(ptr, u),
+                                c.heads as u32,
+                                n as u32,
+                            );
+                        } else {
+                            let (_, merge) = attention_shaders(parts)?;
+                            let partial = match parts {
+                                8 => "qwen4_attention_sparse8",
+                                16 => "qwen4_attention_sparse16",
+                                64 => "qwen4_attention_sparse64",
+                                _ => "qwen4_attention_sparse",
+                            };
+                            gpu.dispatch(current.get(), partial, push(ptr, u), c.heads as u32 * parts, n as u32);
+                            gpu.dispatch(
+                                current.get(),
+                                merge,
+                                push([0, 0, 0, self.o.address, self.scratch.address, 0], u),
+                                c.heads as u32,
+                                n as u32,
+                            );
+                        }
+                    } else if parts == 0 {
                         gpu.dispatch(
                             current.get(),
                             "attention",
@@ -765,7 +1050,9 @@ impl GpuStage {
                     capture(&mut graph, format!("attn_output-{il}"), &self.y, d)?;
                 }
             }
+            mark(&mut graph, li, if c.recurrent(il) { "deltanet" } else { "attention" });
             mixer(&mut graph, &l.ffn_mix, true, &format!("-{il}#2"))?;
+            mark(&mut graph, li, "mixer");
             capture(&mut graph, format!("hc_combine-{il}"), &self.x, w)?;
             // MoE: router (with the shared gate as its last row), top-k, experts, weighted sum.
             let (ne, slots, ff) = (c.experts, c.used + 1, c.ff_exp);
@@ -782,47 +1069,124 @@ impl GpuStage {
                 n as u32,
             );
             capture(&mut graph, format!("moe_weights-{il}"), &self.wts, slots)?;
-            let mut u = [0; 16];
-            u[0] = ff as u32;
-            u[1] = d as u32;
-            u[2] = slots as u32;
-            u[3] = ((ne + 1) * 2 * ff * d / 32) as u32;
-            gpu.dispatch_matrix(
-                current.get(),
-                "qwen4_moe_gu",
-                push([0, self.u.address, self.act.address, self.ids.address, 0, 0], u),
-                ff.div_ceil(16) as u32,
-                (n * slots) as u32,
-                &l.gate_up,
-            )?;
-            let mut u = [0; 16];
-            u[0] = d as u32;
-            u[1] = ff as u32;
-            u[2] = slots as u32;
-            u[3] = ((ne + 1) * d * ff / 32) as u32;
-            gpu.dispatch_matrix(
-                current.get(),
-                "qwen4_moe_down",
-                push(
-                    [
-                        0,
-                        self.act.address,
-                        self.y.address,
-                        self.ids.address,
-                        self.wts.address,
-                        0,
-                    ],
-                    u,
-                ),
-                d.div_ceil(16) as u32,
-                n as u32,
-                &l.down,
-            )?;
+            mark(&mut graph, li, "router");
+            let (gu_stride, down_stride) = (l.gu_stride, l.down_stride);
+            if n < GROUPED_MIN {
+                // Small batches: one workgroup per (token, slot), each re-reading its expert's rows.
+                let mut u = [0; 16];
+                u[0] = ff as u32;
+                u[1] = d as u32;
+                u[2] = slots as u32;
+                u[3] = gu_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_moe_gu",
+                    push([0, self.u.address, self.act.address, self.ids.address, 0, 0], u),
+                    ff.div_ceil(16) as u32,
+                    (n * slots) as u32,
+                    &l.gate_up,
+                )?;
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[1] = ff as u32;
+                u[2] = slots as u32;
+                u[3] = down_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_moe_down",
+                    push(
+                        [
+                            0,
+                            self.act.address,
+                            self.y.address,
+                            self.ids.address,
+                            self.wts.address,
+                            0,
+                        ],
+                        u,
+                    ),
+                    d.div_ceil(16) as u32,
+                    n as u32,
+                    &l.down,
+                )?;
+            } else {
+                // Prefill: group the slots by expert, decode each expert's rows once for all of its slots.
+                let mut u = [0; 16];
+                u[0] = (ne + 1) as u32;
+                u[2] = slots as u32;
+                gpu.dispatch(
+                    current.get(),
+                    "qwen4_moe_route",
+                    push([self.ids.address, 0, self.offsets.address, self.perm.address, 0, 0], u),
+                    1,
+                    1,
+                );
+                let mut u = [0; 16];
+                u[0] = ff as u32;
+                u[1] = d as u32;
+                u[2] = slots as u32;
+                u[3] = gu_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_moe_gu_grouped",
+                    push(
+                        [
+                            0,
+                            self.u.address,
+                            self.act.address,
+                            self.offsets.address,
+                            self.perm.address,
+                            0,
+                        ],
+                        u,
+                    ),
+                    ff.div_ceil(16) as u32,
+                    (ne + 1) as u32,
+                    &l.gate_up,
+                )?;
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[1] = ff as u32;
+                u[2] = slots as u32;
+                u[3] = down_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_moe_down_grouped",
+                    push(
+                        [
+                            0,
+                            self.act.address,
+                            self.ys.address,
+                            self.offsets.address,
+                            self.perm.address,
+                            self.wts.address,
+                        ],
+                        u,
+                    ),
+                    d.div_ceil(16) as u32,
+                    (ne + 1) as u32,
+                    &l.down,
+                )?;
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[2] = slots as u32;
+                gpu.dispatch(
+                    current.get(),
+                    "qwen4_moe_sum",
+                    push([self.ys.address, 0, self.y.address, 0, 0, 0], u),
+                    d.div_ceil(256) as u32,
+                    n as u32,
+                );
+            }
             capture(&mut graph, format!("ffn_out-{il}"), &self.y, d)?;
+            mark(&mut graph, li, "experts");
             pending = true;
             if l.il + 1 < self.last {
+                let li = l.il - self.first;
+                stamp(current.get(), 2 * li + 1, true);
                 gpu.finish(current.get())?;
                 let next = gpu.begin()?;
+                stamp(next, 2 * li + 2, false);
                 gpu.barrier(next);
                 graph.cmds.push(next);
                 current.set(next);
@@ -885,6 +1249,7 @@ impl GpuStage {
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
             gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
         }
+        stamp(current.get(), 2 * self.layers.len() - 1, true);
         gpu.finish(current.get())?;
         Ok(graph)
     }
@@ -936,6 +1301,36 @@ impl GpuStage {
         unsafe {
             self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
         }
+        let mut times = vec![0u64; 2 * self.layers.len() + graph.marks.len()];
+        unsafe {
+            self.gpu.dev.get_query_pool_results(
+                self.queries,
+                0,
+                &mut times,
+                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+            )?;
+        }
+        let period = self.gpu.period as f64 / 1e6;
+        let layers = self.layers.len();
+        self.profile = times[..2 * layers]
+            .chunks_exact(2)
+            .map(|t| t[1].wrapping_sub(t[0]) as f64 * period)
+            .collect();
+        let mut prev = vec![0u64; layers];
+        for (li, p) in prev.iter_mut().enumerate() {
+            *p = times[2 * li];
+        }
+        self.phases = graph
+            .marks
+            .iter()
+            .enumerate()
+            .map(|(i, &(li, name))| {
+                let t = times[2 * layers + i];
+                let ms = t.wrapping_sub(prev[li]) as f64 * period;
+                prev[li] = t;
+                (li, name, ms)
+            })
+            .collect();
         if let Some(m) = dump {
             for (name, host, width) in &graph.captures {
                 let v: Vec<f32> = bytemuck::cast_slice(&host.read(width * 4)?).to_vec();
@@ -968,6 +1363,9 @@ impl Drop for GpuStage {
             let _ = self.gpu.dev.device_wait_idle();
         }
         self.graphs.clear();
-        unsafe { self.gpu.dev.destroy_fence(self.fence, None) };
+        unsafe {
+            self.gpu.dev.destroy_fence(self.fence, None);
+            self.gpu.dev.destroy_query_pool(self.queries, None);
+        }
     }
 }

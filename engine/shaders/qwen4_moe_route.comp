@@ -1,0 +1,17 @@
+#version 460
+#include "common.glsl"
+// Group the batch's expert slots by expert for the prefill kernels. One workgroup: count the slots of each expert,
+// prefix-sum the counts into offsets (p.n + 2 entries: experts plus the shared one, then the total), and list
+// every slot index (token * slots + slot) under its expert. Within an expert the slot order is arbitrary; every
+// slot's result is computed on its own and summed per token in slot order.
+// a: ids [t][slots] (u32), c: offsets [experts + 1] (u32), d: grouped slot indices [t * slots] (u32).
+// p.n = experts including the shared one (513), p.m = slots per token.
+layout(local_size_x=256) in;
+shared uint cnt[1024],off[1024];
+void main(){uint l=gl_LocalInvocationID.x,total=batch()*p.m;
+for(uint e=l;e<p.n;e+=256)cnt[e]=0;barrier();
+for(uint a=l;a<total;a+=256)atomicAdd(cnt[a_u.v[a]],1u);
+barrier();
+if(l==0){uint s=0;for(uint e=0;e<p.n;e++){off[e]=s;c_u.v[e]=s;s+=cnt[e];cnt[e]=0;}c_u.v[p.n]=s;}
+barrier();
+for(uint a=l;a<total;a+=256){uint e=a_u.v[a];d_u.v[off[e]+atomicAdd(cnt[e],1u)]=a;}}

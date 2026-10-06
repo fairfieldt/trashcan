@@ -387,6 +387,20 @@ impl Device {
             ("qwen4_moe_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_down.spv")).as_slice()),
             ("qwen4_ple_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_gate.spv")).as_slice()),
             ("qwen4_ple_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_conv.spv")).as_slice()),
+            ("qwen4_moe_route", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_route.spv")).as_slice()),
+            ("qwen4_moe_gu_grouped", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu_grouped.spv")).as_slice()),
+            ("qwen4_moe_down_grouped", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_down_grouped.spv")).as_slice()),
+            ("qwen4_moe_sum", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_sum.spv")).as_slice()),
+            ("qwen4_idx_store", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_store.spv")).as_slice()),
+            ("qwen4_idx_pool", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_pool.spv")).as_slice()),
+            ("qwen4_idx_select", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_select.spv")).as_slice()),
+            ("qwen4_attention_sparse", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_attention_sparse.spv")).as_slice()),
+            (
+                "qwen4_attention_sparse_full",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_attention_sparse_full.spv")).as_slice(),
+            ),
+            ("qwen4_q8_mv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mv.spv")).as_slice()),
+            ("qwen4_q8_gemm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_gemm.spv")).as_slice()),
         ] {
             ensure!(
                 !bytes.is_empty(),
@@ -412,6 +426,13 @@ impl Device {
                     ("attention_partial_heads8", None),
                     ("attention_partial_heads8_16", Some(16)),
                     ("attention_partial_heads8_64", Some(64)),
+                ],
+                "qwen4_q8_mv" => &[("qwen4_q8_mv", Some(1)), ("qwen4_q8_mv4", Some(4))],
+                "qwen4_attention_sparse" => &[
+                    ("qwen4_attention_sparse", None),
+                    ("qwen4_attention_sparse8", Some(8)),
+                    ("qwen4_attention_sparse16", Some(16)),
+                    ("qwen4_attention_sparse64", Some(64)),
                 ],
                 "attention_merge" => &[
                     ("attention_merge", None),

@@ -1,0 +1,34 @@
+#version 460
+#include "common.glsl"
+// Down projections for every slot routed to one expert, scaled by the slot's routing weight: ys[slot] =
+// w[slot] * W_e . act[slot]. One workgroup per (16-row block, expert); each block's weights are decoded once for
+// all of the expert's slots, four at a time. Weights as in qwen4_moe_down.
+// b: act [t * slots][ff], c: ys [t * slots][n], d: offsets, e: grouped slot indices, f: weights [t * slots].
+// p.n = d (rows per expert), p.k = ff, p.stride = word offset of the blocks.
+layout(local_size_x=256) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,part=lane%4,blocks=p.k/32,e=gl_WorkGroupID.y;
+uint s0=d_u.v[e],s1=d_u.v[e+1];if(s0==s1)return;
+uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
+for(uint c0=s0;c0<s1;c0+=4){
+    uint cols=min(4u,s1-c0);uint slot[4];
+    [[unroll]]for(uint z=0;z<4;z++)slot[z]=e_u.v[c0+min(z,cols-1)];
+    vec4 acc[4];[[unroll]]for(uint z=0;z<4;z++)acc[z]=vec4(0);
+    for(uint b=lane/4;b<blocks;b+=16){
+        vec4 lo[4],hi[4];float sc[4];
+        [[unroll]]for(uint r=0;r<4;r++){
+            uint blk=(e*p.n+first+r)*blocks+b,q=ww.words[p.stride+blk*4+part];
+            lo[r]=unpackUnorm4x8(q&0x0f0f0f0fu)*255.0-8.0;hi[r]=unpackUnorm4x8((q>>4)&0x0f0f0f0fu)*255.0-8.0;
+            sc[r]=unpackHalf2x16(uint(wh.halves[blk])).x;
+        }
+        [[unroll]]for(uint z=0;z<4;z++){
+            uint xb=slot[z]*(p.k/4)+b*8+part;
+            vec4 x0=b_v4.v[xb],x1=b_v4.v[xb+4];
+            [[unroll]]for(uint r=0;r<4;r++)acc[z][r]=fma(dot(lo[r],x0)+dot(hi[r],x1),sc[r],acc[z][r]);
+        }
+    }
+    [[unroll]]for(uint z=0;z<4;z++)acc[z]=subgroupAdd(acc[z]);
+    if(lane==0)[[unroll]]for(uint z=0;z<4;z++)if(z<cols){float w=f_f.v[slot[z]];
+        [[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[slot[z]*p.n+first+r]=w*acc[z][r];}
+}
+}

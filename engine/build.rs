@@ -56,6 +56,17 @@ fn main() {
         "qwen4_moe_down",
         "qwen4_ple_gate",
         "qwen4_ple_conv",
+        "qwen4_moe_route",
+        "qwen4_moe_gu_grouped",
+        "qwen4_moe_down_grouped",
+        "qwen4_moe_sum",
+        "qwen4_idx_store",
+        "qwen4_idx_pool",
+        "qwen4_idx_select",
+        "qwen4_attention_sparse",
+        "qwen4_attention_sparse_full",
+        "qwen4_q8_mv",
+        "qwen4_q8_gemm",
     ] {
         let dest = out.join(format!("{name}.spv"));
         if available {

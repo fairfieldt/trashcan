@@ -1,0 +1,6 @@
+GPU0: layers 0..3
+GPU0: 4254.8 MiB allocated
+GPU1: layers 3..6
+GPU1: 4225.8 MiB allocated
+greedy: [9419, 0, 2500, 628, 353, 1438, 488, 3242, 30, 248046]
+[clocks] 162 samples card0 (02:00.0) sclk/mclk: 850/1370 x67 450/1370 x1 300/150 x93 450/150 x1  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x46 650/1370 x1 450/1370 x1 300/150 x114  max 49C  log=/home/fairfieldt/trashcan-exp/qwen-flash/results/clocks/20261006T161142-32412.txt
