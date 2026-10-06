@@ -40,11 +40,14 @@ fn layer_bytes(g: &Gguf, il: usize) -> u64 {
 }
 
 /// Contiguous layer ranges for up to `devices` stages in order, balancing uploaded bytes. The final stage
-/// also holds the LM head (Q6_K repacked to 1.25 bytes per weight).
-pub fn plan(g: &Gguf, c: &Config, devices: usize) -> Vec<(usize, usize)> {
+/// also holds the LM head (Q6_K repacked to 1.25 bytes per weight) and, with `mtp`, the MTP layer: one
+/// gated-attention block, an FFN and eh_proj in Q4_0 (0.625 bytes per weight once repacked).
+pub fn plan(g: &Gguf, c: &Config, devices: usize, mtp: bool) -> Vec<(usize, usize)> {
     let costs: Vec<f64> = (0..c.layers).map(|il| layer_bytes(g, il) as f64).collect();
     let stages = devices.clamp(1, c.layers);
-    let head = (c.vocab * c.d) as f64 * 1.25;
+    let (d, qd, kvd) = (c.d, c.heads * c.head_dim, c.kv_heads * c.head_dim);
+    let mtp_weights = d * 2 * qd + 2 * d * kvd + qd * d + 3 * d * c.ff + 2 * d * d;
+    let head = (c.vocab * c.d) as f64 * 1.25 + if mtp { mtp_weights as f64 * 0.625 } else { 0. };
     let target = (costs.iter().sum::<f64>() + head) / stages as f64;
     split(&costs, stages, target)
 }

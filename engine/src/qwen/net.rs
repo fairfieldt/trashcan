@@ -331,7 +331,7 @@ impl Chain {
         }
         let stages: usize = counts.iter().sum();
         let all = if cuts.is_empty() {
-            plan(&g, &c, stages)
+            plan(&g, &c, stages, draft)
         } else {
             ensure!(cuts.len() + 1 == stages, "--cuts needs one entry per stage after the first ({stages} stages)");
             let mut edges = vec![0];
