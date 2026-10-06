@@ -1,0 +1,49 @@
+GPU0: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0, queue family 1, timestamp period 37.04 ns
+GPU1: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 02:00.0, queue family 1, timestamp period 37.04 ns
+
+[p2p-wall] submit-to-fence copy time minus an empty submit, GPU0 <-> GPU1's exported VRAM, and host memory
+  dma-buf import on AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0: type 2 heap 1 [ HOST_VISIBLE HOST_COHERENT ] (allowed types 0x4)
+  GPU0 host buffer: type 2 heap 1 [ HOST_VISIBLE HOST_COHERENT ]
+  P2P write, three ways of timing the same copy:
+    GPU timestamps                                   64 KiB       2.4 us    27.65 GB/s
+    GPU timestamps + L2 writeback barrier            64 KiB      10.7 us     6.14 GB/s
+    CPU submit-to-fence                              64 KiB      10.9 us     6.02 GB/s
+    GPU timestamps                                  256 KiB       3.4 us    76.93 GB/s
+    GPU timestamps + L2 writeback barrier           256 KiB      34.5 us     7.59 GB/s
+    CPU submit-to-fence                             256 KiB      34.5 us     7.59 GB/s
+    GPU timestamps                                  512 KiB       9.5 us    55.30 GB/s
+    GPU timestamps + L2 writeback barrier           512 KiB      65.3 us     8.02 GB/s
+    CPU submit-to-fence                             512 KiB      65.3 us     8.03 GB/s
+    GPU timestamps                                 1024 KiB      70.5 us    14.87 GB/s
+    GPU timestamps + L2 writeback barrier          1024 KiB     127.9 us     8.20 GB/s
+    CPU submit-to-fence                            1024 KiB     128.3 us     8.17 GB/s
+    GPU timestamps                                 2048 KiB     205.0 us    10.23 GB/s
+    GPU timestamps + L2 writeback barrier          2048 KiB     252.9 us     8.29 GB/s
+    CPU submit-to-fence                            2048 KiB     280.4 us     7.48 GB/s
+    GPU timestamps                                 8192 KiB     955.7 us     8.78 GB/s
+    GPU timestamps + L2 writeback barrier          8192 KiB    1003.3 us     8.36 GB/s
+    CPU submit-to-fence                            8192 KiB    1022.3 us     8.21 GB/s
+    GPU timestamps                                32768 KiB    3958.8 us     8.48 GB/s
+    GPU timestamps + L2 writeback barrier         32768 KiB    4005.8 us     8.38 GB/s
+    CPU submit-to-fence                           32768 KiB    4023.0 us     8.34 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)               1024 KiB     130.8 us     8.02 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)                1024 KiB     324.6 us     3.23 GB/s
+  GPU0 VRAM -> host (write)                        1024 KiB    7971.7 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                         1024 KiB     112.4 us     9.33 GB/s
+  GPU1 local copy of its own export                1024 KiB      14.4 us    72.79 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)               8192 KiB    1031.7 us     8.13 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)                8192 KiB    2281.6 us     3.68 GB/s
+  GPU0 VRAM -> host (write)                        8192 KiB   66297.8 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                         8192 KiB     918.1 us     9.14 GB/s
+  GPU1 local copy of its own export                8192 KiB      95.7 us    87.66 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)              32768 KiB    4086.7 us     8.21 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)               32768 KiB    9072.2 us     3.70 GB/s
+  GPU0 VRAM -> host (write)                       32768 KiB  262945.7 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                        32768 KiB    3767.3 us     8.91 GB/s
+  GPU1 local copy of its own export               32768 KiB     504.1 us    66.57 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)              65536 KiB    8027.3 us     8.36 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)               65536 KiB   18031.3 us     3.72 GB/s
+  GPU0 VRAM -> host (write)                       65536 KiB  523120.4 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                        65536 KiB    7455.6 us     9.00 GB/s
+  GPU1 local copy of its own export               65536 KiB     952.5 us    70.45 GB/s
+exit 0

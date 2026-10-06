@@ -1,0 +1,110 @@
+[    0.000000] Linux version 7.2.9-p2p (fairfieldt@lima-kbuild) (x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0, GNU ld (GNU Binutils for Debian) 2.44) #1p2p SMP PREEMPT_DYNAMIC Tue Oct  6 12:50:55 PDT 2026
+[    0.000000] Command line: BOOT_IMAGE=/vmlinuz-7.2.9-p2p root=/dev/mapper/incite--vg-root ro quiet radeon.si_support=0 amdgpu.si_support=1
+[    0.017222] ACPI: VFCT 0x000000007E51B000 0200A0 (v01 APPLE  Apple00  00000001 AMD  31504F47)
+[    0.017240] ACPI: Reserving VFCT table memory at [mem 0x7e51b000-0x7e53b09f]
+[    0.031197] Kernel command line: BOOT_IMAGE=/vmlinuz-7.2.9-p2p root=/dev/mapper/incite--vg-root ro quiet radeon.si_support=0 amdgpu.si_support=1
+[    1.277992] ACPI: bus type thunderbolt registered
+[    1.278566] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.282147] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.292732] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    1.352624] usb usb1: Manufacturer: Linux 7.2.9-p2p ehci_hcd
+[    1.356658] usb usb2: Manufacturer: Linux 7.2.9-p2p xhci-hcd
+[    1.357163] usb usb3: Manufacturer: Linux 7.2.9-p2p xhci-hcd
+[    1.730837] [drm] radeon kernel modesetting enabled.
+[    1.731123] radeon 0000:02:00.0: SI support disabled by module param
+[    1.731155] radeon 0000:06:00.0: SI support disabled by module param
+[   11.545996] amdgpu: Virtual CRAT table created for CPU
+[   11.546036] amdgpu: Topology: Add CPU node
+[   11.546280] amdgpu 0000:02:00.0: SI support provided by amdgpu.
+               Use radeon.si_support=1 amdgpu.si_support=0 to override.
+[   11.546443] amdgpu 0000:02:00.0: enabling device (0006 -> 0007)
+[   11.546569] amdgpu 0000:02:00.0: initializing kernel modesetting (TAHITI 0x1002:0x6798 0x106B:0x0128 0x00).
+[   11.546605] amdgpu 0000:02:00.0: register mmio base: 0xA0700000
+[   11.546609] amdgpu 0000:02:00.0: register mmio size: 262144
+[   11.546826] amdgpu 0000:02:00.0: detected ip block number 0 <common_v1_0_0> (si_common)
+[   11.546834] amdgpu 0000:02:00.0: detected ip block number 1 <gmc_v6_0_0> (gmc_v6_0)
+[   11.546839] amdgpu 0000:02:00.0: detected ip block number 2 <ih_v1_0_0> (si_ih)
+[   11.546843] amdgpu 0000:02:00.0: detected ip block number 3 <gfx_v6_0_0> (gfx_v6_0)
+[   11.546847] amdgpu 0000:02:00.0: detected ip block number 4 <sdma_v1_0_0> (si_dma)
+[   11.546852] amdgpu 0000:02:00.0: detected ip block number 5 <smu_v6_0_0> (si_dpm)
+[   11.546856] amdgpu 0000:02:00.0: detected ip block number 6 <dce_v1_0_0> (dm)
+[   11.546860] amdgpu 0000:02:00.0: detected ip block number 7 <uvd_v3_1_0> (uvd_v3_1)
+[   11.546864] amdgpu 0000:02:00.0: detected ip block number 8 <vce_v1_0_0> (vce_v1_0)
+[   11.546931] amdgpu 0000:02:00.0: Fetched VBIOS from VFCT
+[   11.546942] amdgpu 0000:02:00.0: [drm] ATOM BIOS: 113-C3861XA-028, build: 357426  , ver: 015.043.000.016.000000, 2016/08/26
+[   11.547023] amdgpu 0000:02:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   11.547033] amdgpu 0000:02:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   11.547096] amdgpu 0000:02:00.0: Trusted Memory Zone (TMZ) feature not supported
+[   11.547197] amdgpu 0000:02:00.0: [drm] PCIE gen 3 link speeds already enabled
+[   11.547204] amdgpu 0000:02:00.0: vm size is 256 GB, 2 levels, block size is 10-bit, fragment size is 9-bit
+[   11.547589] amdgpu 0000:02:00.0: VRAM: 6144M 0x000000F400000000 - 0x000000F57FFFFFFF (6144M used)
+[   11.547597] amdgpu 0000:02:00.0: GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+[   11.547612] amdgpu 0000:02:00.0: [drm] Detected VRAM RAM=6144M, BAR=256M
+[   11.547616] amdgpu 0000:02:00.0: [drm] RAM width 384bits GDDR5
+[   11.547859] amdgpu 0000:02:00.0:  6144M of VRAM memory ready
+[   11.547865] amdgpu 0000:02:00.0:  32140M of GTT memory ready.
+[   11.547904] amdgpu 0000:02:00.0: [drm] GART: num cpu pages 262144, num gpu pages 262144
+[   11.549313] amdgpu 0000:02:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F400000000).
+[   11.550571] amdgpu 0000:02:00.0: [drm] Internal thermal controller with fan control
+[   11.550582] amdgpu 0000:02:00.0: [drm] si dpm initialized
+[   11.551823] amdgpu 0000:02:00.0: [drm] Found UVD firmware Version: 64.0 Family ID: 13
+[   11.721876] amdgpu 0000:02:00.0: [drm] Display Core v3.2.384 initialized on DCE 6.0
+[   11.910049] amdgpu 0000:02:00.0: [drm] UVD initialized successfully.
+[   11.910554] amdgpu 0000:02:00.0: SE 2, SH per SE 2, CU per SH 8, active_cu_number 32
+[   12.209057] amdgpu 0000:02:00.0: Runtime PM not available
+[   12.216506] [drm] Initialized amdgpu 3.64.0 for 0000:02:00.0 on minor 0
+[   12.218816] amdgpu 0000:02:00.0: [drm] Cannot find any crtc or sizes
+[   12.219111] amdgpu 0000:06:00.0: SI support provided by amdgpu.
+               Use radeon.si_support=1 amdgpu.si_support=0 to override.
+[   12.219346] amdgpu 0000:06:00.0: initializing kernel modesetting (TAHITI 0x1002:0x6798 0x106B:0x0127 0x00).
+[   12.219383] amdgpu 0000:06:00.0: register mmio base: 0xA0600000
+[   12.219388] amdgpu 0000:06:00.0: register mmio size: 262144
+[   12.219563] amdgpu 0000:06:00.0: detected ip block number 0 <common_v1_0_0> (si_common)
+[   12.219570] amdgpu 0000:06:00.0: detected ip block number 1 <gmc_v6_0_0> (gmc_v6_0)
+[   12.219575] amdgpu 0000:06:00.0: detected ip block number 2 <ih_v1_0_0> (si_ih)
+[   12.219579] amdgpu 0000:06:00.0: detected ip block number 3 <gfx_v6_0_0> (gfx_v6_0)
+[   12.219583] amdgpu 0000:06:00.0: detected ip block number 4 <sdma_v1_0_0> (si_dma)
+[   12.219587] amdgpu 0000:06:00.0: detected ip block number 5 <smu_v6_0_0> (si_dpm)
+[   12.219591] amdgpu 0000:06:00.0: detected ip block number 6 <dce_v1_0_0> (dm)
+[   12.219595] amdgpu 0000:06:00.0: detected ip block number 7 <uvd_v3_1_0> (uvd_v3_1)
+[   12.219599] amdgpu 0000:06:00.0: detected ip block number 8 <vce_v1_0_0> (vce_v1_0)
+[   12.219669] amdgpu 0000:06:00.0: Fetched VBIOS from VFCT
+[   12.219680] amdgpu 0000:06:00.0: [drm] ATOM BIOS: 113-C3861XB-028, build: 357427  , ver: 015.043.000.016.000000, 2016/08/26
+[   12.219758] amdgpu 0000:06:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   12.219766] amdgpu 0000:06:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   12.220117] amdgpu 0000:06:00.0: vgaarb: deactivate vga console
+[   12.220123] amdgpu 0000:06:00.0: Trusted Memory Zone (TMZ) feature not supported
+[   12.220220] amdgpu 0000:06:00.0: [drm] PCIE gen 3 link speeds already enabled
+[   12.220227] amdgpu 0000:06:00.0: vm size is 256 GB, 2 levels, block size is 10-bit, fragment size is 9-bit
+[   12.220580] amdgpu 0000:06:00.0: VRAM: 6144M 0x000000F400000000 - 0x000000F57FFFFFFF (6144M used)
+[   12.220588] amdgpu 0000:06:00.0: GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+[   12.220603] amdgpu 0000:06:00.0: [drm] Detected VRAM RAM=6144M, BAR=256M
+[   12.220607] amdgpu 0000:06:00.0: [drm] RAM width 384bits GDDR5
+[   12.220805] amdgpu 0000:06:00.0:  6144M of VRAM memory ready
+[   12.220812] amdgpu 0000:06:00.0:  32140M of GTT memory ready.
+[   12.220841] amdgpu 0000:06:00.0: [drm] GART: num cpu pages 262144, num gpu pages 262144
+[   12.222758] amdgpu 0000:06:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F400000000).
+[   12.224797] amdgpu 0000:06:00.0: [drm] Internal thermal controller with fan control
+[   12.224814] amdgpu 0000:06:00.0: [drm] si dpm initialized
+[   12.226922] amdgpu 0000:06:00.0: [drm] Found UVD firmware Version: 64.0 Family ID: 13
+[   12.399622] amdgpu 0000:06:00.0: [drm] Display Core v3.2.384 initialized on DCE 6.0
+[   12.627812] amdgpu 0000:06:00.0: [drm] UVD initialized successfully.
+[   12.628271] amdgpu 0000:06:00.0: SE 2, SH per SE 2, CU per SH 8, active_cu_number 32
+[   12.924023] amdgpu 0000:06:00.0: Runtime PM not available
+[   12.924878] [drm] Initialized amdgpu 3.64.0 for 0000:06:00.0 on minor 1
+[   12.928741] fbcon: amdgpudrmfb (fb0) is primary device
+[   13.003062] amdgpu 0000:06:00.0: [drm] fb0: amdgpudrmfb frame buffer device
+[   15.020935] Modules linked in: soundcore apple_gmux(+) apple_mfi_fastcharge fjes(-) evdev msr i2c_dev parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid hid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core xhci_pci iTCO_wdt drm_client_lib drm_kms_helper ehci_pci intel_pmc_bxt xhci_hcd ehci_hcd nvme drm watchdog tg3 thunderbolt nvme_core usbcore libphy i2c_i801 nvme_keyring i2c_smbus lpc_ich ioatdma nvme_auth mdio_bus dca configfs usb_common button
+[   15.020982] CPU: 12 UID: 0 PID: 580 Comm: (udev-worker) Not tainted 7.2.9-p2p #1p2p PREEMPT(lazy) 
+[   15.332188] snd_hda_intel 0000:02:00.1: bound 0000:02:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+[   15.379115] snd_hda_intel 0000:06:00.1: bound 0000:06:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+[   75.427405] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[   75.427419] thunderbolt 0-3: Linux incite
+[   75.427425] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[   75.427437] thunderbolt 1-3: Linux incite
+[   83.020792] thunderbolt 0-3: host disconnected
+[   83.052766] thunderbolt 1-3: host disconnected
+[   90.021332] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[   90.021340] thunderbolt 1-3: Linux incite
+[   90.026647] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[   90.026656] thunderbolt 0-3: Linux incite

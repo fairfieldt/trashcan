@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 mode=${1:-push}
 if [ "$mode" = push ] || [ "$mode" = both ]; then
     rsync -a --delete --exclude target --exclude /tools/dump-activations/dump --exclude /bench/xgpu/xgpu --exclude '/bench/xgpu/*.spv' Cargo.toml Cargo.lock README.md engine scripts bench tools tests docs incite:trashcan/
-    rsync -a kernel/build.sh kernel/patches incite:trashcan/kernel/
+    rsync -a kernel/build.sh kernel/build-7.2.sh kernel/configs kernel/patches kernel/patches-7.2 kernel/upstream incite:trashcan/kernel/
 fi
 if [ "$mode" = pull ] || [ "$mode" = both ]; then
     rsync -a incite:trashcan/results/ results/

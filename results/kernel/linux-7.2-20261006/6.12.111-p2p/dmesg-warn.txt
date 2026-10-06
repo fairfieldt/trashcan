@@ -1,0 +1,2 @@
+[   12.815668] WARNING: CPU: 21 PID: 653 at drivers/platform/x86/apple-gmux.c:884 gmux_probe.cold+0x65/0xd32 [apple_gmux]
+[   13.502015] b43 bcma0:1: probe with driver b43 failed with error -95

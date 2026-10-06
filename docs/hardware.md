@@ -9,8 +9,8 @@ models are listed in `../homelab/modelstore/manifest.yaml` and copied to `~/mode
 |---|---|
 | CPU | Xeon E5-2697 v2 (Ivy Bridge-EP), 12C/24T, 2.7 GHz, AVX only (no AVX2/FMA/F16C) |
 | RAM | 64 GB DDR3 (62 GiB usable), 78 GB swap |
-| OS | Debian 13, active kernel `6.12.111-p2p` (confirmed 2026-10-03); stock `6.12.111+deb13-amd64` remains installed |
-| GPU driver | amdgpu with `radeon.si_support=0 amdgpu.si_support=1`; patched `amdgpu.ko` in `/lib/modules/$(uname -r)/updates/` |
+| OS | Debian 13, kernel `7.2.9-p2p` (default since 2026-10-06, see [kernel.md](kernel.md)); `6.12.111-p2p` and stock `6.12.111+deb13-amd64` remain installed |
+| GPU driver | amdgpu with `radeon.si_support=0 amdgpu.si_support=1`; the D700 fixes are built into the `-p2p` kernels |
 | Vulkan | RADV (Mesa 25.0.7-2+deb13u1), Vulkan 1.3.305 |
 
 ## GPUs: 2x FirePro D700 (Tahiti XT, GCN 1.0 / Southern Islands)
@@ -53,10 +53,11 @@ shared memory 32 KB, max workgroup 1024 invocations.
 ## Clock bug (relevant to every benchmark)
 
 Stock amdgpu leaves both D700s at **300 MHz core / 150 MHz memory** even under load, which costs about 9x
-memory bandwidth. `~/D700macpro` on incite has two fixes: an exact-match VFCT VBIOS selection fix, plus a
-backport of Timur Kristóf's 2026-09-23 SI `HARDWAREDC` power-source patch. Without them the second GPU
-gets the wrong VBIOS and the cards stay in the battery power state. The patched module was built and
-installed at 19:14 on 2026-10-02. The VFCT fix is prepared for upstream (amdgpu and radeon) in
+memory bandwidth. Two fixes cure it: an exact-match VFCT VBIOS selection fix, plus a backport of Timur
+Kristóf's 2026-09-23 SI `HARDWAREDC` power-source patch. Without them the second GPU gets the wrong VBIOS
+and the cards stay in the battery power state. Both `-p2p` kernels carry them ([kernel.md](kernel.md)); the
+stock Debian kernel gets them from a patched `amdgpu.ko` in `/lib/modules/6.12.111+deb13-amd64/updates/`
+(built from `~/D700macpro` on 2026-10-02). The VFCT fix is prepared for upstream (amdgpu and radeon) in
 `kernel/upstream/vfct-exact-match/`.
 
 Idle reads 300/150 in `/sys/class/drm/card{0,1}/device/hwmon/hwmon*/freq{1,2}_input`. That's expected at
@@ -64,17 +65,43 @@ idle; under load it should reach 850/1370. **Check those clocks during every ben
 
 ## Kernel
 
-`kernel/build.sh` builds Debian's 6.12.111 source plus the D700 patches and PCI P2P, as `6.12.111-p2p` (about 28
-minutes on incite). It was installed 2026-10-02.
+See [kernel.md](kernel.md): which kernel incite runs, its patches and config, how to build it on the Mac, and how
+to boot, check and recover it.
 
-- Since 2026-10-02 it's the **default** boot entry: `GRUB_DEFAULT="gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-6.12.111-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"`.
-- The original `/etc/default/grub` is in `/etc/default/grub.bak-trashcan`. The stock kernel (`6.12.111+deb13-amd64`) is still in the GRUB menu under Advanced options.
-- To boot stock once: `sudo grub-reboot "gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-6.12.111+deb13-amd64-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"`.
-- A Debian kernel upgrade won't replace the P2P kernel as default, because the default is pinned by entry id. If the
-  `6.12.111+deb13` packages are removed, re-run `update-grub` and check the default still exists.
-- Under it, each card gets its own VBIOS (02:00.0 `113-C3861XA-028`, 06:00.0 `113-C3861XB-028`), so the D700
-  patches are in effect.
-- The `apple-gmux` WARN at boot also happens on the stock kernel.
+- GRUB's default is pinned by entry id in `/etc/default/grub` (original in `/etc/default/grub.bak-trashcan`), so
+  installing a kernel never changes what boots.
+- Under both `-p2p` kernels each card gets its own VBIOS (02:00.0 `113-C3861XA-028`, 06:00.0 `113-C3861XB-028`).
+- The `apple-gmux` WARN at boot happens on every kernel.
+
+## Network
+
+Two Broadcom BCM57762 ports (`tg3`). Since hard power cuts on 2026-10-06 the left one (`enp12s0`) gets no link; the
+cable is in `enp11s0` (192.168.0.83, DHCP). Tailscale address 100.108.0.1. NetworkManager ignores `thunderbolt*`
+interfaces (`/etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf`); otherwise it runs DHCP on them and reports
+failed connections.
+
+Kernel messages stream to the Mac over netconsole, and an oops, lockup or panic reboots the machine after 10 s; see
+[kernel.md](kernel.md#when-something-goes-wrong).
+
+## Thunderbolt
+
+Six Thunderbolt 2 ports on three Falcon Ridge 4C controllers (DSL5520). Each controller's NHI sits behind a PCIe
+Gen2 x4 link, and all three share a PLX PEX 8723 switch with a Gen3 x8 uplink to root port 00:01.0. Facing the rear
+panel (Apple KB HT5918):
+
+| | Left | Right |
+|---|---|---|
+| Top | Bus 1 (`domain1`, NHI 5d:00.0) | Bus 2 (`domain2`, NHI a4:00.0) |
+| Middle | Bus 1 | Bus 2 |
+| Bottom | Bus 0 (`domain0`, NHI 16:00.0) | Bus 0, shared with HDMI |
+
+A cable between two ports of one controller loops that controller and gets one lane; between controllers it bonds
+two lanes (20 Gb/s per direction on the wire). Measured on 7.2: about 9.6 Gb/s per direction per cable, 25 us
+round trips over USB4STREAM and 40 us over `thunderbolt_net` with `throttling=32000`
+([results](../results/kernel/tb-loopback-20261006/README.md)).
+
+With three cables looping the three controllers into a triangle, a reboot hangs in firmware before the startup chime;
+unplug them first ([kernel.md](kernel.md#installing-and-booting)).
 
 ## Fan curve
 

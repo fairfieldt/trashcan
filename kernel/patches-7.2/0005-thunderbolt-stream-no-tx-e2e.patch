@@ -1,0 +1,22 @@
+thunderbolt: stream: do not enable E2E flow control on the Tx ring.
+On incite's Falcon Ridge controllers a Tx ring with E2E never gets credits; stopping it wedges the NHI
+and every later config read times out (results/kernel/tb-loopback-20261006). Same failure as the
+thunderbolt_net revert 1881f2efbf7f. Rx keeps E2E.
+
+--- a/drivers/thunderbolt/stream.c
++++ b/drivers/thunderbolt/stream.c
+@@ -553,8 +553,13 @@
+ 	struct tb_ring *ring;
+ 	int ret, e2e_tx_hop;
+ 
++	/*
++	 * No E2E flow control on the Tx ring: some host routers never return
++	 * the credits and the ring wedges (see the thunderbolt_net revert
++	 * 1881f2efbf7f). Rx keeps E2E.
++	 */
+ 	ring = tb_ring_alloc_tx(xd->tb->nhi, -1, sdev->ring_size,
+-				RING_FLAG_FRAME | RING_FLAG_E2E);
++				RING_FLAG_FRAME);
+ 	if (!ring)
+ 		return -ENOMEM;
+ 	sdev->tx_ring.ring = ring;
