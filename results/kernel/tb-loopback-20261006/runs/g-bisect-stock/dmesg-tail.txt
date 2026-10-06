@@ -1,0 +1,200 @@
+[  294.370153] WARNING: lib/idr.c:594 at ida_free+0xe3/0x140, CPU#19: rmdir/8239
+[  294.370157] Modules linked in: thunderbolt_stream(OE) thunderbolt_net(OE) thunderbolt(OE) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 sd_mod scsi_mod scsi_common snd_seq_dummy snd_hrtimer snd_seq snd_seq_device tun nf_tables qrtr rfcomm algif_hash algif_skcipher af_alg bnep sunrpc binfmt_misc b43 cordic mac80211 nls_ascii nls_cp437 vfat intel_rapl_msr intel_rapl_common fat sb_edac cfg80211 x86_pkg_temp_thermal intel_powerclamp coretemp kvm_intel btusb btmtk snd_hda_codec_atihdmi snd_hda_codec_cs420x snd_hda_codec_generic snd_hda_codec_hdmi btrtl ssb btbcm snd_hda_intel kvm btintel joydev snd_hda_codec mmc_core snd_hda_core bluetooth pcmcia irqbypass snd_intel_dspcfg aesni_intel pcmcia_core snd_intel_sdw_acpi snd_hwdep gf128mul libarc4 rapl aead snd_pcm intel_cstate snd_timer ecdh_generic applesmc rfkill snd mei_me intel_uncore at24 mei bcma pcspkr soundcore apple_gmux apple_mfi_fastcharge evdev msr i2c_dev
+[  294.370215]  parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched hid crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_client_lib drm_kms_helper xhci_pci nvme ehci_pci iTCO_wdt intel_pmc_bxt drm xhci_hcd tg3 ehci_hcd watchdog nvme_core usbcore libphy i2c_i801 nvme_keyring ioatdma lpc_ich i2c_smbus nvme_auth mdio_bus configfs dca usb_common button [last unloaded: thunderbolt]
+[  294.370253] CPU: 19 UID: 0 PID: 8239 Comm: rmdir Tainted: G        W  OE       7.2.9-p2p #1p2p PREEMPT(lazy) 
+[  294.370257] Tainted: [W]=WARN, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+[  294.370259] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+[  294.370260] RIP: 0010:ida_free+0xe5/0x140
+[  294.370263] Code: 4d 68 ff 31 f6 4c 89 ef e8 58 68 02 00 eb 5f 41 83 fe 3e 76 3a 48 8b 3c 24 4c 89 e6 e8 c4 5a 04 00 48 8d 3d ad af cd 00 89 de <67> 48 0f b9 3a 48 8b 44 24 38 65 48 2b 05 81 5d 5e 01 75 3e 48 83
+[  294.370265] RSP: 0018:ffffd20e88887cc8 EFLAGS: 00010286
+[  294.370268] RAX: 0000000000000201 RBX: 0000000000000009 RCX: 0000000000000001
+[  294.370270] RDX: 0000000000000001 RSI: 0000000000000009 RDI: ffffffffb98b6220
+[  294.370271] RBP: 0000000000000100 R08: 0000000000000000 R09: 0000000000000000
+[  294.370273] R10: ffff89df1323a638 R11: 00363133353d4d55 R12: 0000000000000206
+[  294.370275] R13: ffffd20e88887cc8 R14: 0000000000000009 R15: ffffffffc29b1680
+[  294.370276] FS:  00007f553a4ad780(0000) GS:ffff89ee45b17000(0000) knlGS:0000000000000000
+[  294.370279] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[  294.370281] CR2: 00007f553a593a60 CR3: 00000002101a2006 CR4: 00000000001726f0
+[  294.370282] Call Trace:
+[  294.370284]  <TASK>
+[  294.370286]  tbstream_dev_release+0x89/0xa0 [thunderbolt_stream]
+[  294.370290]  tbstream_dev_item_release+0x54/0x80 [thunderbolt_stream]
+[  294.370294]  config_item_cleanup+0x52/0xb0 [configfs]
+[  294.370299]  configfs_rmdir+0x344/0x3d0 [configfs]
+[  294.370305]  vfs_rmdir+0x10e/0x260
+[  294.370308]  filename_rmdir+0x15c/0x260
+[  294.370312]  __x64_sys_rmdir+0x28/0x40
+[  294.370314]  do_syscall_64+0xea/0x640
+[  294.370317]  ? do_user_addr_fault+0x211/0x670
+[  294.370320]  ? irqentry_exit+0x48/0x740
+[  294.370322]  ? do_syscall_64+0x9f/0x640
+[  294.370325]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+[  294.370328] RIP: 0033:0x7f553a5b3c97
+[  294.370330] Code: f0 ff ff 73 01 c3 48 8b 0d 76 11 0e 00 f7 d8 64 89 01 48 83 c8 ff c3 66 2e 0f 1f 84 00 00 00 00 00 66 90 b8 54 00 00 00 0f 05 <48> 3d 00 f0 ff ff 77 01 c3 48 8b 15 49 11 0e 00 f7 d8 64 89 02 b8
+[  294.370332] RSP: 002b:00007ffed8320e18 EFLAGS: 00000246 ORIG_RAX: 0000000000000054
+[  294.370335] RAX: ffffffffffffffda RBX: 00007ffed8321008 RCX: 00007f553a5b3c97
+[  294.370337] RDX: 00007f553a69c5c0 RSI: 00007ffed8321df5 RDI: 00007ffed8321d98
+[  294.370338] RBP: 0000000000000005 R08: 000000000000ffff R09: 0000000000000000
+[  294.370340] R10: 00007f553a634650 R11: 0000000000000246 R12: 00007ffed8321d98
+[  294.370341] R13: 0000000000000001 R14: 00007f553a6f8000 R15: 000055fe3c1c8a98
+[  294.370344]  </TASK>
+[  294.370346] ---[ end trace 0000000000000000 ]---
+[  314.936354] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  314.936385] thunderbolt 0000:16:00.0: 0:3: hop deactivation failed for hop 0, index 9
+[  315.352362] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x6
+[  315.352370] thunderbolt 0000:16:00.0: 0:5: hop deactivation failed for hop 0, index 3
+[  315.604306] thunderbolt 1-3: failed to send properties changed notification
+[  315.980426] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  316.396518] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  316.396548] thunderbolt 0000:16:00.0: DMA RX path activation failed: -110
+[  316.396552] thunderbolt 0000:16:00.0: 0:5 <-> 0:3 (DMA): activation failed
+[  316.396581] thunderbolt 0000:16:00.0: 0:5: DMA tunnel activation failed, aborting
+[  317.652487] thunderbolt 1-3: failed to send properties changed notification
+[  317.844622] thunderbolt 0000:5d:00.0: 0: timeout reading config space 0 from 0x12
+[  317.844629] thunderbolt 0000:5d:00.0: 0:3: hop deactivation failed for hop 0, index 9
+[  318.260666] thunderbolt 0000:5d:00.0: 0: timeout reading config space 0 from 0x6
+[  318.260674] thunderbolt 0000:5d:00.0: 0:5: hop deactivation failed for hop 0, index 3
+[  318.276167] ------------[ cut here ]------------
+[  318.276173] ida_free called for id=9 which is not allocated.
+[  318.276175] WARNING: lib/idr.c:594 at ida_free+0xe3/0x140, CPU#6: rmdir/8442
+[  318.276184] Modules linked in: thunderbolt_stream(OE) thunderbolt_net(OE) thunderbolt(OE) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 sd_mod scsi_mod scsi_common snd_seq_dummy snd_hrtimer snd_seq snd_seq_device tun nf_tables qrtr rfcomm algif_hash algif_skcipher af_alg bnep sunrpc binfmt_misc b43 cordic mac80211 nls_ascii nls_cp437 vfat intel_rapl_msr intel_rapl_common fat sb_edac cfg80211 x86_pkg_temp_thermal intel_powerclamp coretemp kvm_intel btusb btmtk snd_hda_codec_atihdmi snd_hda_codec_cs420x snd_hda_codec_generic snd_hda_codec_hdmi btrtl ssb btbcm snd_hda_intel kvm btintel joydev snd_hda_codec mmc_core snd_hda_core bluetooth pcmcia irqbypass snd_intel_dspcfg aesni_intel pcmcia_core snd_intel_sdw_acpi snd_hwdep gf128mul libarc4 rapl aead snd_pcm intel_cstate snd_timer ecdh_generic applesmc rfkill snd mei_me intel_uncore at24 mei bcma pcspkr soundcore apple_gmux apple_mfi_fastcharge evdev msr i2c_dev
+[  318.276259]  parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched hid crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_client_lib drm_kms_helper xhci_pci nvme ehci_pci iTCO_wdt intel_pmc_bxt drm xhci_hcd tg3 ehci_hcd watchdog nvme_core usbcore libphy i2c_i801 nvme_keyring ioatdma lpc_ich i2c_smbus nvme_auth mdio_bus configfs dca usb_common button [last unloaded: thunderbolt]
+[  318.276308] CPU: 6 UID: 0 PID: 8442 Comm: rmdir Tainted: G        W  OE       7.2.9-p2p #1p2p PREEMPT(lazy) 
+[  318.276313] Tainted: [W]=WARN, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+[  318.276315] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+[  318.276317] RIP: 0010:ida_free+0xe5/0x140
+[  318.276321] Code: 4d 68 ff 31 f6 4c 89 ef e8 58 68 02 00 eb 5f 41 83 fe 3e 76 3a 48 8b 3c 24 4c 89 e6 e8 c4 5a 04 00 48 8d 3d ad af cd 00 89 de <67> 48 0f b9 3a 48 8b 44 24 38 65 48 2b 05 81 5d 5e 01 75 3e 48 83
+[  318.276324] RSP: 0018:ffffd20e88b1fb48 EFLAGS: 00010286
+[  318.276327] RAX: 0000000000000201 RBX: 0000000000000009 RCX: 0000000000000001
+[  318.276329] RDX: 0000000000000001 RSI: 0000000000000009 RDI: ffffffffb98b6220
+[  318.276331] RBP: 0000000000000100 R08: 0000000000000000 R09: 0000000000000000
+[  318.276333] R10: ffff89df1323a638 R11: 3d48544150564544 R12: 0000000000000206
+[  318.276334] R13: ffffd20e88b1fb48 R14: 0000000000000009 R15: ffffffffc29b1680
+[  318.276336] FS:  00007f256cf8a780(0000) GS:ffff89ee457d7000(0000) knlGS:0000000000000000
+[  318.276339] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[  318.276341] CR2: 00007f256d070a60 CR3: 00000001079de004 CR4: 00000000001726f0
+[  318.276343] Call Trace:
+[  318.276347]  <TASK>
+[  318.276353]  tbstream_dev_release+0x6f/0xa0 [thunderbolt_stream]
+[  318.276359]  tbstream_dev_item_release+0x54/0x80 [thunderbolt_stream]
+[  318.276364]  config_item_cleanup+0x52/0xb0 [configfs]
+[  318.276373]  configfs_rmdir+0x344/0x3d0 [configfs]
+[  318.276379]  vfs_rmdir+0x10e/0x260
+[  318.276385]  filename_rmdir+0x15c/0x260
+[  318.276389]  __x64_sys_rmdir+0x28/0x40
+[  318.276392]  do_syscall_64+0xea/0x640
+[  318.276395]  ? dentry_kill+0x2bd/0x300
+[  318.276400]  ? dput.part.0+0x25/0x180
+[  318.276403]  ? mntput+0x21/0x60
+[  318.276408]  ? filename_rmdir+0x1a1/0x260
+[  318.276411]  ? do_syscall_64+0x29d/0x640
+[  318.276414]  ? count_memcg_events+0xb2/0x160
+[  318.276417]  ? handle_mm_fault+0x1e2/0x2e0
+[  318.276421]  ? do_user_addr_fault+0x211/0x670
+[  318.276424]  ? irqentry_exit+0x48/0x740
+[  318.276428]  ? do_syscall_64+0x9f/0x640
+[  318.276430]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+[  318.276434] RIP: 0033:0x7f256d090c97
+[  318.276437] Code: f0 ff ff 73 01 c3 48 8b 0d 76 11 0e 00 f7 d8 64 89 01 48 83 c8 ff c3 66 2e 0f 1f 84 00 00 00 00 00 66 90 b8 54 00 00 00 0f 05 <48> 3d 00 f0 ff ff 77 01 c3 48 8b 15 49 11 0e 00 f7 d8 64 89 02 b8
+[  318.276439] RSP: 002b:00007ffef33a13c8 EFLAGS: 00000246 ORIG_RAX: 0000000000000054
+[  318.276442] RAX: ffffffffffffffda RBX: 00007ffef33a15b8 RCX: 00007f256d090c97
+[  318.276444] RDX: 00007f256d1795c0 RSI: 00007ffef33a1df5 RDI: 00007ffef33a1d98
+[  318.276446] RBP: 0000000000000005 R08: 000000000000ffff R09: 0000000000000000
+[  318.276448] R10: 00007f256d111650 R11: 0000000000000246 R12: 00007ffef33a1d98
+[  318.276450] R13: 0000000000000001 R14: 00007f256d1d5000 R15: 00005565ec477a98
+[  318.276453]  </TASK>
+[  318.276454] ---[ end trace 0000000000000000 ]---
+[  318.276457] ------------[ cut here ]------------
+[  318.276459] ida_free called for id=9 which is not allocated.
+[  318.276460] WARNING: lib/idr.c:594 at ida_free+0xe3/0x140, CPU#6: rmdir/8442
+[  318.276465] Modules linked in: thunderbolt_stream(OE) thunderbolt_net(OE) thunderbolt(OE) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 sd_mod scsi_mod scsi_common snd_seq_dummy snd_hrtimer snd_seq snd_seq_device tun nf_tables qrtr rfcomm algif_hash algif_skcipher af_alg bnep sunrpc binfmt_misc b43 cordic mac80211 nls_ascii nls_cp437 vfat intel_rapl_msr intel_rapl_common fat sb_edac cfg80211 x86_pkg_temp_thermal intel_powerclamp coretemp kvm_intel btusb btmtk snd_hda_codec_atihdmi snd_hda_codec_cs420x snd_hda_codec_generic snd_hda_codec_hdmi btrtl ssb btbcm snd_hda_intel kvm btintel joydev snd_hda_codec mmc_core snd_hda_core bluetooth pcmcia irqbypass snd_intel_dspcfg aesni_intel pcmcia_core snd_intel_sdw_acpi snd_hwdep gf128mul libarc4 rapl aead snd_pcm intel_cstate snd_timer ecdh_generic applesmc rfkill snd mei_me intel_uncore at24 mei bcma pcspkr soundcore apple_gmux apple_mfi_fastcharge evdev msr i2c_dev
+[  318.276533]  parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched hid crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_client_lib drm_kms_helper xhci_pci nvme ehci_pci iTCO_wdt intel_pmc_bxt drm xhci_hcd tg3 ehci_hcd watchdog nvme_core usbcore libphy i2c_i801 nvme_keyring ioatdma lpc_ich i2c_smbus nvme_auth mdio_bus configfs dca usb_common button [last unloaded: thunderbolt]
+[  318.276573] CPU: 6 UID: 0 PID: 8442 Comm: rmdir Tainted: G        W  OE       7.2.9-p2p #1p2p PREEMPT(lazy) 
+[  318.276577] Tainted: [W]=WARN, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+[  318.276579] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+[  318.276580] RIP: 0010:ida_free+0xe5/0x140
+[  318.276584] Code: 4d 68 ff 31 f6 4c 89 ef e8 58 68 02 00 eb 5f 41 83 fe 3e 76 3a 48 8b 3c 24 4c 89 e6 e8 c4 5a 04 00 48 8d 3d ad af cd 00 89 de <67> 48 0f b9 3a 48 8b 44 24 38 65 48 2b 05 81 5d 5e 01 75 3e 48 83
+[  318.276586] RSP: 0018:ffffd20e88b1fb48 EFLAGS: 00010286
+[  318.276589] RAX: 0000000000000201 RBX: 0000000000000009 RCX: 0000000000000001
+[  318.276590] RDX: 0000000000000001 RSI: 0000000000000009 RDI: ffffffffb98b6220
+[  318.276592] RBP: 0000000000000100 R08: 0000000000000000 R09: 0000000000000000
+[  318.276594] R10: ffff89df1323a638 R11: 3d48544150564544 R12: 0000000000000206
+[  318.276595] R13: ffffd20e88b1fb48 R14: 0000000000000009 R15: ffffffffc29b1680
+[  318.276597] FS:  00007f256cf8a780(0000) GS:ffff89ee457d7000(0000) knlGS:0000000000000000
+[  318.276599] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[  318.276601] CR2: 00007f256d070a60 CR3: 00000001079de004 CR4: 00000000001726f0
+[  318.276603] Call Trace:
+[  318.276605]  <TASK>
+[  318.276608]  tbstream_dev_release+0x89/0xa0 [thunderbolt_stream]
+[  318.276612]  tbstream_dev_item_release+0x54/0x80 [thunderbolt_stream]
+[  318.276615]  config_item_cleanup+0x52/0xb0 [configfs]
+[  318.276621]  configfs_rmdir+0x344/0x3d0 [configfs]
+[  318.276627]  vfs_rmdir+0x10e/0x260
+[  318.276631]  filename_rmdir+0x15c/0x260
+[  318.276634]  __x64_sys_rmdir+0x28/0x40
+[  318.276636]  do_syscall_64+0xea/0x640
+[  318.276639]  ? dentry_kill+0x2bd/0x300
+[  318.276643]  ? dput.part.0+0x25/0x180
+[  318.276646]  ? mntput+0x21/0x60
+[  318.276649]  ? filename_rmdir+0x1a1/0x260
+[  318.276652]  ? do_syscall_64+0x29d/0x640
+[  318.276655]  ? count_memcg_events+0xb2/0x160
+[  318.276658]  ? handle_mm_fault+0x1e2/0x2e0
+[  318.276661]  ? do_user_addr_fault+0x211/0x670
+[  318.276664]  ? irqentry_exit+0x48/0x740
+[  318.276667]  ? do_syscall_64+0x9f/0x640
+[  318.276669]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+[  318.276672] RIP: 0033:0x7f256d090c97
+[  318.276674] Code: f0 ff ff 73 01 c3 48 8b 0d 76 11 0e 00 f7 d8 64 89 01 48 83 c8 ff c3 66 2e 0f 1f 84 00 00 00 00 00 66 90 b8 54 00 00 00 0f 05 <48> 3d 00 f0 ff ff 77 01 c3 48 8b 15 49 11 0e 00 f7 d8 64 89 02 b8
+[  318.276676] RSP: 002b:00007ffef33a13c8 EFLAGS: 00000246 ORIG_RAX: 0000000000000054
+[  318.276679] RAX: ffffffffffffffda RBX: 00007ffef33a15b8 RCX: 00007f256d090c97
+[  318.276681] RDX: 00007f256d1795c0 RSI: 00007ffef33a1df5 RDI: 00007ffef33a1d98
+[  318.276683] RBP: 0000000000000005 R08: 000000000000ffff R09: 0000000000000000
+[  318.276684] R10: 00007f256d111650 R11: 0000000000000246 R12: 00007ffef33a1d98
+[  318.276686] R13: 0000000000000001 R14: 00007f256d1d5000 R15: 00005565ec477a98
+[  318.276689]  </TASK>
+[  318.276690] ---[ end trace 0000000000000000 ]---
+[  319.700710] thunderbolt 1-3: failed to send properties changed notification
+[  320.372774] thunderbolt 0-3: failed to send properties changed notification
+[  321.748860] thunderbolt 1-3: failed to send properties changed notification
+[  321.780960] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  322.197027] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  322.197035] thunderbolt 0000:16:00.0: DMA RX path activation failed: -110
+[  322.197038] thunderbolt 0000:16:00.0: 0:5 <-> 0:3 (DMA): activation failed
+[  322.197071] thunderbolt 0000:16:00.0: 0:5: DMA tunnel activation failed, aborting
+[  323.445055] thunderbolt 0-3: failed to send properties changed notification
+[  323.797073] thunderbolt 1-3: failed to send properties changed notification
+[  325.493223] thunderbolt 0-3: failed to send properties changed notification
+[  325.845253] thunderbolt 1-3: failed to send properties changed notification
+[  326.741393] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  326.869290] thunderbolt 1-3: failed to send properties changed notification
+[  327.157468] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  327.157484] thunderbolt 0000:16:00.0: DMA RX path activation failed: -110
+[  327.157490] thunderbolt 0000:16:00.0: 0:5 <-> 0:3 (DMA): activation failed
+[  327.157536] thunderbolt 0000:16:00.0: 0:5: DMA tunnel activation failed, aborting
+[  328.565483] thunderbolt 0-3: failed to send properties changed notification
+[  328.597585] thunderbolt 0000:5d:00.0: 0: timeout reading config space 0 from 0x12
+[  328.597601] thunderbolt 0000:5d:00.0: 0:3: hop deactivation failed for hop 0, index 9
+[  328.917501] thunderbolt 1-3: failed to send properties changed notification
+[  329.017635] thunderbolt 0000:5d:00.0: 0: timeout reading config space 0 from 0x6
+[  329.017663] thunderbolt 0000:5d:00.0: 0:5: hop deactivation failed for hop 0, index 3
+[  330.613680] thunderbolt 0-3: failed to send properties changed notification
+[  330.965674] thunderbolt 1-3: failed to send properties changed notification
+[  331.637735] thunderbolt 0-3: failed to send properties changed notification
+[  332.541912] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  332.965944] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  332.965960] thunderbolt 0000:16:00.0: DMA RX path activation failed: -110
+[  332.965979] thunderbolt 0000:16:00.0: 0:5 <-> 0:3 (DMA): activation failed
+[  332.966007] thunderbolt 0000:16:00.0: 0:5: DMA tunnel activation failed, aborting
+[  333.013831] thunderbolt 1-3: failed to send properties changed notification
+[  334.709958] thunderbolt 0-3: failed to send properties changed notification
+[  335.062030] thunderbolt 1-3: failed to send properties changed notification
+[  335.734049] thunderbolt 0-3: failed read XDomain properties from 00000000-0000-0008-00bb-a7dc22827860
+[  336.758136] thunderbolt 0-3: failed to send properties changed notification
+[  337.146153] thunderbolt 1-3: failed to send properties changed notification
+[  337.522268] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  337.938300] thunderbolt 0000:16:00.0: 0: timeout reading config space 0 from 0x12
+[  337.938316] thunderbolt 0000:16:00.0: DMA RX path activation failed: -110
+[  337.938336] thunderbolt 0000:16:00.0: 0:5 <-> 0:3 (DMA): activation failed
+[  337.938360] thunderbolt 0000:16:00.0: 0:5: DMA tunnel activation failed, aborting
+[  338.166208] thunderbolt 1-3: failed read XDomain properties from 00000000-0000-0018-00bb-a7dca2027060

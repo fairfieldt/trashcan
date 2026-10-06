@@ -1,12 +1,15 @@
 #!/bin/bash
 # One configuration of the Thunderbolt loopback benchmark (MTU 1500).
-# thunderbolt0 (domain0, NHI 16:00.0) = 10.77.0.1 in the root namespace (client side),
-# thunderbolt1 (domain1, NHI 5d:00.0) = 10.77.0.2 in namespace tbB (server side).
+# The A end (client) stays in the root namespace as 10.77.0.1; the B end (server) moves to
+# namespace tbB as 10.77.0.2, so traffic crosses the cable instead of loopback.
+# Ends are XDomain devices (domain-port): default XA=0-3 (domain0, NHI 16:00.0) and
+# XB=1-3 (domain1, NHI 5d:00.0), the top-left to bottom-left cable.
 # Usage: bench.sh OUTDIR
-# Env: PIN=1 pins NHI IRQs and iperf3/sockperf processes (layout below).
-#      REPS=3 repetitions of each one-way iperf3 run.
+# Env: XA, XB select the ends. PIN=1 pins NHI IRQs and iperf3/sockperf processes (layout
+#      below). REPS=3 repetitions of each one-way iperf3 run.
 set -u
 out=${1:?outdir}
+XA=${XA:-0-3} XB=${XB:-1-3}
 PIN=${PIN:-0} REPS=${REPS:-3}
 mkdir -p "$out"
 NS="sudo ip netns exec tbB"
@@ -14,35 +17,50 @@ A=10.77.0.1 B=10.77.0.2
 # Pin layout (CPU 2k and 2k+1 are HT siblings of core k):
 IRQ_A=4 APP_A=6 IRQ_B=8 APP_B=10
 
+# Network interface whose service device is XD.0, searched with the given command prefix.
+iface_of() { # xd, prefix...
+  local xd=$1; shift
+  "$@" sh -c 'for n in /sys/class/net/*; do case "$(readlink -f $n/device 2>/dev/null)" in */'"$xd"'/'"$xd"'.0) basename $n;; esac; done'
+}
+nhi_of() { basename "$(dirname "$(readlink -f /sys/bus/thunderbolt/devices/domain${1%%-*})")"; }
+
 wait_link() {
   for _ in $(seq 60); do
-    ip link show thunderbolt0 >/dev/null 2>&1 && { ip link show thunderbolt1 >/dev/null 2>&1 || $NS ip link show thunderbolt1 >/dev/null 2>&1; } && return 0
+    IA=$(iface_of $XA; iface_of $XA $NS)
+    IB=$(iface_of $XB; iface_of $XB $NS)
+    [ -n "$IA" ] && [ -n "$IB" ] && return 0
     sleep 1
   done
   echo "link did not come up" >&2; return 1
 }
 
 setup() {
-  wait_link || exit 1
   sudo ip netns add tbB 2>/dev/null || true
-  if ip link show thunderbolt1 >/dev/null 2>&1; then sudo ip link set thunderbolt1 netns tbB; fi
-  sudo ip addr flush dev thunderbolt0
-  sudo ip addr add $A/24 dev thunderbolt0
-  sudo ip link set thunderbolt0 mtu 1500 up
-  $NS ip addr flush dev thunderbolt1
-  $NS ip addr add $B/24 dev thunderbolt1
-  $NS ip link set thunderbolt1 mtu 1500 up
+  wait_link || exit 1
+  # Only B lives in tbB; no other interface in the root namespace keeps a 10.77.0.x address.
+  for n in $($NS ls /sys/class/net); do
+    [ "$n" = lo ] || [ "$n" = "$IB" ] || $NS ip link set "$n" netns 1
+  done
+  [ -n "$(iface_of $XB)" ] && sudo ip link set "$IB" netns tbB
+  for n in $(ls /sys/class/net); do
+    case $n in thunderbolt*) sudo ip addr flush dev "$n";; esac
+  done
+  sudo ip addr add $A/24 dev "$IA"
+  sudo ip link set "$IA" mtu 1500 up
+  $NS ip addr flush dev "$IB"
+  $NS ip addr add $B/24 dev "$IB"
+  $NS ip link set "$IB" mtu 1500 up
   $NS ip link set lo up
   for _ in $(seq 30); do ping -c 1 -W 1 -q $B >/dev/null && break; sleep 1; done
   sleep 2
   ping -c 3 -W 2 -q $B >/dev/null || { echo "no ping" >&2; exit 1; }
 }
 
-irqs_of() { grep "PCI-MSIX-0000:$1 " /proc/interrupts | cut -d: -f1 | tr -d ' '; }
+irqs_of() { grep "PCI-MSIX-$1 " /proc/interrupts | cut -d: -f1 | tr -d ' '; }
 
 pin_irqs() {
-  for i in $(irqs_of 16:00.0); do echo $IRQ_A | sudo tee /proc/irq/$i/smp_affinity_list >/dev/null; done
-  for i in $(irqs_of 5d:00.0); do echo $IRQ_B | sudo tee /proc/irq/$i/smp_affinity_list >/dev/null; done
+  for i in $(irqs_of $(nhi_of $XA)); do echo $IRQ_A | sudo tee /proc/irq/$i/smp_affinity_list >/dev/null; done
+  for i in $(irqs_of $(nhi_of $XB)); do echo $IRQ_B | sudo tee /proc/irq/$i/smp_affinity_list >/dev/null; done
 }
 
 if [ "$PIN" = 1 ]; then TA="taskset -c $APP_A" TB="taskset -c $APP_B"; else TA="" TB=""; fi
@@ -50,8 +68,8 @@ if [ "$PIN" = 1 ]; then TA="taskset -c $APP_A" TB="taskset -c $APP_B"; else TA="
 env_dump() {
   {
     date -Is; uname -r
-    echo "PIN=$PIN REPS=$REPS"
-    for p in /sys/module/thunderbolt/parameters/*; do echo "$p=$(cat $p)"; done
+    echo "XA=$XA ($IA, $(nhi_of $XA)) XB=$XB ($IB, $(nhi_of $XB)) PIN=$PIN REPS=$REPS"
+    for p in /sys/module/thunderbolt/parameters/* /sys/module/thunderbolt_net/parameters/*; do echo "$p=$(cat $p)"; done
     echo "srcversion=$(cat /sys/module/thunderbolt/srcversion)"
     for d in /sys/bus/thunderbolt/devices/*-[1-9]; do
       echo "$d rx=$(cat $d/rx_speed)x$(cat $d/rx_lanes) tx=$(cat $d/tx_speed)x$(cat $d/tx_lanes)"
@@ -59,7 +77,7 @@ env_dump() {
     echo "governor=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor) no_turbo=$(cat /sys/devices/system/cpu/intel_pstate/no_turbo 2>/dev/null)"
     echo "min=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq) max=$(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq)"
     for s in /sys/devices/system/cpu/cpu0/cpuidle/state*; do echo "$(cat $s/name) disable=$(cat $s/disable)"; done
-    for i in $(irqs_of 16:00.0) $(irqs_of 5d:00.0); do echo "irq $i eff=$(cat /proc/irq/$i/effective_affinity_list)"; done
+    for i in $(irqs_of $(nhi_of $XA)) $(irqs_of $(nhi_of $XB)); do echo "irq $i eff=$(cat /proc/irq/$i/effective_affinity_list)"; done
   } > "$out/env.txt" 2>&1
 }
 

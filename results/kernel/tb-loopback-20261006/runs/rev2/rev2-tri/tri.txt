@@ -1,0 +1,17 @@
+== 0-3:1-3 alone
+stream chunk=1048576 seconds=5.00 sent=9.632 Gb/s received=9.628 Gb/s
+== 0-1:2-3 alone
+stream chunk=1048576 seconds=5.00 sent=9.617 Gb/s received=9.613 Gb/s
+== 1-1:2-1 alone
+stream chunk=1048576 seconds=5.00 sent=9.629 Gb/s received=9.628 Gb/s
+== all three, one direction
+stream chunk=1048576 seconds=10.00 sent=4.604 Gb/s received=4.604 Gb/s
+stream chunk=1048576 seconds=10.00 sent=6.677 Gb/s received=6.677 Gb/s
+stream chunk=1048576 seconds=10.00 sent=4.605 Gb/s received=4.605 Gb/s
+== all three, both directions (six streams)
+stream chunk=1048576 seconds=8.00 sent=3.984 Gb/s received=3.984 Gb/s
+stream chunk=1048576 seconds=8.00 sent=4.008 Gb/s received=4.008 Gb/s
+stream chunk=1048576 seconds=8.00 sent=4.008 Gb/s received=4.007 Gb/s
+stream chunk=1048576 seconds=10.00 sent=4.462 Gb/s received=4.462 Gb/s
+stream chunk=1048576 seconds=10.00 sent=4.120 Gb/s received=4.118 Gb/s
+stream chunk=1048576 seconds=10.00 sent=4.119 Gb/s received=4.117 Gb/s

@@ -1,0 +1,1 @@
+domains=3 hosts=2 bounce_fail_lines=0/20 stream_ok=0/10 stream_fail_lines=33

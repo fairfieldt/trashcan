@@ -2,6 +2,29 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-06: Linux 7.2.9 kernel and Thunderbolt 2 links
+
+incite moved to Linux 7.2.9 (`7.2.9-p2p`, [kernel.md](kernel.md)) to get USB4STREAM. Thunderbolt was measured
+with cables between ports on different controllers of the same machine
+(`results/kernel/tb-loopback-20261006/`); the kernel A/B is in `results/kernel/linux-7.2-20261006/`.
+
+- 7.2 against 6.12 with the same engine binary: each card loads its own VBIOS, clocks reach 850/1370, P2P passes,
+  `scripts/test-engine.sh` passes (worst relative error 9.95e-4), pp512 prefill 175.0-178.7 vs 170.2-174.4 tok/s,
+  decode 26.9-29.6 vs 26.3-28.7 tok/s. P2P writes (8.1-8.3 GB/s at 32 MiB) move a few percent between runs.
+- USB4STREAM: **25 us** round trip for 64 B and **9.7 Gb/s** one way per cable. `thunderbolt_net`: 9.2 Gb/s and
+  40 us with `throttling=32000` (128 us at the default). Each direction stops at about one lane (~9.6 Gb/s) on a
+  two-lane bonded link.
+- Locking the CPUs at 2.7 GHz (performance governor, turbo off) took `thunderbolt_net` on 6.12 from 6.5-8.4 Gb/s with
+  thousands of retransmits to a steady 8.8 Gb/s with almost none.
+- Stock USB4STREAM wedges the Falcon Ridge NHI: its Tx ring uses end-to-end flow control, never gets credits, and
+  after it is stopped every config read times out. Upstream already reverted Tx-side E2E in `thunderbolt_net` for
+  the same failure on other controllers (1881f2efbf7f). `kernel/patches-7.2/0005` removes it from USB4STREAM.
+- With three cables looping the controllers into a triangle, the Mac hangs in firmware before the startup chime on
+  reboot; with one cable it reboots normally. Linux shuts down cleanly in both cases.
+- thunderbolt-ibverbs (RDMA verbs over Thunderbolt) was built but not pursued: our engine doesn't use the RDMA
+  ecosystem, it has no dma-buf registration so data still goes through host memory, and USB4STREAM's latency is
+  already small next to a decode token.
+
 ## 2026-10-03: bounded tiled long-context prefill
 
 `results/engine/prefill-tiled-20261003/` records three-pass tiled attention with
