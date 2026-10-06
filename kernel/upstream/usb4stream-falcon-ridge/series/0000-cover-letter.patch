@@ -1,0 +1,34 @@
+From 16faa855ebc0f380f548736571d69b4c244c5a0e Mon Sep 17 00:00:00 2001
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Tue, 6 Oct 2026 16:28:44 -0700
+Subject: [PATCH 0/2] thunderbolt: stream: Fixes for Falcon Ridge hosts
+
+Hi,
+
+USB4STREAM wedges the Falcon Ridge 4C host routers in a Mac Pro 6,1:
+after a stream's Tx ring has run with end-to-end flow control, the
+router stops answering config reads until the NHI is reset. This is the
+failure commit 1881f2efbf7f fixed in thunderbolt_net; patch 1 does the
+same for USB4STREAM by keeping E2E only on the Rx ring.
+
+Patch 2 fixes HopID bookkeeping we noticed while recovering from that:
+HopIDs that failed to allocate when a stream attached were released
+later anyway, which warned in ida_free.
+
+Patch 1's change was tested on a Mac Pro 6,1 (three Falcon Ridge 4C
+controllers cabled to each other, software connection manager) running
+7.2.9: streams carry data both ways (64-byte round trips of 25 us,
+9.6 Gb/s one way per cable, 15.9 Gb/s across three cables at once) and
+no config read times out. Patch 2 is compile-tested only, on 7.2.9. The
+series applies to next-20261006 but was not built there.
+
+Tom Fairfield (2):
+  thunderbolt: stream: Don't use end-to-end flow control on the Tx ring
+  thunderbolt: stream: Don't release HopIDs that were never allocated
+
+ drivers/thunderbolt/stream.c | 40 ++++++++++++++++++++++++++----------
+ 1 file changed, 29 insertions(+), 11 deletions(-)
+
+-- 
+2.47.3
+
