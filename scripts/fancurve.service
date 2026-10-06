@@ -1,0 +1,11 @@
+[Unit]
+Description=Aggressive fan curve for incite (trashcan scripts/fancurve.sh)
+ConditionPathExists=/sys/devices/platform/applesmc.768/fan1_manual
+
+[Service]
+ExecStart=/usr/local/sbin/fancurve.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

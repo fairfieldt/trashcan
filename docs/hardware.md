@@ -76,6 +76,26 @@ minutes on incite). It was installed 2026-10-02.
   patches are in effect.
 - The `apple-gmux` WARN at boot also happens on the stock kernel.
 
+## Fan curve
+
+One SMC fan (`applesmc`, 790-1900 rpm) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing. Since
+2026-10-05 `fancurve.service` (`scripts/fancurve.sh`, installed in `/usr/local/sbin`) sets it from the hottest of the
+two GPU edge sensors and the CPU package: 790 rpm at 40 °C or below, linear to 1900 rpm at 50 °C. Idle is about 58 °C,
+so in practice the fan stays at 1900 rpm. An unreadable sensor means full speed. `systemctl stop fancurve` returns
+the fan to SMC control. To change the thresholds, set `Environment=T_LOW=... T_HIGH=...` in a drop-in.
+
+## Suspend is disabled
+
+incite does not resume from suspend; it drops off the network and needs a power cycle. Since FreedomBox was removed
+(2026-10-05), the GDM greeter's `gsd-power` suspended it after 900 s with no local activity. SSH sessions don't count
+as activity, so this hit a P2P test at 22:09 that evening. Since 2026-10-05:
+
+- `sleep`, `suspend`, `hibernate`, `hybrid-sleep` and `suspend-then-hibernate` targets are masked
+  (`systemctl unmask ...` to undo).
+- `/etc/gdm3/greeter.dconf-defaults` sets `sleep-inactive-ac-type='nothing'` (original in
+  `greeter.dconf-defaults.bak-trashcan`, applied with `/usr/share/gdm/generate-config`). fairfieldt's own GNOME
+  setting is `nothing` too.
+
 The `trashcan devices` report confirms the shape: 32 CUs (2 SE x 2 SA x 8), 4 SIMD16 per CU, wave64, 10 waves per
 SIMD, 256 VGPRs per SIMD, 32 KiB shared memory per workgroup, 5888 MiB VRAM heap, plus a 256 MiB CPU-visible BAR
 heap.
