@@ -111,3 +111,62 @@ tokens and activations exactly, including streamed 4- and 5-token prompt chunks.
 
 Within a machine, the two GPUs hand off through host memory (one fence wait per stage per forward). P2P
 pushes with cross-device semaphores, as in the Gemma tensor-parallel path, are the obvious next step.
+
+## Measured (incite, 2026-10-06)
+
+Kernel 7.2.9-p2p, schedutil with turbo, sustained 850/1370 MHz on both cards, `scripts/latency-run.py`.
+Reports and clocks: [results/qwen/bringup-20261006](../results/qwen/bringup-20261006/).
+
+| run | result |
+|---|---|
+| Qwen3.5-9B, GPU0 layers 0-21, GPU1 21-32 + head | matches llama.cpp CPU (logits rel 2.1e-2, same 10 greedy tokens) |
+| Qwen3.5-9B pp512 / tg128, two runs | 127.2 / 22.8 tok/s (ceiling 47 tok/s decode) |
+| Qwen3.5-9B pp2048 / tg32 | 120.8 / 21.9 tok/s |
+| Qwen3.8-27B, CPU layers 0-30 -> GPU node 30-48, 48-64 + head over TCP | matches llama.cpp CPU (logits rel 3.3e-2, same 10 greedy tokens) |
+
+The 27B run is a correctness check: incite alone lacks the VRAM, so its first 30 layers ran on the CPU
+reference path. With a second Mac, the same command uses that Mac's GPUs instead
+(`--nodes MAC2:7070`, no `--cpu`). Per-GPU allocation was 4.2 GiB (18 layers) and 5.1 GiB (16 layers +
+head), so two Macs fit the 27B at 16 layers per GPU with room for context.
+
+Decode at 48% of the bandwidth ceiling is the starting point, not a tuned result. The obvious costs:
+the host relay between stages, one fence wait per stage, unfused norms and the scalar attention kernels.
+
+## Building
+
+`scripts/cross-build.sh [DEST]` builds in the `kbuild` lima VM (aarch64 Debian 13 with an x86_64 cross
+toolchain and the same glibc as incite) in about 10 s and copies the binary to incite, keeping compile
+load off the benchmark machine. GPU runs on incite go through `~/trashcan-exp/locked-run.sh NAME CMD`,
+which holds `~/trashcan-exp/.lock` and records clocks.
+
+## Next: Qwen3.8-Flash-Next (`qwen4exp`)
+
+Shared with what exists: tokenizer, Gated DeltaNet (with a sigmoid output gate instead of SiLU and 48
+value heads), the gated attention projections, partial RoPE, the Q6 head and the machine chain. New:
+
+- **Gated residual (4 streams, rank 320)** replaces every norm. Before each sublayer, a mixer RMS-norms
+  each stream, computes an element-wise read gate through a 10240 -> 320 -> 10240 bottleneck and a
+  per-stream write gate; after it, each stream adds `gate_s * output`. The stage boundary payload becomes
+  the 4 x 2560 residual (40 KiB per token). There are 97 mixers per token, about 10% of active weights,
+  each two dependent GEMVs, so fusing is worth it.
+- **N-gram embedding at `blk.1`**: two hashes of the previous one and two tokens select 16 rows of 160
+  from a 320M-row table (51B parameters; about 29 GB at Q4_0 or 54 GB at Q8_0, 32-element blocks
+  because 160 is not a multiple of 256). It belongs on the driver's CPU next to the token embedding:
+  hash, gather, upload 10 KiB. A key/value gate and a dilated width-4 convolution (9 x 10240 f32 of
+  history) then run on the GPU.
+- **MoE**: softmax router over 512 experts, top 10 renormalized, plus a sigmoid-gated shared expert,
+  all 640 wide. Routed experts total about 121B parameters (68 GB at Q4_0), touched at about 1.33 GB per
+  token.
+- **Qwen Sparse Attention**: 24 Q / 2 KV heads with a 4-head, 128-wide indexer over 4-token pooled keys.
+  Up to 2051 visible tokens every block is selected, so attention is exactly dense there (still caching
+  raw and pooled indexer keys); beyond that, top 512 blocks plus the tail.
+- **MTP** layer: a full QSA layer with its own experts; it needs rollback snapshots of every recurrent
+  state, as speculative decoding does here generally.
+
+Placement keeps every layer's experts on the stage that owns the layer, so routing never crosses a
+machine. 48 layers divide into 8 per Mac on six Macs and 12 on four. VRAM is the binding constraint:
+about 72 GB on six Macs against roughly 68 GB of Q4_0 experts plus 2.5 GB of resident weights, KV and
+state. Six Macs therefore need experts near 4 bits per weight with little slack, and four Macs need about
+2.5-3 bits, or experts left in host RAM with a GPU cache of hot experts. The M3 Ultra (512 GB) holds
+the whole model in llama.cpp, so the first step is the same as for Qwen3.8-27B: a CPU reference checked
+against llama.cpp, then GPU stages checked layer by layer against it.

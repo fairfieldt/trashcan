@@ -5,6 +5,7 @@ written in Rust on raw Vulkan, with tensor parallelism across the two GPUs. llam
 
 - `docs/hardware.md`: the machine, the D700 clock bug, baseline numbers
 - `docs/upstream-survey.md`: upstream TP/meta-backend state, Vulkan PRs and forks
+- `docs/qwen.md`: Qwen3.8-27B / Qwen3.5-9B support, stages across GPUs and machines, Flash-Next plan
 - `docs/engine-plan.md`: the Rust engine design (TP layout, schedule, prefill, MTP, milestones)
 - `docs/engine-spec.md`: implementation reference: exact math, constants, formats, tokenizer, validation assets, GPU facts, conventions
 - `docs/findings.md`: measurements and bugs, newest first
@@ -41,6 +42,13 @@ records 28.75 tok/s prefill and 12.35 tok/s decode, with long prefill still a ma
 The [bounded tiled prefill round](results/engine/prefill-tiled-20261003/README.md)
 raises repeated 4K prefill by43.6% and reaches73,216 tokens3.55× faster than the
 saved baseline. The user stopped that 80K run before completion and decode.
+
+Qwen3.5-architecture models (Qwen3.8-27B, Qwen3.5-9B) run as a pipeline of layer stages across GPUs
+and machines; see [docs/qwen.md](docs/qwen.md):
+
+```sh
+target/release/trashcan qwen-chat ~/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf "Hello there"
+```
 
 To serve the model through the OpenAI Responses API:
 
