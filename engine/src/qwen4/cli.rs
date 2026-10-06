@@ -37,6 +37,9 @@ pub enum Cmd {
         last: Option<usize>,
         #[arg(long)]
         emulate_ggml: bool,
+        /// Write this run's last-token intermediates here.
+        #[arg(long)]
+        dump: Option<PathBuf>,
     },
     /// Render a text file as one user turn (thinking off) and print the token ids.
     TokenizeChat { model: PathBuf, file: PathBuf },
@@ -75,9 +78,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
             first,
             last,
             emulate_ggml,
+            dump,
         } => {
             super::cpu::EMULATE_GGML.store(emulate_ggml, std::sync::atomic::Ordering::Relaxed);
-            layer_check(&model, &reference, first, last)
+            layer_check(&model, &reference, first, last, dump.as_deref())
         }
         Cmd::TokenizeChat { model, file } => {
             let g = crate::gguf::Gguf::open(&model)?;
@@ -111,7 +115,7 @@ pub fn metrics(a: &[f32], b: &[f32]) -> (f64, f64) {
     ((num / den).sqrt(), dot / (na * den).sqrt())
 }
 
-fn layer_check(model: &Path, dir: &Path, first: usize, last: Option<usize>) -> Result<()> {
+fn layer_check(model: &Path, dir: &Path, first: usize, last: Option<usize>, dump: Option<&Path>) -> Result<()> {
     let g = crate::gguf::Gguf::open(model)?;
     let c = super::Config::new(&g)?;
     let w = c.width();
@@ -129,7 +133,22 @@ fn layer_check(model: &Path, dir: &Path, first: usize, last: Option<usize>) -> R
         anyhow::ensure!(input.len() == n * w, "layer {il}: expected {n} input rows");
         let mut x = input.clone();
         let mut stage = super::cpu::CpuStage::new(&c, il, il + 1, n + 1, false);
-        stage.forward(&g, &mut x, Some(&ple), 0, n, &mut None)?;
+        let mut caps = super::cpu::Captures::new();
+        stage.forward(&g, &mut x, Some(&ple), 0, n, &mut Some(&mut caps))?;
+        // Intermediates the reference also dumped (last token), for layers it dumped in detail.
+        for (name, v) in &caps {
+            if let Some(out) = dump {
+                std::fs::create_dir_all(out)?;
+                std::fs::write(out.join(format!("{name}.f32")), bytemuck::cast_slice(v))?;
+            }
+            let path = dir.join(format!("{name}.f32"));
+            if let Ok(r) = read_f32(&path) {
+                if r.len() == v.len() {
+                    let (rel, cos) = metrics(v, &r);
+                    println!("  {name}\trel {rel:.3e}\tcos {cos:.6}");
+                }
+            }
+        }
         // The last layer's reference keeps only the rows gathered for the output.
         let rows = want.len() / w;
         let skip = n - rows;

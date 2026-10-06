@@ -56,9 +56,11 @@ fn round_activations(ty: GgmlType, x: &[f32]) -> Option<Vec<f32>> {
     Some(y)
 }
 
-/// y[t][row] = W[row] . x[t] over a whole tensor, rows split across threads.
+/// y[t][row] = W[row] . x[t] over a whole tensor, rows split across threads. When emulating, a product with at
+/// least 32 rows, 32 columns and 32 tokens runs unrounded in f32, as ggml's BLAS backend takes those over.
 fn matmul(g: &Gguf, t: &TensorInfo, x: &[f32], n: usize) -> Vec<f32> {
-    match round_activations(t.ty, x) {
+    let blas = n >= 32 && t.dims[0] >= 32 && t.dims[1] >= 32;
+    match round_activations(t.ty, x).filter(|_| !blas) {
         Some(xr) => crate::qwen::cpu::matmul(g, t, &xr, n),
         None => crate::qwen::cpu::matmul(g, t, x, n),
     }
@@ -644,6 +646,12 @@ impl CpuStage {
             }
         }
         record(format!("Qcur-{il}"), &q, nh * hd);
+        // Scores of the last token's complete blocks, padded with -inf to llama.cpp's pool count (multiples of 64).
+        let complete = (pos + n) / kp;
+        let mut scores = Self::block_scores(c, &iq[(n - 1) * ih * id..], pooled, complete);
+        scores.resize((complete + 1).next_multiple_of(64).max(64), f32::NEG_INFINITY);
+        let width = scores.len();
+        record(format!("indexer_score-{il}"), &scores, width);
         let kpos = (pos + n - 1) * nkv * hd;
         record(format!("Kcur-{il}#2"), &kc[kpos..kpos + nkv * hd], nkv * hd);
 
@@ -694,18 +702,24 @@ impl CpuStage {
     /// Positions a token at `p` attends to: every complete block while there are at most `top_blocks`, otherwise
     /// the best-scoring ones (score = sum over indexer heads of relu(q . pooled) / sqrt(idx_dim); ties go to the
     /// earlier block), then the incomplete tail ending at `p`.
+    /// Indexer scores of the first `complete` blocks for one token's indexer query (heads x idx_dim).
+    pub(crate) fn block_scores(c: &Config, iq: &[f32], pooled: &[f32], complete: usize) -> Vec<f32> {
+        let id = c.idx_dim;
+        let scale = 1. / (id as f32).sqrt();
+        (0..complete)
+            .map(|b| {
+                let kb = &pooled[b * id..(b + 1) * id];
+                iq.chunks_exact(id).map(|q| dot(q, kb).max(0.)).sum::<f32>() * scale
+            })
+            .collect()
+    }
+
     pub(crate) fn select(c: &Config, iq: &[f32], pooled: &[f32], p: usize) -> Vec<usize> {
-        let (id, kp) = (c.idx_dim, c.kpool);
+        let kp = c.kpool;
         let complete = (p + 1) / kp;
         let mut blocks: Vec<usize> = (0..complete).collect();
         if complete > c.top_blocks() {
-            let scale = 1. / (id as f32).sqrt();
-            let scores: Vec<f32> = (0..complete)
-                .map(|b| {
-                    let kb = &pooled[b * id..(b + 1) * id];
-                    iq.chunks_exact(id).map(|q| dot(q, kb).max(0.)).sum::<f32>() * scale
-                })
-                .collect();
+            let scores = Self::block_scores(c, iq, pooled, complete);
             blocks.sort_by(|a, b| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b)));
             blocks.truncate(c.top_blocks());
             blocks.sort_unstable();

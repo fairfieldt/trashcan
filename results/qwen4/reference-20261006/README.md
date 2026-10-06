@@ -31,3 +31,22 @@ is why the f32 reference differs by a few percent per layer. With that rounding 
 events: an activation landing on the other side of a Q8 rounding boundary, or a near-tied 10th expert
 (e.g. layer 4: experts 198 and 389 at router probabilities 0.01060 and 0.01065). Over 48 layers those events
 accumulate to the end-to-end differences above, without changing the greedy tokens.
+
+## Sparse attention: 3061-token prompt
+
+The first 8.2 KB of `docs/engine-spec.md` behind "Summarize the following document in three sentences."
+(3061 tokens through the chat template, `trashcan qwen4 tokenize-chat`). At the last token 765 blocks are
+complete, so QSA keeps 512 of them plus a 1-token tail. llama.cpp ran with `DUMP_NO_REPACK=1 DUMP_CTX=4096`
+and whole-prompt rows of the QSA layers' inputs (`DUMP_FULL=l_last-2,l_last-22,l_last-46,...`).
+
+For batches of 32 or more, llama.cpp's BLAS backend runs dense products in f32 (rows, columns and tokens all
+at least 32), while expert products keep Q8_0 activations; the emulation follows that rule.
+
+| check | result |
+|---|---|
+| greedy tokens | identical 10/10: 1919 2128 5529 264 11346 7873 24332 364 279 30125 |
+| end to end, emulated | layer 0 rel 1.1e-5, logits rel 5.6e-2, cos 0.99841 ([compare-long-emulated.txt](compare-long-emulated.txt)) |
+| teacher-forced QSA layers 3, 23, 47 | identical top-512 block sets; indexer scores within 7e-5; Q within 7e-6; attention output within 1.3e-3 ([long-qsa-layers.txt](long-qsa-layers.txt)) |
+
+The last 1e-3 in the attention output is llama.cpp's: on Apple Silicon its f16 dot products accumulate in f16
+(`GGML_F16x8_FMA`), which the emulation does not reproduce.
