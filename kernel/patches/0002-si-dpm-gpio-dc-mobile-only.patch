@@ -1,3 +1,6 @@
+drm/amd/pm/si: Check AMD_IS_MOBILITY flag for PPSMC_SYSTEMFLAG_GPIO_DC
+Backport of Timur Kristof's upstream commit cd883d0a3937 (mainline 7.3-rc6, Cc: stable).
+
 diff --git a/drivers/gpu/drm/amd/pm/legacy-dpm/si_dpm.c b/drivers/gpu/drm/amd/pm/legacy-dpm/si_dpm.c
 index 620deb8..ada8ffa 100644
 --- a/drivers/gpu/drm/amd/pm/legacy-dpm/si_dpm.c

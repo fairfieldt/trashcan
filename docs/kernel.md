@@ -13,12 +13,14 @@ VBIOS selection and clocks, P2P passes, the engine test suite passes, and pp512 
 | Patch | What it does | Why we need it | Upstream |
 |---|---|---|---|
 | 0001 `amdgpu-vfct-exact-match-first` | Pick the VFCT VBIOS image whose PCI bus matches exactly, before mainline's soft filter | Otherwise both D700s get 02:00.0's VBIOS and the second card misbehaves | Prepared in `kernel/upstream/vfct-exact-match/`, not sent |
-| 0002 `si-dpm-gpio-dc-mobile-only` | Set `PPSMC_SYSTEMFLAG_GPIO_DC` only on mobile SI parts | Without it the cards stay in the DC (battery) power state at 300/150 MHz; 7.2 already has the related `RunningOnAC` notification | Not sent |
+| 0002 `si-dpm-gpio-dc-mobile-only` | Set `PPSMC_SYSTEMFLAG_GPIO_DC` only on mobile SI parts | Without it the cards stay in the DC (battery) power state at 300/150 MHz | Backport of Timur Kristóf's cd883d0a3937: in mainline 7.3-rc6 and tagged for stable, not in 7.2.9. Drop it when the 7.2.x in use has it (the build stops at this patch then) |
 | 0003 `p2pdma-whitelist-ivy-bridge-ep` | Add the Xeon E5 v2 host bridge (8086:0e00) to the P2PDMA whitelist | Without it dma-buf imports between the D700s migrate to system memory | Prepared in `kernel/upstream/p2pdma-ivy-bridge-ep/`, not sent |
 | 0004 `thunderbolt-net-throttling-param` | `thunderbolt_net` ring interrupt throttle as the `throttling` module parameter (default 128000 ns) | 128 us sets back-to-back latency; 32000 gives 40 us round trips at the same throughput | Local tuning knob |
 | 0005 `thunderbolt-stream-no-tx-e2e` | USB4STREAM Tx ring without E2E flow control (Rx keeps it) | With Tx-side E2E the Falcon Ridge NHI wedges and stops answering config reads | Should be reported; same failure upstream fixed in `thunderbolt_net` with revert 1881f2efbf7f |
 
-0001 and 0003 are the upstream-form versions of the 6.12 patches of the same names. 0002 is unchanged from 6.12.
+0001 and 0003 are the upstream-form versions of the 6.12 patches of the same names. 0002 is unchanged from 6.12 and
+identical to the upstream commit. 7.2 already has the related upstream fix 86b6cf8387a4 ("Fix AC/DC switch
+notification"); the companion 08c9100f6529 ("Fix updating clock limits on AC/DC", 7.3-rc6) isn't needed on the D700s.
 
 ## Config
 
