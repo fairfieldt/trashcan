@@ -51,8 +51,12 @@ pub struct Options {
     cpu_reduce: bool,
     #[arg(long)]
     draft: Option<PathBuf>,
-    #[arg(long, default_value_t = 3)]
-    draft_tokens: usize,
+    /// Drafted tokens per round (default: 3 for Gemma's assistant, 2 for Qwen's MTP layer).
+    #[arg(long)]
+    draft_tokens: Option<usize>,
+    /// Qwen: draft only among the first N token ids (0: the whole vocabulary).
+    #[arg(long, default_value_t = 65536)]
+    draft_vocab: usize,
     /// Replay every prompt from position zero instead of reusing resident KV.
     #[arg(long)]
     no_prefix_cache: bool,
@@ -284,7 +288,8 @@ pub fn serve(mut options: Options) -> Result<()> {
         drop(gguf);
         let devices = qwen::chat::devices(options.cpu, options.gpus.clone())?;
         let draft = options.mtp.is_some();
-        let verify = if draft { options.draft_tokens + 1 } else { 0 };
+        let k = options.draft_tokens.unwrap_or(2);
+        let verify = if draft { k + 1 } else { 0 };
         let mut chain = qwen::net::Chain::new(
             &options.model,
             devices,
@@ -297,7 +302,10 @@ pub fn serve(mut options: Options) -> Result<()> {
             draft,
         )?;
         chain.max_checkpoints = options.checkpoints;
-        let spec = if draft { Some(qwen::spec::Spec::new(&chain, options.draft_tokens)?) } else { None };
+        let mut spec = if draft { Some(qwen::spec::Spec::new(&chain, k)?) } else { None };
+        if let Some(s) = spec.as_mut() {
+            s.vocab = options.draft_vocab;
+        }
         let tokenizer = Tokenizer::new(&chain.local.gguf)?;
         let backend = Qwen {
             tokens: qwen::native::Tokens::new(&tokenizer)?,
@@ -309,7 +317,8 @@ pub fn serve(mut options: Options) -> Result<()> {
         return run(options, backend);
     }
     drop(gguf);
-    crate::validate_draft(options.draft.as_ref(), options.draft_tokens, options.batch)?;
+    options.draft_tokens.get_or_insert(3);
+    crate::validate_draft(options.draft.as_ref(), options.draft_tokens.unwrap(), options.batch)?;
     options.model_id.get_or_insert("gemma-4-12b".into());
     let mut engine = Engine::new(
         &options.model,
@@ -510,6 +519,7 @@ fn generate<W: Write>(
         }
         let k = options
             .draft_tokens
+            .unwrap_or(3)
             .min(budget - generated - 1)
             .min(engine.remaining().saturating_sub(1));
         if let Some(draft) = assistant.as_mut().filter(|_| k > 0) {

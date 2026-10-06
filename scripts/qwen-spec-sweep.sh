@@ -1,7 +1,8 @@
 #!/bin/bash
-# Greedy speculative-decoding depth sweep on incite: the three Gemma MTP benchmark prompts, 128 tokens each,
-# thinking off, one process per depth (0 = no MTP). Run inside ~/trashcan-exp/locked-run.sh from a workspace
-# holding bin/trashcan. Output: OUT/d{depth}.out (text) and OUT/d{depth}.log (rates and MTP stats).
+# Speculative-decoding depth sweep on incite: the three Gemma MTP benchmark prompts, 128 tokens each,
+# thinking off, one process per depth (0 = no MTP). TEMP sets the temperature (default 0, greedy).
+# Run inside ~/trashcan-exp/locked-run.sh from a workspace holding bin/trashcan.
+# Output: OUT/d{depth}.out (text) and OUT/d{depth}.log (rates and MTP stats).
 # usage: scripts/qwen-spec-sweep.sh MODEL MTP OUT [DEPTH ...] [-- EXTRA ARGS]
 set -euo pipefail
 model=$1 mtp=$2 out=$3
@@ -17,7 +18,7 @@ Explain photosynthesis to a ten-year-old in three short paragraphs.
 /reset
 Write a Python function that reads a CSV file and returns rows where the age column is at least 18. Include a short example."
 for d in "${depths[@]}"; do
-    args=(qwen-chat "$model" --temperature 0 --max-tokens 128 --checkpoints 0 "$@")
+    args=(qwen-chat "$model" --temperature "${TEMP:-0}" --max-tokens 128 --checkpoints 0 "$@")
     [ "$d" -gt 0 ] && args+=(--mtp "$mtp" --draft-tokens "$d")
     printf '%s\n' "$prompts" | sudo -n python3 "$HOME/trashcan/scripts/latency-run.py" bin/trashcan "${args[@]}" \
         > "$out/d$d.out" 2> "$out/d$d.log"

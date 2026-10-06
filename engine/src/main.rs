@@ -311,10 +311,10 @@ struct QwenRun {
     #[arg(long)]
     mtp: Option<PathBuf>,
     /// Drafted tokens per speculative round.
-    #[arg(long, default_value_t = 3)]
+    #[arg(long, default_value_t = 2)]
     draft_tokens: usize,
     /// Draft only among the first N token ids (0: the whole vocabulary); a smaller draft head is cheaper.
-    #[arg(long, default_value_t = 0)]
+    #[arg(long, default_value_t = 65536)]
     draft_vocab: usize,
     /// Largest rollback batch (default: draft tokens + 1 with --mtp, else 0).
     #[arg(long)]
