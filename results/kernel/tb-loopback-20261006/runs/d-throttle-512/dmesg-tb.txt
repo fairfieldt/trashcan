@@ -1,0 +1,10 @@
+[ 1918.993535] thunderbolt 0-3: host disconnected
+[ 1918.994273] ACPI: bus type thunderbolt unregistered
+[ 1919.092161] ACPI: bus type thunderbolt registered
+[ 1919.092657] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[ 1919.096822] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[ 1919.100906] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[ 1923.399441] thunderbolt 0-3: new host found, vendor=0x8086 device=0x1
+[ 1923.399448] thunderbolt 0-3: Intel Corp. incite
+[ 1924.423506] thunderbolt 1-3: new host found, vendor=0x8086 device=0x1
+[ 1924.423513] thunderbolt 1-3: Intel Corp. incite
