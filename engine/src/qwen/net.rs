@@ -283,6 +283,20 @@ pub struct Chain {
     pub plans: Vec<Vec<(usize, usize)>>,
     /// Columns of the latest verification batch.
     verified: usize,
+    /// Tokens processed at each position: the live state covers `history[..pos]`; later entries stay
+    /// valid in the KV caches (and for checkpoints) until a forward rewrites their positions.
+    pub history: Vec<u32>,
+    checkpoints: Vec<Checkpoint>,
+    /// Checkpoint slots kept for prefix reuse (least recently used are replaced); 0 disables reuse.
+    pub max_checkpoints: usize,
+    clock: u64,
+}
+
+/// Recurrent state of every machine after `history[..pos]`.
+struct Checkpoint {
+    slot: usize,
+    pos: usize,
+    used: u64,
 }
 
 impl Chain {
@@ -357,6 +371,10 @@ impl Chain {
             mtp: draft,
             plans,
             verified: 0,
+            history: Vec::new(),
+            checkpoints: Vec::new(),
+            max_checkpoints: 0,
+            clock: 0,
         })
     }
 
@@ -366,6 +384,10 @@ impl Chain {
         ensure!(self.pos + n <= self.context, "context exhausted");
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let pos = self.pos;
+        // Rewriting these positions invalidates later history and the checkpoints that depend on it.
+        self.history.truncate(pos);
+        self.checkpoints.retain(|c| c.pos <= pos);
+        self.history.extend_from_slice(tokens);
         let out = self.local.forward(x, pos, tokens, verify, dump.as_deref_mut())?;
         self.pos += n;
         self.verified = if verify { n } else { 0 };
@@ -408,6 +430,7 @@ impl Chain {
                 conn.send(&json!({"rollback": keep - 1}), &[])?;
             }
             self.pos -= self.verified - keep;
+            self.history.truncate(self.pos);
         }
         self.verified = 0;
         Ok(())
@@ -452,6 +475,64 @@ impl Chain {
     pub fn prefill(&mut self, ids: &[u32]) -> Result<Candidates> {
         self.pos = 0;
         self.extend(ids)
+    }
+
+    /// Checkpoint the current position for prefix reuse, replacing the least recently used slot.
+    pub fn checkpoint(&mut self) -> Result<()> {
+        if self.max_checkpoints == 0 || self.pos == 0 {
+            return Ok(());
+        }
+        self.clock += 1;
+        if let Some(c) = self.checkpoints.iter_mut().find(|c| c.pos == self.pos) {
+            c.used = self.clock;
+            return Ok(());
+        }
+        let slot = if self.checkpoints.len() < self.max_checkpoints {
+            (0..).find(|s| !self.checkpoints.iter().any(|c| c.slot == *s)).unwrap()
+        } else {
+            let oldest = (0..self.checkpoints.len()).min_by_key(|&i| self.checkpoints[i].used).unwrap();
+            self.checkpoints.remove(oldest).slot
+        };
+        self.save(slot)?;
+        self.checkpoints.push(Checkpoint { slot, pos: self.pos, used: self.clock });
+        Ok(())
+    }
+
+    /// Prefill `ids` from the longest cached prefix: the live state or a checkpoint at or before the
+    /// common prefix with `history` (at least the last token is recomputed for its candidates).
+    /// Checkpoints are taken at `marks` and at the end of the prompt. Returns the last token's candidates
+    /// and the number of reused positions.
+    pub fn prefill_cached(&mut self, ids: &[u32], marks: &[usize]) -> Result<(Candidates, usize)> {
+        ensure!(!ids.is_empty(), "empty prompt");
+        let common = self.history.iter().zip(ids).take_while(|(a, b)| a == b).count();
+        let target = if self.max_checkpoints == 0 { 0 } else { common.min(ids.len() - 1) };
+        let live = if self.pos <= target { self.pos } else { 0 };
+        let best = self.checkpoints.iter().filter(|c| c.pos <= target).max_by_key(|c| c.pos);
+        match best {
+            Some(c) if c.pos > live => {
+                let (slot, pos) = (c.slot, c.pos);
+                self.clock += 1;
+                self.checkpoints.iter_mut().find(|c| c.slot == slot).unwrap().used = self.clock;
+                self.restore(slot, pos)?;
+            }
+            _ => self.pos = live,
+        }
+        let start = self.pos;
+        let mut cuts: Vec<usize> = marks.iter().copied().filter(|&m| m > start && m < ids.len()).collect();
+        cuts.sort_unstable();
+        cuts.dedup();
+        cuts.push(ids.len());
+        let mut top = None;
+        let mut at = start;
+        for (i, &end) in cuts.iter().enumerate() {
+            let pieces: Vec<_> = ids[at..end].chunks(self.max_batch).collect();
+            for (j, chunk) in pieces.iter().enumerate() {
+                top = self.forward(chunk, i + 1 == cuts.len() && j + 1 == pieces.len(), None)?;
+            }
+            self.checkpoint()?;
+            at = end;
+        }
+        Ok((top.context("missing candidates")?, start))
     }
 
     /// Process `ids` at the current position in chunks; only the final chunk waits for its result.

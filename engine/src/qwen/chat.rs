@@ -115,7 +115,7 @@ pub fn chat(
         messages.push(json!({"role":"user","content":user}));
         let ids = t.encode(&t.render(&messages, thinking)?, true, true);
         let start = Instant::now();
-        let top = e.prefill(&ids)?;
+        let (top, reused) = e.prefill_cached(&ids, &[turn_start(t, &ids)])?;
         let pp = start.elapsed().as_secs_f64();
         let start = Instant::now();
         let mut in_thought = false;
@@ -138,21 +138,39 @@ pub fn chat(
             }
             Ok(())
         })?;
+        let decode = start.elapsed().as_secs_f64();
+        e.checkpoint()?;
         println!();
         eprintln!(
-            "prefill: {} tokens, {:.2} tok/s; decode: {} tokens, {:.2} tok/s",
+            "prefill: {} tokens ({} reused), {:.2} tok/s; decode: {} tokens, {:.2} tok/s",
             ids.len(),
-            ids.len() as f64 / pp,
+            reused,
+            (ids.len() - reused) as f64 / pp,
             generated.len(),
-            generated.len() as f64 / start.elapsed().as_secs_f64()
+            generated.len() as f64 / decode
         );
         if let Some(s) = spec.as_deref() {
             eprintln!("MTP: {}", s.stats.json());
         }
-        messages.push(json!({"role":"assistant","content":t.decode(&generated, false)}));
+        messages.push(assistant_message(&t.decode(&generated, false)));
         if !interactive {
             return Ok(());
         }
+    }
+}
+
+/// Position just after the last `<|im_start|>assistant\n`: earlier turns render the same up to there even
+/// when the template drops their reasoning, so it is the checkpoint worth keeping for the next turn.
+pub fn turn_start(t: &Tokenizer, ids: &[u32]) -> usize {
+    let open = t.encode("<|im_start|>assistant\n", false, true);
+    ids.windows(open.len()).rposition(|w| w == open.as_slice()).map_or(0, |i| i + open.len())
+}
+
+/// An assistant turn for the chat template: reasoning before `</think>`, the answer after it.
+pub fn assistant_message(text: &str) -> Value {
+    match text.split_once("</think>") {
+        Some((r, c)) => json!({"role":"assistant","reasoning_content":r.trim(),"content":c.trim_start_matches('\n')}),
+        None => json!({"role":"assistant","content":text}),
     }
 }
 
@@ -253,7 +271,8 @@ pub fn check(e: &mut Chain, t: &Tokenizer, tokens: usize, steps: usize, spec: Op
     let top = e.prefill(&ids)?;
     let prefill_s = start.elapsed().as_secs_f64();
     let p0 = e.pos;
-    e.save(0)?;
+    const SLOT: usize = 1 << 20;
+    e.save(SLOT)?;
     let serial = |e: &mut Chain, first: &[(f32, u32)]| -> Result<(Vec<u32>, Vec<f32>, Vec<f32>)> {
         let (mut ids, mut scores, mut margins) = (Vec::new(), Vec::new(), Vec::new());
         let mut top = first.to_vec();
@@ -270,12 +289,12 @@ pub fn check(e: &mut Chain, t: &Tokenizer, tokens: usize, steps: usize, spec: Op
     let start = Instant::now();
     let (expected, scores, margins) = serial(e, &top)?;
     let decode_s = start.elapsed().as_secs_f64();
-    e.restore(0, p0)?;
+    e.restore(SLOT, p0)?;
     let (again, again_scores, _) = serial(e, &top)?;
     let restore_exact = again == expected && again_scores == scores;
 
     // Verification batches over the expected continuation, rolling back to a varying prefix each time.
-    e.restore(0, p0)?;
+    e.restore(SLOT, p0)?;
     let mut column_mismatches = Vec::new();
     let mut max_score_error = 0f32;
     let (mut i, mut round) = (0, 0);
@@ -297,7 +316,7 @@ pub fn check(e: &mut Chain, t: &Tokenizer, tokens: usize, steps: usize, spec: Op
 
     let speculative = match spec {
         Some(s) => {
-            e.restore(0, p0)?;
+            e.restore(SLOT, p0)?;
             let mut sampler = Sampler::new(0., 1, 1., 1)?;
             let start = Instant::now();
             let got = generate(e, expected[0], steps, &mut sampler, &[], Some(&mut *s), |_| Ok(()))?;

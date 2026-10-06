@@ -306,13 +306,19 @@ struct QwenRun {
     /// Largest rollback batch (default: draft tokens + 1 with --mtp, else 0).
     #[arg(long)]
     verify: Option<usize>,
+    /// Checkpoints kept for prefix reuse across turns (0 disables reuse).
+    #[arg(long, default_value_t = 8)]
+    checkpoints: usize,
 }
 impl QwenRun {
     fn chain(&self, model: &Path) -> Result<qwen::net::Chain> {
         let devices = qwen::chat::devices(self.cpu, self.gpus.clone())?;
         let draft = self.mtp.is_some();
         let verify = self.verify.unwrap_or(if draft { self.draft_tokens + 1 } else { 0 });
-        qwen::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch, verify, self.mtp.as_deref(), draft)
+        let mut chain =
+            qwen::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch, verify, self.mtp.as_deref(), draft)?;
+        chain.max_checkpoints = self.checkpoints;
+        Ok(chain)
     }
     fn spec(&self, chain: &qwen::net::Chain) -> Result<Option<qwen::spec::Spec>> {
         self.mtp
