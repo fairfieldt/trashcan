@@ -1,0 +1,11 @@
+scripts/test-server.py against `trashcan serve Qwen3.5-9B-trashcan-Q4_0.gguf`, both runs passed every group:
+CPU path on the Mac (`--cpu`, no MTP) and both D700s with `--mtp ... --draft-tokens 2`
+(scripts/qwen-serve-test.sh; server log results/serve-9b.log on incite).
+
+PASS: discovery, JSON, SSE, deterministic parity and persistent HTTP
+PASS: alternating greedy/stochastic graphs and seeded parity
+PASS: token-limit terminal event and separate reasoning
+PASS: invalid requests and prompt overflow
+PASS: native function call and full-history tool continuation
+PASS: namespaces, single-call control, custom tools and client tool search
+Responses server checks passed

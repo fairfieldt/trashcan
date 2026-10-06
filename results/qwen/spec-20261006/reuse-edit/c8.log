@@ -1,0 +1,10 @@
+CPU latency request: 0 us, scoped to this command
+plan: [[(0, 21), (21, 32)]]
+GPU0: layers 0..21
+GPU0: 3148.4 MiB allocated
+GPU1: layers 21..32 + head + MTP
+GPU1: 3151.6 MiB allocated
+prefill: 5867 tokens (0 reused), 99.24 tok/s; decode: 32 tokens, 28.42 tok/s
+MTP: {"acceptance":0.6923076923076923,"accepted":18,"accepted_at":[10,8],"draft_ms_per_round":9.734653999999999,"offered_at":[13,13],"proposed":26,"rollback_ms_per_round":0.42353030769230765,"rounds":13,"tokens_per_round":2.3846153846153846,"verify_ms_per_round":76.43405853846154}
+prefill: 5866 tokens (4096 reused), 85.23 tok/s; decode: 4 tokens, 23.25 tok/s
+MTP: {"acceptance":0.6666666666666666,"accepted":20,"accepted_at":[11,9],"draft_ms_per_round":9.718809266666664,"offered_at":[15,15],"proposed":30,"rollback_ms_per_round":0.4280635333333333,"rounds":15,"tokens_per_round":2.3333333333333335,"verify_ms_per_round":76.3635338}

@@ -1,0 +1,12 @@
+
+> The primary goal of this design is to build a purpose-built, Rust-based inference engine that achieves significantly higher throughput than existing solutions by leveraging tensor parallelism across two FirePro D700 GPUs to run the Gemma 4 12B model in Q4_0 quantization. It prioritizes performance optimization
+
+> It targets a **Mac Pro 6,1** equipped with **two AMD FirePro D700** GPUs (based on the GCN 1.0 architecture).
+
+> Based on the document, here are two risks mentioned:
+
+1.  **Performance Gap vs. Theoretical Ceiling:** The document explicitly states that the calculated ideal bounds (e.g., 51.57 tok/s for decode) are "not practical performance predictions" because they omit significant overheads like attention,
+
+> Vulkan
+
+> 

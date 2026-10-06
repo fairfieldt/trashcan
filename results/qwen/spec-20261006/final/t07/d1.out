@@ -1,0 +1,35 @@
+
+> A **transformer** is an electrical device that transfers electrical energy between two or more circuits through electromagnetic induction. It is the fundamental component used in power grids to step up (increase) or step down (decrease) voltage levels.
+
+Here is a step-by-step explanation of how a transformer works:
+
+### 1. The Core Components
+Before understanding the process, it helps to know what a transformer is made of:
+*   **The Core**: Usually made of laminated soft iron or ferrite. This material has high magnetic permeability, meaning it easily conducts magnetic fields while minimizing energy loss.
+*   **The
+
+> 
+> Photosynthesis is like a special magic trick that plants do to make their own food! Instead of going to a store to buy lunch, plants use sunlight, water, and air to create energy. You can think of the sun as the chef, the water as the ingredients, and the leaves as the kitchen where the cooking happens.
+
+The plant's leaves act like solar panels, catching the light from the sun. They pull water up from their roots and grab carbon dioxide from the air around them. Inside the leaf cells, these three things mix together to create sugar, which is the plant's delicious meal that helps it grow tall and strong
+
+> 
+> Here is a Python function that reads a CSV file and filters rows where the age is at least 18. It uses the built-in `csv` module to handle the file parsing.
+
+### Python Function
+
+```python
+import csv
+
+def filter_adults(csv_file_path):
+    """
+    Reads a CSV file and returns a list of rows where the age is at least 18.
+    
+    Args:
+        csv_file_path (str): Path to the input CSV file.
+        
+    Returns:
+        list: A list of dictionaries representing rows where age >= 18.
+    """
+
+> 
