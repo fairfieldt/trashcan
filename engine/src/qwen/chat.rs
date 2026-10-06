@@ -241,6 +241,16 @@ pub fn validate(e: &mut Chain, out: &Path, tokens: &[u32], greedy: usize) -> Res
     if let Some(l) = caps.get("result_output") {
         std::fs::write(out.join("logits.f32"), bytemuck::cast_slice(l))?;
     }
+    if e.mtp {
+        // Three chained greedy MTP drafts after the prompt over the full vocabulary: "id score" per line,
+        // the 64 candidates of each step, steps separated by a blank line.
+        let drafts = e.draft(top[0].1, 3, 0, &Sampler::new(0., 1, 1., 1)?, 0, &[])?;
+        let text: Vec<String> = drafts
+            .iter()
+            .map(|(_, top)| top.iter().map(|(s, id)| format!("{id} {s}\n")).collect())
+            .collect();
+        std::fs::write(out.join("mtp_drafts.txt"), text.join("\n"))?;
+    }
     let mut ids = Vec::new();
     while ids.len() < greedy {
         ids.push(top[0].1);

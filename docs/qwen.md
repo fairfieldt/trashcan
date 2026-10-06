@@ -242,6 +242,7 @@ Same machine and clocks (850/1370 MHz sustained). Reports, outputs and clock log
 | `qwen-check` 9B GPUs, 600-token prompt, 64 steps, MTP k=3 | pass: restore bitwise exact, 32 verification batches (2-4 tokens) with rollbacks match serial decode (top score error 1.6e-4), speculative output identical |
 | `qwen-check` 27B hybrid (CPU 0-30, GPU 30-48, 48-64 + head + MTP), 48 tokens, 24 steps, k=2 | pass: verification score error 3.5e-4, speculative output identical, 70% acceptance |
 | same checks on the CPU path, one process and a two-process TCP chain | pass, verification bitwise exact |
+| GPU MTP layer vs the CPU reference (`qwen-validate --mtp`, 9B, three chained drafts after the reference prompt) | same top token at every step, top-10 overlap 10/10, largest score difference 0.005 (rel 4.7e-4) over all 64 candidates |
 | our MTP vs llama.cpp `--spec-type draft-mtp` (9B, k=3, same 48-token prompt, 20 tokens) | same text; 13/21 vs 12/19 drafts accepted |
 | `scripts/test-server.py`, 9B GPUs, MTP k=2 | pass (JSON, SSE, seeded sampling, tools, tool continuations) |
 
@@ -271,7 +272,8 @@ its CPU stage).
 
 Prefix reuse, 9B, MTP k=2: a 2.7K-token document turn followed by three short questions. With reuse each
 follow-up prefills 84, 56 and 92 tokens (2675, 2755 and 2807 reused; about 1.4 s instead of 25 s), and the
-text is identical to the run without reuse.
+text is identical to the run without reuse. Qwen3.8-27B with thinking on (CPU path, two short turns)
+reuses the whole first turn, reasoning included: 100 of 118 tokens.
 
 ## Building
 
