@@ -293,6 +293,20 @@ pub struct Chain {
     clock: u64,
 }
 
+/// Prompt positions between checkpoints in long prefills.
+const CHECKPOINT_INTERVAL: usize = 4096;
+
+/// Where a prefill of positions `start..end` stops for a checkpoint: the `marks` inside it, every
+/// CHECKPOINT_INTERVAL positions (so an edit deep in a long history still reuses most of it) and `end`.
+fn checkpoint_positions(marks: &[usize], start: usize, end: usize) -> Vec<usize> {
+    let every = (start / CHECKPOINT_INTERVAL + 1..).map(|i| i * CHECKPOINT_INTERVAL).take_while(|&p| p < end);
+    let mut cuts: Vec<usize> = marks.iter().copied().filter(|&m| m > start && m < end).chain(every).collect();
+    cuts.sort_unstable();
+    cuts.dedup();
+    cuts.push(end);
+    cuts
+}
+
 /// Recurrent state of every machine after `history[..pos]`.
 struct Checkpoint {
     slot: usize,
@@ -510,7 +524,7 @@ impl Chain {
 
     /// Prefill `ids` from the longest cached prefix: the live state or a checkpoint at or before the
     /// common prefix with `history` (at least the last token is recomputed for its candidates).
-    /// Checkpoints are taken at `marks` and at the end of the prompt. Returns the last token's candidates
+    /// Checkpoints are taken at `marks`, every CHECKPOINT_INTERVAL positions and at the end of the prompt. Returns the last token's candidates
     /// and the number of reused positions.
     pub fn prefill_cached(&mut self, ids: &[u32], marks: &[usize]) -> Result<(Candidates, usize)> {
         ensure!(!ids.is_empty(), "empty prompt");
@@ -528,10 +542,7 @@ impl Chain {
             _ => self.pos = live,
         }
         let start = self.pos;
-        let mut cuts: Vec<usize> = marks.iter().copied().filter(|&m| m > start && m < ids.len()).collect();
-        cuts.sort_unstable();
-        cuts.dedup();
-        cuts.push(ids.len());
+        let cuts = checkpoint_positions(marks, start, ids.len());
         let mut top = None;
         let mut at = start;
         for (i, &end) in cuts.iter().enumerate() {
@@ -553,5 +564,19 @@ impl Chain {
             top = self.forward(chunk, i + 1 == chunks.len(), None)?;
         }
         top.context("empty prompt")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::checkpoint_positions;
+
+    #[test]
+    fn checkpoints_at_marks_intervals_and_the_end() {
+        assert_eq!(checkpoint_positions(&[30], 0, 40), vec![30, 40]);
+        assert_eq!(checkpoint_positions(&[30, 0, 40, 50], 10, 40), vec![30, 40]);
+        assert_eq!(checkpoint_positions(&[5000], 100, 9000), vec![4096, 5000, 8192, 9000]);
+        assert_eq!(checkpoint_positions(&[], 4096, 8192), vec![8192]);
+        assert_eq!(checkpoint_positions(&[], 4095, 4097), vec![4096, 4097]);
     }
 }
