@@ -5,9 +5,9 @@
 //! Every mixer applies the previous sublayer's write (`x_s += w_s * y`) in its norm kernel, so a layer ends with a
 //! pending combine that the next mixer, the head or the stage output resolves.
 //!
-//! Dense matrices are Q4_0 repacked with f32 scales (`quant::repack_q4`, the Gemma kernels); experts keep the GGUF's
-//! f16 scales (`quant::repack_q4h`, 4.5 bits per weight) and are stacked into one gate/up and one down matrix per
-//! layer, with the shared expert appended as expert `experts`. Attention is dense, so a stage
+//! Dense matrices are Q4_0 repacked with f32 scales (`quant::repack_q4`, the Gemma kernels) or Q8_0 with f16 scales;
+//! experts are Q4_0, IQ4_NL (4.5 bits per weight) or IQ4_XS (4.25), at their GGUF size, stacked into one gate/up and
+//! one down matrix per layer with the shared expert appended as expert `experts`. Attention is dense, so a stage
 //! accepts at most `idx_budget + kpool - 1` visible tokens (the sparse block selection is not implemented here yet).
 use super::{cpu::Captures, Config};
 use crate::{
@@ -93,6 +93,38 @@ struct Layer {
     down: Buffer,
     gu_stride: u32,
     down_stride: u32,
+    /// Expert formats (qwen4_expert.glsl): 0 Q4_0, 1 IQ4_NL, 2 IQ4_XS.
+    gu_fmt: u32,
+    down_fmt: u32,
+}
+
+/// The GPU expert format of a GGUF type and the bytes of one row of `k` weights.
+fn expert_format(t: &TensorInfo) -> Result<(u32, usize)> {
+    let k = t.dims[0] as usize;
+    Ok(match t.ty {
+        GgmlType::Q4_0 => (0, k / 32 * 18),
+        GgmlType::IQ4NL => (1, k / 32 * 18),
+        GgmlType::IQ4XS => (2, k / 256 * 136),
+        other => anyhow::bail!(
+            "{} is {other}; GPU experts are Q4_0, IQ4_NL or IQ4_XS (docs/qwen4.md)",
+            t.name
+        ),
+    })
+}
+
+/// Raw rows `row0..row0 + rows` of an expert tensor in its GGUF format.
+fn expert_rows<'a>(g: &'a Gguf, t: &TensorInfo, row0: usize, rows: usize) -> Result<&'a [u8]> {
+    let rb = expert_format(t)?.1;
+    Ok(&g.data(t)[row0 * rb..(row0 + rows) * rb])
+}
+
+/// Experts repacked for the GPU: scales or headers, then the nibble blocks (and the blocks' word offset).
+fn expert_pack(fmt: u32, raw: &[u8]) -> (Vec<u8>, usize) {
+    if fmt == 2 {
+        quant::repack_iq4xs(raw)
+    } else {
+        quant::repack_q4h(raw)
+    }
 }
 
 struct Ple {
@@ -189,6 +221,21 @@ pub struct GpuStage {
     pub profile: Vec<f64>,
     /// GPU milliseconds per (layer index in the stage, phase) in the last forward.
     pub phases: Vec<(usize, &'static str, f64)>,
+}
+
+/// The pipeline of an expert kernel for a format (the variants are specializations of one shader).
+fn expert_shader(name: &'static str, fmt: u32) -> &'static str {
+    match (name, fmt) {
+        ("qwen4_moe_gu", 1) => "qwen4_moe_gu_iq4nl",
+        ("qwen4_moe_gu", 2) => "qwen4_moe_gu_iq4xs",
+        ("qwen4_moe_down", 1) => "qwen4_moe_down_iq4nl",
+        ("qwen4_moe_down", 2) => "qwen4_moe_down_iq4xs",
+        ("qwen4_moe_gu_grouped", 1) => "qwen4_moe_gu_grouped_iq4nl",
+        ("qwen4_moe_gu_grouped", 2) => "qwen4_moe_gu_grouped_iq4xs",
+        ("qwen4_moe_down_grouped", 1) => "qwen4_moe_down_grouped_iq4nl",
+        ("qwen4_moe_down_grouped", 2) => "qwen4_moe_down_grouped_iq4xs",
+        _ => name,
+    }
 }
 
 fn partitions(pos: usize, n: usize) -> u32 {
@@ -360,21 +407,33 @@ impl GpuStage {
                 t(il, "ffn_up_shexp.weight")?,
                 t(il, "ffn_down_shexp.weight")?,
             );
-            let mut gu = Vec::with_capacity((ne + 1) * 2 * ff * d / 32 * 18);
-            for e in 0..ne {
-                gu.extend_from_slice(q4_rows(g, gt, e * ff, ff)?);
-                gu.extend_from_slice(q4_rows(g, ut, e * ff, ff)?);
+            // The shared expert is stacked with the routed ones, so it must share their formats.
+            let (gu_fmt, down_fmt) = (expert_format(gt)?.0, expert_format(dt)?.0);
+            for (a, b) in [(gt, ut), (gt, gs), (gt, us), (dt, ds)] {
+                ensure!(
+                    a.ty == b.ty,
+                    "{} is {} but {} is {}: quantize them alike",
+                    a.name,
+                    a.ty,
+                    b.name,
+                    b.ty
+                );
             }
-            gu.extend_from_slice(q4_rows(g, gs, 0, ff)?);
-            gu.extend_from_slice(q4_rows(g, us, 0, ff)?);
-            let (packed, gu_stride) = quant::repack_q4h(&gu);
+            let mut gu = Vec::with_capacity((ne + 1) * 2 * ff * expert_format(gt)?.1);
+            for e in 0..ne {
+                gu.extend_from_slice(expert_rows(g, gt, e * ff, ff)?);
+                gu.extend_from_slice(expert_rows(g, ut, e * ff, ff)?);
+            }
+            gu.extend_from_slice(expert_rows(g, gs, 0, ff)?);
+            gu.extend_from_slice(expert_rows(g, us, 0, ff)?);
+            let (packed, gu_stride) = expert_pack(gu_fmt, &gu);
             drop(gu);
             let gate_up = gpu.upload_matrix(&packed)?;
             drop(packed);
-            let mut dn = Vec::with_capacity((ne + 1) * d * ff / 32 * 18);
-            dn.extend_from_slice(q4_rows(g, dt, 0, ne * d)?);
-            dn.extend_from_slice(q4_rows(g, ds, 0, d)?);
-            let (packed, down_stride) = quant::repack_q4h(&dn);
+            let mut dn = Vec::with_capacity((ne + 1) * d * expert_format(dt)?.1);
+            dn.extend_from_slice(expert_rows(g, dt, 0, ne * d)?);
+            dn.extend_from_slice(expert_rows(g, ds, 0, d)?);
+            let (packed, down_stride) = expert_pack(down_fmt, &dn);
             drop(dn);
             let down = gpu.upload_matrix(&packed)?;
             drop(packed);
@@ -390,6 +449,8 @@ impl GpuStage {
                 down,
                 gu_stride: gu_stride as u32,
                 down_stride: down_stride as u32,
+                gu_fmt,
+                down_fmt,
             });
         }
         let ple = match &c.ngram {
@@ -1181,7 +1242,7 @@ impl GpuStage {
                 u[3] = gu_stride;
                 gpu.dispatch_matrix(
                     current.get(),
-                    "qwen4_moe_gu",
+                    expert_shader("qwen4_moe_gu", l.gu_fmt),
                     push([0, self.u.address, self.act.address, self.ids.address, 0, 0], u),
                     ff.div_ceil(16) as u32,
                     (n * slots) as u32,
@@ -1194,7 +1255,7 @@ impl GpuStage {
                 u[3] = down_stride;
                 gpu.dispatch_matrix(
                     current.get(),
-                    "qwen4_moe_down",
+                    expert_shader("qwen4_moe_down", l.down_fmt),
                     push(
                         [
                             0,
@@ -1229,7 +1290,7 @@ impl GpuStage {
                 u[3] = gu_stride;
                 gpu.dispatch_matrix(
                     current.get(),
-                    "qwen4_moe_gu_grouped",
+                    expert_shader("qwen4_moe_gu_grouped", l.gu_fmt),
                     push(
                         [
                             0,
@@ -1252,7 +1313,7 @@ impl GpuStage {
                 u[3] = down_stride;
                 gpu.dispatch_matrix(
                     current.get(),
-                    "qwen4_moe_down_grouped",
+                    expert_shader("qwen4_moe_down_grouped", l.down_fmt),
                     push(
                         [
                             0,

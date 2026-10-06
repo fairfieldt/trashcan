@@ -1,0 +1,2 @@
+[lock acquired after 0s]
+[clocks] 207 samples card0 (02:00.0) sclk/mclk: 300/150 x207  max 53C card1 (06:00.0) sclk/mclk: 300/150 x207  max 53C  log=/home/fairfieldt/trashcan-exp/qwen-flash/results/clocks/20261006T163536-395637.txt

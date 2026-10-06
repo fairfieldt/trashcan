@@ -42,6 +42,29 @@ fn json(v: &Profile) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// Run a prompt through the local stages only (chunks of `batch`), writing the last chunk's last-token
+/// activations in the reference dump format, for comparing a layer range against `qwen4 ref`.
+pub fn stage_dump(local: &mut Local, out: &std::path::Path, tokens: &[u32], batch: usize) -> Result<()> {
+    let mut caps = super::cpu::Captures::new();
+    let chunks: Vec<_> = tokens.chunks(batch).collect();
+    let mut pos = 0;
+    for (i, chunk) in chunks.iter().enumerate() {
+        let x = super::embed(&local.gguf, &local.c, chunk)?;
+        let ple = super::ple_rows(&local.gguf, &local.c, &tokens[..pos], chunk)?;
+        let dump = if i + 1 == chunks.len() { Some(&mut caps) } else { None };
+        local.forward(x, ple.as_deref(), pos, chunk.len(), dump)?;
+        pos += chunk.len();
+    }
+    std::fs::create_dir_all(out)?;
+    let mut index = String::new();
+    for (name, v) in &caps {
+        std::fs::write(out.join(format!("{name}.f32")), bytemuck::cast_slice(v))?;
+        index.push_str(&format!("{name}\t{},1,1,1\t{}\n", v.len(), v.len()));
+    }
+    std::fs::write(out.join("index.tsv"), index)?;
+    Ok(())
+}
+
 /// Per-layer and per-phase GPU milliseconds of the local stages: `prefill` chunks of `batch` tokens from position 0
 /// (after one warm-up chunk), then `decode` single-token steps after `start` tokens.
 pub fn stage_bench(

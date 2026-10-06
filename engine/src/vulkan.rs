@@ -430,6 +430,26 @@ impl Device {
                     ("attention_partial_heads8_64", Some(64)),
                 ],
                 "qwen4_q8_mv" => &[("qwen4_q8_mv", Some(1)), ("qwen4_q8_mv4", Some(4))],
+                "qwen4_moe_gu" => &[
+                    ("qwen4_moe_gu", Some(0)),
+                    ("qwen4_moe_gu_iq4nl", Some(1)),
+                    ("qwen4_moe_gu_iq4xs", Some(2)),
+                ],
+                "qwen4_moe_down" => &[
+                    ("qwen4_moe_down", Some(0)),
+                    ("qwen4_moe_down_iq4nl", Some(1)),
+                    ("qwen4_moe_down_iq4xs", Some(2)),
+                ],
+                "qwen4_moe_gu_grouped" => &[
+                    ("qwen4_moe_gu_grouped", Some(0)),
+                    ("qwen4_moe_gu_grouped_iq4nl", Some(1)),
+                    ("qwen4_moe_gu_grouped_iq4xs", Some(2)),
+                ],
+                "qwen4_moe_down_grouped" => &[
+                    ("qwen4_moe_down_grouped", Some(0)),
+                    ("qwen4_moe_down_grouped_iq4nl", Some(1)),
+                    ("qwen4_moe_down_grouped_iq4xs", Some(2)),
+                ],
                 "qwen4_mix_down" => &[("qwen4_mix_down", Some(0)), ("qwen4_mix_down_q8", Some(1))],
                 "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],
                 "qwen4_attention_sparse" => &[

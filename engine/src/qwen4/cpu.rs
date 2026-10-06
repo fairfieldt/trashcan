@@ -1,9 +1,10 @@
 //! Straightforward f32 CPU forward of a qwen4exp layer range: the executable specification the GPU kernels are
 //! checked against (docs/qwen4.md), and a stage that runs anywhere. Captured names follow llama.cpp's graph
 //! callbacks; a name the graph uses twice in a layer (the second hyper-connection mixer) gets `#2`.
+use super::dequant_row;
 use super::Config;
 use crate::gguf::{GgmlType, Gguf, TensorInfo};
-use crate::qwen::{dequant_row, vector};
+use crate::qwen::vector;
 use anyhow::{ensure, Result};
 use half::{bf16, f16};
 use std::collections::BTreeMap;
@@ -61,9 +62,40 @@ fn round_activations(ty: GgmlType, x: &[f32]) -> Option<Vec<f32>> {
 fn matmul(g: &Gguf, t: &TensorInfo, x: &[f32], n: usize) -> Vec<f32> {
     let blas = n >= 32 && t.dims[0] >= 32 && t.dims[1] >= 32;
     match round_activations(t.ty, x).filter(|_| !blas) {
-        Some(xr) => crate::qwen::cpu::matmul(g, t, &xr, n),
-        None => crate::qwen::cpu::matmul(g, t, x, n),
+        Some(xr) => matmul_rows(g, t, &xr, n),
+        None => matmul_rows(g, t, x, n),
     }
+}
+
+/// `qwen::cpu::matmul` with this module's dequantization (which adds the IQ4 types).
+fn matmul_rows(g: &Gguf, t: &TensorInfo, x: &[f32], n: usize) -> Vec<f32> {
+    let rows: u64 = t.dims[1..].iter().product();
+    let rows = rows as usize;
+    let threads = std::thread::available_parallelism().map_or(8, |n| n.get());
+    let per = rows.div_ceil(threads);
+    let parts: Vec<Vec<f32>> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..threads)
+            .map(|i| {
+                s.spawn(move || {
+                    let (lo, hi) = (i * per, ((i + 1) * per).min(rows));
+                    if lo >= hi {
+                        return Vec::new();
+                    }
+                    matvec_rows(g, t, lo, hi - lo, x, n)
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    let mut y = vec![0f32; n * rows];
+    for (i, part) in parts.iter().enumerate().filter(|(_, p)| !p.is_empty()) {
+        let lo = i * per;
+        let width = part.len() / n;
+        for tok in 0..n {
+            y[tok * rows + lo..tok * rows + lo + width].copy_from_slice(&part[tok * width..(tok + 1) * width]);
+        }
+    }
+    y
 }
 
 /// Last-token rows of named intermediates.

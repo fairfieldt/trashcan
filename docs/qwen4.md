@@ -71,7 +71,25 @@ chunked prefill (batches of 4 and 5) and a two-process TCP chain give identical 
 
 ## N-gram table placement
 
-TBD
+The table is read only at layer 1, so it stays with the driver, next to the token embedding: the driver hashes
+each token with its two predecessors, gathers 16 rows of 160 and sends `n x 2560` floats to the stage owning
+layer 1, which must be on the driver (`net::Chain` enforces it). `--ngram` picks the source: `map` (the GGUF
+mapping), `ram-q4`/`ram-q8` (a resident copy, Q8_0 rows requantized to Q4_0 at load), `disk` (pread through the
+page cache) or `direct` (O_DIRECT 4 KiB pages). Measured on incite's SSD (Intel 660p, PCIe 2.0 x4), 16 readers
+([results/qwen4/ngram-20261006](../results/qwen4/ngram-20261006/README.md)):
+
+| storage | RAM used | one token's rows (p50) | prefill |
+|---|---|---|---|
+| RAM, Q4_0 rows | 26.8 GiB | 0.07 ms | 0.8-0.95 M tok/s |
+| SSD through the page cache | page cache only | 0.40 ms | 2.8k tok/s random tokens, 10k tok/s on real text |
+| SSD, O_DIRECT | none | 0.72-0.74 ms | 2.7k tok/s |
+
+**Recommendation: keep the table on the driver's SSD and read rows through the page cache.** A decode step costs
+0.4 ms against tens of milliseconds of GPU work (and the reads can start as soon as the token is sampled, while
+the GPU runs layer 0), and 2.7k-10k tokens per second is several times the measured prefill throughput of a GPU
+stage. Common n-grams stay cached for free, and no RAM is committed: a resident Q4_0 copy takes 27 GiB of the
+driver's 64 GB without a measurable end-to-end gain, and a resident Q8_0 copy (51 GiB) does not fit safely.
+On disk the rows can keep the release's precision (Q8_0 here, 170 bytes; BF16 rows cost the same 4 KiB read).
 
 ## Quantization and VRAM
 

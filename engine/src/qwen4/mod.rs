@@ -261,6 +261,48 @@ pub fn gather(g: &Gguf, rows: &[u32], out: &mut [f32]) -> Result<()> {
     Ok(())
 }
 
+/// The non-linear IQ4_NL values (also used by IQ4_XS).
+pub const IQ4_VALUES: [i8; 16] = [-127, -104, -83, -65, -49, -35, -22, -10, 1, 13, 25, 38, 53, 69, 89, 113];
+
+/// Dequantize one row: IQ4_NL and IQ4_XS here, every other type through `qwen::dequant_row`.
+pub fn dequant_row(g: &Gguf, t: &TensorInfo, row: usize, out: &mut [f32]) -> Result<()> {
+    use crate::gguf::GgmlType;
+    use half::f16;
+    let k = t.dims[0] as usize;
+    match t.ty {
+        GgmlType::IQ4NL => {
+            let rb = k / 32 * 18;
+            let b = &g.data(t)[row * rb..(row + 1) * rb];
+            for (o, s) in out.chunks_exact_mut(32).zip(b.chunks_exact(18)) {
+                let d = f16::from_le_bytes([s[0], s[1]]).to_f32();
+                for j in 0..16 {
+                    o[j] = d * IQ4_VALUES[(s[2 + j] & 15) as usize] as f32;
+                    o[j + 16] = d * IQ4_VALUES[(s[2 + j] >> 4) as usize] as f32;
+                }
+            }
+        }
+        GgmlType::IQ4XS => {
+            let rb = k / 256 * 136;
+            let b = &g.data(t)[row * rb..(row + 1) * rb];
+            for (o, s) in out.chunks_exact_mut(256).zip(b.chunks_exact(136)) {
+                let d = f16::from_le_bytes([s[0], s[1]]).to_f32();
+                let sh = u16::from_le_bytes([s[2], s[3]]) as u32;
+                for ib in 0..8 {
+                    let ls = ((s[4 + ib / 2] as u32 >> (4 * (ib % 2))) & 15) | (((sh >> (2 * ib)) & 3) << 4);
+                    let dl = d * (ls as i32 - 32) as f32;
+                    let q = &s[8 + ib * 16..8 + (ib + 1) * 16];
+                    for j in 0..16 {
+                        o[ib * 32 + j] = dl * IQ4_VALUES[(q[j] & 15) as usize] as f32;
+                        o[ib * 32 + j + 16] = dl * IQ4_VALUES[(q[j] >> 4) as usize] as f32;
+                    }
+                }
+            }
+        }
+        _ => crate::qwen::dequant_row(g, t, row, out)?,
+    }
+    Ok(())
+}
+
 /// The n-gram rows of `tokens` after `history`, gathered from the GGUF (`None` when the model has no PLE).
 pub fn ple_rows(g: &Gguf, c: &Config, history: &[u32], tokens: &[u32]) -> Result<Option<Vec<f32>>> {
     let Some(p) = &c.ngram else { return Ok(None) };
@@ -332,6 +374,49 @@ pub fn embed(g: &Gguf, c: &Config, tokens: &[u32]) -> Result<Vec<f32>> {
 #[cfg(test)]
 mod tests {
     use super::Ngram;
+
+    /// The GPU's IQ4_XS layout (quant::repack_iq4xs) decoded as qwen4_expert.glsl does (header words, then the
+    /// sub-block's 4 nibble words) gives the same values as the reference decoding of the original superblock.
+    #[test]
+    fn iq4xs_repack_matches_the_shader_decode() {
+        let mut sb = [0u8; 136];
+        sb[..2].copy_from_slice(&half::f16::from_f32(0.75).to_le_bytes());
+        sb[2..4].copy_from_slice(&0b1001_1100_0110_0011u16.to_le_bytes());
+        for (i, b) in sb[4..].iter_mut().enumerate() {
+            *b = (i * 37 + 11) as u8;
+        }
+        // Reference decoding (ggml dequantize_row_iq4_xs).
+        let d = 0.75f32;
+        let sh = u16::from_le_bytes([sb[2], sb[3]]) as u32;
+        let mut want = [0f32; 256];
+        for ib in 0..8 {
+            let ls = ((sb[4 + ib / 2] as u32 >> (4 * (ib % 2))) & 15) | (((sh >> (2 * ib)) & 3) << 4);
+            for j in 0..16 {
+                let q = sb[8 + ib * 16 + j];
+                want[ib * 32 + j] = d * (ls as i32 - 32) as f32 * super::IQ4_VALUES[(q & 15) as usize] as f32;
+                want[ib * 32 + j + 16] = d * (ls as i32 - 32) as f32 * super::IQ4_VALUES[(q >> 4) as usize] as f32;
+            }
+        }
+        let (packed, stride) = crate::quant::repack_iq4xs(&sb);
+        let words: Vec<u32> = packed
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .collect();
+        for blk in 0..8usize {
+            let (h0, h1, ib) = (words[(blk >> 3) * 2], words[(blk >> 3) * 2 + 1], blk as u32 & 7);
+            let ls = ((h1 >> (8 * (ib >> 1) + 4 * (ib & 1))) & 15) | (((h0 >> (16 + 2 * ib)) & 3) << 4);
+            let scale = half::f16::from_bits(h0 as u16).to_f32() * (ls as i32 - 32) as f32;
+            for part in 0..4 {
+                let q = words[stride + blk * 4 + part];
+                for j in 0..4 {
+                    let lo = super::IQ4_VALUES[((q >> (8 * j)) & 15) as usize] as f32 * scale;
+                    let hi = super::IQ4_VALUES[((q >> (8 * j + 4)) & 15) as usize] as f32 * scale;
+                    assert_eq!(lo, want[blk * 32 + 4 * part + j]);
+                    assert_eq!(hi, want[blk * 32 + 16 + 4 * part + j]);
+                }
+            }
+        }
+    }
 
     fn ngram() -> Ngram {
         Ngram {

@@ -42,6 +42,20 @@ pub fn repack_q4h(src: &[u8]) -> (Vec<u8>, usize) {
     (out, blocks_at / 4)
 }
 
+/// IQ4_XS superblocks (256 weights: f16 d, u16 high scale bits, 4 bytes of low scale bits, 128 bytes of nibbles)
+/// split into all 8-byte headers, padded to 16 bytes, then the nibbles: 136 bytes per 256 weights, as stored.
+/// The nibbles of each 32-weight sub-block keep the Q4_0 order. Returns the bytes and the blocks' word offset.
+pub fn repack_iq4xs(src: &[u8]) -> (Vec<u8>, usize) {
+    let count = src.len() / 136;
+    let blocks_at = (count * 8).next_multiple_of(16);
+    let mut out = vec![0u8; blocks_at + count * 128];
+    for (i, b) in src.chunks_exact(136).enumerate() {
+        out[i * 8..i * 8 + 8].copy_from_slice(&b[..8]);
+        out[blocks_at + i * 128..blocks_at + (i + 1) * 128].copy_from_slice(&b[8..]);
+    }
+    (out, blocks_at / 4)
+}
+
 /// Q8_0 blocks split into all f16 scales, padded to 16 bytes, then the 32-byte blocks: 34 bytes per 32 weights,
 /// as stored. Returns the bytes and the offset of the blocks in u32 words.
 pub fn repack_q8h(src: &[u8]) -> (Vec<u8>, usize) {

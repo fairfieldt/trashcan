@@ -86,6 +86,11 @@ pub enum Cmd {
         /// Prefill chunks of `batch` tokens timed.
         #[arg(long, default_value_t = 3)]
         prefill: usize,
+        /// Instead of timing, run this prompt (token ids) and dump the last chunk's activations into `--out`.
+        #[arg(long)]
+        tokens_file: Option<PathBuf>,
+        #[arg(long)]
+        out: Option<PathBuf>,
     },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
@@ -230,6 +235,8 @@ pub fn run(cmd: Cmd) -> Result<()> {
             decode,
             start,
             prefill,
+            tokens_file,
+            out,
         } => {
             let ranges: Vec<(usize, usize)> = ranges
                 .iter()
@@ -241,6 +248,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let gpus = gpus.unwrap_or_else(|| (0..ranges.len()).collect());
             let devices = crate::qwen::pipeline::Devices::Gpus(gpus);
             let mut local = super::pipeline::Local::new(&model, &devices, &ranges, head, context, batch)?;
+            if let (Some(tf), Some(out)) = (tokens_file, out) {
+                let tokens = prompt(Some(&tf), &[])?;
+                return super::bench::stage_dump(&mut local, &out, &tokens, batch);
+            }
             println!(
                 "{}",
                 super::bench::stage_bench(&mut local, decode, start, prefill, batch)?

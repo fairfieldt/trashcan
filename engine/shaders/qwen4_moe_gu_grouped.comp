@@ -1,29 +1,30 @@
 #version 460
 #include "common.glsl"
+#include "qwen4_expert.glsl"
 // Gate and up projections with SwiGLU for every slot routed to one expert: each 16-row block of the expert's
-// weights is decoded once and applied to all of its slots, four at a time. One workgroup per (row block, expert);
-// experts without slots return at once. Weights as in qwen4_moe_gu.
+// weights is decoded once and applied to all of its slots, COLS at a time (4 measured fastest of 2, 4 and 8).
+// One workgroup per (row block, expert); experts without slots return at once. Weights as in qwen4_moe_gu.
 // b: u [t][k], c: act [t * slots][ff], d: offsets (from qwen4_moe_route), e: grouped slot indices.
 // p.n = ff, p.m = slots per token, p.k = d, p.stride = word offset of the blocks.
+#define COLS 4
 layout(local_size_x=256) in;
 void main(){
+init_lut();
 uint lane=gl_SubgroupInvocationID,part=lane%4,blocks=p.k/32,e=gl_WorkGroupID.y;
 uint s0=d_u.v[e],s1=d_u.v[e+1];if(s0==s1)return;
 uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
-for(uint c0=s0;c0<s1;c0+=4){
-    uint cols=min(4u,s1-c0);uint slot[4];
-    [[unroll]]for(uint z=0;z<4;z++)slot[z]=e_u.v[c0+min(z,cols-1)];
-    vec4 g[4],u[4];[[unroll]]for(uint z=0;z<4;z++){g[z]=vec4(0);u[z]=vec4(0);}
+for(uint c0=s0;c0<s1;c0+=COLS){
+    uint cols=min(uint(COLS),s1-c0);uint slot[COLS];
+    [[unroll]]for(uint z=0;z<COLS;z++)slot[z]=e_u.v[c0+min(z,cols-1)];
+    vec4 g[COLS],u[COLS];[[unroll]]for(uint z=0;z<COLS;z++){g[z]=vec4(0);u[z]=vec4(0);}
     for(uint b=lane/4;b<blocks;b+=16){
         vec4 lo[4],hi[4],lu[4],hu[4];float sg[4],su[4];
         [[unroll]]for(uint r=0;r<4;r++){
             uint bg=(e*2*p.n+first+r)*blocks+b,bu=bg+p.n*blocks;
             uint qg=ww.words[p.stride+bg*4+part],qu=ww.words[p.stride+bu*4+part];
-            lo[r]=unpackUnorm4x8(qg&0x0f0f0f0fu)*255.0-8.0;hi[r]=unpackUnorm4x8((qg>>4)&0x0f0f0f0fu)*255.0-8.0;
-            lu[r]=unpackUnorm4x8(qu&0x0f0f0f0fu)*255.0-8.0;hu[r]=unpackUnorm4x8((qu>>4)&0x0f0f0f0fu)*255.0-8.0;
-            sg[r]=unpackHalf2x16(uint(wh.halves[bg])).x;su[r]=unpackHalf2x16(uint(wh.halves[bu])).x;
+            lo[r]=qlo(qg);hi[r]=qhi(qg);lu[r]=qlo(qu);hu[r]=qhi(qu);sg[r]=bscale(bg);su[r]=bscale(bu);
         }
-        [[unroll]]for(uint z=0;z<4;z++){
+        [[unroll]]for(uint z=0;z<COLS;z++){
             uint xb=(slot[z]/p.m)*(p.k/4)+b*8+part;
             vec4 x0=b_v4.v[xb],x1=b_v4.v[xb+4];
             [[unroll]]for(uint r=0;r<4;r++){
@@ -32,8 +33,8 @@ for(uint c0=s0;c0<s1;c0+=4){
             }
         }
     }
-    [[unroll]]for(uint z=0;z<4;z++){g[z]=subgroupAdd(g[z]);u[z]=subgroupAdd(u[z]);}
-    if(lane==0)[[unroll]]for(uint z=0;z<4;z++)if(z<cols)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n){
+    [[unroll]]for(uint z=0;z<COLS;z++){g[z]=subgroupAdd(g[z]);u[z]=subgroupAdd(u[z]);}
+    if(lane==0)[[unroll]]for(uint z=0;z<COLS;z++)if(z<cols)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n){
         float a=g[z][r];c_f.v[slot[z]*p.n+first+r]=a/(1.0+exp(-a))*u[z][r];}
 }
 }
