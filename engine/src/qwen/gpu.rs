@@ -59,14 +59,16 @@ struct Head {
     chunks: usize,
 }
 
+/// One command buffer per layer: each is a separate submission, which keeps every GPU job well inside
+/// the kernel's lockup timeout during long prefill chunks.
 struct Graph {
     gpu: Rc<Device>,
-    cmd: vk::CommandBuffer,
+    cmds: Vec<vk::CommandBuffer>,
     captures: Vec<(String, Buffer, usize)>,
 }
 impl Drop for Graph {
     fn drop(&mut self) {
-        unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &[self.cmd]) };
+        unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &self.cmds) };
     }
 }
 
@@ -246,12 +248,13 @@ impl GpuStage {
         let gpu = &self.gpu;
         let c = &self.c;
         let d = c.d;
-        let cmd = gpu.begin()?;
+        let current = std::cell::Cell::new(gpu.begin()?);
         let mut graph = Graph {
             gpu: gpu.clone(),
-            cmd,
+            cmds: vec![current.get()],
             captures: Vec::new(),
         };
+        let cmd = current.get();
         gpu.barrier(cmd);
         gpu.copy(cmd, &self.params_host, 0, &self.params, 0, 16);
         gpu.copy(cmd, &self.input, 0, &self.x, 0, n * d * 4);
@@ -263,7 +266,7 @@ impl GpuStage {
         let capture = |graph: &mut Graph, name: String, b: &Buffer, width: usize| -> Result<()> {
             if dump {
                 let host = gpu.buffer(width * 4, true, false, None)?;
-                gpu.copy(cmd, b, (n - 1) * width * 4, &host, 0, width * 4);
+                gpu.copy(current.get(), b, (n - 1) * width * 4, &host, 0, width * 4);
                 graph.captures.push((name, host, width));
             }
             Ok(())
@@ -282,7 +285,7 @@ impl GpuStage {
                 _ => ("gemm", rows.div_ceil(64), n.div_ceil(64)),
             };
             gpu.dispatch_matrix(
-                cmd,
+                current.get(),
                 shader,
                 push([0, x.address, y.address, 0, 0, 0], u).defer_barrier(defer),
                 gx as u32,
@@ -296,7 +299,7 @@ impl GpuStage {
             u[11] = u32::from(y.is_some());
             u[12] = eps;
             gpu.dispatch(
-                cmd,
+                current.get(),
                 "qwen_add_norm",
                 push(
                     [
@@ -340,7 +343,7 @@ impl GpuStage {
                     u[0] = (2 * c.v_heads) as u32;
                     u[1] = d as u32;
                     gpu.dispatch_matrix(
-                        cmd,
+                        current.get(),
                         "qwen_matf32",
                         push([0, self.h.address, self.ab.address, 0, 0, 0], u),
                         (2 * c.v_heads).div_ceil(4) as u32,
@@ -352,7 +355,7 @@ impl GpuStage {
                     let mut u = [0; 16];
                     u[0] = cd as u32;
                     gpu.dispatch(
-                        cmd,
+                        current.get(),
                         "qwen_conv",
                         push([self.big.address, conv_w.address, conv.address, self.conv_out.address, 0, 0], u),
                         cd.div_ceil(256) as u32,
@@ -366,7 +369,7 @@ impl GpuStage {
                     u[6] = c.state as u32;
                     u[12] = eps;
                     gpu.dispatch(
-                        cmd,
+                        current.get(),
                         "qwen_gdn",
                         push(
                             [self.conv_out.address, self.ab.address, state.address, self.o.address, dt_a.address, 0],
@@ -381,7 +384,7 @@ impl GpuStage {
                     u[6] = c.state as u32;
                     u[12] = eps;
                     gpu.dispatch(
-                        cmd,
+                        current.get(),
                         "qwen_gated_norm",
                         push([self.o.address, self.z.address, norm.address, 0, 0, 0], u),
                         c.v_heads as u32,
@@ -423,7 +426,7 @@ impl GpuStage {
                         u[12] = c.rope_base.to_bits();
                         u[13] = scale.to_bits();
                         gpu.dispatch(
-                            cmd,
+                            current.get(),
                             "qwen_qk",
                             push(
                                 [
@@ -449,7 +452,7 @@ impl GpuStage {
                     u[7] = self.context as u32;
                     if parts == 0 {
                         gpu.dispatch(
-                            cmd,
+                            current.get(),
                             "attention",
                             push([self.rq.address, kc.address, vc.address, self.o.address, 0, 0], u),
                             c.heads as u32,
@@ -458,7 +461,7 @@ impl GpuStage {
                     } else {
                         let (partial, merge) = attention_shaders(parts)?;
                         gpu.dispatch(
-                            cmd,
+                            current.get(),
                             partial,
                             push(
                                 [self.rq.address, kc.address, vc.address, self.o.address, self.scratch.address, 0],
@@ -468,7 +471,7 @@ impl GpuStage {
                             n as u32,
                         );
                         gpu.dispatch(
-                            cmd,
+                            current.get(),
                             merge,
                             push([0, 0, 0, self.o.address, self.scratch.address, 0], u),
                             c.heads as u32,
@@ -480,7 +483,7 @@ impl GpuStage {
                     u[0] = qd as u32;
                     u[6] = hd as u32;
                     gpu.dispatch(
-                        cmd,
+                        current.get(),
                         "qwen_gate",
                         push([self.o.address, self.big.address, 0, 0, 0, 0], u),
                         qd.div_ceil(256) as u32,
@@ -499,7 +502,7 @@ impl GpuStage {
             let mut u = [0; 16];
             u[0] = c.ff as u32;
             gpu.dispatch(
-                cmd,
+                current.get(),
                 "qwen_swiglu",
                 push([self.gate.address, self.up.address, self.act.address, 0, 0, 0], u),
                 c.ff.div_ceil(256) as u32,
@@ -509,6 +512,14 @@ impl GpuStage {
             matrix(&l.down, &self.act, &self.y, c.ff, d, false)?;
             capture(&mut graph, format!("ffn_out-{il}"), &self.y, d)?;
             pending = true;
+            // Later layers start a new submission; the leading barrier orders it after this one.
+            if l.il + 1 < self.last {
+                gpu.finish(current.get())?;
+                let next = gpu.begin()?;
+                gpu.barrier(next);
+                graph.cmds.push(next);
+                current.set(next);
+            }
         }
         let last = self.last - 1;
         if let Some(hd) = &self.head {
@@ -522,7 +533,7 @@ impl GpuStage {
             u[9] = 1;
             u[15] = 1;
             gpu.dispatch_matrix(
-                cmd,
+                current.get(),
                 "headvec",
                 push([0, self.h.address + ((n - 1) * d * 4) as u64, hd.logits.address, 0, 0, 0], u),
                 c.vocab.div_ceil(16) as u32,
@@ -531,7 +542,7 @@ impl GpuStage {
             )?;
             if dump {
                 let host = gpu.buffer(c.vocab * 4, true, false, None)?;
-                gpu.copy(cmd, &hd.logits, 0, &host, 0, c.vocab * 4);
+                gpu.copy(current.get(), &hd.logits, 0, &host, 0, c.vocab * 4);
                 graph.captures.push(("result_output".into(), host, c.vocab));
             }
             let mut u = [0; 16];
@@ -540,7 +551,7 @@ impl GpuStage {
             u[2] = (hd.chunks * TOP_K) as u32;
             u[15] = 1;
             gpu.dispatch(
-                cmd,
+                current.get(),
                 "topk",
                 push([hd.logits.address, 0, hd.scratch.address, 0, 0, 0], u),
                 hd.chunks as u32,
@@ -551,7 +562,7 @@ impl GpuStage {
             u[1] = TOP_K as u32;
             u[15] = 1;
             gpu.dispatch(
-                cmd,
+                current.get(),
                 "merge",
                 push([hd.scratch.address, 0, hd.top.address, 0, 0, 0], u),
                 1,
@@ -562,9 +573,9 @@ impl GpuStage {
                 add_norm(&self.x, Some(&self.y), None, None);
             }
             capture(&mut graph, format!("l_out-{last}"), &self.x, d)?;
-            gpu.copy(cmd, &self.x, 0, &self.output, 0, n * d * 4);
+            gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * d * 4);
         }
-        gpu.finish(cmd)?;
+        gpu.finish(current.get())?;
         Ok(graph)
     }
 
@@ -597,7 +608,11 @@ impl GpuStage {
         unsafe {
             self.gpu.dev.reset_fences(&[self.fence])?;
         }
-        self.gpu.submit(graph.cmd, None, None, self.fence)?;
+        for (i, &cmd) in graph.cmds.iter().enumerate() {
+            let last = i + 1 == graph.cmds.len();
+            self.gpu
+                .submit(cmd, None, None, if last { self.fence } else { vk::Fence::null() })?;
+        }
         unsafe {
             self.gpu
                 .dev

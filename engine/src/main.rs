@@ -275,6 +275,9 @@ struct QwenRun {
     /// Local GPU indices (default: all).
     #[arg(long, value_delimiter = ',')]
     gpus: Option<Vec<usize>>,
+    /// First layer of each stage after the first, in chain order (default: balance weight bytes).
+    #[arg(long, value_delimiter = ',')]
+    cuts: Vec<usize>,
     #[arg(long, default_value_t = 8192)]
     context: usize,
     #[arg(long, default_value_t = 512)]
@@ -283,7 +286,7 @@ struct QwenRun {
 impl QwenRun {
     fn chain(self, model: &Path) -> Result<qwen::net::Chain> {
         let devices = qwen::chat::devices(self.cpu, self.gpus)?;
-        qwen::net::Chain::new(model, devices, &self.nodes, self.context, self.batch)
+        qwen::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch)
     }
 }
 

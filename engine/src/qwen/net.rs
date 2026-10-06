@@ -207,10 +207,12 @@ pub struct Chain {
 }
 
 impl Chain {
+    /// `cuts` overrides the byte-balanced placement: the first layer of every stage after the first.
     pub fn new(
         model: &Path,
         devices: Devices,
         nodes: &[String],
+        cuts: &[usize],
         context: usize,
         max_batch: usize,
     ) -> Result<Self> {
@@ -226,7 +228,17 @@ impl Chain {
             counts.extend(serde_json::from_value::<Vec<usize>>(reply["devices"].clone())?);
             next = Some(conn);
         }
-        let all = plan(&g, &c, counts.iter().sum());
+        let stages: usize = counts.iter().sum();
+        let all = if cuts.is_empty() {
+            plan(&g, &c, stages)
+        } else {
+            ensure!(cuts.len() + 1 == stages, "--cuts needs one entry per stage after the first ({stages} stages)");
+            let mut edges = vec![0];
+            edges.extend(cuts);
+            edges.push(c.layers);
+            ensure!(edges.windows(2).all(|w| w[0] < w[1]), "cuts must increase within 1..{}", c.layers);
+            edges.windows(2).map(|w| (w[0], w[1])).collect()
+        };
         let mut plans = Vec::new();
         let mut it = all.into_iter();
         for count in &counts {
