@@ -215,6 +215,18 @@ enum Cmd {
         #[arg(long, default_value_t = 128)]
         tg: usize,
     },
+    /// Check checkpoint restore, verification rollback and speculative decoding against greedy decode.
+    QwenCheck {
+        model: PathBuf,
+        #[command(flatten)]
+        run: QwenRun,
+        /// Prompt length.
+        #[arg(long, default_value_t = 600)]
+        tokens: usize,
+        /// Greedy continuation length.
+        #[arg(long, default_value_t = 64)]
+        steps: usize,
+    },
     /// Run the reference prompt through the qwen35 pipeline, dump activations and greedy tokens.
     QwenValidate {
         model: PathBuf,
@@ -233,6 +245,9 @@ enum Cmd {
         cpu: bool,
         #[arg(long, value_delimiter = ',')]
         gpus: Option<Vec<usize>>,
+        /// MTP layer GGUF, used when this machine ends the chain and the driver drafts.
+        #[arg(long)]
+        mtp: Option<PathBuf>,
     },
     /// Run a qwen35 model on the CPU reference path and dump activations in the reference format.
     QwenRef {
@@ -282,11 +297,28 @@ struct QwenRun {
     context: usize,
     #[arg(long, default_value_t = 512)]
     batch: usize,
+    /// MTP layer GGUF (the model itself if it has one); enables speculative decoding.
+    #[arg(long)]
+    mtp: Option<PathBuf>,
+    /// Drafted tokens per speculative round.
+    #[arg(long, default_value_t = 3)]
+    draft_tokens: usize,
+    /// Largest rollback batch (default: draft tokens + 1 with --mtp, else 0).
+    #[arg(long)]
+    verify: Option<usize>,
 }
 impl QwenRun {
-    fn chain(self, model: &Path) -> Result<qwen::net::Chain> {
-        let devices = qwen::chat::devices(self.cpu, self.gpus)?;
-        qwen::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch)
+    fn chain(&self, model: &Path) -> Result<qwen::net::Chain> {
+        let devices = qwen::chat::devices(self.cpu, self.gpus.clone())?;
+        let draft = self.mtp.is_some();
+        let verify = self.verify.unwrap_or(if draft { self.draft_tokens + 1 } else { 0 });
+        qwen::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch, verify, self.mtp.as_deref(), draft)
+    }
+    fn spec(&self, chain: &qwen::net::Chain) -> Result<Option<qwen::spec::Spec>> {
+        self.mtp
+            .as_ref()
+            .map(|_| qwen::spec::Spec::new(chain, self.draft_tokens))
+            .transpose()
     }
 }
 
@@ -774,12 +806,29 @@ fn main() -> Result<()> {
         } => {
             let mut sampler = generation::Sampler::new(temperature, top_k, top_p, seed)?;
             let mut chain = run.chain(&model)?;
+            let mut spec = run.spec(&chain)?;
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
-            qwen::chat::chat(&mut chain, &t, prompt, system, thinking, max_tokens, &mut sampler)
+            qwen::chat::chat(&mut chain, &t, prompt, system, thinking, max_tokens, &mut sampler, spec.as_mut())
         }
         Cmd::QwenBench { model, run, pp, tg } => {
             let mut chain = run.chain(&model)?;
-            println!("{}", qwen::chat::bench(&mut chain, pp, tg)?);
+            let mut spec = run.spec(&chain)?;
+            let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+            println!("{}", qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?);
+            Ok(())
+        }
+        Cmd::QwenCheck {
+            model,
+            run,
+            tokens,
+            steps,
+        } => {
+            let mut chain = run.chain(&model)?;
+            let mut spec = run.spec(&chain)?;
+            let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+            let report = qwen::chat::check(&mut chain, &t, tokens, steps, spec.as_mut())?;
+            println!("{report}");
+            anyhow::ensure!(report["pass"] == true, "qwen check failed");
             Ok(())
         }
         Cmd::QwenValidate {
@@ -798,7 +847,8 @@ fn main() -> Result<()> {
             listen,
             cpu,
             gpus,
-        } => qwen::net::serve(&model, &listen, qwen::chat::devices(cpu, gpus)?),
+            mtp,
+        } => qwen::net::serve(&model, mtp, &listen, qwen::chat::devices(cpu, gpus)?),
         Cmd::QwenRef {
             model,
             out,
@@ -829,8 +879,8 @@ fn qwen_ref(model: &Path, out: &Path, greedy: usize, tokens: &[u32]) -> Result<(
     let mut caps = qwen::cpu::Captures::new();
     let mut x = qwen::embed(&g, &c, tokens)?;
     let start = std::time::Instant::now();
-    stage.forward(&g, &mut x, 0, tokens.len(), &mut Some(&mut caps))?;
-    let logits = stage.logits(&g, &x, &mut Some(&mut caps))?;
+    stage.forward(&g, &mut x, 0, tokens.len(), false, &mut Some(&mut caps))?;
+    let logits = stage.head(&g, &x, 1, &mut Some(&mut caps))?.1.remove(0);
     caps.insert("result_output".into(), logits.clone());
     write_dump(out, &caps)?;
     std::fs::write(out.join("logits.f32"), bytemuck::cast_slice(&logits))?;
@@ -840,9 +890,9 @@ fn qwen_ref(model: &Path, out: &Path, greedy: usize, tokens: &[u32]) -> Result<(
     let mut pos = tokens.len();
     while ids.len() < greedy {
         let mut x = qwen::embed(&g, &c, &ids[ids.len() - 1..])?;
-        stage.forward(&g, &mut x, pos, 1, &mut None)?;
+        stage.forward(&g, &mut x, pos, 1, false, &mut None)?;
         pos += 1;
-        ids.push(argmax(&stage.logits(&g, &x, &mut None)?));
+        ids.push(argmax(&stage.head(&g, &x, 1, &mut None)?.1[0]));
     }
     std::fs::write(
         out.join("greedy.txt"),

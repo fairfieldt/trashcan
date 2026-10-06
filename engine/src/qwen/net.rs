@@ -5,27 +5,36 @@
 //!
 //! Frames are `[u32 header length][u64 blob length][JSON header][blob]`. Requests:
 //! - `{"probe": [addresses after the receiver]}` -> `{"devices": [stage count per machine]}`
-//! - `{"setup": {"plans": [[[first, last], ...] per machine], "context", "batch"}}` -> `{"ok": true}`
-//! - `{"forward": {"pos", "n", "reply", "dump"}}` + f32 hidden rows -> when `reply`,
-//!   `{"top": [[score, id], ...], "captures": [[name, len], ...]}` + concatenated f32 captures.
+//! - `{"setup": {"plans": [[[first, last], ...] per machine], "context", "batch", "verify", "mtp"}}` ->
+//!   `{"ok": true}`. `verify` sizes the rollback snapshots; with `mtp` the last machine loads its MTP layer.
+//! - `{"forward": {"pos", "n", "reply", "dump", "verify", "tokens"}}` + f32 hidden rows -> when `reply`,
+//!   `{"columns": [[[score, id], ...] per column], "captures": [[name, len], ...]}` + concatenated f32
+//!   captures. Columns hold the last token, or every token with `verify`, which also keeps per-token
+//!   recurrent states. `tokens` (the batch's ids) feed the MTP layer.
+//! - `{"rollback": column}`: keep tokens `0..=column` of the latest verification batch.
+//! - `{"save": slot}` / `{"restore": slot}`: copy the recurrent state into a checkpoint slot or back.
+//! - `{"draft": {"token", "pos", "k", "temperature", "top_k", "top_p", "seed", "stop"}}` ->
+//!   `{"drafts": [[id, [[score, id], ...]], ...]}` from the MTP layer on the last machine.
 //!
-//! A forward without `reply` streams on immediately, so prompt chunks pipeline across machines; a later
-//! reply implies every earlier chunk finished, because each machine handles requests in order.
+//! Requests without a reply stream on immediately, so prompt chunks pipeline across machines; a later
+//! reply implies every earlier request finished, because each machine handles requests in order.
 use super::{
     cpu::Captures,
     embed,
     gpu::Output,
-    pipeline::{plan, Devices, Local},
+    pipeline::{plan, Devices, Draft, Local},
     Config,
 };
-use crate::gguf::Gguf;
+use crate::{generation::Sampler, gguf::Gguf};
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
     io::{BufReader, BufWriter, Read, Write},
     net::{TcpListener, TcpStream},
-    path::Path,
+    path::{Path, PathBuf},
 };
+
+pub type Candidates = Vec<(f32, u32)>;
 
 struct Conn {
     r: BufReader<TcpStream>,
@@ -83,22 +92,32 @@ fn ranges(v: &Value) -> Result<Vec<(usize, usize)>> {
         .collect()
 }
 
-/// Encode a result for the upstream machine.
-fn result(top: &[(f32, u32)], caps: &Captures) -> (Value, Vec<u8>) {
-    let names: Vec<Value> = caps.iter().map(|(n, v)| json!([n, v.len()])).collect();
-    let blob: Vec<u8> = caps.values().flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec()).collect();
-    (
-        json!({"top": top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>(), "captures": names}),
-        blob,
-    )
+fn candidates_json(top: &[(f32, u32)]) -> Value {
+    json!(top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>())
 }
 
-fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
-    let top = header["top"]
-        .as_array()
-        .context("missing top candidates")?
+fn candidates(v: &Value) -> Result<Candidates> {
+    v.as_array()
+        .context("missing candidates")?
         .iter()
         .map(|p| Ok((p[0].as_f64().context("score")? as f32, p[1].as_u64().context("id")? as u32)))
+        .collect()
+}
+
+/// Encode a result for the upstream machine.
+fn result(columns: &[Candidates], caps: &Captures) -> (Value, Vec<u8>) {
+    let names: Vec<Value> = caps.iter().map(|(n, v)| json!([n, v.len()])).collect();
+    let blob: Vec<u8> = caps.values().flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec()).collect();
+    let columns: Vec<Value> = columns.iter().map(|c| candidates_json(c)).collect();
+    (json!({"columns": columns, "captures": names}), blob)
+}
+
+fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<Vec<Candidates>> {
+    let columns = header["columns"]
+        .as_array()
+        .context("missing candidate columns")?
+        .iter()
+        .map(candidates)
         .collect::<Result<Vec<_>>>()?;
     if let Some(m) = caps {
         let mut at = 0;
@@ -108,18 +127,40 @@ fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Re
             at += len * 4;
         }
     }
-    Ok(top)
+    Ok(columns)
 }
 
-/// Serve layers to an upstream machine, one session at a time.
-pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
+fn decode_drafts(header: &Value) -> Result<Vec<Draft>> {
+    header["drafts"]
+        .as_array()
+        .context("missing drafts")?
+        .iter()
+        .map(|d| Ok((d[0].as_u64().context("draft id")? as u32, candidates(&d[1])?)))
+        .collect()
+}
+
+/// Run a draft request on this machine, which ends the model.
+fn draft_here(l: &mut Local, r: &Value) -> Result<Vec<Draft>> {
+    let num = |k: &str| r[k].as_f64().with_context(|| format!("draft {k}"));
+    let mut sampler = Sampler::new(num("temperature")? as f32, num("top_k")? as usize, num("top_p")? as f32, r["seed"].as_u64().context("seed")?)?;
+    let stop: Vec<u32> = serde_json::from_value(r["stop"].clone())?;
+    l.draft(num("token")? as u32, num("pos")? as usize, num("k")? as usize, &mut sampler, &stop)
+}
+
+fn drafts_json(drafts: &[Draft]) -> Value {
+    json!({"drafts": drafts.iter().map(|(id, top)| json!([id, candidates_json(top)])).collect::<Vec<_>>()})
+}
+
+/// Serve layers to an upstream machine, one session at a time. `mtp` is this machine's MTP layer GGUF,
+/// used when it ends the model and the driver asks for drafts.
+pub fn serve(model: &Path, mtp: Option<PathBuf>, listen: &str, devices: Devices) -> Result<()> {
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     eprintln!("node: {} on {listen}, devices {devices:?}", model.display());
     for stream in listener.incoming() {
         let stream = stream?;
         eprintln!("node: session from {}", stream.peer_addr()?);
         let mut up = Conn::new(stream)?;
-        if let Err(e) = session(model, &devices, &mut up) {
+        if let Err(e) = session(model, mtp.as_deref(), &devices, &mut up) {
             eprintln!("node: session ended: {e:#}");
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
         }
@@ -127,7 +168,7 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
     Ok(())
 }
 
-fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
+fn session(model: &Path, mtp: Option<&Path>, devices: &Devices, up: &mut Conn) -> Result<()> {
     let mut down: Option<Conn> = None;
     let mut local: Option<Local> = None;
     loop {
@@ -151,15 +192,19 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             let plans = s["plans"].as_array().context("missing plans")?;
             let context = s["context"].as_u64().context("context")? as usize;
             let batch = s["batch"].as_u64().context("batch")? as usize;
+            let verify = s["verify"].as_u64().unwrap_or(0) as usize;
+            let want_mtp = s["mtp"].as_bool().unwrap_or(false);
             let mine = ranges(&plans[0])?;
-            ensure!(
-                (plans.len() > 1) == down.is_some(),
-                "plan does not match the probed chain"
-            );
+            let last = plans.len() == 1;
+            ensure!(last != down.is_some(), "plan does not match the probed chain");
+            ensure!(!(last && want_mtp && mtp.is_none()), "the last machine needs --mtp for drafts");
             drop(local.take());
-            local = Some(Local::new(model, devices, &mine, plans.len() == 1, context, batch)?);
+            let m = mtp.filter(|_| want_mtp);
+            local = Some(Local::new(model, devices, &mine, last, context, batch, verify, m)?);
             if let Some(d) = down.as_mut() {
-                d.send(&json!({"setup": {"plans": &plans[1..], "context": context, "batch": batch}}), &[])?;
+                let mut s = s.clone();
+                s["plans"] = json!(&plans[1..]);
+                d.send(&json!({"setup": s}), &[])?;
                 d.recv()?;
             }
             up.send(&json!({"ok": true}), &[])?;
@@ -169,12 +214,18 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             let n = f["n"].as_u64().context("n")? as usize;
             let reply = f["reply"].as_bool().unwrap_or(true);
             let dump = f["dump"].as_bool().unwrap_or(false);
+            let verify = f["verify"].as_bool().unwrap_or(false);
+            let tokens: Vec<u32> = match f.get("tokens") {
+                Some(t) => serde_json::from_value(t.clone())?,
+                None => vec![0; n],
+            };
+            ensure!(tokens.len() == n, "token count mismatch");
             let mut caps = Captures::new();
-            let out = l.forward(floats(&blob), pos, n, dump.then_some(&mut caps))?;
+            let out = l.forward(floats(&blob), pos, &tokens, verify, dump.then_some(&mut caps))?;
             match (out, down.as_mut()) {
-                (Output::Top(top), _) => {
+                (Output::Top(columns), _) => {
                     if reply {
-                        let (h, b) = result(&top, &caps);
+                        let (h, b) = result(&columns, &caps);
                         up.send(&h, &b)?;
                     }
                 }
@@ -182,15 +233,38 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
                     d.send(&json!({"forward": f}), bytemuck::cast_slice(&x))?;
                     if reply {
                         let (h, b) = d.recv()?;
-                        let top = decode_result(&h, &b, Some(&mut caps))?;
-                        let (h, b) = result(&top, &caps);
+                        let columns = decode_result(&h, &b, Some(&mut caps))?;
+                        let (h, b) = result(&columns, &caps);
                         up.send(&h, &b)?;
                     }
                 }
                 (Output::Hidden(_), None) => bail!("the last machine has no LM head"),
             }
+        } else if let Some(r) = header.get("draft") {
+            let l = local.as_mut().context("draft before setup")?;
+            match down.as_mut() {
+                Some(d) => {
+                    d.send(&header, &[])?;
+                    let (h, _) = d.recv()?;
+                    up.send(&h, &[])?;
+                }
+                None => up.send(&drafts_json(&draft_here(l, r)?), &[])?,
+            }
         } else {
-            bail!("unknown request {header}");
+            let l = local.as_mut().context("request before setup")?;
+            let arg = |k: &str| header[k].as_u64().map(|v| v as usize);
+            if let Some(column) = arg("rollback") {
+                l.rollback(column)?;
+            } else if let Some(slot) = arg("save") {
+                l.save(slot)?;
+            } else if let Some(slot) = arg("restore") {
+                l.restore(slot)?;
+            } else {
+                bail!("unknown request {header}");
+            }
+            if let Some(d) = down.as_mut() {
+                d.send(&header, &[])?;
+            }
         }
     }
 }
@@ -202,12 +276,20 @@ pub struct Chain {
     pub pos: usize,
     pub max_batch: usize,
     pub context: usize,
+    /// Largest verification batch that can be rolled back (0: none).
+    pub verify: usize,
+    pub mtp: bool,
     /// Layer ranges per machine, the driver first.
     pub plans: Vec<Vec<(usize, usize)>>,
+    /// Columns of the latest verification batch.
+    verified: usize,
 }
 
 impl Chain {
     /// `cuts` overrides the byte-balanced placement: the first layer of every stage after the first.
+    /// `verify` sizes the rollback snapshots for speculative decoding; `mtp` is the driver's MTP layer GGUF,
+    /// used when it also ends the model (a remote last machine uses its own `--mtp`).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         model: &Path,
         devices: Devices,
@@ -215,8 +297,12 @@ impl Chain {
         cuts: &[usize],
         context: usize,
         max_batch: usize,
+        verify: usize,
+        mtp: Option<&Path>,
+        draft: bool,
     ) -> Result<Self> {
         ensure!(context > 0 && max_batch > 0, "context and batch must be positive");
+        ensure!(verify <= 8 && verify <= max_batch, "verification batches are limited to eight columns");
         let g = Gguf::open(model)?;
         let c = Config::new(&g)?;
         let mut counts = vec![devices.count()];
@@ -247,47 +333,50 @@ impl Chain {
         ensure!(plans.iter().all(|p| !p.is_empty()), "more machines than layers");
         eprintln!("plan: {plans:?}");
         drop(g);
+        ensure!(!draft || next.is_some() || mtp.is_some(), "drafting needs --mtp");
         if let Some(conn) = next.as_mut() {
             let remote: Vec<Value> = plans[1..]
                 .iter()
                 .map(|p| json!(p.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()))
                 .collect();
-            conn.send(&json!({"setup": {"plans": remote, "context": context, "batch": max_batch}}), &[])?;
+            conn.send(
+                &json!({"setup": {"plans": remote, "context": context, "batch": max_batch, "verify": verify, "mtp": draft}}),
+                &[],
+            )?;
             conn.recv()?;
         }
-        let local = Local::new(model, &devices, &plans[0], next.is_none(), context, max_batch)?;
+        let head = next.is_none();
+        let local = Local::new(model, &devices, &plans[0], head, context, max_batch, verify, mtp.filter(|_| draft))?;
         Ok(Self {
             local,
             next,
             pos: 0,
             max_batch,
             context,
+            verify,
+            mtp: draft,
             plans,
+            verified: 0,
         })
     }
 
-    /// Process `tokens` at the current position. Without `reply` the result of a remote chain is not
-    /// awaited (prompt chunks stream through) and `None` is returned.
-    pub fn forward(
-        &mut self,
-        tokens: &[u32],
-        reply: bool,
-        mut dump: Option<&mut Captures>,
-    ) -> Result<Option<Vec<(f32, u32)>>> {
+    fn run(&mut self, tokens: &[u32], verify: bool, reply: bool, mut dump: Option<&mut Captures>) -> Result<Option<Vec<Candidates>>> {
         let n = tokens.len();
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(self.pos + n <= self.context, "context exhausted");
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let pos = self.pos;
-        let out = self.local.forward(x, pos, n, dump.as_deref_mut())?;
+        let out = self.local.forward(x, pos, tokens, verify, dump.as_deref_mut())?;
         self.pos += n;
+        self.verified = if verify { n } else { 0 };
         match (out, self.next.as_mut()) {
-            (Output::Top(top), _) => Ok(Some(top)),
+            (Output::Top(columns), _) => Ok(Some(columns)),
             (Output::Hidden(x), Some(conn)) => {
-                conn.send(
-                    &json!({"forward": {"pos": pos, "n": n, "reply": reply, "dump": dump.is_some()}}),
-                    bytemuck::cast_slice(&x),
-                )?;
+                let mut f = json!({"pos": pos, "n": n, "reply": reply, "dump": dump.is_some(), "verify": verify});
+                if self.mtp {
+                    f["tokens"] = json!(tokens);
+                }
+                conn.send(&json!({"forward": f}), bytemuck::cast_slice(&x))?;
                 if !reply {
                     return Ok(None);
                 }
@@ -298,9 +387,75 @@ impl Chain {
         }
     }
 
+    /// Process `tokens` at the current position and return the last token's candidates. Without `reply`
+    /// the result of a remote chain is not awaited (prompt chunks stream through) and `None` is returned.
+    pub fn forward(&mut self, tokens: &[u32], reply: bool, dump: Option<&mut Captures>) -> Result<Option<Candidates>> {
+        Ok(self.run(tokens, false, reply, dump)?.map(|mut c| c.pop().unwrap()))
+    }
+
+    /// Process a verification batch: candidates for every token, recurrent states kept for `rollback`.
+    pub fn verify(&mut self, tokens: &[u32]) -> Result<Vec<Candidates>> {
+        ensure!(tokens.len() <= self.verify.max(1), "verification batch exceeds the configured {} columns", self.verify);
+        self.run(tokens, true, true, None)?.context("missing candidates")
+    }
+
+    /// Keep the first `keep` tokens of the latest verification batch.
+    pub fn rollback(&mut self, keep: usize) -> Result<()> {
+        ensure!(keep > 0 && keep <= self.verified, "rollback outside the latest verification batch");
+        if keep < self.verified {
+            self.local.rollback(keep - 1)?;
+            if let Some(conn) = self.next.as_mut() {
+                conn.send(&json!({"rollback": keep - 1}), &[])?;
+            }
+            self.pos -= self.verified - keep;
+        }
+        self.verified = 0;
+        Ok(())
+    }
+
+    /// Checkpoint the recurrent state of every machine at the current position.
+    pub fn save(&mut self, slot: usize) -> Result<()> {
+        self.local.save(slot)?;
+        if let Some(conn) = self.next.as_mut() {
+            conn.send(&json!({"save": slot}), &[])?;
+        }
+        Ok(())
+    }
+
+    /// Return every machine to checkpoint `slot`, taken at `pos`. Attention KV below `pos` must be unchanged
+    /// since then (the caller tracks which positions were rewritten).
+    pub fn restore(&mut self, slot: usize, pos: usize) -> Result<()> {
+        self.local.restore(slot)?;
+        if let Some(conn) = self.next.as_mut() {
+            conn.send(&json!({"restore": slot}), &[])?;
+        }
+        self.pos = pos;
+        self.verified = 0;
+        Ok(())
+    }
+
+    /// Up to `k` MTP drafts following the sampled, not yet processed `token` at the current position.
+    pub fn draft(&mut self, token: u32, k: usize, sampler: &Sampler, seed: u64, stop: &[u32]) -> Result<Vec<Draft>> {
+        ensure!(self.mtp, "drafting needs --mtp");
+        let r = json!({"token": token, "pos": self.pos, "k": k, "temperature": sampler.temperature,
+            "top_k": sampler.top_k, "top_p": sampler.top_p, "seed": seed, "stop": stop});
+        match self.next.as_mut() {
+            Some(conn) => {
+                conn.send(&json!({"draft": r}), &[])?;
+                decode_drafts(&conn.recv()?.0)
+            }
+            None => draft_here(&mut self.local, &r),
+        }
+    }
+
     /// Prefill a prompt from position 0 in chunks; only the final chunk waits for its result.
-    pub fn prefill(&mut self, ids: &[u32]) -> Result<Vec<(f32, u32)>> {
+    pub fn prefill(&mut self, ids: &[u32]) -> Result<Candidates> {
         self.pos = 0;
+        self.extend(ids)
+    }
+
+    /// Process `ids` at the current position in chunks; only the final chunk waits for its result.
+    pub fn extend(&mut self, ids: &[u32]) -> Result<Candidates> {
         let chunks: Vec<_> = ids.chunks(self.max_batch).collect();
         let mut top = None;
         for (i, chunk) in chunks.iter().enumerate() {

@@ -1,12 +1,13 @@
 //! Layer placement and the stages of one machine. The last stage of the last machine owns the final
-//! norm and LM head; every other boundary passes the `n x d` hidden state.
+//! norm, LM head and optional MTP block; every other boundary passes the `n x d` hidden state.
 use super::{
-    cpu::{Captures, CpuStage},
+    cpu::{Captures, CpuMtp, CpuStage},
+    embed,
     gpu::{GpuStage, Output, TOP_K},
     Config,
 };
-use crate::{gguf::Gguf, gpu::Instance, vulkan::Device};
-use anyhow::{ensure, Result};
+use crate::{generation::Sampler, gguf::Gguf, gpu::Instance, vulkan::Device};
+use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, rc::Rc};
 
@@ -73,14 +74,21 @@ pub enum Stage {
     Gpu(GpuStage),
 }
 
+/// A drafted token and the MTP's top candidates it was sampled from.
+pub type Draft = (u32, Vec<(f32, u32)>);
+
 /// The stages of this machine, run in order; with `head`, the last one ends the model.
 pub struct Local {
     pub gguf: Gguf,
     pub c: Config,
     pub stages: Vec<Stage>,
+    mtp: bool,
 }
 
 impl Local {
+    /// `verify` is the largest verification batch that can be rolled back; `mtp` is a GGUF holding the
+    /// MTP layer, loaded when this machine ends the model.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         path: &Path,
         devices: &Devices,
@@ -88,16 +96,27 @@ impl Local {
         head: bool,
         context: usize,
         max_batch: usize,
+        verify: usize,
+        mtp: Option<&Path>,
     ) -> Result<Self> {
         let gguf = Gguf::open(path)?;
         let c = Config::new(&gguf)?;
         ensure!(ranges.len() <= devices.count(), "more stages than devices");
+        let mtp = match mtp.filter(|_| head) {
+            Some(p) => Some(Gguf::open(p).with_context(|| format!("opening {}", p.display()))?),
+            None => None,
+        };
+        let has_mtp = mtp.is_some();
         let mut stages = Vec::new();
         match devices {
             Devices::Cpu => {
                 ensure!(ranges.len() == 1, "the CPU runs a single stage");
                 let (first, last) = ranges[0];
-                stages.push(Stage::Cpu(CpuStage::new(&c, first, last, context, head)));
+                let mut s = CpuStage::new(&c, first, last, context, head);
+                if let Some(m) = mtp {
+                    s.mtp = Some(CpuMtp::new(m, &c, context)?);
+                }
+                stages.push(Stage::Cpu(s));
             }
             Devices::Gpus(indices) => {
                 let inst = Rc::new(Instance::new()?);
@@ -107,37 +126,54 @@ impl Local {
                         .get(indices[i])
                         .ok_or_else(|| anyhow::anyhow!("GPU {} not found", indices[i]))?;
                     let is_head = head && i + 1 == ranges.len();
-                    eprintln!("GPU{}: layers {first}..{last}{}", indices[i], if is_head { " + head" } else { "" });
+                    let extra = if !is_head {
+                        ""
+                    } else if has_mtp {
+                        " + head + MTP"
+                    } else {
+                        " + head"
+                    };
+                    eprintln!("GPU{}: layers {first}..{last}{extra}", indices[i]);
                     let gpu = Device::new(inst.clone(), pd)?;
-                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, is_head, context, max_batch)?;
+                    let m = mtp.as_ref().filter(|_| is_head);
+                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, is_head, context, max_batch, verify, m)?;
                     eprintln!("GPU{}: {:.1} MiB allocated", indices[i], stage.device_mib());
                     stages.push(Stage::Gpu(stage));
                 }
             }
         }
-        Ok(Self { gguf, c, stages })
+        Ok(Self { gguf, c, stages, mtp: has_mtp })
     }
 
-    /// Run all local stages. Returns the hidden state, or the top candidates when this machine ends the model.
+    /// Run all local stages over the hidden rows of `tokens` (the token ids feed the MTP block). Returns the
+    /// hidden state, or the top candidates when this machine ends the model: of the last column, or of every
+    /// column with `verify`, which also keeps the per-column states for `rollback`.
     pub fn forward(
         &mut self,
         mut x: Vec<f32>,
         pos: usize,
-        n: usize,
+        tokens: &[u32],
+        verify: bool,
         mut dump: Option<&mut Captures>,
     ) -> Result<Output> {
+        let n = tokens.len();
+        let emb = if self.mtp { Some(embed(&self.gguf, &self.c, tokens)?) } else { None };
         for stage in &mut self.stages {
             let out = match stage {
-                Stage::Gpu(s) => s.forward(&x, pos, n, dump.as_deref_mut())?,
+                Stage::Gpu(s) => s.forward(&x, pos, n, verify, emb.as_deref(), dump.as_deref_mut())?,
                 Stage::Cpu(s) => {
                     let mut cap = dump.as_deref_mut();
-                    s.forward(&self.gguf, &mut x, pos, n, &mut cap)?;
+                    s.forward(&self.gguf, &mut x, pos, n, verify, &mut cap)?;
                     if s.head {
-                        let logits = s.logits(&self.gguf, &x, &mut cap)?;
+                        let cols = if verify { n } else { 1 };
+                        let (rows, logits) = s.head(&self.gguf, &x, cols, &mut cap)?;
                         if let Some(m) = cap {
-                            m.insert("result_output".into(), logits.clone());
+                            m.insert("result_output".into(), logits[cols - 1].clone());
                         }
-                        Output::Top(top_k(&logits))
+                        if let (Some(m), Some(e)) = (s.mtp.as_mut(), emb.as_deref()) {
+                            m.process(&self.c, e, &rows, pos, n)?;
+                        }
+                        Output::Top(logits.iter().map(|l| top_k(l)).collect())
                     } else {
                         Output::Hidden(std::mem::take(&mut x))
                     }
@@ -149,6 +185,65 @@ impl Local {
             }
         }
         Ok(Output::Hidden(x))
+    }
+
+    /// Keep columns `0..=column` of the latest verification batch on every stage.
+    pub fn rollback(&mut self, column: usize) -> Result<()> {
+        for stage in &mut self.stages {
+            match stage {
+                Stage::Gpu(s) => s.rollback(column)?,
+                Stage::Cpu(s) => s.rollback(column)?,
+            }
+        }
+        Ok(())
+    }
+
+    pub fn save(&mut self, slot: usize) -> Result<()> {
+        for stage in &mut self.stages {
+            match stage {
+                Stage::Gpu(s) => s.save(slot)?,
+                Stage::Cpu(s) => s.save(slot),
+            }
+        }
+        Ok(())
+    }
+
+    pub fn restore(&mut self, slot: usize) -> Result<()> {
+        for stage in &mut self.stages {
+            match stage {
+                Stage::Gpu(s) => s.restore(slot)?,
+                Stage::Cpu(s) => s.restore(slot)?,
+            }
+        }
+        Ok(())
+    }
+
+    /// Chain up to `k` MTP drafts from `token` at `pos`, sampling each from the MTP's candidates. Stops
+    /// after a token in `stop`.
+    pub fn draft(&mut self, token: u32, pos: usize, k: usize, sampler: &mut Sampler, stop: &[u32]) -> Result<Vec<Draft>> {
+        ensure!(self.mtp, "this machine has no MTP block");
+        let (g, c) = (&self.gguf, &self.c);
+        let mut drafts = Vec::new();
+        let mut token = token;
+        let mut hidden: Option<Vec<f32>> = None;
+        for j in 0..k {
+            let emb = embed(g, c, &[token])?;
+            let top = match self.stages.last_mut().context("no stages")? {
+                Stage::Gpu(s) => s.draft(&emb, pos + j, j == 0)?,
+                Stage::Cpu(s) => {
+                    let m = s.mtp.as_mut().context("no MTP block")?;
+                    let (logits, h) = m.step(g, c, &emb, hidden.as_deref(), pos + j)?;
+                    hidden = Some(h);
+                    top_k(&logits)
+                }
+            };
+            token = sampler.sample(&top);
+            drafts.push((token, top));
+            if stop.contains(&token) {
+                break;
+            }
+        }
+        Ok(drafts)
     }
 }
 

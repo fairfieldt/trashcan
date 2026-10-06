@@ -676,7 +676,7 @@ impl Drop for Assistant {
 
 /// Rejection sampling preserves the target law using the union of the truncated distributions.
 /// Greedy distributions are point masses, so this reduces to accepting the matching prefix.
-fn verify_prefix(
+pub(crate) fn verify_prefix(
     tokens: &[u32],
     logits: &[Vec<(f32, u32)>],
     q: &[Vec<(f64, u32)>],

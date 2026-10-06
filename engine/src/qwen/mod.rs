@@ -9,6 +9,7 @@ pub mod cpu;
 pub mod gpu;
 pub mod net;
 pub mod pipeline;
+pub mod spec;
 
 use crate::gguf::{GgmlType, Gguf, TensorInfo};
 use anyhow::{ensure, Context, Result};
@@ -98,6 +99,22 @@ impl Config {
         let full = format!("blk.{il}.{name}");
         g.tensor(&full).with_context(|| format!("missing {full}"))
     }
+}
+
+/// The MTP (nextn) layer index of a qwen35 GGUF (the model itself or an `--mtp` sidecar), checked against
+/// the trunk's shape.
+pub fn mtp_layer(g: &Gguf, c: &Config) -> Result<usize> {
+    let blocks = g.get_u64("qwen35.block_count")? as usize;
+    let nextn = g.get_u64("qwen35.nextn_predict_layers").unwrap_or(0) as usize;
+    ensure!(nextn == 1, "expected one MTP (nextn) layer, found {nextn}");
+    let il = blocks - 1;
+    let eh = c.layer_tensor(g, il, "nextn.eh_proj.weight")?;
+    let q = c.layer_tensor(g, il, "attn_q.weight")?;
+    ensure!(
+        eh.dims == [2 * c.d as u64, c.d as u64] && q.dims == [c.d as u64, (2 * c.heads * c.head_dim) as u64],
+        "the MTP layer does not match this model"
+    );
+    Ok(il)
 }
 
 /// Dequantize one row of `k` elements of a 2-D tensor (ggml row-major: rows of `dims[0]` elements).

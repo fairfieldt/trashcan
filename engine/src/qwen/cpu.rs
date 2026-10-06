@@ -2,8 +2,8 @@
 //! checked against, and a stage that runs anywhere (the distributed protocol is testable without GPUs).
 use super::{dequant_row, rope_angle, vector, Config};
 use crate::gguf::{Gguf, TensorInfo};
-use anyhow::Result;
-use std::collections::BTreeMap;
+use anyhow::{ensure, Context, Result};
+use std::collections::{BTreeMap, HashMap};
 
 /// Last-token rows of named intermediates, in llama.cpp's callback names.
 pub type Captures = BTreeMap<String, Vec<f32>>;
@@ -16,12 +16,19 @@ enum State {
     Attention { k: Vec<f32>, v: Vec<f32> },
 }
 
+/// The recurrent state of every DeltaNet layer of a stage, `(conv window, S)` in layer order.
+type Recurrent = Vec<(Vec<f32>, Vec<f32>)>;
+
 pub struct CpuStage {
     c: Config,
     pub first: usize,
     pub last: usize,
     states: Vec<State>,
     pub head: bool,
+    /// Recurrent states after each column but the last of the latest verification batch.
+    columns: Vec<Recurrent>,
+    slots: HashMap<usize, Recurrent>,
+    pub mtp: Option<CpuMtp>,
 }
 
 /// y[t][row] = W[row] . x[t], rows split across threads.
@@ -86,6 +93,15 @@ fn rms_norm(x: &mut [f32], w: Option<&[f32]>, eps: f32) {
     }
 }
 
+/// RMS norm of every `w.len()`-wide row with a learned weight.
+fn norm_rows(x: &[f32], w: &[f32], eps: f32) -> Vec<f32> {
+    let mut h = x.to_vec();
+    for row in h.chunks_exact_mut(w.len()) {
+        rms_norm(row, Some(w), eps);
+    }
+    h
+}
+
 fn silu(x: f32) -> f32 {
     x / (1. + (-x).exp())
 }
@@ -100,6 +116,16 @@ fn softplus(x: f32) -> f32 {
     } else {
         x.exp().ln_1p()
     }
+}
+
+/// SwiGLU FFN of layer `il` over `n` normed rows.
+fn ffn(g: &Gguf, c: &Config, il: usize, h: &[f32], n: usize, record: &mut impl FnMut(String, &[f32], usize)) -> Result<Vec<f32>> {
+    let t = |name: &str| c.layer_tensor(g, il, name);
+    let gate = matmul(g, t("ffn_gate.weight")?, h, n);
+    let up = matmul(g, t("ffn_up.weight")?, h, n);
+    let act: Vec<f32> = gate.iter().zip(&up).map(|(a, b)| silu(*a) * b).collect();
+    record(format!("ffn_swiglu-{il}"), &act, c.ff);
+    Ok(matmul(g, t("ffn_down.weight")?, &act, n))
 }
 
 impl CpuStage {
@@ -127,16 +153,21 @@ impl CpuStage {
             last,
             states,
             head,
+            columns: Vec::new(),
+            slots: HashMap::new(),
+            mtp: None,
         }
     }
 
-    /// Run the layers over `n` tokens at `pos` in place. Position 0 starts a new sequence.
+    /// Run the layers over `n` tokens at `pos` in place. Position 0 starts a new sequence. `verify` keeps
+    /// the recurrent state after every column so `rollback` can return to any of them.
     pub fn forward(
         &mut self,
         g: &Gguf,
         x: &mut [f32],
         pos: usize,
         n: usize,
+        verify: bool,
         cap: &mut Option<&mut Captures>,
     ) -> Result<()> {
         if pos == 0 {
@@ -147,6 +178,7 @@ impl CpuStage {
                 }
             }
         }
+        self.columns = vec![Vec::new(); if verify { n - 1 } else { 0 }];
         let c = self.c.clone();
         let d = c.d;
         let mut record = |name: String, rows: &[f32], width: usize| {
@@ -156,41 +188,74 @@ impl CpuStage {
         };
         for il in self.first..self.last {
             let t = |name: &str| c.layer_tensor(g, il, name);
-            let v = |name: &str| -> Result<Vec<f32>> { vector(g, t(name)?) };
-            let mut h = x.to_vec();
-            let attn_norm = v("attn_norm.weight")?;
-            for row in h.chunks_exact_mut(d) {
-                rms_norm(row, Some(&attn_norm), c.eps);
-            }
+            let h = norm_rows(x, &vector(g, t("attn_norm.weight")?)?, c.eps);
             record(format!("attn_norm-{il}"), &h, d);
             let out = match &mut self.states[il - self.first] {
                 State::Recurrent { conv, s } => {
-                    Self::delta_net(g, &c, il, &h, n, conv, s, &mut record)?
+                    let mut snaps = Vec::new();
+                    let y = Self::delta_net(g, &c, il, &h, n, conv, s, verify.then_some(&mut snaps), &mut record)?;
+                    for (column, snap) in self.columns.iter_mut().zip(snaps) {
+                        column.push(snap);
+                    }
+                    y
                 }
-                State::Attention { k, v } => {
-                    Self::attention(g, &c, il, &h, pos, n, k, v, &mut record)?
-                }
+                State::Attention { k, v } => Self::attention(g, &c, il, &h, pos, n, k, v, &mut record)?,
             };
             for (xv, o) in x.iter_mut().zip(&out) {
                 *xv += o;
             }
             record(format!("attn_residual-{il}"), x, d);
-            let mut h = x.to_vec();
-            let post = v("post_attention_norm.weight")?;
-            for row in h.chunks_exact_mut(d) {
-                rms_norm(row, Some(&post), c.eps);
-            }
+            let h = norm_rows(x, &vector(g, t("post_attention_norm.weight")?)?, c.eps);
             record(format!("attn_post_norm-{il}"), &h, d);
-            let gate = matmul(g, t("ffn_gate.weight")?, &h, n);
-            let up = matmul(g, t("ffn_up.weight")?, &h, n);
-            let act: Vec<f32> = gate.iter().zip(&up).map(|(a, b)| silu(*a) * b).collect();
-            record(format!("ffn_swiglu-{il}"), &act, c.ff);
-            let down = matmul(g, t("ffn_down.weight")?, &act, n);
+            let down = ffn(g, &c, il, &h, n, &mut record)?;
             record(format!("ffn_out-{il}"), &down, d);
             for (xv, o) in x.iter_mut().zip(&down) {
                 *xv += o;
             }
             record(format!("l_out-{il}"), x, d);
+        }
+        Ok(())
+    }
+
+    fn recurrent(&mut self) -> impl Iterator<Item = (&mut Vec<f32>, &mut Vec<f32>)> {
+        self.states.iter_mut().filter_map(|s| match s {
+            State::Recurrent { conv, s } => Some((conv, s)),
+            State::Attention { .. } => None,
+        })
+    }
+
+    /// Return the recurrent state to the one after `column` of the latest verification batch.
+    pub fn rollback(&mut self, column: usize) -> Result<()> {
+        if column == self.columns.len() {
+            return Ok(());
+        }
+        let snap = self.columns.get(column).context("rollback beyond the verification batch")?.clone();
+        for ((conv, s), (c, m)) in self.recurrent().zip(snap) {
+            *conv = c;
+            *s = m;
+        }
+        if let Some(m) = self.mtp.as_mut() {
+            m.rollback(column)?;
+        }
+        Ok(())
+    }
+
+    pub fn save(&mut self, slot: usize) {
+        let state: Recurrent = self.recurrent().map(|(c, s)| (c.clone(), s.clone())).collect();
+        self.slots.insert(slot, state);
+        if let Some(m) = self.mtp.as_mut() {
+            m.slots.insert(slot, m.pending.clone());
+        }
+    }
+
+    pub fn restore(&mut self, slot: usize) -> Result<()> {
+        let state = self.slots.get(&slot).context("empty checkpoint slot")?.clone();
+        for ((conv, s), (c, m)) in self.recurrent().zip(state) {
+            *conv = c;
+            *s = m;
+        }
+        if let Some(m) = self.mtp.as_mut() {
+            m.pending = m.slots.get(&slot).context("empty MTP checkpoint slot")?.clone();
         }
         Ok(())
     }
@@ -204,6 +269,7 @@ impl CpuStage {
         n: usize,
         conv: &mut [f32],
         s: &mut [f32],
+        mut snaps: Option<&mut Recurrent>,
         record: &mut impl FnMut(String, &[f32], usize),
     ) -> Result<Vec<f32>> {
         let t = |name: &str| c.layer_tensor(g, il, name);
@@ -247,11 +313,15 @@ impl CpuStage {
                 qkv[tok * cd + ch] = silu(sum);
             }
         }
-        let next: Vec<f32> = (n..n + hist)
-            .flat_map(|i| (0..cd).map(move |ch| (i, ch)))
-            .map(|(i, ch)| input(i, ch))
-            .collect();
-        conv.copy_from_slice(&next);
+        // The window after token `tok` holds inputs tok+1..=tok+hist.
+        let window = |tok: usize| -> Vec<f32> {
+            (tok + 1..tok + 1 + hist)
+                .flat_map(|i| (0..cd).map(move |ch| (i, ch)))
+                .map(|(i, ch)| input(i, ch))
+                .collect()
+        };
+        let windows: Vec<Vec<f32>> = (0..n).map(window).collect();
+        conv.copy_from_slice(&windows[n - 1]);
         record(format!("conv_output_silu-{il}"), &qkv, cd);
 
         let mut out = vec![0f32; n * vd];
@@ -288,6 +358,9 @@ impl CpuStage {
                     }
                     out[tok * vd + vh * sd + i] = dot(r, q) * scale;
                 }
+            }
+            if let Some(snaps) = snaps.as_mut().filter(|_| tok + 1 < n) {
+                snaps.push((windows[tok].clone(), s.to_vec()));
             }
         }
         record(format!("attn_output-{il}"), &out, vd);
@@ -388,15 +461,91 @@ impl CpuStage {
         Ok(y)
     }
 
-    /// Final norm and full logits of the last token.
-    pub fn logits(&self, g: &Gguf, x: &[f32], cap: &mut Option<&mut Captures>) -> Result<Vec<f32>> {
+    /// Final norm of every row (the MTP input) and full logits of the last `cols` rows.
+    pub fn head(&self, g: &Gguf, x: &[f32], cols: usize, cap: &mut Option<&mut Captures>) -> Result<(Vec<f32>, Vec<Vec<f32>>)> {
         let d = self.c.d;
-        let mut h = x[x.len() - d..].to_vec();
-        let norm = vector(g, g.tensor("output_norm.weight").unwrap())?;
-        rms_norm(&mut h, Some(&norm), self.c.eps);
+        let h = norm_rows(x, &vector(g, g.tensor("output_norm.weight").context("missing output_norm")?)?, self.c.eps);
         if let Some(m) = cap.as_mut() {
-            m.insert("result_norm".into(), h.clone());
+            m.insert("result_norm".into(), h[h.len() - d..].to_vec());
         }
-        Ok(matmul(g, g.tensor("output.weight").unwrap(), &h, 1))
+        let out = g.tensor("output.weight").context("missing output.weight")?;
+        let logits = matmul(g, out, &h[h.len() - cols * d..], cols);
+        Ok((h, logits.chunks_exact(self.c.vocab).map(|l| l.to_vec()).collect()))
+    }
+}
+
+/// The MTP (nextn) layer on the CPU. Position p combines the token at p with the target's normed hidden
+/// state at p - 1 (zeros at position 0), as llama.cpp's qwen35 `graph_mtp`: e = RMS(embed) * enorm,
+/// h = RMS(hidden) * hnorm, x = eh_proj [e | h], one gated-attention block with its own KV cache and a
+/// SwiGLU FFN, then RMS * shared_head_norm. That output feeds the shared LM head and is the hidden
+/// input of the next chained draft.
+pub struct CpuMtp {
+    g: Gguf,
+    il: usize,
+    k: Vec<f32>,
+    v: Vec<f32>,
+    /// The target's normed hidden state of the position before the next token.
+    pending: Vec<f32>,
+    /// The target's normed hidden rows of the latest batch, for rollback.
+    rows: Vec<f32>,
+    slots: HashMap<usize, Vec<f32>>,
+}
+
+impl CpuMtp {
+    pub fn new(g: Gguf, c: &Config, context: usize) -> Result<Self> {
+        let il = super::mtp_layer(&g, c)?;
+        let kv = context * c.kv_heads * c.head_dim;
+        Ok(Self { g, il, k: vec![0.; kv], v: vec![0.; kv], pending: vec![0.; c.d], rows: Vec::new(), slots: HashMap::new() })
+    }
+
+    /// The MTP block over `n` rows at `pos`: token embeddings and hidden inputs in, normed outputs out.
+    fn layer(&mut self, c: &Config, emb: &[f32], hidden: &[f32], pos: usize, n: usize) -> Result<Vec<f32>> {
+        let (g, il, d) = (&self.g, self.il, c.d);
+        let v = |name: &str| -> Result<Vec<f32>> { vector(g, c.layer_tensor(g, il, name)?) };
+        let e = norm_rows(emb, &v("nextn.enorm.weight")?, c.eps);
+        let h = norm_rows(hidden, &v("nextn.hnorm.weight")?, c.eps);
+        let cat: Vec<f32> = e.chunks_exact(d).zip(h.chunks_exact(d)).flat_map(|(a, b)| a.iter().chain(b).copied()).collect();
+        let mut x = matmul(g, c.layer_tensor(g, il, "nextn.eh_proj.weight")?, &cat, n);
+        let hn = norm_rows(&x, &v("attn_norm.weight")?, c.eps);
+        let y = CpuStage::attention(g, c, il, &hn, pos, n, &mut self.k, &mut self.v, &mut |_, _, _| {})?;
+        for (a, b) in x.iter_mut().zip(&y) {
+            *a += b;
+        }
+        let hn = norm_rows(&x, &v("post_attention_norm.weight")?, c.eps);
+        let y = ffn(g, c, il, &hn, n, &mut |_, _, _| {})?;
+        for (a, b) in x.iter_mut().zip(&y) {
+            *a += b;
+        }
+        Ok(norm_rows(&x, &v("nextn.shared_head_norm.weight")?, c.eps))
+    }
+
+    /// Extend the MTP cache over a target batch: `rows` are the target's normed hidden states.
+    pub fn process(&mut self, c: &Config, emb: &[f32], rows: &[f32], pos: usize, n: usize) -> Result<()> {
+        let d = c.d;
+        if pos == 0 {
+            self.pending.fill(0.);
+        }
+        let mut hidden = self.pending.clone();
+        hidden.extend_from_slice(&rows[..(n - 1) * d]);
+        self.layer(c, emb, &hidden, pos, n)?;
+        self.pending = rows[(n - 1) * d..].to_vec();
+        self.rows = rows.to_vec();
+        Ok(())
+    }
+
+    fn rollback(&mut self, column: usize) -> Result<()> {
+        let d = self.pending.len();
+        ensure!((column + 1) * d <= self.rows.len(), "MTP rollback beyond the batch");
+        self.pending = self.rows[column * d..(column + 1) * d].to_vec();
+        Ok(())
+    }
+
+    /// One draft step at `pos`: the token's embedding with the previous step's output (or the target's
+    /// hidden state for the first step). Returns the logits and the output for the next step.
+    pub fn step(&mut self, main: &Gguf, c: &Config, emb: &[f32], hidden: Option<&[f32]>, pos: usize) -> Result<(Vec<f32>, Vec<f32>)> {
+        let hidden = hidden.map_or_else(|| self.pending.clone(), |h| h.to_vec());
+        let out = self.layer(c, emb, &hidden, pos, 1)?;
+        let logits = matmul(main, main.tensor("output.weight").context("missing output.weight")?, &out, 1);
+        Ok((logits, out))
     }
 }
