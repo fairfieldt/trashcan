@@ -268,7 +268,14 @@ bridge whitelisted):
 
 - A dma-buf exported from GPU1's VRAM and imported on GPU0 stays in VRAM (GPU1's own copies of it run at
   100 GB/s; on the stock kernel it migrates to GTT at 5-8 GB/s).
-- GPU0 writing into GPU1's VRAM: 15.6-15.9 GB/s at 256 KiB-1 MiB, 9.3 GB/s at 8 MiB. Reading across: 2-3.7 GB/s.
+- GPU0 writing into GPU1's VRAM: 7.9 GB/s; reading across: 3.7 GB/s (1-64 MiB, submit-to-fence, 2026-10-05). The
+  15.6-15.9 GB/s first recorded at 256 KiB-1 MiB was a GPU-timestamp artifact (writes still in L2).
+  `pci=pcie_bus_perf` (MPS 256) or `intel_iommu=off` each raise writes to 8.5 GB/s; together they don't stack
+  (`results/kernel/p2p-boot-options-20261005/`, not adopted).
+- GPU shader writes into system memory are slow: 1.5 GB/s into cached (snooped) GTT and 0.13 GB/s into WC GTT,
+  whatever issues them. SDMA writes the same memory at 12.7 GB/s. Cost follows the number of sub-line write
+  pieces, which points at partial-line writes to DRAM. It only matters for `--cpu-reduce` and other bulk
+  GPU-to-host transfers.
 - GPU writes into shared host memory (`external_memory_host`, a cached/snooped type): only 1.4 GB/s at 8 MiB;
   host -> VRAM about 6.5 GB/s.
 - Takeaway: allreduces should push partials into the peer's VRAM.

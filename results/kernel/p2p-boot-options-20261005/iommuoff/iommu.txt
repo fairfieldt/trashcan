@@ -1,0 +1,3 @@
+[    0.409687] iommu: Default domain type: Translated
+02:00.0 iommu_group 
+06:00.0 iommu_group 

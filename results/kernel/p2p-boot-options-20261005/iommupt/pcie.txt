@@ -1,0 +1,18 @@
+== 00:02.0
+		DevCap:	MaxPayload 256 bytes, PhantFunc 0
+			MaxPayload 128 bytes, MaxReadReq 128 bytes
+		LnkSta:	Speed 8GT/s, Width x16
+		ACSCtl:	SrcValid+ TransBlk- ReqRedir+ CmpltRedir+ UpstreamFwd+ EgressCtrl- DirectTrans-
+== 00:03.0
+		DevCap:	MaxPayload 256 bytes, PhantFunc 0
+			MaxPayload 128 bytes, MaxReadReq 128 bytes
+		LnkSta:	Speed 8GT/s, Width x16
+		ACSCtl:	SrcValid+ TransBlk- ReqRedir+ CmpltRedir+ UpstreamFwd+ EgressCtrl- DirectTrans-
+== 02:00.0
+		DevCap:	MaxPayload 256 bytes, PhantFunc 0, Latency L0s <4us, L1 unlimited
+			MaxPayload 128 bytes, MaxReadReq 512 bytes
+		LnkSta:	Speed 8GT/s, Width x16
+== 06:00.0
+		DevCap:	MaxPayload 256 bytes, PhantFunc 0, Latency L0s <4us, L1 unlimited
+			MaxPayload 128 bytes, MaxReadReq 512 bytes
+		LnkSta:	Speed 8GT/s, Width x16

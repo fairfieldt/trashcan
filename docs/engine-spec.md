@@ -323,7 +323,9 @@ From `trashcan devices` (identical cards):
    type 2), and import with `VkImportMemoryFdInfoKHR` plus a dedicated allocation.
 
 On the P2P kernel the buffer stays in the owner's VRAM: the owner's own copies run at 100 GB/s. **Writes** from the
-peer into it run at 15.6-15.9 GB/s (256 KiB-1 MiB) and 9.3 GB/s (8 MiB). **Reads** across run at only 2-3.7 GB/s.
+peer into it run at 7.9 GB/s and **reads** across at 3.7 GB/s (1-64 MiB, timed submit-to-fence: `xgpu p2p-wall`,
+`results/kernel/p2pdma-20261005/`). The 15.6-15.9 GB/s recorded earlier for 256 KiB-1 MiB writes came from GPU
+timestamps, which land before Tahiti's 768 KiB L2 writes back, and exceeds what the 128-byte-payload link can carry.
 So data always moves by the producer *pushing* into the consumer's VRAM.
 
 **Cross-GPU sync:** timeline semaphores created with `VkExportSemaphoreCreateInfo(OPAQUE_FD)`, exported with

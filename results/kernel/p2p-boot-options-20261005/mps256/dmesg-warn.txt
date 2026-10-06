@@ -1,0 +1,65 @@
+[    0.175028] MDS CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/mds.html for more details.
+[    0.175028] VMSCAPE: SMT on, STIBP is required for full protection. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/vmscape.html for more details.
+[    0.437746] DMAR: DRHD: handling fault status reg 702
+[    1.477043] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.503459] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.527880] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    1.650999] device-mapper: core: CONFIG_IMA_DISABLE_HTABLE is disabled. Duplicate IMA measurements will not be recorded in the IMA log.
+[   11.635439] systemd[1]: bpf-restrict-fs: Failed to load BPF object: No such process
+[   12.543374] ------------[ cut here ]------------
+[   12.543377] WARNING: CPU: 7 PID: 699 at drivers/platform/x86/apple-gmux.c:884 gmux_probe.cold+0x65/0xd32 [apple_gmux]
+[   12.543388] Modules linked in: apple_gmux(+) apple_mfi_fastcharge evdev msr i2c_dev parport_pc ppdev lp parport efi_pstore configfs nfnetlink efivarfs ip_tables x_tables autofs4 ext4 mbcache jbd2 crc32c_generic amdgpu hid_generic usbhid hid drm_buddy amdxcp drm_exec gpu_sched crc16 radeon video wmi i2c_algo_bit drm_suballoc_helper drm_display_helper dm_mod cec rc_core drm_ttm_helper ttm drm_kms_helper xhci_pci drm xhci_hcd thunderbolt nvme ehci_pci iTCO_wdt ehci_hcd tg3 intel_pmc_bxt iTCO_vendor_support nvme_core watchdog usbcore libphy crc32_pclmul crc32c_intel ioatdma i2c_i801 lpc_ich nvme_auth i2c_smbus dca usb_common button
+[   12.543462] CPU: 7 UID: 0 PID: 699 Comm: (udev-worker) Not tainted 6.12.111-p2p #1p2p 
+[   12.543467] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+[   12.543470] RIP: 0010:gmux_probe.cold+0x65/0xd32 [apple_gmux]
+[   12.543477] Code: e9 48 fd ff ff b8 ff ff 00 00 31 f6 31 ff 89 44 24 0c e8 60 05 b8 fe 83 f8 05 0f 85 c0 00 00 00 81 7c 24 0c ff ff ff 00 7e 0a <0f> 0b c7 44 24 0c ff ff ff 00 4d 89 f0 48 c7 c1 e0 88 c7 c1 48 89
+[   12.543480] RSP: 0018:ffffcfc0014efb48 EFLAGS: 00010212
+[   12.543484] RAX: 0000000000000005 RBX: ffff8bf8814f9800 RCX: 0000000000000000
+[   12.543487] RDX: 0000000000000000 RSI: 0000000000000246 RDI: ffffffffc0876340
+[   12.543489] RBP: ffff8bf88228e000 R08: ffffcfc0014efa68 R09: ffffffffc0a4c16d
+[   12.543492] R10: 0000000000000009 R11: fefefefefefefeff R12: 0000000000000000
+[   12.543494] R13: 0000000000000001 R14: ffffcfc0014efb50 R15: 0000000000000400
+[   12.543496] FS:  00007fb713c87980(0000) GS:ffff8c07bf580000(0000) knlGS:0000000000000000
+[   12.543499] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+[   12.543502] CR2: 00007fb7145cf00c CR3: 000000010855c001 CR4: 00000000001706f0
+[   12.543505] Call Trace:
+[   12.543509]  <TASK>
+[   12.543515]  ? __pfx_gmux_probe+0x10/0x10 [apple_gmux]
+[   12.543522]  pnp_device_probe+0xac/0x140
+[   12.543530]  really_probe+0xde/0x340
+[   12.543536]  ? pm_runtime_barrier+0x54/0x90
+[   12.543541]  ? __pfx___driver_attach+0x10/0x10
+[   12.543545]  __driver_probe_device+0x84/0x140
+[   12.543550]  driver_probe_device+0x1f/0xa0
+[   12.543555]  __driver_attach+0xba/0x1c0
+[   12.543559]  bus_for_each_dev+0x8f/0xe0
+[   12.543563]  bus_add_driver+0x112/0x1f0
+[   12.543568]  driver_register+0x72/0xd0
+[   12.543573]  ? __pfx_gmux_pnp_driver_init+0x10/0x10 [apple_gmux]
+[   12.543578]  do_one_initcall+0x5b/0x310
+[   12.543586]  do_init_module+0x60/0x220
+[   12.543593]  init_module_from_file+0x89/0xe0
+[   12.543600]  idempotent_init_module+0x11e/0x310
+[   12.543607]  __x64_sys_finit_module+0x5e/0xb0
+[   12.543613]  do_syscall_64+0x87/0x1b0
+[   12.543618]  ? arch_exit_to_user_mode_prepare.isra.0+0x16/0xa0
+[   12.543622]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+[   12.543630] RIP: 0033:0x7fb713f1a4f9
+[   12.543633] Code: ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00 00 48 89 f8 48 89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff ff 73 01 c3 48 8b 0d e7 68 0d 00 f7 d8 64 89 01 48
+[   12.543636] RSP: 002b:00007ffeff938cd8 EFLAGS: 00000246 ORIG_RAX: 0000000000000139
+[   12.543641] RAX: ffffffffffffffda RBX: 000055e29c4bd320 RCX: 00007fb713f1a4f9
+[   12.543643] RDX: 0000000000000004 RSI: 00007fb713c6b44d RDI: 0000000000000042
+[   12.543645] RBP: 0000000000000004 R08: 0000000000000000 R09: 000055e29c384960
+[   12.543648] R10: 0000000000000000 R11: 0000000000000246 R12: 00007fb713c6b44d
+[   12.543650] R13: 0000000000020000 R14: 000055e29c4d75e0 R15: 0000000000000000
+[   12.543654]  </TASK>
+[   12.543656] ---[ end trace 0000000000000000 ]---
+[   12.604100] at24 0-0052: supply vcc not found, using dummy regulator
+[   12.612003] at24 0-0053: supply vcc not found, using dummy regulator
+[   12.640350] mei_me 0000:00:16.0: can't derive routing for PCI INT A
+[   12.640355] mei_me 0000:00:16.0: PCI INT A: no GSI
+[   12.759766] applesmc applesmc.768: hwmon_device_register() is deprecated. Please convert the driver to use hwmon_device_register_with_info().
+[   13.309984] b43-phy0 ERROR: FOUND UNSUPPORTED PHY (Analog 12, Type 11 (AC), Revision 1)
+[   13.310002] b43 bcma0:1: probe with driver b43 failed with error -95
+[   14.248112] nvme nvme0: using unchecked data buffer
+[   14.300156] block nvme0n1: No UUID available providing old NGUID

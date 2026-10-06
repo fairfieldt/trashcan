@@ -1,0 +1,26 @@
+GPU0: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0, queue family 1, timestamp period 37.04 ns
+GPU1: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 02:00.0, queue family 1, timestamp period 37.04 ns
+
+[p2p-wall] submit-to-fence copy time minus an empty submit, GPU0 <-> GPU1's exported VRAM, and host memory
+  dma-buf import on AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0: type 2 heap 1 [ HOST_VISIBLE HOST_COHERENT ] (allowed types 0x4)
+  GPU0 host buffer: type 2 heap 1 [ HOST_VISIBLE HOST_COHERENT ]
+  GPU0 VRAM -> GPU1 VRAM (P2P write)               1024 KiB     133.3 us     7.86 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)                1024 KiB     393.3 us     2.67 GB/s
+  GPU0 VRAM -> host (write)                        1024 KiB    8268.2 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                         1024 KiB     135.6 us     7.73 GB/s
+  GPU1 local copy of its own export                1024 KiB      15.2 us    68.77 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)               8192 KiB    1111.9 us     7.54 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)                8192 KiB    2271.7 us     3.69 GB/s
+  GPU0 VRAM -> host (write)                        8192 KiB   66349.5 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                         8192 KiB     909.7 us     9.22 GB/s
+  GPU1 local copy of its own export                8192 KiB      98.3 us    85.36 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)              32768 KiB    4254.5 us     7.89 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)               32768 KiB    9038.2 us     3.71 GB/s
+  GPU0 VRAM -> host (write)                       32768 KiB  265571.9 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                        32768 KiB    3485.8 us     9.63 GB/s
+  GPU1 local copy of its own export               32768 KiB     391.6 us    85.69 GB/s
+  GPU0 VRAM -> GPU1 VRAM (P2P write)              65536 KiB    8522.4 us     7.87 GB/s
+  GPU1 VRAM -> GPU0 VRAM (P2P read)               65536 KiB   18005.1 us     3.73 GB/s
+  GPU0 VRAM -> host (write)                       65536 KiB  531051.6 us     0.13 GB/s
+  host -> GPU0 VRAM (read)                        65536 KiB    7428.8 us     9.03 GB/s
+  GPU1 local copy of its own export               65536 KiB     973.8 us    68.91 GB/s
