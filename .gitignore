@@ -8,6 +8,7 @@
 # build outputs and fetched originals
 /bench/xgpu/xgpu
 /bench/xgpu/spin*.spv
+/bench/xgpu/store*.spv
 /kernel/orig/
 
 # rust

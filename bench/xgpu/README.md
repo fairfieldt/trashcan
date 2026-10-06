@@ -20,6 +20,9 @@ make                       # on incite: needs libvulkan-dev and glslc
 | `spin` | a shader on each GPU ping-pongs a flag in a host allocation imported into both GPUs. No submission boundaries; the CPU is out of the loop |
 | `copy` | GPU-timed `vkCmdCopyBuffer` between VRAM and an imported host allocation, at 16 KiB to 8 MiB |
 | `p2p` | GPU1 exports a VRAM buffer as a dma-buf and GPU0 imports it; copy bandwidth both ways, then the spin test with flags in that buffer |
+| `p2p-verify` | each GPU in turn writes and reads the other's exported VRAM over P2P (full buffer and random sub-ranges); the CPU checks every word and that the export stayed in VRAM |
+| `p2p-wall` | P2P and host copy bandwidth timed submit-to-fence on the CPU, which includes the end-of-submission L2 writeback that GPU timestamps miss |
+| `host-write` | GPU0 writes 32 MiB into local VRAM, peer VRAM, WC GTT, cached GTT and an imported malloc, by RADV copy, RADV fill and `store.comp` (4 or 16 B stores, contiguous or one per 64 B line) |
 
 Per-hop numbers are one-way: GPU A finishing something until GPU B can act on it.
 

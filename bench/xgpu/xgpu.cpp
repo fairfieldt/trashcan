@@ -2,7 +2,7 @@
 // Written for incite (2x FirePro D700 on RADV) to decide how a Vulkan tensor-parallel allreduce should
 // synchronize and move data. See README.md for what each test models.
 //
-// usage: xgpu [test ...]   tests: fence relay proxy xsem spin copy p2p   (default: all)
+// usage: xgpu [test ...]   tests: fence relay proxy xsem spin copy p2p p2p-verify p2p-wall host-write   (default: all)
 
 #include <vulkan/vulkan.hpp>
 
@@ -80,6 +80,8 @@ struct gpu {
     vk::DescriptorSetLayout dsl;
     vk::PipelineLayout      pl;
     vk::Pipeline            spin_pipeline[4];
+    vk::ShaderModule        store_module[2];
+    vk::Pipeline            store_pipeline[2];
     vk::DescriptorPool      dpool;
 };
 
@@ -508,6 +510,12 @@ static void init_spin(gpu & g, const std::string & dir) {
         vk::ComputePipelineCreateInfo cpci{ {}, { {}, vk::ShaderStageFlagBits::eCompute, g.spin_module[mode], "main" }, g.pl };
         g.spin_pipeline[mode] = g.dev.createComputePipeline({}, cpci).value;
     }
+    for (int wide = 0; wide < 2; wide++) {
+        const auto code = read_spv((dir + "store" + std::to_string(wide) + ".spv").c_str());
+        g.store_module[wide] = g.dev.createShaderModule({ {}, code.size() * 4, code.data() });
+        vk::ComputePipelineCreateInfo cpci{ {}, { {}, vk::ShaderStageFlagBits::eCompute, g.store_module[wide], "main" }, g.pl };
+        g.store_pipeline[wide] = g.dev.createComputePipeline({}, cpci).value;
+    }
     vk::DescriptorPoolSize ps{ vk::DescriptorType::eStorageBuffer, 64 };
     g.dpool = g.dev.createDescriptorPool({ vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, 32, ps });
 }
@@ -677,7 +685,9 @@ static void test_spin_wc(std::vector<gpu> & gpus) {
 // ---------------------------------------------------------------------------------------------------------------
 
 // GPU-timed copy: returns microseconds for one vkCmdCopyBuffer of `size` bytes, median of reps.
-static double time_copy(gpu & g, const buffer & src, const buffer & dst, size_t size, int reps = 15) {
+// writeback: put a transfer-write -> host-read barrier before the closing timestamp, which makes RADV write back L2
+// first, so the timestamp covers the data actually leaving the GPU.
+static double time_copy(gpu & g, const buffer & src, const buffer & dst, size_t size, int reps = 15, bool writeback = false) {
     auto qp = g.dev.createQueryPool({ {}, vk::QueryType::eTimestamp, 2 });
     std::vector<double> t;
     auto fence = g.dev.createFence({});
@@ -686,6 +696,11 @@ static double time_copy(gpu & g, const buffer & src, const buffer & dst, size_t 
         cb.resetQueryPool(qp, 0, 2);
         cb.writeTimestamp(vk::PipelineStageFlagBits::eTopOfPipe, qp, 0);
         cb.copyBuffer(src.buf, dst.buf, vk::BufferCopy{ 0, 0, size });
+        if (writeback) {
+            const vk::MemoryBarrier mb{ vk::AccessFlagBits::eTransferWrite, vk::AccessFlagBits::eHostRead | vk::AccessFlagBits::eMemoryRead };
+            cb.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eHost | vk::PipelineStageFlagBits::eBottomOfPipe,
+                               {}, mb, {}, {});
+        }
         cb.writeTimestamp(vk::PipelineStageFlagBits::eBottomOfPipe, qp, 1);
         cb.end();
         submit(g, cb, {}, {}, fence);
@@ -757,13 +772,278 @@ static void test_p2p(std::vector<gpu> & gpus) {
     free_buffer(gpus[1], exp1);
 }
 
+// Data check for the p2p path. Bandwidth alone can't tell a peer write that lands in the right place from one that
+// lands somewhere else, so each GPU in turn imports the other's exported VRAM buffer, writes into it and reads from
+// it over PCIe (full size and at random sub-ranges), and the CPU checks every word through host-visible staging.
+static uint32_t pattern_word(uint64_t seed, size_t i) {
+    uint64_t z = seed * 0x9e3779b97f4a7c15ull + i;
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ull;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111ebull;
+    return (uint32_t) (z ^ (z >> 31));
+}
+
+static void copy_wait(gpu & g, const buffer & src, const buffer & dst, vk::BufferCopy region) {
+    auto cb = begin_cb(g);
+    cb.copyBuffer(src.buf, dst.buf, region);
+    cb.end();
+    auto fence = g.dev.createFence({});
+    submit(g, cb, {}, {}, fence);
+    (void) g.dev.waitForFences(fence, VK_TRUE, UINT64_MAX);
+    g.dev.destroyFence(fence);
+    g.dev.freeCommandBuffers(g.pool, cb);
+}
+
+static void test_p2p_verify(std::vector<gpu> & gpus) {
+    const size_t   sz = 32 << 20, words = sz / 4;
+    const int      rounds = 16, subranges = 4;
+    bool           all_ok = true;
+    printf("\n[p2p-verify] dma-buf P2P data check: %zu MiB buffers, %d rounds of full write, full read and %d sub-range writes\n",
+           sz >> 20, rounds, subranges);
+    for (int init = 0; init < 2; init++) {
+        gpu & gi = gpus[init];
+        gpu & ge = gpus[1 - init];
+        buffer exp  = make_buffer(ge, sz, vk::MemoryPropertyFlagBits::eDeviceLocal, true, vk::MemoryPropertyFlagBits::eHostVisible);
+        buffer imp  = import_dmabuf(gi, export_dmabuf(ge, exp), sz);
+        buffer v_i  = make_buffer(gi, sz, vk::MemoryPropertyFlagBits::eDeviceLocal, false, vk::MemoryPropertyFlagBits::eHostVisible);
+        buffer v_e  = make_buffer(ge, sz, vk::MemoryPropertyFlagBits::eDeviceLocal, false, vk::MemoryPropertyFlagBits::eHostVisible);
+        buffer st_i = make_buffer(gi, sz, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        buffer st_e = make_buffer(ge, sz, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+        uint32_t * pi = (uint32_t *) st_i.ptr;
+        uint32_t * pe = (uint32_t *) st_e.ptr;
+        const vk::BufferCopy full{ 0, 0, sz };
+
+        size_t   checked = 0, bad = 0;
+        long     first_bad = -1;
+        uint32_t first_got = 0, first_want = 0;
+        auto compare = [&](const uint32_t * got, auto want) {
+            for (size_t i = 0; i < words; i++) {
+                const uint32_t w = want(i);
+                if (got[i] != w) {
+                    if (first_bad < 0) {
+                        first_bad = (long) i, first_got = got[i], first_want = w;
+                    }
+                    bad++;
+                }
+            }
+            checked += words;
+        };
+        uint64_t rng = 0x5eed0000ull + init;
+        auto next = [&]() { rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17; return rng; };
+
+        for (int r = 0; r < rounds; r++) {
+            const uint64_t s_write = 3 * (uint64_t) r + 1 + 1000 * init, s_read = s_write + 1, s_sub = s_write + 2;
+
+            // P2P write: initiator VRAM -> peer's exported VRAM; the exporter reads it back locally.
+            for (size_t i = 0; i < words; i++) pi[i] = pattern_word(s_write, i);
+            copy_wait(gi, st_i, v_i, full);
+            copy_wait(gi, v_i, imp, full);
+            copy_wait(ge, exp, st_e, full);
+            compare(pe, [&](size_t i) { return pattern_word(s_write, i); });
+
+            // P2P read: the exporter fills its buffer locally; the initiator reads it across into its own VRAM.
+            for (size_t i = 0; i < words; i++) pe[i] = pattern_word(s_read, i);
+            copy_wait(ge, st_e, exp, full);
+            copy_wait(gi, imp, v_i, full);
+            copy_wait(gi, v_i, st_i, full);
+            compare(pi, [&](size_t i) { return pattern_word(s_read, i); });
+
+            // Sub-range P2P writes at random word offsets: bytes outside each range must keep the previous contents.
+            for (size_t i = 0; i < words; i++) pi[i] = pattern_word(s_sub, i);
+            copy_wait(gi, st_i, v_i, full);
+            std::vector<std::pair<size_t, size_t>> ranges;
+            for (int k = 0; k < subranges; k++) {
+                const size_t off = next() % words, len = 1 + next() % std::min<size_t>(words - off, 1 << 20);
+                ranges.push_back({ off, len });
+                copy_wait(gi, v_i, imp, vk::BufferCopy{ off * 4, off * 4, len * 4 });
+            }
+            copy_wait(ge, exp, st_e, full);
+            compare(pe, [&](size_t i) {
+                for (const auto & [off, len] : ranges) {
+                    if (i >= off && i < off + len) return pattern_word(s_sub, i);
+                }
+                return pattern_word(s_read, i);
+            });
+        }
+
+        // Where the export lives after all that: VRAM-speed local copies mean the importer really went peer-to-peer.
+        const double local_us = time_copy(ge, exp, v_e, sz, 5);
+        const double gbs      = sz / local_us / 1000.0;
+        printf("  GPU%d writes/reads GPU%d's VRAM: %zu MiB checked, %zu bad words", init, 1 - init, checked * 4 >> 20, bad);
+        if (bad) {
+            printf(" (first at word %ld: got 0x%08x want 0x%08x)", first_bad, first_got, first_want);
+        }
+        printf("; export local copy %.1f GB/s (%s)\n", gbs, gbs > 30 ? "in VRAM" : "NOT in VRAM");
+        all_ok = all_ok && bad == 0 && gbs > 30;
+
+        free_buffer(gi, imp);
+        free_buffer(gi, v_i);
+        free_buffer(gi, st_i);
+        free_buffer(ge, v_e);
+        free_buffer(ge, st_e);
+        free_buffer(ge, exp);
+    }
+    printf("  p2p-verify: %s\n", all_ok ? "PASS" : "FAIL");
+}
+
+// GPU timestamps undercount copies whose destination is outside local VRAM: the bottom-of-pipe timestamp can land
+// while up to 768 KiB of written lines still sit in Tahiti's L2, before the end-of-submission writeback. This times
+// submit-to-fence on the CPU instead (which includes that writeback), minus an empty submission, at sizes well past L2.
+static double wall_copy(gpu & g, const buffer & src, const buffer & dst, size_t size, int reps = 9) {
+    auto fence = g.dev.createFence({});
+    auto once  = [&](size_t n) {
+        auto cb = begin_cb(g);
+        if (n) {
+            cb.copyBuffer(src.buf, dst.buf, vk::BufferCopy{ 0, 0, n });
+        }
+        cb.end();
+        const auto t0 = clk::now();
+        submit(g, cb, {}, {}, fence);
+        (void) g.dev.waitForFences(fence, VK_TRUE, UINT64_MAX);
+        const double t = us_since(t0);
+        g.dev.resetFences(fence);
+        g.dev.freeCommandBuffers(g.pool, cb);
+        return t;
+    };
+    std::vector<double> empty, full;
+    for (int i = 0; i < reps + 2; i++) {
+        const double e = once(0), f = once(size);
+        if (i >= 2) {
+            empty.push_back(e);
+            full.push_back(f);
+        }
+    }
+    g.dev.destroyFence(fence);
+    return summarize(full).p50 - summarize(empty).p50;
+}
+
+static void test_p2p_wall(std::vector<gpu> & gpus) {
+    printf("\n[p2p-wall] submit-to-fence copy time minus an empty submit, GPU0 <-> GPU1's exported VRAM, and host memory\n");
+    const size_t maxsz = 64 << 20;
+    buffer exp1  = make_buffer(gpus[1], maxsz, vk::MemoryPropertyFlagBits::eDeviceLocal, true, vk::MemoryPropertyFlagBits::eHostVisible);
+    buffer imp0  = import_dmabuf(gpus[0], export_dmabuf(gpus[1], exp1), maxsz);
+    buffer vram0 = make_buffer(gpus[0], maxsz, vk::MemoryPropertyFlagBits::eDeviceLocal, false, vk::MemoryPropertyFlagBits::eHostVisible);
+    buffer vram1 = make_buffer(gpus[1], maxsz, vk::MemoryPropertyFlagBits::eDeviceLocal, false, vk::MemoryPropertyFlagBits::eHostVisible);
+    buffer host0 = make_buffer(gpus[0], maxsz, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, false,
+                               vk::MemoryPropertyFlagBits::eDeviceLocal);
+    printf("  GPU0 host buffer: %s\n", mem_type_str(gpus[0], find_mem_type(gpus[0], gpus[0].dev.getBufferMemoryRequirements(host0.buf).memoryTypeBits,
+           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, vk::MemoryPropertyFlagBits::eDeviceLocal)).c_str());
+    printf("  P2P write, three ways of timing the same copy:\n");
+    for (size_t sz : { (size_t) 64 << 10, (size_t) 256 << 10, (size_t) 512 << 10, (size_t) 1 << 20, (size_t) 2 << 20, (size_t) 8 << 20, (size_t) 32 << 20 }) {
+        print_copy("  GPU timestamps", sz, time_copy(gpus[0], vram0, imp0, sz));
+        print_copy("  GPU timestamps + L2 writeback barrier", sz, time_copy(gpus[0], vram0, imp0, sz, 15, true));
+        print_copy("  CPU submit-to-fence", sz, wall_copy(gpus[0], vram0, imp0, sz));
+    }
+    for (size_t sz : { (size_t) 1 << 20, (size_t) 8 << 20, (size_t) 32 << 20, (size_t) 64 << 20 }) {
+        print_copy("GPU0 VRAM -> GPU1 VRAM (P2P write)", sz, wall_copy(gpus[0], vram0, imp0, sz));
+        print_copy("GPU1 VRAM -> GPU0 VRAM (P2P read)", sz, wall_copy(gpus[0], imp0, vram0, sz));
+        print_copy("GPU0 VRAM -> host (write)", sz, wall_copy(gpus[0], vram0, host0, sz));
+        print_copy("host -> GPU0 VRAM (read)", sz, wall_copy(gpus[0], host0, vram0, sz));
+        print_copy("GPU1 local copy of its own export", sz, wall_copy(gpus[1], exp1, vram1, sz));
+    }
+    free_buffer(gpus[0], imp0);
+    free_buffer(gpus[0], vram0);
+    free_buffer(gpus[0], host0);
+    free_buffer(gpus[1], vram1);
+    free_buffer(gpus[1], exp1);
+}
+
+// Submit-to-fence wall time of one recorded command buffer, minus an empty submission (median of reps).
+static double wall_record(gpu & g, const std::function<void(vk::CommandBuffer)> & record, int reps = 7) {
+    auto fence = g.dev.createFence({});
+    auto once  = [&](bool work) {
+        auto cb = begin_cb(g);
+        if (work) {
+            record(cb);
+        }
+        cb.end();
+        const auto t0 = clk::now();
+        submit(g, cb, {}, {}, fence);
+        (void) g.dev.waitForFences(fence, VK_TRUE, UINT64_MAX);
+        const double t = us_since(t0);
+        g.dev.resetFences(fence);
+        g.dev.freeCommandBuffers(g.pool, cb);
+        return t;
+    };
+    std::vector<double> empty, full;
+    for (int i = 0; i < reps + 1; i++) {
+        const double e = once(false), f = once(true);
+        if (i >= 1) {
+            empty.push_back(e);
+            full.push_back(f);
+        }
+    }
+    g.dev.destroyFence(fence);
+    return summarize(full).p50 - summarize(empty).p50;
+}
+
+// GPU writes into different destinations by different methods: RADV's copy and fill, and store.comp with 4- or
+// 16-byte stores, either contiguous or one store per 64-byte line (partial lines). Reports bytes stored per second
+// and 64-byte lines touched per second.
+static void test_host_write(std::vector<gpu> & gpus) {
+    printf("\n[host-write] GPU0 writes, submit-to-fence wall time, 32 MiB region\n");
+    gpu &        g  = gpus[0];
+    const size_t sz = 32 << 20;
+    buffer src   = make_buffer(g, sz, vk::MemoryPropertyFlagBits::eDeviceLocal, false, vk::MemoryPropertyFlagBits::eHostVisible);
+    buffer vram  = make_buffer(g, sz, vk::MemoryPropertyFlagBits::eDeviceLocal, false, vk::MemoryPropertyFlagBits::eHostVisible);
+    buffer exp1  = make_buffer(gpus[1], sz, vk::MemoryPropertyFlagBits::eDeviceLocal, true, vk::MemoryPropertyFlagBits::eHostVisible);
+    buffer peer  = import_dmabuf(g, export_dmabuf(gpus[1], exp1), sz);
+    buffer wc    = make_buffer(g, sz, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, false,
+                               vk::MemoryPropertyFlagBits::eHostCached | vk::MemoryPropertyFlagBits::eDeviceLocal);
+    buffer cached = make_buffer(g, sz, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent |
+                                vk::MemoryPropertyFlagBits::eHostCached);
+    void * host  = aligned_alloc(4096, sz);
+    memset(host, 0, sz);
+    buffer hostb = import_host(g, host, sz);
+    struct dst { const char * name; buffer * b; };
+    const dst dsts[] = { { "local VRAM", &vram }, { "peer VRAM (P2P)", &peer }, { "WC GTT", &wc }, { "cached GTT", &cached },
+                         { "imported malloc", &hostb } };
+    printf("  %-18s %-34s %10s %9s %11s\n", "destination", "method", "us", "GB/s", "Mlines/s");
+    auto row = [&](const char * dname, const char * method, double us, size_t bytes, size_t lines) {
+        printf("  %-18s %-34s %10.1f %9.2f %11.1f\n", dname, method, us, bytes / us / 1000.0, lines / us);
+    };
+    auto ds = g.dev.allocateDescriptorSets({ g.dpool, g.dsl })[0];
+    for (const auto & d : dsts) {
+        row(d.name, "vkCmdCopyBuffer from VRAM", wall_record(g, [&](vk::CommandBuffer cb) { cb.copyBuffer(src.buf, d.b->buf, vk::BufferCopy{ 0, 0, sz }); }),
+            sz, sz / 64);
+        row(d.name, "vkCmdFillBuffer", wall_record(g, [&](vk::CommandBuffer cb) { cb.fillBuffer(d.b->buf, 0, sz, 0x12345678); }), sz, sz / 64);
+        vk::DescriptorBufferInfo bi{ d.b->buf, 0, VK_WHOLE_SIZE };
+        std::vector<vk::WriteDescriptorSet> w = { { ds, 0, 0, vk::DescriptorType::eStorageBuffer, {}, bi },
+                                                  { ds, 1, 0, vk::DescriptorType::eStorageBuffer, {}, bi } };
+        g.dev.updateDescriptorSets(w, {});
+        struct variant { int wide; uint32_t stride; const char * name; };
+        const variant vs[] = { { 0, 1, "store 4 B/lane, contiguous" }, { 1, 1, "store 16 B/lane, contiguous" },
+                               { 0, 16, "store 4 B per 64 B line" }, { 1, 4, "store 16 B per 64 B line" } };
+        for (const auto & v : vs) {
+            const uint32_t elem = v.wide ? 16 : 4;
+            const uint32_t n    = (uint32_t) (sz / (elem * v.stride));
+            const uint32_t pc[4] = { n, v.stride, 7, 0 };
+            const double us = wall_record(g, [&](vk::CommandBuffer cb) {
+                cb.bindPipeline(vk::PipelineBindPoint::eCompute, g.store_pipeline[v.wide]);
+                cb.bindDescriptorSets(vk::PipelineBindPoint::eCompute, g.pl, 0, ds, {});
+                cb.pushConstants(g.pl, vk::ShaderStageFlagBits::eCompute, 0, sizeof(pc), pc);
+                cb.dispatch(512, 1, 1);
+            });
+            row(d.name, v.name, us, (size_t) n * elem, (size_t) n * elem * v.stride / 64);
+        }
+    }
+    g.dev.freeDescriptorSets(g.dpool, ds);
+    free_buffer(g, hostb);
+    free(host);
+    free_buffer(g, cached);
+    free_buffer(g, wc);
+    free_buffer(g, peer);
+    free_buffer(gpus[1], exp1);
+    free_buffer(g, vram);
+    free_buffer(g, src);
+}
+
 int main(int argc, char ** argv) {
     std::vector<std::string> tests;
     for (int i = 1; i < argc; i++) {
         tests.push_back(argv[i]);
     }
     if (tests.empty()) {
-        tests = { "fence", "relay", "proxy", "xsem", "spin", "spin-wc", "copy", "p2p" };
+        tests = { "fence", "relay", "proxy", "xsem", "spin", "spin-wc", "copy", "p2p", "p2p-verify", "p2p-wall", "host-write" };
     }
 
     vk::ApplicationInfo ai{ "xgpu", 1, nullptr, 0, VK_API_VERSION_1_3 };
@@ -798,6 +1078,9 @@ int main(int argc, char ** argv) {
         else if (t == "spin-wc") test_spin_wc(gpus);
         else if (t == "copy") test_copy(gpus);
         else if (t == "p2p") test_p2p(gpus);
+        else if (t == "p2p-verify") test_p2p_verify(gpus);
+        else if (t == "p2p-wall") test_p2p_wall(gpus);
+        else if (t == "host-write") test_host_write(gpus);
         else fprintf(stderr, "unknown test %s\n", t.c_str());
         fflush(stdout);
     }
