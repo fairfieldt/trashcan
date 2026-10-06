@@ -14,3 +14,13 @@ a model there, read `gpuq rules`, request and wait for a lease, and run GPU comm
 `ssh inf.tdf.sh 'gpuq run ID -- CMD'`. Release the lease promptly. Extend it if needed and honor
 YIELD REQUESTED by finishing the current command and running `gpuq yield ID`.
 Never stop or start `ds4-qwen.service` yourself; gpuq manages it.
+
+# Shared GPUs on incite
+
+incite's two D700s are shared by several sessions through gpuq (dashboard http://incite.tdf.sh:8765/,
+MCP server `gpuq-incite`). Request a lease with `gpuq --on incite request LABEL --est MIN`, wait with
+`gpuq --on incite wait ID`, run GPU commands as `ssh incite 'gpuq run ID -- CMD'`, and release promptly.
+`~/trashcan-exp/locked-run.sh NAME CMD` still works: it and `gpuq run` both hold `~/trashcan-exp/.lock`,
+so they exclude each other. Never write into `~/trashcan` on incite (another checkout); use a
+`~/trashcan-exp/NAME` workspace. Build with `scripts/cross-build.sh` in the kbuild VM, not on incite.
+amdgpu kills a GPU job after about 10 s, so keep each queue submission short.
