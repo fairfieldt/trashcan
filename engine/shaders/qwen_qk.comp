@@ -1,0 +1,27 @@
+#version 460
+#include "common.glsl"
+// One wave per (head, token): optional RMS norm with a learned weight, NeoX rotation of the first p.k dims
+// (pairs i, i + p.k/2), a scale, then an f32 output and/or an f16 cache store.
+// a: source (token stride p.m, head stride p.stride), b: norm weight (0: none), c: f32 output [t][head][dim]
+// (0: none), f: f16 cache [slot][head][dim] (0: none). p.heads, p.dim, p.cap, p.r0 = rope base,
+// p.r1 = scale, p.window = eps bits.
+layout(local_size_x=64) in;
+void main(){uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint src=t*p.m+head*p.stride,half_rot=p.k/2;float inv=1.0;
+if(p.b!=0){float ss=0;for(uint j=l;j<p.dim;j+=64){float x=a_f.v[src+j];ss=fma(x,x,ss);}
+inv=inversesqrt(subgroupAdd(ss)/float(p.dim)+uintBitsToFloat(p.window));}
+float pos=float(position()+t),scale=uintBitsToFloat(p.r1);
+uint dst=(t*p.heads+head)*p.dim,slot=((position()+t)%p.cap)*p.heads*p.dim+head*p.dim;
+for(uint j=l;j<p.dim;j+=64){
+    float x=a_f.v[src+j]*inv;if(p.b!=0)x*=b_f.v[j];
+    if(j<p.k){
+        uint i=j%half_rot,partner=j<half_rot?j+half_rot:j-half_rot;
+        float y=a_f.v[src+partner]*inv;if(p.b!=0)y*=b_f.v[partner];
+        float theta=pos*pow(uintBitsToFloat(p.r0),-2.0*float(i)/float(p.k));
+        float co=cos(theta),si=sin(theta);
+        x=j<half_rot?x*co-y*si:y*si+x*co;
+    }
+    x*=scale;
+    if(p.c!=0)c_f.v[dst+j]=x;
+    if(p.f!=0)f_h.v[slot+j]=uint16_t(packHalf2x16(vec2(x,0))&65535u);
+}}

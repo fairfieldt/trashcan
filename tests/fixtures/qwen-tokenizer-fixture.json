@@ -1,0 +1,1098 @@
+[
+ {
+  "text": "Hello there",
+  "ids": [
+   9419,
+   1017
+  ],
+  "pieces": [
+   "Hello",
+   " there"
+  ],
+  "detokenized": "Hello there"
+ },
+ {
+  "text": "In two sentences, what is a cache in computer architecture?",
+  "ids": [
+   623,
+   1330,
+   22157,
+   11,
+   1092,
+   369,
+   264,
+   6297,
+   303,
+   6165,
+   17120,
+   30
+  ],
+  "pieces": [
+   "In",
+   " two",
+   " sentences",
+   ",",
+   " what",
+   " is",
+   " a",
+   " cache",
+   " in",
+   " computer",
+   " architecture",
+   "?"
+  ],
+  "detokenized": "In two sentences, what is a cache in computer architecture?"
+ },
+ {
+  "text": " leading space",
+  "ids": [
+   6187,
+   3433
+  ],
+  "pieces": [
+   " leading",
+   " space"
+  ],
+  "detokenized": " leading space"
+ },
+ {
+  "text": "trailing space ",
+  "ids": [
+   371,
+   13868,
+   3433,
+   220
+  ],
+  "pieces": [
+   "tr",
+   "ailing",
+   " space",
+   " "
+  ],
+  "detokenized": "trailing space "
+ },
+ {
+  "text": "  two leading spaces",
+  "ids": [
+   220,
+   1330,
+   6187,
+   12258
+  ],
+  "pieces": [
+   " ",
+   " two",
+   " leading",
+   " spaces"
+  ],
+  "detokenized": "  two leading spaces"
+ },
+ {
+  "text": "multiple   internal    spaces",
+  "ids": [
+   34493,
+   256,
+   5138,
+   262,
+   12258
+  ],
+  "pieces": [
+   "multiple",
+   "  ",
+   " internal",
+   "   ",
+   " spaces"
+  ],
+  "detokenized": "multiple   internal    spaces"
+ },
+ {
+  "text": "line one\nline two",
+  "ids": [
+   1021,
+   799,
+   198,
+   1021,
+   1330
+  ],
+  "pieces": [
+   "line",
+   " one",
+   "\n",
+   "line",
+   " two"
+  ],
+  "detokenized": "line one\nline two"
+ },
+ {
+  "text": "para one\n\npara two\n\n\n\nfour newlines",
+  "ids": [
+   14365,
+   799,
+   271,
+   14365,
+   1330,
+   987,
+   32897,
+   491,
+   7718
+  ],
+  "pieces": [
+   "para",
+   " one",
+   "\n\n",
+   "para",
+   " two",
+   "\n\n\n\n",
+   "four",
+   " new",
+   "lines"
+  ],
+  "detokenized": "para one\n\npara two\n\n\n\nfour newlines"
+ },
+ {
+  "text": "\n",
+  "ids": [
+   198
+  ],
+  "pieces": [
+   "\n"
+  ],
+  "detokenized": "\n"
+ },
+ {
+  "text": "\n\n\n",
+  "ids": [
+   1358
+  ],
+  "pieces": [
+   "\n\n\n"
+  ],
+  "detokenized": "\n\n\n"
+ },
+ {
+  "text": "tabs\tand\t\tdouble tabs",
+  "ids": [
+   29975,
+   50711,
+   197,
+   8382,
+   21700
+  ],
+  "pieces": [
+   "tabs",
+   "\tand",
+   "\t",
+   "\tdouble",
+   " tabs"
+  ],
+  "detokenized": "tabs\tand\t\tdouble tabs"
+ },
+ {
+  "text": "CRLF line\r\nnext",
+  "ids": [
+   34,
+   77874,
+   1500,
+   317,
+   3480
+  ],
+  "pieces": [
+   "C",
+   "RLF",
+   " line",
+   "\r\n",
+   "next"
+  ],
+  "detokenized": "CRLF line\r\nnext"
+ },
+ {
+  "text": "Numbers: 0 7 42 1234567890 3.14159 -2e10",
+  "ids": [
+   26359,
+   25,
+   220,
+   15,
+   220,
+   22,
+   220,
+   19,
+   17,
+   220,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   15,
+   220,
+   18,
+   13,
+   16,
+   19,
+   16,
+   20,
+   24,
+   471,
+   17,
+   68,
+   16,
+   15
+  ],
+  "pieces": [
+   "Numbers",
+   ":",
+   " ",
+   "0",
+   " ",
+   "7",
+   " ",
+   "4",
+   "2",
+   " ",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9",
+   "0",
+   " ",
+   "3",
+   ".",
+   "1",
+   "4",
+   "1",
+   "5",
+   "9",
+   " -",
+   "2",
+   "e",
+   "1",
+   "0"
+  ],
+  "detokenized": "Numbers: 0 7 42 1234567890 3.14159 -2e10"
+ },
+ {
+  "text": "fn main() { println!(\"hi {}\", x[3] + y); } // rust",
+  "ids": [
+   8556,
+   1822,
+   363,
+   313,
+   13356,
+   16715,
+   5834,
+   23911,
+   830,
+   58,
+   18,
+   60,
+   478,
+   374,
+   1174,
+   333,
+   434,
+   22353
+  ],
+  "pieces": [
+   "fn",
+   " main",
+   "()",
+   " {",
+   " println",
+   "!(\"",
+   "hi",
+   " {}\",",
+   " x",
+   "[",
+   "3",
+   "]",
+   " +",
+   " y",
+   ");",
+   " }",
+   " //",
+   " rust"
+  ],
+  "detokenized": "fn main() { println!(\"hi {}\", x[3] + y); } // rust"
+ },
+ {
+  "text": "def f(x):\n    return x ** 2  # python",
+  "ids": [
+   727,
+   281,
+   2007,
+   1590,
+   198,
+   262,
+   460,
+   830,
+   2972,
+   220,
+   17,
+   220,
+   653,
+   9834
+  ],
+  "pieces": [
+   "def",
+   " f",
+   "(x",
+   "):",
+   "\n",
+   "   ",
+   " return",
+   " x",
+   " **",
+   " ",
+   "2",
+   " ",
+   " #",
+   " python"
+  ],
+  "detokenized": "def f(x):\n    return x ** 2  # python"
+ },
+ {
+  "text": "SELECT * FROM t WHERE a <> 'b';",
+  "ids": [
+   4703,
+   348,
+   4154,
+   259,
+   5120,
+   264,
+   13979,
+   359,
+   65,
+   6750
+  ],
+  "pieces": [
+   "SELECT",
+   " *",
+   " FROM",
+   " t",
+   " WHERE",
+   " a",
+   " <>",
+   " '",
+   "b",
+   "';"
+  ],
+  "detokenized": "SELECT * FROM t WHERE a <> 'b';"
+ },
+ {
+  "text": "Ünïcödé café naïve façade",
+  "ids": [
+   50724,
+   77,
+   245787,
+   2862,
+   164497,
+   50203,
+   91603,
+   571,
+   218894
+  ],
+  "pieces": [
+   "Ü",
+   "n",
+   "ïc",
+   "ö",
+   "dé",
+   " café",
+   " naï",
+   "ve",
+   " façade"
+  ],
+  "detokenized": "Ünïcödé café naïve façade"
+ },
+ {
+  "text": "日本語のテキストと中文和한국어",
+  "ids": [
+   247359,
+   15303,
+   210342,
+   18602,
+   99986,
+   95793,
+   174675,
+   30061
+  ],
+  "pieces": [
+   "日本語",
+   "の",
+   "テキスト",
+   "と",
+   "中文",
+   "和",
+   "한국",
+   "어"
+  ],
+  "detokenized": "日本語のテキストと中文和한국어"
+ },
+ {
+  "text": "Emoji: 😀🚀🔥 and a family 👨‍👩‍👧",
+  "ids": [
+   89535,
+   25,
+   87209,
+   9008,
+   248,
+   222,
+   9008,
+   242,
+   98,
+   321,
+   264,
+   2902,
+   59720,
+   101,
+   373,
+   235,
+   9008,
+   239,
+   102,
+   373,
+   235,
+   9008,
+   239,
+   100
+  ],
+  "pieces": [
+   "Emoji",
+   ":",
+   " 😀",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   " and",
+   " a",
+   " family",
+   " �",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�",
+   "�"
+  ],
+  "detokenized": "Emoji: 😀🚀🔥 and a family 👨‍👩‍👧"
+ },
+ {
+  "text": "Math: ∑ ∫ √ ≤ ≥ ≠ ∞ π",
+  "ids": [
+   8549,
+   25,
+   11654,
+   239,
+   11654,
+   104,
+   11654,
+   248,
+   36059,
+   60052,
+   91050,
+   11654,
+   252,
+   50003
+  ],
+  "pieces": [
+   "Math",
+   ":",
+   " �",
+   "�",
+   " �",
+   "�",
+   " �",
+   "�",
+   " ≤",
+   " ≥",
+   " ≠",
+   " �",
+   "�",
+   " π"
+  ],
+  "detokenized": "Math: ∑ ∫ √ ≤ ≥ ≠ ∞ π"
+ },
+ {
+  "text": "Zero-width: a​b, nbsp: x",
+  "ids": [
+   17461,
+   9069,
+   25,
+   264,
+   15231,
+   65,
+   11,
+   307,
+   5249,
+   25,
+   3966,
+   87
+  ],
+  "pieces": [
+   "Zero",
+   "-width",
+   ":",
+   " a",
+   "​",
+   "b",
+   ",",
+   " n",
+   "bsp",
+   ":",
+   " ",
+   "x"
+  ],
+  "detokenized": "Zero-width: a​b, nbsp: x"
+ },
+ {
+  "text": "mixed CASE and camelCaseWords and snake_case_words",
+  "ids": [
+   54789,
+   37049,
+   321,
+   47502,
+   4068,
+   22755,
+   321,
+   24463,
+   18521,
+   18408
+  ],
+  "pieces": [
+   "mixed",
+   " CASE",
+   " and",
+   " camel",
+   "Case",
+   "Words",
+   " and",
+   " snake",
+   "_case",
+   "_words"
+  ],
+  "detokenized": "mixed CASE and camelCaseWords and snake_case_words"
+ },
+ {
+  "text": "URL https://example.com/path?q=1&r=two#frag",
+  "ids": [
+   3044,
+   3577,
+   1074,
+   8422,
+   877,
+   49259,
+   42332,
+   28,
+   16,
+   58573,
+   28,
+   19186,
+   2,
+   32096
+  ],
+  "pieces": [
+   "URL",
+   " https",
+   "://",
+   "example",
+   ".com",
+   "/path",
+   "?q",
+   "=",
+   "1",
+   "&r",
+   "=",
+   "two",
+   "#",
+   "frag"
+  ],
+  "detokenized": "URL https://example.com/path?q=1&r=two#frag"
+ },
+ {
+  "text": "repeated aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "ids": [
+   265,
+   40568,
+   264,
+   67089,
+   67089,
+   67089,
+   67089,
+   27528,
+   31564
+  ],
+  "pieces": [
+   "re",
+   "peated",
+   " a",
+   "aaaaaaaa",
+   "aaaaaaaa",
+   "aaaaaaaa",
+   "aaaaaaaa",
+   "aaaa",
+   "aaa"
+  ],
+  "detokenized": "repeated aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+ },
+ {
+  "text": "literal <eos> and <bos> in text",
+  "ids": [
+   34600,
+   361,
+   81486,
+   29,
+   321,
+   361,
+   75759,
+   29,
+   303,
+   1414
+  ],
+  "pieces": [
+   "literal",
+   " <",
+   "eos",
+   ">",
+   " and",
+   " <",
+   "bos",
+   ">",
+   " in",
+   " text"
+  ],
+  "detokenized": "literal <eos> and <bos> in text"
+ },
+ {
+  "text": "\u0001control\u0007chars",
+  "ids": [
+   189,
+   2772,
+   195,
+   18673
+  ],
+  "pieces": [
+   "\u0001",
+   "control",
+   "\u0007",
+   "chars"
+  ],
+  "detokenized": "\u0001control\u0007chars"
+ },
+ {
+  "text": "",
+  "ids": [],
+  "pieces": [],
+  "detokenized": ""
+ },
+ {
+  "text": "<|im_start|>user\nHello there<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n",
+  "ids": [
+   248045,
+   846,
+   198,
+   9419,
+   1017,
+   248046,
+   198,
+   248045,
+   74455,
+   198,
+   248068,
+   271,
+   248069,
+   271
+  ],
+  "pieces": [
+   "<|im_start|>",
+   "user",
+   "\n",
+   "Hello",
+   " there",
+   "<|im_end|>",
+   "\n",
+   "<|im_start|>",
+   "assistant",
+   "\n",
+   "<think>",
+   "\n\n",
+   "</think>",
+   "\n\n"
+  ],
+  "detokenized": "<|im_start|>user\nHello there<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
+ },
+ {
+  "text": "<|im_start|>system\nYou are helpful.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n",
+  "ids": [
+   248045,
+   8678,
+   198,
+   2523,
+   513,
+   10631,
+   13,
+   248046,
+   198,
+   248045,
+   846,
+   198,
+   12675,
+   248046,
+   198,
+   248045,
+   74455,
+   198
+  ],
+  "pieces": [
+   "<|im_start|>",
+   "system",
+   "\n",
+   "You",
+   " are",
+   " helpful",
+   ".",
+   "<|im_end|>",
+   "\n",
+   "<|im_start|>",
+   "user",
+   "\n",
+   "Hi",
+   "<|im_end|>",
+   "\n",
+   "<|im_start|>",
+   "assistant",
+   "\n"
+  ],
+  "detokenized": "<|im_start|>system\nYou are helpful.<|im_end|>\n<|im_start|>user\nHi<|im_end|>\n<|im_start|>assistant\n"
+ },
+ {
+  "text": "<tool_call>\n<function=get_weather>\n<parameter=city>\nParis\n</parameter>\n</function>\n</tool_call>",
+  "ids": [
+   248058,
+   198,
+   27,
+   1628,
+   27362,
+   67017,
+   29,
+   198,
+   27,
+   15704,
+   28,
+   8656,
+   29,
+   198,
+   57590,
+   198,
+   510,
+   15704,
+   29,
+   198,
+   510,
+   1628,
+   29,
+   198,
+   248059
+  ],
+  "pieces": [
+   "<tool_call>",
+   "\n",
+   "<",
+   "function",
+   "=get",
+   "_weather",
+   ">",
+   "\n",
+   "<",
+   "parameter",
+   "=",
+   "city",
+   ">",
+   "\n",
+   "Paris",
+   "\n",
+   "</",
+   "parameter",
+   ">",
+   "\n",
+   "</",
+   "function",
+   ">",
+   "\n",
+   "</tool_call>"
+  ],
+  "detokenized": "<tool_call>\n<function=get_weather>\n<parameter=city>\nParis\n</parameter>\n</function>\n</tool_call>"
+ },
+ {
+  "text": "literal <|im_end|> and <|endoftext|> in text",
+  "ids": [
+   34600,
+   220,
+   248046,
+   321,
+   220,
+   248044,
+   303,
+   1414
+  ],
+  "pieces": [
+   "literal",
+   " ",
+   "<|im_end|>",
+   " and",
+   " ",
+   "<|endoftext|>",
+   " in",
+   " text"
+  ],
+  "detokenized": "literal <|im_end|> and <|endoftext|> in text"
+ },
+ {
+  "text": "I'm sure they'll say we'd've DON'T it's ok'S",
+  "ids": [
+   40,
+   2688,
+   2617,
+   781,
+   3172,
+   1910,
+   567,
+   4035,
+   2908,
+   42803,
+   16813,
+   424,
+   579,
+   5226,
+   12887
+  ],
+  "pieces": [
+   "I",
+   "'m",
+   " sure",
+   " they",
+   "'ll",
+   " say",
+   " we",
+   "'d",
+   "'ve",
+   " DON",
+   "'T",
+   " it",
+   "'s",
+   " ok",
+   "'S"
+  ],
+  "detokenized": "I'm sure they'll say we'd've DON'T it's ok'S"
+ },
+ {
+  "text": "digits 2026-10-06 12345678901234567890 1,234.5",
+  "ids": [
+   58722,
+   220,
+   17,
+   15,
+   17,
+   21,
+   12,
+   16,
+   15,
+   12,
+   15,
+   21,
+   220,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   15,
+   16,
+   17,
+   18,
+   19,
+   20,
+   21,
+   22,
+   23,
+   24,
+   15,
+   220,
+   16,
+   11,
+   17,
+   18,
+   19,
+   13,
+   20
+  ],
+  "pieces": [
+   "digits",
+   " ",
+   "2",
+   "0",
+   "2",
+   "6",
+   "-",
+   "1",
+   "0",
+   "-",
+   "0",
+   "6",
+   " ",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9",
+   "0",
+   "1",
+   "2",
+   "3",
+   "4",
+   "5",
+   "6",
+   "7",
+   "8",
+   "9",
+   "0",
+   " ",
+   "1",
+   ",",
+   "2",
+   "3",
+   "4",
+   ".",
+   "5"
+  ],
+  "detokenized": "digits 2026-10-06 12345678901234567890 1,234.5"
+ },
+ {
+  "text": "\t\t indented\n  \n\n   trailing   ",
+  "ids": [
+   297,
+   1214,
+   15397,
+   198,
+   18050,
+   256,
+   26849,
+   262
+  ],
+  "pieces": [
+   "\t\t",
+   " ind",
+   "ented",
+   "\n",
+   "  \n\n",
+   "  ",
+   " trailing",
+   "   "
+  ],
+  "detokenized": "\t\t indented\n  \n\n   trailing   "
+ },
+ {
+  "text": "Ελληνικά русский текст עברית العربية हिन्दी",
+  "ids": [
+   168953,
+   164594,
+   159778,
+   211075,
+   185386,
+   150581,
+   151188,
+   151552,
+   171405,
+   190488,
+   150127,
+   177453
+  ],
+  "pieces": [
+   "Ε",
+   "λλην",
+   "ικά",
+   " русский",
+   " текст",
+   " ע",
+   "בר",
+   "ית",
+   " العربية",
+   " हि",
+   "न्",
+   "दी"
+  ],
+  "detokenized": "Ελληνικά русский текст עברית العربية हिन्दी"
+ },
+ {
+  "text": "combining é ä and ñ",
+  "ids": [
+   21200,
+   5562,
+   378,
+   52033,
+   264,
+   136,
+   230,
+   321,
+   307,
+   136,
+   225
+  ],
+  "pieces": [
+   "comb",
+   "ining",
+   " e",
+   "́",
+   " a",
+   "�",
+   "�",
+   " and",
+   " n",
+   "�",
+   "�"
+  ],
+  "detokenized": "combining é ä and ñ"
+ },
+ {
+  "text": "<think>reasoning</think>answer",
+  "ids": [
+   248068,
+   19290,
+   286,
+   248069,
+   8944
+  ],
+  "pieces": [
+   "<think>",
+   "reason",
+   "ing",
+   "</think>",
+   "answer"
+  ],
+  "detokenized": "<think>reasoning</think>answer"
+ }
+]

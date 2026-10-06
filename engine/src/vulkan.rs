@@ -333,6 +333,38 @@ impl Device {
                 "gemm",
                 include_bytes!(concat!(env!("OUT_DIR"), "/gemm.spv")).as_slice(),
             ),
+            (
+                "qwen_add_norm",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_add_norm.spv")).as_slice(),
+            ),
+            (
+                "qwen_matf32",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_matf32.spv")).as_slice(),
+            ),
+            (
+                "qwen_conv",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_conv.spv")).as_slice(),
+            ),
+            (
+                "qwen_gdn",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gdn.spv")).as_slice(),
+            ),
+            (
+                "qwen_gated_norm",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gated_norm.spv")).as_slice(),
+            ),
+            (
+                "qwen_qk",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_qk.spv")).as_slice(),
+            ),
+            (
+                "qwen_gate",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gate.spv")).as_slice(),
+            ),
+            (
+                "qwen_swiglu",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_swiglu.spv")).as_slice(),
+            ),
         ] {
             ensure!(
                 !bytes.is_empty(),

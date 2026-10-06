@@ -35,6 +35,14 @@ fn main() {
         "matvecq4",
         "matvecq4narrow",
         "merge",
+        "qwen_add_norm",
+        "qwen_matf32",
+        "qwen_conv",
+        "qwen_gdn",
+        "qwen_gated_norm",
+        "qwen_qk",
+        "qwen_gate",
+        "qwen_swiglu",
     ] {
         let dest = out.join(format!("{name}.spv"));
         if available {

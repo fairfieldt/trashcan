@@ -89,6 +89,15 @@ int main(int argc, char ** argv) {
     }
     d.wanted = { "inp_scaled", "result_norm", "result_output" };
     d.detail_layers = { 0, 5 };
+    // DUMP_DETAIL=0,3 selects other detail layers (Gemma's defaults are 0 and 5).
+    if (const char * detail = getenv("DUMP_DETAIL")) {
+        d.detail_layers.clear();
+        for (const char * s = detail; *s; ) {
+            d.detail_layers.insert(atoi(s));
+            const char * comma = strchr(s, ',');
+            s = comma ? comma + 1 : s + strlen(s);
+        }
+    }
     d.index.open(d.dir + "/index.tsv");
 
     llama_backend_init();

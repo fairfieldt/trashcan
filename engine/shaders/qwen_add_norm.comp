@@ -1,0 +1,13 @@
+#version 460
+#include "common.glsl"
+// One workgroup per token: optional residual add x += y, then h = RMS(x) * w when an output is bound.
+// a: x (read/write), b: y (flags & 1), c: h (0: add only), d: weight. p.n = width, p.r0 = eps bits.
+layout(local_size_x=256) in;
+shared float ss[4];
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint base=t*p.n;float sum=0;
+for(uint i=l;i<p.n;i+=256){float x=a_f.v[base+i];if((p.flags&1)!=0){x+=b_f.v[base+i];a_f.v[base+i]=x;}sum=fma(x,x,sum);}
+if(p.c==0)return;
+float s=subgroupAdd(sum);if(gl_SubgroupInvocationID==0)ss[gl_SubgroupID]=s;barrier();
+float inv=inversesqrt((ss[0]+ss[1]+ss[2]+ss[3])/float(p.n)+uintBitsToFloat(p.r0));
+for(uint i=l;i<p.n;i+=256)c_f.v[base+i]=a_f.v[base+i]*inv*d_f.v[i];}

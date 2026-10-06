@@ -6,6 +6,7 @@ mod micro;
 mod model;
 mod prefill_micro;
 mod quant;
+mod qwen;
 mod responses;
 mod server;
 mod tokenizer;
@@ -183,6 +184,66 @@ enum Cmd {
         #[arg(long, default_value_t = 3)]
         draft_tokens: usize,
     },
+    /// Chat with a qwen35 model (Qwen3.8-27B, Qwen3.5-9B), optionally across a chain of machines.
+    QwenChat {
+        model: PathBuf,
+        prompt: Option<String>,
+        #[command(flatten)]
+        run: QwenRun,
+        #[arg(long)]
+        system: Option<String>,
+        #[arg(long)]
+        thinking: bool,
+        #[arg(long, default_value_t = 512)]
+        max_tokens: usize,
+        #[arg(long, default_value_t = 0.7)]
+        temperature: f32,
+        #[arg(long, default_value_t = 20)]
+        top_k: usize,
+        #[arg(long, default_value_t = 0.8)]
+        top_p: f32,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
+    /// Measure qwen35 prefill and greedy decode.
+    QwenBench {
+        model: PathBuf,
+        #[command(flatten)]
+        run: QwenRun,
+        #[arg(long, default_value_t = 512)]
+        pp: usize,
+        #[arg(long, default_value_t = 128)]
+        tg: usize,
+    },
+    /// Run the reference prompt through the qwen35 pipeline, dump activations and greedy tokens.
+    QwenValidate {
+        model: PathBuf,
+        out: PathBuf,
+        #[command(flatten)]
+        run: QwenRun,
+        #[arg(long, default_value_t = 10)]
+        greedy: usize,
+    },
+    /// Serve qwen35 layers to the previous machine in a chain.
+    QwenNode {
+        model: PathBuf,
+        #[arg(long, default_value = "0.0.0.0:7070")]
+        listen: String,
+        #[arg(long)]
+        cpu: bool,
+        #[arg(long, value_delimiter = ',')]
+        gpus: Option<Vec<usize>>,
+    },
+    /// Run a qwen35 model on the CPU reference path and dump activations in the reference format.
+    QwenRef {
+        model: PathBuf,
+        out: PathBuf,
+        #[arg(long, default_value_t = 10)]
+        greedy: usize,
+        /// Prompt token ids.
+        #[arg(required = true)]
+        tokens: Vec<u32>,
+    },
     /// Dump a GGUF file's metadata and tensor inventory.
     Info {
         model: PathBuf,
@@ -201,6 +262,35 @@ enum Cmd {
         n: usize,
     },
 }
+
+/// Devices of this machine and the rest of the chain, shared by the qwen35 commands.
+#[derive(clap::Args)]
+struct QwenRun {
+    /// Further machines, in chain order (host:port of `trashcan qwen-node`).
+    #[arg(long, value_delimiter = ',')]
+    nodes: Vec<String>,
+    /// Run this machine's layers on the CPU reference path.
+    #[arg(long)]
+    cpu: bool,
+    /// Local GPU indices (default: all).
+    #[arg(long, value_delimiter = ',')]
+    gpus: Option<Vec<usize>>,
+    #[arg(long, default_value_t = 8192)]
+    context: usize,
+    #[arg(long, default_value_t = 512)]
+    batch: usize,
+}
+impl QwenRun {
+    fn chain(self, model: &Path) -> Result<qwen::net::Chain> {
+        let devices = qwen::chat::devices(self.cpu, self.gpus)?;
+        qwen::net::Chain::new(model, devices, &self.nodes, self.context, self.batch)
+    }
+}
+
+/// The 14-token ChatML reference prompt ("Hello there", thinking off) used for activation dumps.
+const QWEN_REFERENCE: [u32; 14] = [
+    248045, 846, 198, 9419, 1017, 248046, 198, 248045, 74455, 198, 248068, 271, 248069, 271,
+];
 
 fn info(path: &Path, layers: &[u32]) -> Result<()> {
     let g = gguf::Gguf::open(path)?;
@@ -667,10 +757,96 @@ fn main() -> Result<()> {
             std::fs::write(out.join("profile.tsv"), prof)?;
             Ok(())
         }
+        Cmd::QwenChat {
+            model,
+            prompt,
+            run,
+            system,
+            thinking,
+            max_tokens,
+            temperature,
+            top_k,
+            top_p,
+            seed,
+        } => {
+            let mut sampler = generation::Sampler::new(temperature, top_k, top_p, seed)?;
+            let mut chain = run.chain(&model)?;
+            let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+            qwen::chat::chat(&mut chain, &t, prompt, system, thinking, max_tokens, &mut sampler)
+        }
+        Cmd::QwenBench { model, run, pp, tg } => {
+            let mut chain = run.chain(&model)?;
+            println!("{}", qwen::chat::bench(&mut chain, pp, tg)?);
+            Ok(())
+        }
+        Cmd::QwenValidate {
+            model,
+            out,
+            run,
+            greedy,
+        } => {
+            let mut chain = run.chain(&model)?;
+            let ids = qwen::chat::validate(&mut chain, &out, &QWEN_REFERENCE, greedy)?;
+            println!("greedy: {ids:?}");
+            Ok(())
+        }
+        Cmd::QwenNode {
+            model,
+            listen,
+            cpu,
+            gpus,
+        } => qwen::net::serve(&model, &listen, qwen::chat::devices(cpu, gpus)?),
+        Cmd::QwenRef {
+            model,
+            out,
+            greedy,
+            tokens,
+        } => qwen_ref(&model, &out, greedy, &tokens),
         Cmd::Info { model, layers } => info(&model, &layers),
         Cmd::Tensor { model, name, n } => tensor(&model, &name, n),
         Cmd::Vocab { model } => vocab(&model),
     }
+}
+
+fn write_dump(out: &Path, caps: &qwen::cpu::Captures) -> Result<()> {
+    std::fs::create_dir_all(out)?;
+    let mut index = String::new();
+    for (name, v) in caps {
+        std::fs::write(out.join(format!("{name}.f32")), bytemuck::cast_slice(v))?;
+        index.push_str(&format!("{name}\t{},1,1,1\t{}\n", v.len(), v.len()));
+    }
+    std::fs::write(out.join("index.tsv"), index)?;
+    Ok(())
+}
+
+fn qwen_ref(model: &Path, out: &Path, greedy: usize, tokens: &[u32]) -> Result<()> {
+    let g = gguf::Gguf::open(model)?;
+    let c = qwen::Config::new(&g)?;
+    let mut stage = qwen::cpu::CpuStage::new(&c, 0, c.layers, tokens.len() + greedy + 1, true);
+    let mut caps = qwen::cpu::Captures::new();
+    let mut x = qwen::embed(&g, &c, tokens)?;
+    let start = std::time::Instant::now();
+    stage.forward(&g, &mut x, 0, tokens.len(), &mut Some(&mut caps))?;
+    let logits = stage.logits(&g, &x, &mut Some(&mut caps))?;
+    caps.insert("result_output".into(), logits.clone());
+    write_dump(out, &caps)?;
+    std::fs::write(out.join("logits.f32"), bytemuck::cast_slice(&logits))?;
+    eprintln!("prompt: {:.2} s", start.elapsed().as_secs_f64());
+    let argmax = |l: &[f32]| (0..l.len()).fold(0, |b, i| if l[i] > l[b] { i } else { b }) as u32;
+    let mut ids = vec![argmax(&logits)];
+    let mut pos = tokens.len();
+    while ids.len() < greedy {
+        let mut x = qwen::embed(&g, &c, &ids[ids.len() - 1..])?;
+        stage.forward(&g, &mut x, pos, 1, &mut None)?;
+        pos += 1;
+        ids.push(argmax(&stage.logits(&g, &x, &mut None)?));
+    }
+    std::fs::write(
+        out.join("greedy.txt"),
+        ids.iter().map(|x| format!("{x}\n")).collect::<String>(),
+    )?;
+    println!("greedy: {ids:?}");
+    Ok(())
 }
 
 fn check_continuation(

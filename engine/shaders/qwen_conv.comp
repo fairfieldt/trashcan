@@ -1,0 +1,15 @@
+#version 460
+#include "common.glsl"
+// Causal depthwise convolution (kernel 4) and SiLU over a batch. One thread per channel walks the tokens,
+// keeping the previous three inputs in registers, then stores them as the state for the next call.
+// a: input [t][ch], b: weights f32 [ch][4], c: state [3][ch] (read/write), d: output [t][ch]. p.n = channels.
+// Position 0 starts a new sequence from a zero state.
+layout(local_size_x=256) in;
+void main(){uint ch=gl_GlobalInvocationID.x;if(ch>=p.n)return;
+vec4 w=vec4(b_f.v[ch*4],b_f.v[ch*4+1],b_f.v[ch*4+2],b_f.v[ch*4+3]);
+bool fresh=position()==0;
+float x0=fresh?0:c_f.v[ch],x1=fresh?0:c_f.v[p.n+ch],x2=fresh?0:c_f.v[2*p.n+ch];
+uint nb=batch();
+for(uint t=0;t<nb;t++){float x3=a_f.v[t*p.n+ch];float s=w.x*x0;s+=w.y*x1;s+=w.z*x2;s+=w.w*x3;
+d_f.v[t*p.n+ch]=s/(1+exp(-s));x0=x1;x1=x2;x2=x3;}
+c_f.v[ch]=x0;c_f.v[p.n+ch]=x1;c_f.v[2*p.n+ch]=x2;}

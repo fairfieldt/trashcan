@@ -10,13 +10,55 @@ pub struct Tokenizer {
     specials: Vec<(String, u32)>,
     bytes: [Option<u32>; 256],
     pub template: String,
+    /// GPT-2 style byte-level BPE (Qwen); `None` is Gemma's SentencePiece-style BPE.
+    byte_level: Option<ByteLevel>,
+}
+/// Byte-to-character table and pre-tokenizer of a byte-level BPE vocabulary.
+struct ByteLevel {
+    encode: [char; 256],
+    decode: HashMap<char, u8>,
+    split: fancy_regex::Regex,
+    bos: Option<u32>,
+}
+impl ByteLevel {
+    fn new(g: &Gguf) -> Result<Self> {
+        // llama.cpp's expansion of the tokenizer.json pattern, without the inline (?i:) group.
+        let pattern = match g.get_str("tokenizer.ggml.pre")? {
+            "qwen35" => r"(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\r\n\p{L}\p{N}]?[\p{L}\p{M}]+|\p{N}| ?[^\s\p{L}\p{M}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",
+            other => anyhow::bail!("unsupported byte-level pre-tokenizer {other}"),
+        };
+        let mut encode = ['\0'; 256];
+        let mut extra = 0;
+        for (b, c) in encode.iter_mut().enumerate() {
+            let printable = matches!(b, 33..=126 | 161..=172 | 174..=255);
+            *c = char::from_u32(if printable { b as u32 } else { 256 + extra }).unwrap();
+            extra += u32::from(!printable);
+        }
+        let add_bos = g
+            .get("tokenizer.ggml.add_bos_token")
+            .ok()
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0)
+            != 0;
+        Ok(Self {
+            decode: encode.iter().enumerate().map(|(b, c)| (*c, b as u8)).collect(),
+            encode,
+            split: fancy_regex::Regex::new(pattern)?,
+            bos: if add_bos {
+                Some(g.get_u64("tokenizer.ggml.bos_token_id")? as u32)
+            } else {
+                None
+            },
+        })
+    }
 }
 impl Tokenizer {
     pub fn new(g: &Gguf) -> Result<Self> {
-        ensure!(
-            g.get_str("tokenizer.ggml.model")? == "gemma4",
-            "only Gemma4 tokenizer supported"
-        );
+        let byte_level = match g.get_str("tokenizer.ggml.model")? {
+            "gemma4" => None,
+            "gpt2" => Some(ByteLevel::new(g)?),
+            other => anyhow::bail!("unsupported tokenizer {other}"),
+        };
         let tokens: Vec<_> = g
             .get("tokenizer.ggml.tokens")?
             .as_arr()
@@ -70,7 +112,11 @@ impl Tokenizer {
         specials.sort_by_key(|(s, id)| (std::cmp::Reverse(s.len()), *id));
         let mut bytes = [None; 256];
         for (i, b) in bytes.iter_mut().enumerate() {
-            *b = ids.get(&format!("<0x{i:02X}>")).copied();
+            *b = match &byte_level {
+                Some(bl) => ids.get(&bl.encode[i].to_string()),
+                None => ids.get(&format!("<0x{i:02X}>")),
+            }
+            .copied();
         }
         ensure!(
             bytes.iter().all(Option::is_some),
@@ -84,12 +130,18 @@ impl Tokenizer {
             specials,
             bytes,
             template: g.get_str("tokenizer.chat_template")?.into(),
+            byte_level,
         })
+    }
+    pub fn id(&self, token: &str) -> Option<u32> {
+        self.ids.get(token).copied()
     }
     pub fn encode(&self, text: &str, bos: bool, special: bool) -> Vec<u32> {
         let mut out = Vec::new();
-        if bos {
-            out.push(2);
+        match &self.byte_level {
+            Some(bl) => out.extend(bl.bos.filter(|_| bos)),
+            None if bos => out.push(2),
+            None => {}
         }
         let mut pos = 0;
         let mut plain = 0;
@@ -113,6 +165,14 @@ impl Tokenizer {
         out
     }
     fn plain(&self, text: &str, out: &mut Vec<u32>) {
+        if let Some(bl) = &self.byte_level {
+            for word in bl.split.find_iter(text) {
+                let word = word.expect("pre-tokenizer backtracking limit");
+                let mapped: String = word.as_str().bytes().map(|b| bl.encode[b as usize]).collect();
+                self.bpe(&mapped, out);
+            }
+            return;
+        }
         let text = text.replace(' ', "▁");
         let mut start = 0;
         while start < text.len() {
@@ -179,6 +239,8 @@ impl Tokenizer {
         for piece in pieces.into_iter().filter(|s| !s.is_empty()) {
             if let Some(id) = self.ids.get(&piece) {
                 out.push(*id);
+            } else if let Some(bl) = &self.byte_level {
+                out.extend(piece.chars().filter_map(|c| self.bytes[bl.decode[&c] as usize]));
             } else {
                 for b in piece.bytes() {
                     if let Some(id) = self.bytes[b as usize] {
@@ -192,6 +254,13 @@ impl Tokenizer {
         let Some(s) = self.tokens.get(id as usize) else {
             return vec![];
         };
+        if let Some(bl) = &self.byte_level {
+            return match self.types[id as usize] {
+                1 => s.chars().filter_map(|c| bl.decode.get(&c).copied()).collect(),
+                3 if !special => vec![],
+                _ => s.clone().into_bytes(),
+            };
+        }
         if self.types[id as usize] == 6 && s.len() == 6 {
             if let Ok(b) = u8::from_str_radix(&s[3..5], 16) {
                 return vec![b];

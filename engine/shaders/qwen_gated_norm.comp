@@ -1,0 +1,11 @@
+#version 460
+#include "common.glsl"
+// Per value head: RMS norm over the head with a shared weight, gated by SiLU(z). One wave per (head, token).
+// a: DeltaNet output [t][head][dim] (in place), b: z (same layout), c: weight [dim].
+// p.n = heads * dim, p.dim, p.r0 = eps bits.
+layout(local_size_x=64) in;
+void main(){uint h=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint base=t*p.n+h*p.dim;float ss=0;
+for(uint j=l;j<p.dim;j+=64){float x=a_f.v[base+j];ss=fma(x,x,ss);}
+float inv=inversesqrt(subgroupAdd(ss)/float(p.dim)+uintBitsToFloat(p.r0));
+for(uint j=l;j<p.dim;j+=64){float z=b_f.v[base+j];a_f.v[base+j]=a_f.v[base+j]*inv*c_f.v[j]*(z/(1.0+exp(-z)));}}

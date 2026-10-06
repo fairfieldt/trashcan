@@ -1,0 +1,11 @@
+#version 460
+#include "common.glsl"
+// Small f32 projection (DeltaNet alpha/beta): y[t][row] = W[row] . x[t]. One wave per row and eight tokens,
+// so each weight is read once per eight columns. W in set 0, x in b, y in c. p.n rows, p.k row length.
+layout(local_size_x=256) in;
+void main(){uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x*4+gl_SubgroupID,t0=gl_WorkGroupID.y*8,nb=batch();
+if(row>=p.n||t0>=nb)return;uint cols=min(8u,nb-t0);float sums[8];
+[[unroll]]for(uint z=0;z<8;z++)sums[z]=0;
+for(uint i=lane;i<p.k;i+=64){float w=uintBitsToFloat(ww.words[row*p.k+i]);
+[[unroll]]for(uint z=0;z<8;z++)if(z<cols)sums[z]=fma(w,b_f.v[(t0+z)*p.k+i],sums[z]);}
+[[unroll]]for(uint z=0;z<8;z++){float v=subgroupAdd(sums[z]);if(lane==0&&z<cols)c_f.v[(t0+z)*p.n+row]=v;}}
