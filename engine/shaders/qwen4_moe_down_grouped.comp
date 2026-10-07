@@ -17,6 +17,21 @@ for(uint c0=s0;c0<s1;c0+=COLS){
     uint cols=min(uint(COLS),s1-c0);uint slot[COLS];
     [[unroll]]for(uint z=0;z<COLS;z++)slot[z]=e_u.v[c0+min(z,cols-1)];
     vec4 acc[COLS];[[unroll]]for(uint z=0;z<COLS;z++)acc[z]=vec4(0);
+    if(FMT==3){
+        uint blocks64=p.k/64;
+        for(uint b=lane/4;b<blocks64;b+=16){
+            uint qw[4];float sc[4];
+            [[unroll]]for(uint r=0;r<4;r++){
+                uint blk=(e*p.n+first+r)*blocks64+b;qw[r]=ww.words[p.stride+blk*4+part];sc[r]=bscale(blk);
+            }
+            [[unroll]]for(uint z=0;z<COLS;z++){
+                uint xb=slot[z]*(p.k/4)+b*16+part*4;
+                vec4 x0=b_v4.v[xb],x1=b_v4.v[xb+1],x2=b_v4.v[xb+2],x3=b_v4.v[xb+3];
+                [[unroll]]for(uint r=0;r<4;r++)acc[z][r]=fma(dot(q2(qw[r],0u),x0)+dot(q2(qw[r],1u),x1)
+                    +dot(q2(qw[r],2u),x2)+dot(q2(qw[r],3u),x3),sc[r],acc[z][r]);
+            }
+        }
+    }else
     for(uint b=lane/4;b<blocks;b+=16){
         vec4 lo[4],hi[4];float sc[4];
         [[unroll]]for(uint r=0;r<4;r++){

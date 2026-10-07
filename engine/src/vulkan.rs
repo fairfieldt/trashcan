@@ -445,6 +445,7 @@ impl Device {
                     ("qwen4_moe_down", Some(0)),
                     ("qwen4_moe_down_iq4nl", Some(1)),
                     ("qwen4_moe_down_iq4xs", Some(2)),
+                    ("qwen4_moe_down_q2", Some(3)),
                 ],
                 "qwen4_moe_gu_grouped" => &[
                     ("qwen4_moe_gu_grouped", Some(0)),
@@ -455,6 +456,7 @@ impl Device {
                     ("qwen4_moe_down_grouped", Some(0)),
                     ("qwen4_moe_down_grouped_iq4nl", Some(1)),
                     ("qwen4_moe_down_grouped_iq4xs", Some(2)),
+                    ("qwen4_moe_down_grouped_q2", Some(3)),
                 ],
                 "qwen4_mix_down" => &[("qwen4_mix_down", Some(0)), ("qwen4_mix_down_q8", Some(1))],
                 "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],

@@ -124,6 +124,7 @@ pub enum GgmlType {
     IQ4NL,
     IQ4XS,
     MXFP4,
+    Q2_0,
     Other(u32),
 }
 
@@ -143,6 +144,7 @@ impl GgmlType {
             20 => GgmlType::IQ4NL,
             23 => GgmlType::IQ4XS,
             39 => GgmlType::MXFP4,
+            42 => GgmlType::Q2_0,
             12 => GgmlType::Q4K,
             13 => GgmlType::Q5K,
             14 => GgmlType::Q6K,
@@ -168,6 +170,7 @@ impl GgmlType {
             GgmlType::IQ4NL => (32, 18),
             GgmlType::IQ4XS => (256, 136),
             GgmlType::MXFP4 => (32, 17),
+            GgmlType::Q2_0 => (64, 18),
             GgmlType::Q5K => (256, 176),
             GgmlType::Q6K => (256, 210),
             GgmlType::Other(_) => return None,
@@ -184,6 +187,7 @@ impl fmt::Display for GgmlType {
             GgmlType::IQ2XXS => write!(f, "IQ2_XXS"),
             GgmlType::IQ4NL => write!(f, "IQ4_NL"),
             GgmlType::IQ4XS => write!(f, "IQ4_XS"),
+            GgmlType::Q2_0 => write!(f, "Q2_0"),
             GgmlType::Q5K => write!(f, "Q5_K"),
             GgmlType::Q6K => write!(f, "Q6_K"),
             GgmlType::Other(t) => write!(f, "type{t}"),

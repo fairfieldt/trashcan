@@ -106,6 +106,7 @@ fn expert_format(t: &TensorInfo) -> Result<(u32, usize)> {
         GgmlType::Q4_0 => (0, k / 32 * 18),
         GgmlType::IQ4NL => (1, k / 32 * 18),
         GgmlType::IQ4XS => (2, k / 256 * 136),
+        GgmlType::Q2_0 => (3, k / 64 * 18),
         other => anyhow::bail!(
             "{} is {other}; GPU experts are Q4_0, IQ4_NL or IQ4_XS (docs/qwen4.md)",
             t.name
@@ -296,10 +297,12 @@ fn expert_shader(name: &'static str, fmt: u32) -> &'static str {
         ("qwen4_moe_gu", 2) => "qwen4_moe_gu_iq4xs",
         ("qwen4_moe_down", 1) => "qwen4_moe_down_iq4nl",
         ("qwen4_moe_down", 2) => "qwen4_moe_down_iq4xs",
+        ("qwen4_moe_down", 3) => "qwen4_moe_down_q2",
         ("qwen4_moe_gu_grouped", 1) => "qwen4_moe_gu_grouped_iq4nl",
         ("qwen4_moe_gu_grouped", 2) => "qwen4_moe_gu_grouped_iq4xs",
         ("qwen4_moe_down_grouped", 1) => "qwen4_moe_down_grouped_iq4nl",
         ("qwen4_moe_down_grouped", 2) => "qwen4_moe_down_grouped_iq4xs",
+        ("qwen4_moe_down_grouped", 3) => "qwen4_moe_down_grouped_q2",
         _ => name,
     }
 }
@@ -481,6 +484,7 @@ impl GpuStage {
             );
             // The shared expert is stacked with the routed ones, so it must share their formats.
             let (gu_fmt, down_fmt) = (expert_format(gt)?.0, expert_format(dt)?.0);
+            ensure!(gu_fmt != 3, "{} is Q2_0; the GPU reads Q2_0 for down projections only", gt.name);
             for (a, b) in [(gt, ut), (gt, gs), (gt, us), (dt, ds)] {
                 ensure!(
                     a.ty == b.ty,

@@ -298,6 +298,16 @@ pub fn dequant_row(g: &Gguf, t: &TensorInfo, row: usize, out: &mut [f32]) -> Res
                 }
             }
         }
+        GgmlType::Q2_0 => {
+            let rb = k / 64 * 18;
+            let b = &g.data(t)[row * rb..(row + 1) * rb];
+            for (o, s) in out.chunks_exact_mut(64).zip(b.chunks_exact(18)) {
+                let d = f16::from_le_bytes([s[0], s[1]]).to_f32();
+                for (j, v) in o.iter_mut().enumerate() {
+                    *v = d * (((s[2 + j / 4] >> (2 * (j % 4))) & 3) as i32 - 1) as f32;
+                }
+            }
+        }
         _ => crate::qwen::dequant_row(g, t, row, out)?,
     }
     Ok(())
@@ -414,6 +424,33 @@ mod tests {
                     assert_eq!(lo, want[blk * 32 + 4 * part + j]);
                     assert_eq!(hi, want[blk * 32 + 16 + 4 * part + j]);
                 }
+            }
+        }
+    }
+
+    /// A Q2_0 block repacked like the IQ4_NL/Q4_0 experts (scale array, then 4 code words) and decoded as
+    /// qwen4_expert.glsl does (word w holds elements 16w..16w+15) gives ggml's dequantize_row_q2_0 values.
+    #[test]
+    fn q2_0_repack_matches_the_shader_decode() {
+        let mut blk = [0u8; 18];
+        blk[..2].copy_from_slice(&half::f16::from_f32(-0.375).to_le_bytes());
+        for (i, b) in blk[2..].iter_mut().enumerate() {
+            *b = (i * 53 + 7) as u8;
+        }
+        let want: Vec<f32> = (0..64)
+            .map(|j| -0.375 * (((blk[2 + j / 4] >> (2 * (j % 4))) & 3) as i32 - 1) as f32)
+            .collect();
+        let (packed, stride) = crate::quant::repack_q4h(&blk);
+        let scale = half::f16::from_le_bytes([packed[0], packed[1]]).to_f32();
+        let words: Vec<u32> = packed
+            .chunks_exact(4)
+            .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
+            .collect();
+        for part in 0..4 {
+            let q = words[stride + part];
+            for e in 0..16 {
+                let code = (q >> (2 * e)) & 3;
+                assert_eq!(scale * (code as i32 - 1) as f32, want[16 * part + e]);
             }
         }
     }
