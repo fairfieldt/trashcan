@@ -146,7 +146,7 @@ value head h reads key head h % k_heads, so taking each group of k_heads value h
 mapping locally. Each mixer and FFN ends a segment with its partial output projection in host memory; the host
 adds the ranks' partials and exchanges the sum with the other machine over 1-3 lanes (`link.rs`, TCP or USB4STREAM):
 two all-reduces per layer, 2 × layers + 1 segments per forward. Each machine merges its ranks' candidates and the
-machines exchange theirs. Rollback and checkpoints apply to every rank.
+machines exchange theirs. Rollback and checkpoints apply to every rank. A forward runs one of three ways:
 
 - Decode, verification and draft steps (up to 8 columns) are one command buffer and one submission per rank. Each
   segment after the first waits on a VkEvent the host sets (RADV: a command-processor poll of host memory, about
@@ -154,8 +154,15 @@ machines exchange theirs. Rollback and checkpoints apply to every rank.
   residual: it adds each all-reduced total and writes the next segment's normed rows, which the projections read from
   host memory, so the GPUs run no residual norms. Device buffers of a rank come from 256 MiB allocations, so a
   submission lists few memory objects (the kernel validates each one before the GPU starts).
-- Prefill segments are one submission each, submitted ahead and released by a timeline semaphore (a gated
-  submission would last the whole chunk, and amdgpu kills GPU jobs after about 10 s), adding the total on the GPUs.
+- A prefill batch of at least 128 tokens runs as two micro-batches, each with its own rows of the batch buffers,
+  its own half of the work buffers and its own position parameters. Each GPU runs the second micro-batch on the
+  second queue of the compute family, its segment i waiting for the first micro-batch's segment i (whose recurrent
+  state and attention cache it continues). The host all-reduces one micro-batch (on 6 threads across Macs) while
+  the GPUs run the other, and each queue fills the other's bubbles (`qwen_gdn`, host-memory traffic). The
+  candidates are bit for bit those of one batch. A full chunk's graphs are recorded when the model loads.
+- Other batches (9 to 127 tokens, such as the tail of a prompt) are one submission per segment, submitted ahead and
+  released by a timeline semaphore, adding the total on the GPUs. Prefill segments stay separate submissions
+  because amdgpu kills GPU jobs after about 10 s.
 - A SIGINT, SIGTERM or SIGHUP during a gated forward sets the release events until the GPUs drain, then takes its
   default action; a failed exchange drains the same way.
 
@@ -167,35 +174,49 @@ trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP
 trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
 ```
 
-Qwen3.8-27B on incite and invite (four D700s, [results/qwen/tp-20261006](../results/qwen/tp-20261006/),
-[results/qwen/tp-decode-20261006](../results/qwen/tp-decode-20261006/)): TP4 matches the CPU reference to 4.1e-4
-with the same greedy tokens, and runs at 91 tok/s prefill and 28.5 tok/s decode over USB4STREAM, against 38 / 9.6
-for the four-stage pipeline. The 9B gets 208 / 46 with TP2 on one Mac against 127 / 23. A 27B decode token takes
-35 ms: 29-30 ms on the GPUs (invite's run streaming kernels 5-7% slower than incite's at the same clocks, so they
-pace the exchanges) and 4-5.5 ms in the 128 cross-Mac exchanges. With MTP drafting (the block split like a trunk
-layer, each rank holding an equal share of the draft vocabulary's head rows) the 27B decodes at 39.6 tok/s on the
-two Macs and the 9B at 66 on one, 72% of drafts accepted; `qwen-check` passes on TP with and without drafting.
-`trashcan serve` takes the same `--tp` options and passes `scripts/test-server.py` that way. Measurement switches:
-`TRASHCAN_TP_EVENTS=0` (decode through per-segment submissions too), `TRASHCAN_TP_HOSTNORM=0` (GPU residual norms),
-`TRASHCAN_TP_ARENA=0`, `TRASHCAN_TP_PARTS=N` (split-K attention partitions times N, default 2),
-`TRASHCAN_TP_DRAFT_HEAD=0`; `TRASHCAN_TP_SUBMIT=1` submits each prefill segment when it is due instead of ahead;
-`TRASHCAN_TP_FREE=1` runs the segments without all-reduces (wrong results, the GPU floor);
-`TRASHCAN_TP_PROFILE=FILE` (with `TRASHCAN_TP_PROFILE_DISPATCH=1`) writes GPU timestamps per segment (and dispatch)
-aligned to host time, summarized by `tools/tp_profile.py` and `tools/tp_timeline.py`.
+Qwen3.8-27B on incite and invite (four D700s; [results/qwen/tp-merged-20261006](../results/qwen/tp-merged-20261006/),
+which builds on [tp-20261006](../results/qwen/tp-20261006/), [tp-decode-20261006](../results/qwen/tp-decode-20261006/)
+and [tp-prefill-20261006](../results/qwen/tp-prefill-20261006/)): TP4 matches the CPU reference to 4.1e-4 with the
+same greedy tokens, and runs at 150 tok/s prefill (512-token prompts; 134 at 2048) and 28.4 tok/s decode over
+USB4STREAM, against 38 / 9.6 for the four-stage pipeline. The 9B gets 269 / 46 with TP2 on one Mac against 127 / 23.
+A 27B decode token takes 35 ms: 29-30 ms on the GPUs (invite's run streaming kernels 5-7% slower than incite's at the
+same clocks, so they pace the exchanges) and 4-5.5 ms in the 128 cross-Mac exchanges. With MTP drafting (the block
+split like a trunk layer, each rank holding an equal share of the draft vocabulary's head rows) the 27B decodes at
+39.5 tok/s on the two Macs and the 9B at 66 on one, 71-72% of drafts accepted; `qwen-check` passes on TP with and
+without drafting. The 27B prefill is paced by the slower Mac's host work and varies from one session to the next
+(142-151 tok/s; run back to back, the prefill branch's binary gives the same or 1-2% less). `trashcan serve` takes
+the same `--tp` options and passes `scripts/test-server.py` that way; `qwen-tp-node` waits for the next request
+without a deadline and ends a session only when the driver says goodbye or closes the lanes.
 
-Prefill hides its all-reduces behind GPU work ([results/qwen/tp-prefill-20261006](../results/qwen/tp-prefill-20261006/)).
-A batch of at least 128 tokens runs as two micro-batches, each with its own rows of the batch buffers and its own
-position parameters. Each GPU runs the second micro-batch on the second queue of the compute family, its segment i
-waiting for the first micro-batch's segment i (whose recurrent state and attention cache it continues). The host
-all-reduces one micro-batch while the GPUs run the other, and each queue fills the other's bubbles (`qwen_gdn`,
-host-memory traffic). The prefill's candidates are bit for bit those of one batch. The 27B prefills 512 tokens in
-3.4 s instead of 5.6. The prefill is now GPU-bound, mostly in Q4_0 GEMMs at about 2.1 TFLOP/s (60% of the D700's
-peak). Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead:
-3-6% faster, identical results (`TRASHCAN_QWEN_GEMM=gemm` restores the old kernel). Switches: `TRASHCAN_TP_MICRO`
-(default 2, 1 disables), `TRASHCAN_TP_QUEUES=1` (one queue), `TRASHCAN_TP_THREADS` (host threads for the sums; 6
-across Macs, 1 on one Mac), `TRASHCAN_TP_PROFILE=1` (GPU time per kernel in `qwen-bench`'s `pp_profile`),
-`TRASHCAN_TP_VRAM_IO=1` (timing only: partials and totals stay in VRAM). `trashcan qwen-gemm-bench --shapes
-ROWSxK,...` times Q4_0 GEMM kernels and checks variants against `gemm` bit for bit.
+Benchmarks hold the performance governor and a 0 µs CPU latency request (`scripts/latency-run.py`) on both Macs,
+the node included. Without the request on the node, a decode token's cross-Mac exchanges take about 7.4 ms instead
+of 4.1 (27B decode 26.0 instead of 28.4 tok/s); the first TP4 record (16.6 tok/s, 26 with MTP) was measured that
+way, and the same binary gives 18.7 / 28.6 with the request (note in [tp-20261006](../results/qwen/tp-20261006/)).
+
+Measurement switches (per process: give the node the same ones; the micro-batch and thread counts travel with each
+forward):
+
+- decode: `TRASHCAN_TP_EVENTS=0` (per-segment submissions for small batches too), `TRASHCAN_TP_HOSTNORM=0` (GPU
+  residual norms), `TRASHCAN_TP_ARENA=0`, `TRASHCAN_TP_PARTS=N` (split-K attention partitions times N, default 2),
+  `TRASHCAN_TP_DRAFT_HEAD=0`;
+- prefill: `TRASHCAN_TP_MICRO=N` (micro-batches of batches of 128 tokens or more, default 2, 1 disables),
+  `TRASHCAN_TP_QUEUES=1` (both micro-batches on one queue), `TRASHCAN_TP_THREADS=N` (host threads for the sums; 6
+  across Macs, 1 on one Mac), `TRASHCAN_QWEN_GEMM=gemm` (the old GEMM kernel), `TRASHCAN_TP_VRAM_IO=1` (timing
+  only: partials and totals stay in VRAM, wrong results);
+- both: `TRASHCAN_TP_SUBMIT=1` submits each per-segment submission when it is due instead of ahead;
+  `TRASHCAN_TP_FREE=1` runs the segments without all-reduces (wrong results, the GPU floor);
+- profiling: `TRASHCAN_TP_PROFILE=FILE` records GPU timestamps at every segment boundary of every tensor-parallel
+  graph (with `TRASHCAN_TP_PROFILE_DISPATCH=1` also around every dispatch and copy, labelled with the shader and a
+  matrix's rows x row length) and writes one JSON line per local rank and graph (micro-batch) for every forward and
+  draft step, aligned to host time; `tools/tp_profile.py FILE --n N` summarizes the steps of N columns (a
+  micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
+  prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
+
+Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead: 3-6%
+faster, identical results. `qwen_matf32` (the DeltaNet alpha/beta projection) has two variants with the same sums:
+16 loads per lane for decode and verification, and the plain loop for larger batches (with the 16-load path compiled
+in, 80 more values per lane in registers, a 9B prefill was 4% slower). `trashcan qwen-gemm-bench --shapes ROWSxK,...`
+times Q4_0 GEMM kernels and checks variants against `gemm` bit for bit.
 
 The decision to use TP across Macs came from `trashcan allreduce-bench`
 ([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)): a cross-Mac all-reduce costs

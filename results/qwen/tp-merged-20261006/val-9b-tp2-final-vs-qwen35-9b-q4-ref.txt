@@ -1,0 +1,36 @@
+l_out-0                          rel  8.23e-07  cos 1.000000
+l_out-1                          rel  8.13e-07  cos 1.000000
+l_out-10                         rel  2.26e-04  cos 1.000000
+l_out-11                         rel  2.69e-04  cos 1.000000
+l_out-12                         rel  2.66e-04  cos 1.000000
+l_out-13                         rel  2.86e-04  cos 1.000000
+l_out-14                         rel  2.79e-04  cos 1.000000
+l_out-15                         rel  3.23e-04  cos 1.000000
+l_out-16                         rel  3.24e-04  cos 1.000000
+l_out-17                         rel  3.09e-04  cos 1.000000
+l_out-18                         rel  2.72e-04  cos 1.000000
+l_out-19                         rel  3.28e-04  cos 1.000000
+l_out-2                          rel  1.24e-06  cos 1.000000
+l_out-20                         rel  3.03e-04  cos 1.000000
+l_out-21                         rel  2.87e-04  cos 1.000000
+l_out-22                         rel  2.56e-04  cos 1.000000
+l_out-23                         rel  3.06e-04  cos 1.000000
+l_out-24                         rel  3.04e-04  cos 1.000000
+l_out-25                         rel  2.76e-04  cos 1.000000
+l_out-26                         rel  2.54e-04  cos 1.000000
+l_out-27                         rel  2.96e-04  cos 1.000000
+l_out-28                         rel  2.78e-04  cos 1.000000
+l_out-29                         rel  2.84e-04  cos 1.000000
+l_out-3                          rel  1.98e-04  cos 1.000000
+l_out-30                         rel  2.62e-04  cos 1.000000
+l_out-31                         rel  3.60e-04  cos 1.000000
+l_out-4                          rel  1.86e-04  cos 1.000000
+l_out-5                          rel  1.70e-04  cos 1.000000
+l_out-6                          rel  1.81e-04  cos 1.000000
+l_out-7                          rel  2.30e-04  cos 1.000000
+l_out-8                          rel  2.59e-04  cos 1.000000
+l_out-9                          rel  2.40e-04  cos 1.000000
+result_norm                      rel  2.93e-04  cos 1.000000
+worst relative error over 474 tensors: 3.74e-04
+logits: rel 2.35e-04 cos 1.000000; top-1 9419 vs 9419; top-10 overlap 10/10
+greedy: first 10 of 10 tokens identical

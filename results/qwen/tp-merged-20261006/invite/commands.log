@@ -1,0 +1,23 @@
+2026-10-07T00:27:17-07:00 invite node node-27b-merged:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:36:06-07:00 invite node node-27b-prefill:  ./trashcan-prefill /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:38:26-07:00 invite node node-27b-decode:  ./trashcan-decode /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:40:15-07:00 node-abm-27b-merged-mtp-c (lat): ./trashcan
+2026-10-07T00:40:15-07:00 invite node node-abm-27b-merged-mtp-c:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:40:51-07:00 node-abd-27b-decode-mtp-b (lat): ./trashcan-decode
+2026-10-07T00:40:51-07:00 invite node node-abd-27b-decode-mtp-b:  ./trashcan-decode /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:41:28-07:00 node-abm-27b-merged-mtp-d (lat): ./trashcan
+2026-10-07T00:41:28-07:00 invite node node-abm-27b-merged-mtp-d:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:42:03-07:00 node-abd-27b-decode-mtp-c (lat): ./trashcan-decode
+2026-10-07T00:42:03-07:00 invite node node-abd-27b-decode-mtp-c:  ./trashcan-decode /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:42:51-07:00 node-abn-27b-merged-nolat-pp512-a (nolat): ./trashcan
+2026-10-07T00:44:18-07:00 invite node node-27b-serve:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:49:02-07:00 invite node node-27b-final:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:52:53-07:00 node-abq-27b-prefill-c (lat): ./trashcan-prefill
+2026-10-07T00:52:53-07:00 invite node node-abq-27b-prefill-c:  ./trashcan-prefill /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:53:26-07:00 node-abq-27b-merged-c (lat): ./trashcan
+2026-10-07T00:53:26-07:00 invite node node-abq-27b-merged-c:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:53:57-07:00 node-abq-27b-prefill-d (lat): ./trashcan-prefill
+2026-10-07T00:53:57-07:00 invite node node-abq-27b-prefill-d:  ./trashcan-prefill /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:54:29-07:00 node-abq-27b-merged-d (lat): ./trashcan
+2026-10-07T00:54:29-07:00 invite node node-abq-27b-merged-d:  ./trashcan /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T00:55:08-07:00 node-abn-27b-merged-nolat-e (nolat): ./trashcan

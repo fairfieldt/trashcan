@@ -1,0 +1,7 @@
+PASS: discovery, JSON, SSE, deterministic parity and persistent HTTP
+PASS: alternating greedy/stochastic graphs and seeded parity
+PASS: token-limit terminal event and separate reasoning
+PASS: invalid requests and prompt overflow
+PASS: native function call and full-history tool continuation
+PASS: namespaces, single-call control, custom tools and client tool search
+Responses server checks passed

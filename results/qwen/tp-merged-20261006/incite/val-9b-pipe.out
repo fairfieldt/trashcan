@@ -1,0 +1,7 @@
+plan: [[(0, 21), (21, 32)]]
+GPU0: layers 0..21
+GPU0: 3081.4 MiB allocated
+GPU1: layers 21..32 + head
+GPU1: 2914.9 MiB allocated
+greedy: [9419, 0, 2500, 628, 353, 1438, 488, 3242, 30, 248046]
+[clocks] 66 samples card0 (02:00.0) sclk/mclk: 850/1370 x4 450/1370 x3 300/150 x59  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x5 450/1370 x5 300/150 x56  max 48C  log=results/clocks/val-9b-pipe.txt

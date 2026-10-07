@@ -2,6 +2,29 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-07: tensor-parallel decode and prefill in one build; `qwen-tp-node` waits through idle time
+
+`results/qwen/tp-merged-20261006/`: the event-gated decode and the two-queue micro-batch prefill together. Qwen3.8-27B
+TP4 across both Macs: pp512 150.4, 151.3 tok/s, decode 28.4, 28.2, with MTP 39.5, 39.6, pp2048 134.1, 133.6.
+Qwen3.5-9B TP2: pp512 269.0, 269.0, decode 45.9, 45.9, with MTP 66.1, 66.1, pp2048 251.1, 250.5. Every check passes
+and the validate dumps are bit for bit those of the earlier TP builds; the Gemma checks pass.
+
+- `qwen_matf32` with the decode branch's 16-load path compiled in cost the prefill 4% (9B pp512 259 against 269)
+  although prefill batches take its plain loop: 80 more values per lane in registers. Two pipelines from one shader
+  (a specialization constant) fix it. With the single pipeline, the merged build's MTP verification batches also ran
+  1.7% slower than the decode branch's (9B: 31.8 against 31.3 ms per round); the split removed that too, cause not
+  found.
+- The 27B TP4 prefill is paced by the slower Mac's host work and varies by session for the same binary: 142-151
+  tok/s (cross-Mac wait 1.0-1.5 s per 512-token chunk). Run back to back, the prefill branch's binary gives the same
+  or 1-2% less than the merged one.
+- The 0 µs CPU latency request on the node matters for decode: without it a 27B token's cross-Mac exchanges take
+  7.4 ms instead of 4.1 (26.0 against 28.4 tok/s). The first TP4 record below was measured that way.
+- `qwen-tp-node` ended its session after 30 s without a request: the lane read timed out, and the node took any
+  error for a disconnect. It now waits for the next request without a deadline (spinning 50 ms, then polling every
+  1 ms: 0.5% of a core while idle), keeps the 30 s stall check inside an operation, and ends the session at end of
+  file (the driver closed the streams) or a reset. `scripts/test-server.py` passes against `trashcan serve` before
+  and after a 2:51 idle gap; killing the server ends the node's session within seconds.
+
 ## 2026-10-06 (later): tensor-parallel decode, 27B TP4 at 28.5 tok/s and 39.6 with MTP
 
 `results/qwen/tp-decode-20261006/`. Base binary measured in the same conditions: 18.5-19.0 (TP4 27B), 32.0 (TP2 9B);

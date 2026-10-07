@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 2 ranks, 2 on this machine
+GPU0: rank 0 of 2, 3014.7 MiB allocated
+GPU1: rank 1 of 2, 3014.7 MiB allocated
+[clocks] 91 samples card0 (02:00.0) sclk/mclk: 850/1370 x34 450/1370 x7 300/150 x50  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x14 450/1370 x6 300/150 x70 450/150 x1  max 47C  log=results/clocks/smoke-9b-tp2.txt
