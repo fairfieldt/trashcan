@@ -52,6 +52,11 @@ enum Cmd {
         /// Sustain GPU load before collecting timestamps (D700 clocks ramp from idle).
         #[arg(long, default_value_t = 500)]
         warmup_ms: u64,
+        /// Use the first ROWS rows and COLS columns of the tensor instead of the Gemma shard (Q4 only).
+        #[arg(long)]
+        rows: Option<usize>,
+        #[arg(long)]
+        cols: Option<usize>,
     },
     /// Measure GPU candidate selection and check ranks/ties against a CPU sort.
     TopkBench {
@@ -367,7 +372,8 @@ impl QwenRun {
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, self.gpus.clone())? else { unreachable!() };
             let peer = qwen::tp::peer(&self.tp_connect, &self.tp_stream)?;
             let verify = self.verify.unwrap_or(if self.mtp.is_some() { self.draft_tokens + 1 } else { 0 });
-            let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify, self.mtp.as_deref())?;
+            let mtp = self.mtp.as_deref();
+            let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify, mtp, self.draft_vocab)?;
             chain.max_checkpoints = self.checkpoints;
             return Ok(chain);
         }
@@ -530,6 +536,8 @@ fn main() -> Result<()> {
             kernel,
             tensor,
             warmup_ms,
+            rows,
+            cols,
         } => micro::bench(
             &model,
             iterations,
@@ -537,6 +545,7 @@ fn main() -> Result<()> {
             kernel.as_deref(),
             &tensor,
             warmup_ms,
+            rows.zip(cols),
         ),
         Cmd::TopkBench { iterations, batch } => micro::selection(iterations, batch),
         Cmd::NormBench { iterations } => micro::norm(iterations),

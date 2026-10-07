@@ -423,6 +423,10 @@ impl Device {
                 "qwen_q4c4",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_q4c4.spv")).as_slice(),
             ),
+            (
+                "qwen_topk",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_topk.spv")).as_slice(),
+            ),
             // Qwen3.8-Flash-Next (qwen4exp)
             ("qwen4_hc_norm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_norm.spv")).as_slice()),
             ("qwen4_hc_mix", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_mix.spv")).as_slice()),

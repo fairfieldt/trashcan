@@ -1,0 +1,35 @@
+#version 460
+#include "common.glsl"
+// The best 64 of up to 1024 entries per workgroup, highest score first and ties by lower id, by a bitonic sort in
+// shared memory (55 steps) instead of 64 rounds of argmax. Entries of column t: with p.kind 0 the logits
+// a[t * p.n + i] with ids i + p.offset; with p.kind 1 the (score, id) pairs a[(t * p.n + i) * 2..] of a previous
+// pass. p.n entries per column, p.m output pairs per column: workgroup w writes its 64 at c[(t * p.m + w * 64)*2..].
+layout(local_size_x=256) in;
+shared float sv[1024];
+shared uint si[1024];
+bool first(float va,uint ia,float vb,uint ib){return va>vb||(va==vb&&ia<ib);}
+void main(){
+uint l=gl_LocalInvocationID.x,w=gl_WorkGroupID.x,t=gl_WorkGroupID.y;
+if(t>=batch())return;
+for(uint j=l;j<1024;j+=256){
+    uint i=w*1024+j;float v=-1e30;uint id=0xffffffffu;
+    if(i<p.n){
+        if(p.kind==0){v=a_f.v[t*p.n+i];id=i+p.offset;}
+        else{v=a_f.v[(t*p.n+i)*2];id=a_u.v[(t*p.n+i)*2+1];}
+    }
+    sv[j]=v;si[j]=id;
+}
+barrier();
+for(uint k=2;k<=1024;k<<=1){
+    for(uint s=k>>1;s>0;s>>=1){
+        for(uint x=l;x<512;x+=256){
+            uint i=2*x-(x&(s-1)),o=i+s;
+            float va=sv[i],vb=sv[o];uint ia=si[i],ib=si[o];
+            bool down=(i&k)==0;
+            if(down?first(vb,ib,va,ia):first(va,ia,vb,ib)){sv[i]=vb;sv[o]=va;si[i]=ib;si[o]=ia;}
+        }
+        barrier();
+    }
+}
+if(l<64){uint at=(t*p.m+w*64+l)*2;c_f.v[at]=sv[l];c_u.v[at+1]=si[l];}
+}

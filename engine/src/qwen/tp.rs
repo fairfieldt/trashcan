@@ -12,6 +12,7 @@
 use super::{
     cpu::Captures,
     embed,
+    vector,
     gpu::{GpuStage, Split, TOP_K},
     pipeline::Draft,
     Config,
@@ -52,6 +53,52 @@ pub struct TpGroup {
     /// Rank of the first local GPU.
     first: usize,
     profile: Option<Profile>,
+    /// Residual norm weights in segment order (attention and FFN norm of each layer, then the final norm), and
+    /// the residual of a forward that keeps it on the host (`gpu::hostnorm`).
+    norms: Vec<Vec<f32>>,
+    resid: Vec<f32>,
+}
+
+/// The norm weights that start each segment of a forward: per layer the attention and FFN norms, then the
+/// final norm.
+fn segment_norms(g: &Gguf, c: &Config) -> Result<Vec<Vec<f32>>> {
+    let mut norms = Vec::new();
+    for il in 0..c.layers {
+        norms.push(vector(g, c.layer_tensor(g, il, "attn_norm.weight")?)?);
+        norms.push(vector(g, c.layer_tensor(g, il, "post_attention_norm.weight")?)?);
+    }
+    norms.push(vector(g, g.tensor("output_norm.weight").context("missing output norm")?)?);
+    Ok(norms)
+}
+
+/// Add `total` (when given) to the host residual rows `resid`, then write their RMS norm times `w` into every
+/// local rank's input rows. Eight running sums in a fixed order keep the result identical on every machine
+/// without a dependent add per element; separate simple loops vectorize.
+fn normed_rows(resid: &mut [f32], total: Option<&[f32]>, w: &[f32], eps: f32, shards: &[GpuStage]) {
+    let d = w.len();
+    if let Some(total) = total {
+        for (r, &t) in resid.iter_mut().zip(total) {
+            *r += t;
+        }
+    }
+    let (first, rest) = shards.split_first().expect("a tensor-parallel group has local ranks");
+    let out = first.tp_hin(resid.len());
+    for (x, o) in resid.chunks_exact(d).zip(out.chunks_exact_mut(d)) {
+        let mut acc = [0f32; 8];
+        for c in x.chunks_exact(8) {
+            for j in 0..8 {
+                acc[j] += c[j] * c[j];
+            }
+        }
+        let ss = ((acc[0] + acc[1]) + (acc[2] + acc[3])) + ((acc[4] + acc[5]) + (acc[6] + acc[7]));
+        let inv = 1.0 / (ss / d as f32 + eps).sqrt();
+        for ((o, &v), &wv) in o.iter_mut().zip(x).zip(w) {
+            *o = v * inv * wv;
+        }
+    }
+    for s in rest {
+        s.tp_hin(resid.len()).copy_from_slice(out);
+    }
 }
 
 /// Every forward and draft step of a profiling run (`TRASHCAN_TP_PROFILE=FILE`), one JSON line per local rank:
@@ -130,9 +177,19 @@ fn message(v: Value) -> Result<Vec<u8>> {
 
 impl TpGroup {
     /// The driver: its `gpus` take the first ranks and, with `peer`, the other machine's GPUs the rest. With
-    /// `mtp` (a GGUF holding the MTP layer) every rank also holds its share of the MTP block; the other machine
-    /// then needs its own copy (`qwen-tp-node --mtp`).
-    pub fn new(model: &Path, gpus: &[usize], mut peer: Option<Lanes>, context: usize, max_batch: usize, verify: usize, mtp: Option<&Path>) -> Result<Self> {
+    /// `mtp` (a GGUF holding the MTP layer) every rank also holds its share of the MTP block and of the draft
+    /// head over the first `draft_vocab` ids; the other machine then needs its own copy (`qwen-tp-node --mtp`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        model: &Path,
+        gpus: &[usize],
+        mut peer: Option<Lanes>,
+        context: usize,
+        max_batch: usize,
+        verify: usize,
+        mtp: Option<&Path>,
+        draft_vocab: usize,
+    ) -> Result<Self> {
         let peer_gpus = match peer.as_mut() {
             Some(l) => {
                 l.send_message(&message(json!({"probe": true}))?)?;
@@ -144,18 +201,36 @@ impl TpGroup {
         let ranks = gpus.len() + peer_gpus;
         ensure!(ranks > 1, "tensor parallelism needs at least two GPUs");
         if let Some(l) = peer.as_mut() {
-            let setup = json!({"first": gpus.len(), "ranks": ranks, "context": context, "batch": max_batch, "verify": verify, "mtp": mtp.is_some()});
+            let setup = json!({"first": gpus.len(), "ranks": ranks, "context": context, "batch": max_batch, "verify": verify, "mtp": mtp.is_some(), "draft_vocab": draft_vocab});
             l.send_message(&message(json!({ "setup": setup }))?)?;
         }
         eprintln!("tp: {ranks} ranks, {} on this machine{}", gpus.len(), if peer.is_some() { ", the rest on the other" } else { "" });
-        let (gguf, c, shards) = shards(model, gpus, 0, ranks, context, max_batch, verify, mtp)?;
+        let (gguf, c, mut shards) = shards(model, gpus, 0, ranks, context, max_batch, verify, mtp)?;
+        for s in shards.iter_mut() {
+            s.tp_draft_head(&gguf, draft_vocab)?;
+        }
         if let Some(l) = peer.as_mut() {
             let reply: Value = serde_json::from_slice(&l.recv_message()?)?;
             ensure!(reply.get("ok").is_some(), "the other machine failed: {}", reply["error"]);
         }
         let len = c.d * max_batch;
         let profile = Profile::open(shards.len())?;
-        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], seconds: Phases::default(), first: 0, profile })
+        let norms = segment_norms(&gguf, &c)?;
+        let rows = c.d * max_batch.min(8);
+        Ok(Self {
+            gguf,
+            c,
+            shards,
+            peer,
+            driver: true,
+            sum: vec![0.; len],
+            remote: vec![0.; len],
+            seconds: Phases::default(),
+            first: 0,
+            profile,
+            norms,
+            resid: vec![0.; rows],
+        })
     }
 
     /// Forward `tokens` (embedded as `x`) at `pos`: candidates of the last column, or of every column of a
@@ -169,6 +244,11 @@ impl TpGroup {
         let mut segments = 0;
         for s in self.shards.iter_mut() {
             segments = s.tp_prepare(x, pos, n, verify, dump.is_some())?;
+        }
+        if self.shards[0].tp_hostnorm() {
+            let len = n * self.c.d;
+            self.resid[..len].copy_from_slice(x);
+            normed_rows(&mut self.resid[..len], None, &self.norms[0], self.c.eps, &self.shards);
         }
         self.launch(segments, n)?;
         let columns = self.candidates(if verify && n > 1 { n } else { 1 })?;
@@ -241,6 +321,7 @@ impl TpGroup {
         let emb = embed(&self.gguf, &self.c, &[token])?;
         let mut segments = 0;
         for s in self.shards.iter_mut() {
+            s.tp_draft_head(&self.gguf, vocab)?;
             segments = s.tp_draft_prepare(&emb, pos, first, vocab)?;
         }
         self.launch(segments, 1)?;
@@ -338,7 +419,7 @@ impl TpGroup {
             self.seconds.submit += (submitted - start).as_secs_f64();
             self.seconds.wait += submitted.elapsed().as_secs_f64();
             if i + 1 < segments {
-                self.allreduce(n)?;
+                self.allreduce(n, i)?;
                 if let Some(p) = self.profile.as_mut() {
                     p.exchanged.push(host_ns());
                 }
@@ -347,8 +428,9 @@ impl TpGroup {
         Ok(())
     }
 
-    /// Add every rank's partial projection of the latest segment and hand the total to the local ranks.
-    fn allreduce(&mut self, n: usize) -> Result<()> {
+    /// Add every rank's partial projection of segment `seg` and hand the total, or the normed rows of the
+    /// residual it updates, to the local ranks.
+    fn allreduce(&mut self, n: usize, seg: usize) -> Result<()> {
         let len = n * self.c.d;
         let start = Instant::now();
         let sum = &mut self.sum[..len];
@@ -370,8 +452,12 @@ impl TpGroup {
             }
         }
         let exchanged = Instant::now();
-        for s in &self.shards {
-            s.tp_set_total(sum);
+        if self.shards[0].tp_hostnorm() {
+            normed_rows(&mut self.resid[..len], Some(sum), &self.norms[seg + 1], self.c.eps, &self.shards);
+        } else {
+            for s in &self.shards {
+                s.tp_set_total(sum);
+            }
         }
         self.seconds.add += (added - start).as_secs_f64() + exchanged.elapsed().as_secs_f64();
         self.seconds.exchange += (exchanged - added).as_secs_f64();
@@ -494,16 +580,22 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut lanes: Lanes) -
             };
             shards(model, gpus, num("first")?, num("ranks")?, num("context")?, num("batch")?, num("verify")?, m)
         })();
-        let (gguf, c, shards) = match loaded {
+        let (gguf, c, mut shards) = match loaded {
             Ok(v) => v,
             Err(e) => {
                 lanes.send_message(&message(json!({"error": format!("{e:#}")}))?)?;
                 return Err(e);
             }
         };
+        let draft_vocab = s["draft_vocab"].as_u64().unwrap_or(0) as usize;
+        for st in shards.iter_mut() {
+            st.tp_draft_head(&gguf, draft_vocab)?;
+        }
         lanes.send_message(&message(json!({"ok": true}))?)?;
         let len = c.d * num("batch")?;
         let profile = Profile::open(shards.len())?;
+        let norms = segment_norms(&gguf, &c)?;
+        let rows = c.d * num("batch")?.min(8);
         let mut group = TpGroup {
             gguf,
             c,
@@ -515,6 +607,8 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut lanes: Lanes) -
             seconds: Phases::default(),
             first: num("first")?,
             profile,
+            norms,
+            resid: vec![0.; rows],
         };
         return group.follow();
     }

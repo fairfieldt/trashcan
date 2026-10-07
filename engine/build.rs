@@ -47,6 +47,7 @@ fn main() {
         "qwen_q4c2",
         "qwen_q4c3",
         "qwen_q4c4",
+        "qwen_topk",
         // Qwen3.8-Flash-Next (qwen4exp)
         "qwen4_hc_norm",
         "qwen4_hc_mix",

@@ -303,7 +303,8 @@ pub fn serve(mut options: Options) -> Result<()> {
             anyhow::ensure!(options.nodes.is_empty() && !options.cpu && options.cuts.is_empty(), "tensor parallelism runs without --nodes, --cpu or --cuts");
             let qwen::pipeline::Devices::Gpus(gpus) = devices else { unreachable!() };
             let peer = qwen::tp::peer(&options.tp_connect, &options.tp_stream)?;
-            qwen::net::Chain::tensor_parallel(&options.model, &gpus, peer, options.context, options.batch, verify, options.mtp.as_deref())?
+            let mtp = options.mtp.as_deref();
+            qwen::net::Chain::tensor_parallel(&options.model, &gpus, peer, options.context, options.batch, verify, mtp, options.draft_vocab)?
         } else {
             qwen::net::Chain::new(
                 &options.model,

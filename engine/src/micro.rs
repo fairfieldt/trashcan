@@ -363,6 +363,7 @@ pub fn bench(
     kernel: Option<&str>,
     tensor: &str,
     warmup_ms: u64,
+    shape: Option<(usize, usize)>,
 ) -> Result<()> {
     ensure!(
         iterations > 0 && (1..=512).contains(&batch),
@@ -410,7 +411,10 @@ pub fn bench(
         tensor.ends_with("ffn_down.weight") || tensor.ends_with("attn_output.weight");
     let replicated = tensor.ends_with("attn_k.weight") || tensor.ends_with("attn_v.weight");
     // Global KV is replicated; sliding KV and Q/gate/up are split by rows.
-    let (k, n) = if column_split {
+    let (k, n) = if let Some((rows, cols)) = shape {
+        ensure!(kind == 0 && rows <= full_n && cols <= full_k, "--rows/--cols cut a Q4 matrix");
+        (cols, rows)
+    } else if column_split {
         (full_k / 2, full_n)
     } else if replicated && full_n == 512 {
         (full_k, full_n)

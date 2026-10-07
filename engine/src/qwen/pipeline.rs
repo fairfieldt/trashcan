@@ -153,8 +153,18 @@ impl Local {
 
     /// Tensor parallelism over this machine's `gpus` and, with `peer`, the other machine's (`tp`), with the
     /// MTP block in `mtp` split the same way.
-    pub fn tensor_parallel(path: &Path, gpus: &[usize], peer: Option<Lanes>, context: usize, max_batch: usize, verify: usize, mtp: Option<&Path>) -> Result<Self> {
-        let group = TpGroup::new(path, gpus, peer, context, max_batch, verify, mtp)?;
+    #[allow(clippy::too_many_arguments)]
+    pub fn tensor_parallel(
+        path: &Path,
+        gpus: &[usize],
+        peer: Option<Lanes>,
+        context: usize,
+        max_batch: usize,
+        verify: usize,
+        mtp: Option<&Path>,
+        draft_vocab: usize,
+    ) -> Result<Self> {
+        let group = TpGroup::new(path, gpus, peer, context, max_batch, verify, mtp, draft_vocab)?;
         let (gguf, c) = (Gguf::open(path)?, group.c.clone());
         Ok(Self { gguf, c, stages: vec![Stage::Tp(Box::new(group))], mtp: mtp.is_some() })
     }

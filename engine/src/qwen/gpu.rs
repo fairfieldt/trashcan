@@ -45,6 +45,14 @@ pub fn gated(n: usize) -> bool {
     n <= 8 && std::env::var("TRASHCAN_TP_EVENTS").as_deref() != Ok("0")
 }
 
+/// Whether a tensor-parallel forward of `n` columns keeps its residual on the host: the host adds each
+/// all-reduced total to it and writes the next segment's normed rows, which the projections read from host
+/// memory (cached in L2 after the first read), so the GPUs run no residual norms. Gated forwards without
+/// captures (`TRASHCAN_TP_HOSTNORM=0`: the GPUs add and norm).
+pub fn hostnorm(n: usize, dump: bool) -> bool {
+    gated(n) && !dump && std::env::var("TRASHCAN_TP_HOSTNORM").as_deref() != Ok("0")
+}
+
 /// Stages after which gated graphs set and reset their events: all prior work.
 const GATE_STAGES: vk::PipelineStageFlags = vk::PipelineStageFlags::from_raw(
     vk::PipelineStageFlags::COMPUTE_SHADER.as_raw() | vk::PipelineStageFlags::TRANSFER.as_raw(),
@@ -232,7 +240,11 @@ struct Head {
     norm: Buffer,
     w: Buffer,
     logits: Buffer,
+    /// Rows of `w` (the quantized values start after their scales).
+    rows: usize,
+    /// Candidates of the selection passes: per 1024 logits, then per 1024 of those.
     scratch: Buffer,
+    scratch2: Buffer,
     top: Buffer,
 }
 
@@ -282,11 +294,6 @@ impl Drop for Graph {
 /// and the first one in host CLOCK_MONOTONIC ns when calibrated.
 pub type StampRead = (u64, Rc<Vec<String>>, Vec<f64>, Option<f64>);
 
-/// The original order of independent projections (`TRASHCAN_QWEN_ORDER=old`), for comparison.
-fn old_order() -> bool {
-    std::env::var("TRASHCAN_QWEN_ORDER").as_deref() == Ok("old")
-}
-
 /// Profiling level from the environment: 0 off, 1 segment boundaries (`TRASHCAN_TP_PROFILE=FILE`), 2 also every
 /// dispatch (`TRASHCAN_TP_PROFILE_DISPATCH=1`).
 pub fn profile_level() -> u8 {
@@ -312,6 +319,9 @@ struct Tp {
     part: Buffer,
     /// The all-reduced total, written by the host before the next segment.
     total: Buffer,
+    /// The normed rows of the next segment when the host keeps the residual (`hostnorm`).
+    hin: Buffer,
+    hostnorm: bool,
     /// Segment `i` of the forward in progress signals `done` = `base + i + 1` when it finishes and, when
     /// submitted ahead, waits for the host to signal `release` = `base + i`.
     done: vk::Semaphore,
@@ -325,6 +335,10 @@ struct Tp {
     current: Option<Key>,
     cmds: Vec<vk::CommandBuffer>,
     head_rows: usize,
+    /// First token id of the head rows ranked by the step in progress, and whether they are the balanced draft
+    /// head's (`tp_draft_head`).
+    head_start: usize,
+    draft_top: bool,
     /// Timestamps of the graph in progress, when profiling.
     stamps: Option<(vk::QueryPool, Rc<Vec<String>>)>,
     /// Release and done events of event-gated forwards (`gated`), shared by all segments: each segment after the
@@ -369,7 +383,8 @@ pub struct GpuStage {
     act: Buffer,
     fence: vk::Fence,
     graphs: HashMap<Key, (Graph, u64)>,
-    drafts: HashMap<(u32, bool, usize), Graph>,
+    /// Draft graphs by (partitions, first step, head rows, balanced draft head).
+    drafts: HashMap<(u32, bool, usize, bool), Graph>,
     tick: u64,
     /// Columns of the latest forward, and whether it kept per-column snapshots.
     last_n: usize,
@@ -381,9 +396,24 @@ pub struct GpuStage {
     tp: Option<Tp>,
     /// First vocabulary id of this rank's head rows.
     vocab_start: usize,
+    split: Split,
+    /// A tensor-parallel rank's share of the draft vocabulary `(vocab, first id, rows)` (`tp_draft_head`).
+    draft_head: Option<(usize, usize, Head)>,
 }
 
 /// Partition count of split decode attention, by visible tokens; large batches use the unsplit kernel.
+/// Tensor-parallel ranks hold few query heads, so their split-K attention takes twice the partitions (at most
+/// 128) to have enough waves; `TRASHCAN_TP_PARTS=N` sets the multiplier.
+fn tp_partitions(pos: usize, n: usize) -> u32 {
+    let p = partitions(pos, n);
+    let scale = std::env::var("TRASHCAN_TP_PARTS").ok().and_then(|v| v.parse::<u32>().ok()).unwrap_or(2);
+    if p == 0 {
+        0
+    } else {
+        (p * scale).min(128)
+    }
+}
+
 fn partitions(pos: usize, n: usize) -> u32 {
     if n > 8 {
         return 0;
@@ -463,6 +493,8 @@ struct Rec<'a> {
     out: u64,
     /// Event-gated tensor-parallel graph (`gated`).
     gated: bool,
+    /// The normed rows the mixers and FFNs project: `h`.
+    h_in: u64,
 }
 
 impl<'a> Rec<'a> {
@@ -496,6 +528,7 @@ impl<'a> Rec<'a> {
             },
             out: s.tp.as_ref().map_or(s.y.address, |t| t.part.address),
             gated: s.tp.is_some() && gated(n),
+            h_in: s.h.address,
         })
     }
 
@@ -582,15 +615,9 @@ impl<'a> Rec<'a> {
         let n = self.n;
         // Two to four columns use the decode kernels' formulation (qwen_q4c*): each column matches a
         // one-column decode bit for bit, as fast as multivec or slightly faster on Qwen shapes.
-        // Tensor-parallel ranks use matvecq4 at every shape: back-to-back matvecq4narrow dispatches (512-thread
-        // workgroups) do not overlap on the D700s, so its advantage on small Gemma shapes is lost here.
-        let decode = match std::env::var("TRASHCAN_Q4_DECODE").as_deref() {
-            Ok("matvecq4") => "matvecq4",
-            Ok("matvecq4narrow") => "matvecq4narrow",
-            Ok("auto") => q4_decode_shader(rows, k),
-            _ if self.s.tp.is_some() => "matvecq4",
-            _ => q4_decode_shader(rows, k),
-        };
+        // Tensor-parallel ranks use matvecq4 at every shape: a matvecq4narrow dispatch (512-thread workgroups)
+        // only starts once the previous one has finished on the D700s, so independent projections cannot overlap.
+        let decode = if self.s.tp.is_some() { "matvecq4" } else { q4_decode_shader(rows, k) };
         let (shader, gx, gy) = match n {
             1 => (decode, rows.div_ceil(16), 1),
             2 => ("qwen_q4c2", rows.div_ceil(16), 1),
@@ -613,10 +640,9 @@ impl<'a> Rec<'a> {
     /// (0: dense). One workgroup per token.
     fn add_norm(&self, x: u64, y: Option<u64>, h: Option<u64>, w: Option<&Buffer>, stride: usize) {
         // Hidden sizes of 16 or 20 elements per thread have a straight-line variant (same sums).
-        let shader = match (self.s.c.d, std::env::var("TRASHCAN_QWEN_NORM").as_deref()) {
-            (_, Ok("old")) => "qwen_add_norm",
-            (4096, _) => "qwen_add_norm_j16",
-            (5120, _) => "qwen_add_norm_j20",
+        let shader = match self.s.c.d {
+            4096 => "qwen_add_norm_j16",
+            5120 => "qwen_add_norm_j20",
             _ => "qwen_add_norm",
         };
         let mut u = [0; 16];
@@ -639,12 +665,12 @@ impl<'a> Rec<'a> {
         let (d, cd, vd) = (c.d, c.conv_dim(), c.value_dim());
         let eps = c.eps.to_bits();
         // Independent projections share one barrier. The command processor starts a dispatch's workgroups only
-        // once the previous dispatch's have all started, so the small f32 alpha/beta projection goes first and
-        // runs beside the large ones instead of alone after them.
-        let old = old_order();
+        // once the previous dispatch's have all started, so tensor-parallel ranks issue the small f32 alpha/beta
+        // projection first, where it runs beside the large ones instead of alone after them.
+        let old = s.tp.is_none();
         if old {
-            self.matrix(&dl.qkv, s.h.address, s.big.address, d, cd, true)?;
-            self.matrix(&dl.z, s.h.address, s.z.address, d, vd, true)?;
+            self.matrix(&dl.qkv, self.h_in, s.big.address, d, cd, true)?;
+            self.matrix(&dl.z, self.h_in, s.z.address, d, vd, true)?;
         }
         let mut u = [0; 16];
         u[0] = (2 * c.v_heads) as u32;
@@ -652,14 +678,14 @@ impl<'a> Rec<'a> {
         s.gpu.dispatch_matrix(
             self.cmd,
             "qwen_matf32",
-            self.push([0, s.h.address, s.ab.address, 0, 0, 0], u).defer_barrier(!old),
+            self.push([0, self.h_in, s.ab.address, 0, 0, 0], u).defer_barrier(!old),
             (2 * c.v_heads).div_ceil(4) as u32,
             self.n.div_ceil(8) as u32,
             &dl.ab,
         )?;
         if !old {
-            self.matrix(&dl.z, s.h.address, s.z.address, d, vd, true)?;
-            self.matrix(&dl.qkv, s.h.address, s.big.address, d, cd, false)?;
+            self.matrix(&dl.z, self.h_in, s.z.address, d, vd, true)?;
+            self.matrix(&dl.qkv, self.h_in, s.big.address, d, cd, false)?;
         }
         self.capture(format!("linear_attn_qkv_mixed-{il}"), &s.big, cd)?;
         self.capture(format!("z-{il}"), &s.z, vd)?;
@@ -712,15 +738,15 @@ impl<'a> Rec<'a> {
         let (s, c) = (self.s, &self.s.c);
         let (d, hd, kvd) = (c.d, c.head_dim, c.kv_heads * c.head_dim);
         let qd = c.heads * hd;
-        // The small K and V projections first (see `delta`).
-        if old_order() {
-            self.matrix(&a.q, s.h.address, s.big.address, d, 2 * qd, true)?;
-            self.matrix(&a.k, s.h.address, s.kb.address, d, kvd, true)?;
-            self.matrix(&a.v, s.h.address, s.vb.address, d, kvd, false)?;
+        // Tensor-parallel ranks issue the small K and V projections first (see `delta`).
+        if s.tp.is_none() {
+            self.matrix(&a.q, self.h_in, s.big.address, d, 2 * qd, true)?;
+            self.matrix(&a.k, self.h_in, s.kb.address, d, kvd, true)?;
+            self.matrix(&a.v, self.h_in, s.vb.address, d, kvd, false)?;
         } else {
-            self.matrix(&a.k, s.h.address, s.kb.address, d, kvd, true)?;
-            self.matrix(&a.v, s.h.address, s.vb.address, d, kvd, true)?;
-            self.matrix(&a.q, s.h.address, s.big.address, d, 2 * qd, false)?;
+            self.matrix(&a.k, self.h_in, s.kb.address, d, kvd, true)?;
+            self.matrix(&a.v, self.h_in, s.vb.address, d, kvd, true)?;
+            self.matrix(&a.q, self.h_in, s.big.address, d, 2 * qd, false)?;
         }
         // Q (normed, rotated, pre-scaled into rq), K (normed, rotated into the cache), V (cache).
         for (src, norm, out, cache, heads, stride, width, scale, defer) in [
@@ -807,8 +833,8 @@ impl<'a> Rec<'a> {
     /// SwiGLU FFN from `h` into `y`.
     fn ffn(&mut self, f: &Ffn, il: usize) -> Result<()> {
         let (s, c) = (self.s, &self.s.c);
-        self.matrix(&f.gate, s.h.address, s.gate.address, c.d, c.ff, true)?;
-        self.matrix(&f.up, s.h.address, s.up.address, c.d, c.ff, false)?;
+        self.matrix(&f.gate, self.h_in, s.gate.address, c.d, c.ff, true)?;
+        self.matrix(&f.up, self.h_in, s.up.address, c.d, c.ff, false)?;
         let mut u = [0; 16];
         u[0] = c.ff as u32;
         s.gpu.dispatch(
@@ -831,7 +857,7 @@ impl<'a> Rec<'a> {
         let mut u = [0; 16];
         u[0] = rows as u32;
         u[1] = d as u32;
-        u[3] = (c.vocab * d / 16) as u32;
+        u[3] = (hd.rows * d / 16) as u32;
         u[9] = 1;
         let single = u32::from(cols == 1);
         u[15] = single;
@@ -856,6 +882,31 @@ impl<'a> Rec<'a> {
             let host = s.gpu.buffer(rows * 4, true, false, None)?;
             s.gpu.copy(self.cmd, &hd.logits, (cols - 1) * rows * 4, &host, 0, rows * 4);
             self.graph.captures.push((name.into(), host, rows));
+        }
+        if s.tp.is_some() {
+            // Passes of qwen_topk: the best 64 of each 1024 logits, then of each 1024 of those, until one list is
+            // left (at most three passes for 256 chunks). The same candidates as topk and merge, in a fifth of the
+            // time.
+            let (mut src, mut kind, mut entries, mut groups, mut pass) = (hd.logits.address, 0, rows, chunks, 0);
+            loop {
+                let dst = match (groups, pass) {
+                    (1, _) => hd.top.address,
+                    (_, 0) => hd.scratch.address,
+                    _ => hd.scratch2.address,
+                };
+                let mut u = [0; 16];
+                u[0] = entries as u32;
+                u[2] = (groups * TOP_K) as u32;
+                u[9] = kind;
+                u[15] = single;
+                s.gpu.dispatch(self.cmd, "qwen_topk", self.push([src, 0, dst, 0, 0, 0], u), groups as u32, cols as u32);
+                if groups == 1 {
+                    return Ok(());
+                }
+                ensure!(pass < 2, "too many candidate lists");
+                (src, kind, entries, pass) = (dst, 1, groups * TOP_K, pass + 1);
+                groups = entries.div_ceil(1024);
+            }
         }
         let mut u = [0; 16];
         u[0] = rows as u32;
@@ -1005,8 +1056,10 @@ impl GpuStage {
             Some(Head {
                 norm: upload_f32(&gpu, &vector(g, g.tensor("output_norm.weight").context("missing output norm")?)?)?,
                 w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[vocab_start * row..(vocab_start + vocab_rows) * row]))?,
+                rows: vocab_rows,
                 logits: gpu.buffer(cols * c.vocab * 4, false, false, None)?,
                 scratch: gpu.buffer(cols * chunks * TOP_K * 8, false, false, None)?,
+                scratch2: gpu.buffer(cols * chunks.div_ceil(16) * TOP_K * 8, false, false, None)?,
                 top: gpu.buffer(cols * TOP_K * 8, true, false, None)?,
             })
         } else {
@@ -1059,7 +1112,8 @@ impl GpuStage {
             kb: alloc(c.kv_heads * c.head_dim)?,
             vb: alloc(c.kv_heads * c.head_dim)?,
             rq: alloc(qd)?,
-            scratch: gpu.buffer(c.heads * 64 * (c.head_dim + 2) * 4 * 8, false, false, None)?,
+            // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`).
+            scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8, false, false, None)?,
             gate: alloc(c.ff)?,
             up: alloc(c.ff)?,
             act: alloc(c.ff)?,
@@ -1076,6 +1130,8 @@ impl GpuStage {
                 Some(Tp {
                     part: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
                     total: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
+                    hin: gpu.buffer(c.d * 8 * 4, true, false, None)?,
+                    hostnorm: false,
                     done: gpu.timeline(false)?,
                     release: gpu.timeline(false)?,
                     base: 0,
@@ -1084,6 +1140,8 @@ impl GpuStage {
                     current: None,
                     cmds: Vec::new(),
                     head_rows: 0,
+                    head_start: 0,
+                    draft_top: false,
                     stamps: None,
                     gate: unsafe {
                         let e = || gpu.dev.create_event(&vk::EventCreateInfo::default(), None);
@@ -1096,6 +1154,8 @@ impl GpuStage {
                 None
             },
             vocab_start,
+            split,
+            draft_head: None,
             c: c.clone(),
             gpu,
         })
@@ -1165,12 +1225,19 @@ impl GpuStage {
         let d = self.c.d;
         let (hd, tp) = (self.head.as_ref().context("a tensor-parallel rank needs its head rows")?, self.tp.as_ref().unwrap());
         let total = tp.total.address;
+        let host = hostnorm(n, dump);
         let mut r = Rec::new(self, n, dump)?;
-        r.copy(&self.input, 0, &self.x, 0, n * d * 4);
+        if host {
+            r.h_in = tp.hin.address;
+        } else {
+            r.copy(&self.input, 0, &self.x, 0, n * d * 4);
+        }
         let mut added = None;
         for l in &self.layers {
             let il = l.il;
-            r.add_norm(self.x.address, added, Some(self.h.address), Some(&l.attn_norm), 0);
+            if !host {
+                r.add_norm(self.x.address, added, Some(self.h.address), Some(&l.attn_norm), 0);
+            }
             if added.is_some() {
                 r.capture(format!("l_out-{}", il - 1), &self.x, d)?;
             }
@@ -1180,21 +1247,27 @@ impl GpuStage {
                 Mixer::Attention(a) => r.attention(a, parts, il)?,
             }
             r.end_segment()?;
-            r.add_norm(self.x.address, Some(total), Some(self.h.address), Some(&l.post_norm), 0);
+            if !host {
+                r.add_norm(self.x.address, Some(total), Some(self.h.address), Some(&l.post_norm), 0);
+            }
             r.capture(format!("attn_residual-{il}"), &self.x, d)?;
             r.capture(format!("attn_post_norm-{il}"), &self.h, d)?;
             r.ffn(&l.ffn, il)?;
             r.end_segment()?;
             added = Some(total);
         }
-        r.add_norm(self.x.address, added, Some(self.h.address), Some(&hd.norm), 0);
+        if !host {
+            r.add_norm(self.x.address, added, Some(self.h.address), Some(&hd.norm), 0);
+        }
         r.capture(format!("l_out-{}", self.last - 1), &self.x, d)?;
         r.capture("result_norm".into(), &self.h, d)?;
-        r.head(hd, &self.h, if verify { n } else { 1 }, self.c.vocab)?;
+        let normed = if host { &tp.hin } else { &self.h };
+        r.head(hd, normed, if verify { n } else { 1 }, self.c.vocab)?;
         if let Some(m) = &self.mtp {
             // Extend the MTP layer's KV cache over this batch (token p pairs with the target's row p - 1). Only
             // its K and V are kept, so the block stops after the attention and needs no all-reduce.
-            r.copy(&self.h, 0, &m.hin, d * 4, n * d * 4);
+            r.h_in = self.h.address;
+            r.copy(normed, 0, &m.hin, d * 4, n * d * 4);
             r.mtp_inputs(m, m.hin.address);
             r.matrix(&m.eh, m.cat.address, self.x.address, 2 * d, d, false)?;
             r.add_norm(self.x.address, None, Some(self.h.address), Some(&m.attn_norm), 0);
@@ -1206,8 +1279,9 @@ impl GpuStage {
 
     /// Tensor-parallel MTP draft step: the attention and the FFN each end a segment with their partials, then
     /// the head ranks this rank's share of the first `rows` vocabulary ids (none when `rows` is 0).
-    fn record_draft_tp(&self, parts: u32, first: bool, rows: usize) -> Result<Graph> {
-        let (m, hd) = (self.mtp.as_ref().context("no MTP block")?, self.head.as_ref().context("no head")?);
+    fn record_draft_tp(&self, parts: u32, first: bool, rows: usize, balanced: bool) -> Result<Graph> {
+        let m = self.mtp.as_ref().context("no MTP block")?;
+        let hd = if balanced { &self.draft_head.as_ref().context("no draft head")?.2 } else { self.head.as_ref().context("no head")? };
         let (d, total) = (self.c.d, self.tp.as_ref().unwrap().total.address);
         let mut r = Rec::new(self, 1, false)?;
         r.mtp_inputs(m, if first { m.hin.address } else { m.out.address });
@@ -1247,7 +1321,7 @@ impl GpuStage {
             }
         }
         self.params_host.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump, verify);
+        let key = (n, tp_partitions(pos, n), dump, verify);
         self.tick += 1;
         if let Some(e) = self.graphs.get_mut(&key) {
             e.1 = self.tick;
@@ -1267,6 +1341,9 @@ impl GpuStage {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         tp.current = Some(key);
         tp.stamps = stamps;
+        tp.hostnorm = hostnorm(n, dump);
+        tp.head_start = self.vocab_start;
+        tp.draft_top = false;
         Ok(tp.start(cmds, segments, rows, gated(n)))
     }
 
@@ -1277,18 +1354,60 @@ impl GpuStage {
         ensure!(pos < self.context, "context exhausted");
         m.emb.write(bytemuck::cast_slice(emb))?;
         self.params_host.write(bytemuck::cast_slice(&[pos as u32, 1, 0, 0]))?;
-        let rows = if rows == 0 { usize::MAX } else { rows };
-        let local = rows.saturating_sub(self.vocab_start).min(self.c.vocab);
-        let key = (partitions(pos, 1), first, local);
+        let balanced = self.draft_head.as_ref().filter(|h| h.0 == rows && rows > 0).map(|h| (h.1, h.2.logits.size / 4));
+        let (start, local) = match balanced {
+            Some(b) => b,
+            None => {
+                let rows = if rows == 0 { usize::MAX } else { rows };
+                (self.vocab_start, rows.saturating_sub(self.vocab_start).min(self.c.vocab))
+            }
+        };
+        let key = (tp_partitions(pos, 1), first, local, balanced.is_some());
         if !self.drafts.contains_key(&key) {
-            let graph = self.record_draft_tp(key.0, key.1, key.2)?;
+            let graph = self.record_draft_tp(key.0, key.1, key.2, key.3)?;
             self.drafts.insert(key, graph);
         }
         let (cmds, segments) = (self.drafts[&key].cmds.clone(), self.drafts[&key].segments);
         let stamps = self.drafts[&key].stamps.clone();
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         tp.stamps = stamps;
+        tp.hostnorm = false;
+        tp.head_start = start;
+        tp.draft_top = balanced.is_some();
         Ok(tp.start(cmds, segments, local, gated(1)))
+    }
+
+    /// Give this rank an equal share of the first `vocab` token ids for MTP drafts (a copy of those head rows),
+    /// so draft heads take every rank instead of the one or two holding the low ids. Kept until the draft
+    /// vocabulary changes; ignored for the whole vocabulary or one that does not split evenly
+    /// (`TRASHCAN_TP_DRAFT_HEAD=0`: off).
+    pub fn tp_draft_head(&mut self, g: &Gguf, vocab: usize) -> Result<()> {
+        let (rank, ranks) = (self.split.rank, self.split.ranks);
+        let full = self.c.vocab * ranks;
+        if self.mtp.is_none() || ranks < 2 || vocab == 0 || vocab >= full || !vocab.is_multiple_of(16 * ranks) {
+            return Ok(());
+        }
+        if std::env::var("TRASHCAN_TP_DRAFT_HEAD").as_deref() == Ok("0") || self.draft_head.as_ref().is_some_and(|h| h.0 == vocab) {
+            return Ok(());
+        }
+        self.drafts.clear();
+        let rows = vocab / ranks;
+        let start = rank * rows;
+        let t = g.tensor("output.weight").context("missing output.weight")?;
+        let row = self.c.d / 256 * 210;
+        let chunks = rows.div_ceil(1024);
+        let gpu = &self.gpu;
+        let head = Head {
+            norm: gpu.buffer(4, false, false, None)?,
+            w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[start * row..(start + rows) * row]))?,
+            rows,
+            logits: gpu.buffer(rows * 4, false, false, None)?,
+            scratch: gpu.buffer(chunks * TOP_K * 8, false, false, None)?,
+            scratch2: gpu.buffer(chunks.div_ceil(16) * TOP_K * 8, false, false, None)?,
+            top: gpu.buffer(TOP_K * 8, true, false, None)?,
+        };
+        self.draft_head = Some((vocab, start, head));
+        Ok(())
     }
 
     /// Submit segment `i` of the forward in progress, to run as soon as the GPU is free.
@@ -1395,6 +1514,20 @@ impl GpuStage {
         unsafe { std::slice::from_raw_parts(part.ptr as *const f32, n * self.c.d) }
     }
 
+    /// Whether the forward in progress reads its normed rows from the host (`hostnorm`).
+    pub fn tp_hostnorm(&self) -> bool {
+        self.tp.as_ref().is_some_and(|t| t.hostnorm)
+    }
+
+    /// The first `len` normed rows the next segment reads, when the host keeps the residual (host memory the
+    /// GPU reads only while a segment runs).
+    #[allow(clippy::mut_from_ref)]
+    pub fn tp_hin(&self, len: usize) -> &mut [f32] {
+        let t = &self.tp.as_ref().unwrap().hin;
+        assert!(len * 4 <= t.size);
+        unsafe { std::slice::from_raw_parts_mut(t.ptr as *mut f32, len) }
+    }
+
     /// The all-reduced total for the next segment.
     pub fn tp_set_total(&self, total: &[f32]) {
         let t = &self.tp.as_ref().unwrap().total;
@@ -1416,11 +1549,13 @@ impl GpuStage {
 
     /// Top candidates of this rank's vocabulary rows after the last segment, with model token ids.
     pub fn tp_top(&self, cols: usize) -> Result<Vec<Vec<(f32, u32)>>> {
-        if self.tp.as_ref().is_some_and(|t| t.head_rows == 0) {
+        let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        if tp.head_rows == 0 {
             return Ok(vec![Vec::new(); cols]);
         }
-        let start = self.vocab_start as u32;
-        Ok(self.read_top(cols)?.into_iter().map(|c| c.into_iter().map(|(s, id)| (s, id + start)).collect()).collect())
+        let start = tp.head_start as u32;
+        let hd = if tp.draft_top { &self.draft_head.as_ref().context("no draft head")?.2 } else { self.head.as_ref().context("no head")? };
+        Ok(read_top(hd, cols)?.into_iter().map(|c| c.into_iter().map(|(s, id)| (s, id + start)).collect()).collect())
     }
 
     /// The captures of the latest forward (whole tensors only).
@@ -1465,24 +1600,7 @@ impl GpuStage {
     }
 
     fn read_top(&self, cols: usize) -> Result<Vec<Vec<(f32, u32)>>> {
-        let hd = self.head.as_ref().context("no head")?;
-        let bytes = hd.top.read(cols * TOP_K * 8)?;
-        Ok(bytes
-            .chunks_exact(TOP_K * 8)
-            .map(|col| {
-                let mut top: Vec<(f32, u32)> = col
-                    .chunks_exact(8)
-                    .map(|s| {
-                        (
-                            f32::from_le_bytes(s[..4].try_into().unwrap()),
-                            u32::from_le_bytes(s[4..].try_into().unwrap()),
-                        )
-                    })
-                    .collect();
-                top.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
-                top
-            })
-            .collect())
+        read_top(self.head.as_ref().context("no head")?, cols)
     }
 
     /// Run `n` tokens at `pos`; position 0 starts a new sequence (DeltaNet states restart from zero).
@@ -1556,7 +1674,7 @@ impl GpuStage {
         m.emb.write(bytemuck::cast_slice(emb))?;
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, 1, 0, 0]))?;
-        let key = (partitions(pos, 1), first, rows);
+        let key = (partitions(pos, 1), first, rows, false);
         if !self.drafts.contains_key(&key) {
             let graph = self.record_draft(key.0, key.1, key.2)?;
             self.drafts.insert(key, graph);
@@ -1642,6 +1760,22 @@ impl GpuStage {
         self.last_n = 0;
         Ok(())
     }
+}
+
+/// Candidates of `cols` columns from a head's selection, best first.
+fn read_top(hd: &Head, cols: usize) -> Result<Vec<Vec<(f32, u32)>>> {
+    let bytes = hd.top.read(cols * TOP_K * 8)?;
+    Ok(bytes
+        .chunks_exact(TOP_K * 8)
+        .map(|col| {
+            let mut top: Vec<(f32, u32)> = col
+                .chunks_exact(8)
+                .map(|s| (f32::from_le_bytes(s[..4].try_into().unwrap()), u32::from_le_bytes(s[4..].try_into().unwrap())))
+                .collect();
+            top.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+            top
+        })
+        .collect())
 }
 
 impl Drop for GpuStage {
