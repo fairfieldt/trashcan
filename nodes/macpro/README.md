@@ -30,8 +30,12 @@ against incite changes nothing.
 ```bash
 nodes/macpro/provision.sh NEW_HOST
 ssh NEW_HOST tailscale up            # once; open the URL it prints
-nodes/macpro/provision.sh NEW_HOST reboot models verify
+MODEL_SRC=incite-lan nodes/macpro/provision.sh NEW_HOST models reboot verify
 ```
+
+Use LAN addresses (`~/.ssh/config` has `invite` and `incite-lan`) for the workspace and model copies: from this Mac
+the LAN carries 940 Mb/s, Tailscale about 450-500 Mb/s (WireGuard encryption in the Tailscale app). The 8 GB default
+models take about 70 s over the LAN.
 
 | Step | What it does |
 |---|---|
@@ -43,7 +47,7 @@ nodes/macpro/provision.sh NEW_HOST reboot models verify
 | `kernel` | Installs the `7.2.9-p2p` image and headers and pins `GRUB_DEFAULT` to that entry by id |
 | `workspace` | `HOST=NEW_HOST scripts/sync.sh push`, then `cargo build --release` and `make -C bench/xgpu` |
 | `reboot` | Reboots and waits for SSH (up to 5 minutes) |
-| `models` | Copies `MODELS` (default: the Gemma 4 12B QAT GGUF and its assistant) from `MODEL_SRC` (default incite) with agent forwarding |
+| `models` | Copies `MODELS` (default: the Gemma 4 12B QAT GGUF and its assistant) from `MODEL_SRC` (default incite), streamed through this Mac with `tar`; skips directories whose size already matches |
 | `verify` | Running kernel and command line; each GPU's VBIOS and VRAM; Vulkan devices; a netconsole line reaching this Mac; `xgpu p2p-verify`; `scripts/test-engine.sh` with the GPU clocks logged |
 
 Run any subset by naming steps, for example `provision.sh NEW_HOST system` after editing a file under `root/`.
@@ -55,6 +59,24 @@ Run any subset by naming steps, for example `provision.sh NEW_HOST system` after
 - `xgpu p2p-verify` passes and the export stays in VRAM.
 - `test-engine` passes. It needs about 4.5 GiB per GPU, so it only fits on D700s (6 GB), not D500s (3 GB) or
   D300s (2 GB).
+
+## Slow disk right after install (Apple SSDs)
+
+The Mac Pro's original Apple SSDs (invite: `APPLE SSD SM1024F`) don't support the write-zeroes command, so ext4's
+background inode-table zeroing (`ext4lazyinit`, shown as `init_itable`) writes real zeroes after every mount until a
+new filesystem is fully initialized. On invite this took writes from 1 ms to 400-700 ms and made the installer and
+the first `apt-get` crawl, although the drive itself does 1.4 GB/s reads and 870 MB/s writes. If a new node feels
+slow:
+
+```bash
+cat /proc/pressure/io                                  # "some avg60" near 90 means the disk is saturated
+sudo dumpe2fs /dev/sdXN | grep -c ITABLE_ZEROED       # groups done, against grep -c "^Group "
+sudo fstrim -av                                        # a reinstalled SSD hasn't been told its old data is free
+sudo mount -o remount,noinit_itable /home              # pause the zeroing until the next mount
+```
+
+It resumes after a reboot and only has to run once. incite's Intel NVMe drive supports write-zeroes and never
+showed this.
 
 ## Not covered
 

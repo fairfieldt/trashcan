@@ -7,7 +7,8 @@
 #   other steps:   reboot (reboots into the new kernel and waits), models, verify
 #   first run:     provision.sh HOST && provision.sh HOST reboot models verify
 # env: KVER (7.2.9-p2p), DEBS (~/dev/claude-work/trashcan-kbuild, from kernel/cross-build-7.2.sh),
-#      MODELS ("gemma-4-12b-qat-gguf gemma-4-12b-assistant"), MODEL_SRC (incite, reached with ssh -A from HOST)
+#      MODELS ("gemma-4-12b-qat-gguf gemma-4-12b-assistant"), MODEL_SRC (incite; a LAN address is about twice as
+#      fast as Tailscale)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -59,7 +60,7 @@ apt-get install -y -q --no-install-recommends \
     firmware-amd-graphics firmware-misc-nonfree intel-microcode \
     mesa-vulkan-drivers vulkan-tools libvulkan-dev glslc spirv-headers \
     libssl-dev libcurl4-openssl-dev libelf-dev libdw-dev bc bison flex cpio debhelper cmake \
-    iperf3 sockperf netcat-openbsd python3
+    iperf3 sockperf netcat-openbsd python3 smartmontools
 EOF
 }
 
@@ -206,8 +207,12 @@ step_models() {
     say "models from $MODEL_SRC: $MODELS"
     local m
     ssh "$host" 'mkdir -p ~/models'
+    # Streamed through this Mac, so the nodes need no keys for each other. Use LAN addresses for speed.
     for m in $MODELS; do
-        ssh -A "$host" "rsync -a -e 'ssh -o StrictHostKeyChecking=accept-new' $MODEL_SRC:models/$m ~/models/ && du -sh ~/models/$m"
+        if ssh "$host" "[ -d ~/models/$m ] && [ \"\$(du -sb ~/models/$m | cut -f1)\" = \"$(ssh "$MODEL_SRC" "du -sb ~/models/$m | cut -f1")\" ]"; then
+            echo "$m: already there"; continue
+        fi
+        ssh "$MODEL_SRC" "tar -C ~/models -cf - $m" | ssh "$host" "tar -C ~/models -xf - && du -sh ~/models/$m"
     done
 }
 
