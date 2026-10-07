@@ -6,7 +6,7 @@ set -euo pipefail
 m=$HOME/models/qwen3.5-9b
 model=$m/Qwen3.5-9B-trashcan-Q4_0.gguf
 mtp=$m/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf
-out=results/final
+out=${OUT:-results/final}
 mkdir -p $out
 lat() { sudo -n python3 "$HOME/trashcan/scripts/latency-run.py" bin/trashcan "$@"; }
 lat qwen-bench $model --pp 64 --tg 64 > /dev/null 2>&1

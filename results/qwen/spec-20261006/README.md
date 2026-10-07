@@ -1,11 +1,12 @@
 # Qwen rollback, MTP speculative decoding and prefix reuse, 2026-10-06
 
-Tested source: commit `2dd5f05` (engine unchanged since; later commits add results and docs). The final
-runs (`final/`, `reuse-edit/`) used the incite binary with sha256
-`2998e3f6e1061ca5e1b77cc32dc799c2a9be80d57286856dcff8687fb808fd5d`, cross-built with
+Tested source: commit `c425b7e` for `final-q4c/` (incite binary sha256
+`bec174a51051ad6407e3cb687608fc8fcb000369d41d6bdac36b4739390ae086`), and commit `2dd5f05` for `final/`
+and `reuse-edit/` (sha256 `2998e3f6e1061ca5e1b77cc32dc799c2a9be80d57286856dcff8687fb808fd5d`), which
+verifies with the multivec kernels instead of `qwen_q4c`. Binaries were cross-built with
 `scripts/cross-build.sh trashcan-exp/qwen-dense/bin/trashcan`. Earlier runs (`sweep-*`, `reuse-9b*`,
-`gpu-9b-check-k3.json`, `hybrid-27b-check.json`) used intermediate builds of the same series; their
-numbers are reproduced by the final runs where they overlap.
+`gpu-9b-check-k3.json`, `hybrid-27b-check.json`) used intermediate builds of the same series; the final
+runs reproduce their numbers where they overlap.
 
 incite, kernel 7.2.9-p2p, both D700s sustained 850/1370 MHz during compute (`clocks/`, sampled by
 `~/trashcan-exp/locked-run.sh`; the samples also cover loading and idle time). Timed commands hold
@@ -17,43 +18,44 @@ incite, kernel 7.2.9-p2p, both D700s sustained 850/1370 MHz during compute (`clo
 
 | run | file | result |
 |---|---|---|
-| `qwen-check`, 9B GPUs, 600-token prompt, 256 steps, k=2, 64K draft head | `final/check-256.json` | pass: restore bitwise exact; 170 verification batches with rollbacks match serial decode (top score error 2.3e-4); speculative output identical over 256 tokens |
-| same, k=3, 64 steps (full head) | `gpu-9b-check-k3.json` | pass |
-| `qwen-check`, 27B hybrid chain (CPU 0-30, GPU 30-48, 48-64 + head + MTP), k=2 | `hybrid-27b-check.json` | pass: score error 3.5e-4, identical, 70% acceptance |
+| `qwen-check`, 9B GPUs, 600-token prompt, 256 steps, k=2, 64K draft head | `final-q4c/check-256.json` | pass: restore bitwise exact; 170 verification batches with rollbacks match serial decode, top scores bit for bit (multivec build: error 2.3e-4); speculative output identical over 256 tokens |
+| `qwen-check`, 27B hybrid chain (CPU 0-30, GPU 30-48, 48-64 + head + MTP), k=2 | `hybrid-27b-check.json` | pass: score error 3.5e-4 (multivec build), identical, 70% acceptance |
 | `qwen-check`, 9B CPU path, one process and a two-process TCP chain | `cpu-9b-check.json` | pass, verification bitwise exact |
 | GPU vs CPU MTP layer: three chained drafts after the reference prompt | `val-9b-*-mtp/mtp_drafts.txt` | same top tokens (the target's greedy continuation), top-10 overlap 10/10, score difference at most 0.005 |
-| acceptance vs llama.cpp `--spec-type draft-mtp --spec-draft-n-max 3`, same 48-token prompt, 200 tokens | `final/check-llama-k3.json`, `llama-mtp-ref-200.json` | 126/219 (57.5%) vs 126/214 (58.9%) drafts accepted, same opening text |
-| depth sweeps: speculative greedy output vs plain decoding | `sweep-*/`, `final/greedy-*/` | byte-identical for every depth and draft head |
+| acceptance vs llama.cpp `--spec-type draft-mtp --spec-draft-n-max 3`, same 48-token prompt, 200 tokens | `final-q4c/check-llama-k3.json`, `llama-mtp-ref-200.json` | 126/219 (57.5%) vs 126/214 (58.9%) drafts accepted, same opening text |
+| `qwen_q4c2/3/4` against the decode kernel for each shape | `micro-cols/`, matvec-bench | every column bit-identical |
+| depth sweeps: speculative greedy output vs plain decoding | `sweep-*/`, `final*/greedy-*/` | byte-identical for every depth and draft head |
 | `scripts/test-server.py` against `trashcan serve`, 9B | `test-server.txt` | pass on the CPU path and on the GPUs with MTP |
 
 ## Rates
 
 Greedy, the three Gemma MTP prompts, 128 tokens, thinking off, after a warm-up, in both orders
-(`final/greedy-a`, `final/greedy-b`; tok/s):
+(`final-q4c/greedy-a`, `final-q4c/greedy-b`; tok/s):
 
 | | transformer | photosynthesis | CSV function | pooled |
 |---|---|---|---|---|
-| plain decode | 22.93 / 23.09 | 23.08 / 23.17 | 23.12 / 23.11 | 23.04 / 23.12 |
-| MTP, two drafts, 64K draft head | 34.07 / 34.21 | 30.29 / 30.41 | 41.21 / 41.23 | 34.63 / 34.73 |
+| plain decode | 23.17 / 23.16 | 23.29 / 23.22 | 23.28 / 23.20 | 23.25 / 23.19 |
+| MTP, two drafts, 64K draft head | 34.34 / 34.34 | 30.72 / 30.71 | 41.54 / 41.65 | 34.99 / 35.01 |
 
-+50% pooled. Per round: 59.5 ms verification, 7.9-8.0 ms drafting, 0.4 ms rollback, 2.37 tokens
-(first draft accepted 77%, both 60%). Depth and draft-head sweeps (`sweep-9b-1`, `sweep-9b-v64k`,
-`sweep-9b-v32k`) are tabulated in docs/qwen.md: two drafts beat one and three for every head, and the 64K
-head beats both the full head and the 32K head.
++51% pooled (`final/` with multivec verification: 34.63 / 34.73 against 23.04 / 23.12). Per round about
+59 ms of verification, 7.9 ms of drafting and 0.4 ms of rollback for 2.37 tokens (first draft accepted
+77%, both 60%). Depth and draft-head sweeps (`sweep-9b-1`, `sweep-9b-v64k`, `sweep-9b-v32k`) are tabulated
+in docs/qwen.md: two drafts beat one and three for every head, and the 64K head beats both the full head
+and the 32K head.
 
-Temperature 0.7, top-k 20, top-p 0.8 (`final/t07`; outputs differ by design):
+Temperature 0.7, top-k 20, top-p 0.8 (`final-q4c/t07`; outputs differ by design):
 
-| k | transformer | photosynthesis | CSV function | pooled | acceptance |
-|---|---|---|---|---|---|
-| 0 | 23.06 | 23.24 | 23.21 | 23.17 | |
-| 1 | 33.13 | 32.05 | 35.14 | 33.39 | 84% |
-| 2 | 34.90 | 27.08 | 38.57 | 32.78 | 74% first, 51% both |
-| 3 | 32.90 | 27.11 | 33.06 | 30.76 | |
+| k | transformer | photosynthesis | CSV function | pooled |
+|---|---|---|---|---|
+| 0 | 23.16 | 23.24 | 23.22 | 23.21 |
+| 1 | 32.98 | 32.28 | 35.28 | 33.47 |
+| 2 | 35.25 | 27.47 | 38.91 | 33.16 |
+| 3 | 32.99 | 27.20 | 33.17 | 30.86 |
 
-Building blocks (`final/spec-bench.json`, 600-token prompt, ms per call): decode 45.2; verification of
-2/3/4 tokens 52.4/61.1/75.9; rollback 1.1-1.3; draft steps (64K head) 3.96 each; checkpoint save 24.0 and
-restore 6.0. Prefill pp512 (`final/bench-*.json`): 126.65 tok/s plain, 121.55 with the MTP layer
-(-4%); tg64 23.07 plain, 35.28 with MTP.
+Building blocks (`final-q4c/spec-bench.json`, 600-token prompt, ms per call): decode 45.4; verification of
+2/3/4 tokens 52.5/60.5/75.5; rollback 0.9; draft steps (64K head) 3.98 each; checkpoint save 23.8 and
+restore 5.8. Prefill pp512 (`final-q4c/bench-*.json`): 126.46 tok/s plain, 121.59 with the MTP layer
+(-4%); tg64 23.10 plain, 35.51 with MTP. `ab-q4c*/` hold the verification kernel A/B (ABBA order).
 
 ## Prefix reuse
 
@@ -69,8 +71,8 @@ tokens).
 ```sh
 scripts/cross-build.sh trashcan-exp/qwen-dense/bin/trashcan
 rsync -a scripts/qwen-*.sh results/qwen/spec-20261006/run-*.sh incite:trashcan-exp/qwen-dense/scripts/
-ssh incite '~/trashcan-exp/locked-run.sh qwen-dense scripts/run-final.sh'
-ssh incite '~/trashcan-exp/locked-run.sh qwen-dense scripts/run-checks.sh'
+ssh incite 'OUT=results/final-q4c ~/trashcan-exp/locked-run.sh qwen-dense scripts/run-final.sh'
+ssh incite 'OUT=results/final-q4c ~/trashcan-exp/locked-run.sh qwen-dense scripts/run-checks.sh'
 ssh incite '~/trashcan-exp/locked-run.sh qwen-dense scripts/qwen-hybrid.sh 30,48 qwen-check --draft-tokens 2 --tokens 48 --steps 24 --context 512'
 ```
 

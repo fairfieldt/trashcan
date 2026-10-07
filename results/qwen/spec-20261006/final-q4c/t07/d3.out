@@ -1,0 +1,34 @@
+
+> A **transformer** is an electrical device that transfers electrical energy between two or more circuits through electromagnetic induction. Its primary function is to change the voltage level of an alternating current (AC) system—either stepping it up (increasing voltage) or stepping it down (decreasing voltage)—while keeping the frequency constant.
+
+Here is a step-by-step explanation of how a transformer works:
+
+### 1. The Core Components
+Before understanding the process, it helps to know the physical structure:
+*   **Primary Coil**: The input winding connected to the power source.
+*   **Secondary Coil**: The output winding connected to
+
+> 
+> Photosynthesis is like a magic kitchen that plants use to make their own food. Instead of going to a grocery store, plants take ingredients from right around them: they grab sunlight from the sky, pull carbon dioxide from the air, and drink water from the soil. Using the sun's energy, they mix these three things together in a special process to create sugar, which is the plant's lunch.
+
+You can think of the sun as the chef and the leaves as the cooking pots. The green color in leaves comes from a special helper called chlorophyll that catches the sunlight, just like a solar panel catches energy for a toy.
+
+> 
+> Here is a Python function that reads a CSV file and filters rows where the age is at least 18. It uses the built-in `csv` module for simplicity and handles the age conversion to an integer.
+
+### Python Function
+
+```python
+import csv
+
+def filter_adults(csv_path):
+    """
+    Reads a CSV file and returns a list of rows where the age is at least 18.
+    
+    Args:
+        csv_path (str): Path to the input CSV file.
+        
+    Returns:
+        list: A list of dictionaries representing rows where age >= 18.
+
+> 

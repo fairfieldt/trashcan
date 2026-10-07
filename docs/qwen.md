@@ -243,7 +243,7 @@ Same machine and clocks (850/1370 MHz sustained). Reports, outputs and clock log
 
 | check | result |
 |---|---|
-| `qwen-check` 9B GPUs, 600-token prompt, 256 steps, MTP k=2 | pass: restore bitwise exact, 170 verification batches with rollbacks match serial decode (top score error 2.3e-4), speculative output identical over 256 tokens |
+| `qwen-check` 9B GPUs, 600-token prompt, 256 steps, MTP k=2 | pass: restore bitwise exact, 170 verification batches with rollbacks match serial decode with bitwise-equal top scores (2.3e-4 apart before `qwen_q4c`), speculative output identical over 256 tokens |
 | `qwen-check` 27B hybrid (CPU 0-30, GPU 30-48, 48-64 + head + MTP), 48 tokens, 24 steps, k=2 | pass: verification score error 3.5e-4, speculative output identical, 70% acceptance |
 | same checks on the CPU path, one process and a two-process TCP chain | pass, verification bitwise exact |
 | GPU MTP layer vs the CPU reference (`qwen-validate --mtp`, 9B, three chained drafts after the reference prompt) | same top token at every step, top-10 overlap 10/10, largest score difference 0.005 (rel 4.7e-4) over all 64 candidates |
@@ -254,14 +254,14 @@ Costs from `qwen-spec-bench` (9B, 600-token prompt, ms per call):
 
 | decode | verify 2 / 3 / 4 / 5 tokens | rollback | draft step: full head / 64K / 32K | checkpoint save / restore |
 |---|---|---|---|---|
-| 45.2 | 52.4 / 61.1 / 75.9 / 125.5 | 0.9-1.3 | 8.4 / 4.0 / 3.25 | 24.0 / 6.0 |
+| 45.4 | 52.5 / 60.5 / 75.5 / 125.5 | 0.9 | 8.4 / 4.0 / 3.25 | 23.8 / 5.8 |
 
 Five columns run the four-column kernel twice, hence the jump. The MTP cache update inside each
 verification batch costs 1.5-2 ms (verification without the MTP layer: 50.9 / 59.2 / 73.6) and slows
-prefill by 4% (pp512 126.65 vs 121.55 tok/s).
+prefill by 4% (pp512 126.46 vs 121.59 tok/s).
 
-Greedy decode rates (tok/s), three prompts from the Gemma MTP round, 128 tokens, thinking off. Every
-speculative output is byte-identical to plain decoding:
+Greedy decode rates (tok/s), three prompts from the Gemma MTP round, 128 tokens, thinking off, before the
+`qwen_q4c` verification kernels. Every speculative output is byte-identical to plain decoding:
 
 | draft head | k | transformer | photosynthesis | CSV function |
 |---|---|---|---|---|
@@ -270,12 +270,13 @@ speculative output is byte-identical to plain decoding:
 | first 65536 ids | 1 / 2 / 3 | 33.31 / **34.19** / 30.46 | 28.94 / **30.31** / 26.03 | 34.58 / **41.26** / 38.01 |
 | first 32768 ids | 1 / 2 / 3 | 31.29 / 31.86 / 27.86 | 29.48 / 30.95 / 27.12 | 34.49 / 40.36 / 38.33 |
 
-Two drafts from a 64K draft head (the defaults) give 30-41 tok/s: pooled 34.6-34.7 against 23.0-23.1
-tok/s plain over two repeated runs after a warm-up (+50%). Per round: 59.5 ms of verification, 7.9 ms of
-drafting and 0.4 ms of rollback for 2.37 tokens (77% of first drafts and 60% of both accepted).
+With `qwen_q4c` verification, two drafts from a 64K draft head (the defaults) give 30.7-41.7 tok/s:
+pooled 35.0 against 23.2 tok/s plain in two runs after a warm-up, in both orders (+51%). Per round: about
+59 ms of verification, 7.9 ms of drafting and 0.4 ms of rollback for 2.37 tokens (77% of first drafts and
+60% of both accepted).
 
-At temperature 0.7 (top-k 20, top-p 0.8), pooled tok/s is 23.17 plain, 33.39 with one draft (84% accepted),
-32.78 with two and 30.76 with three. The 27B cannot be timed on one Mac (the hybrid chain spends seconds
+At temperature 0.7 (top-k 20, top-p 0.8), pooled tok/s is 23.21 plain, 33.47 with one draft (84% accepted),
+33.16 with two and 30.86 with three. The 27B cannot be timed on one Mac (the hybrid chain spends seconds
 per token in its CPU stage); with two Macs the same cost model applies, with the 27B's verification
 crossing four GPUs.
 

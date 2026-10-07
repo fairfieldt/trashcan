@@ -4,7 +4,7 @@
 # ~/trashcan-exp/locked-run.sh.
 set -euo pipefail
 m=$HOME/models/qwen3.5-9b
-out=results/final
+out=${OUT:-results/final}
 mkdir -p $out
 bin/trashcan qwen-check $m/Qwen3.5-9B-trashcan-Q4_0.gguf --mtp $m/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf \
     --tokens 600 --steps 256 > $out/check-256.json 2> $out/check-256.log
