@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4, 4279.1 MiB allocated
+GPU1: rank 1 of 4, 4279.1 MiB allocated
+[clocks] 110 samples card0 (02:00.0) sclk/mclk: 850/1370 x69 450/1370 x6 300/150 x35  max 69C card1 (06:00.0) sclk/mclk: 850/1370 x48 300/1370 x1 450/1370 x19 300/150 x42  max 66C  log=results/clocks/v6-27b-hn0-m0.txt

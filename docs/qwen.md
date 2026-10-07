@@ -143,11 +143,21 @@ Instead of a range of layers per GPU, every GPU can hold one rank's share of eve
 its key heads with the value heads that read them, its query heads with their KV heads, a slice of the FFN and of
 the vocabulary. The hidden state is replicated. Each rank runs the unchanged kernels with the per-rank head counts;
 value head h reads key head h % k_heads, so taking each group of k_heads value heads' share in order keeps that
-mapping locally. Each mixer and FFN ends a submission with its partial output projection in host memory; the
-host adds the ranks' partials, exchanges the sum with the other machine over 1-3 lanes (`link.rs`, TCP or
-USB4STREAM) and writes the total that the next submission adds to the residual: two all-reduces per layer,
-2 × layers + 1 submissions per forward, all submitted ahead and released by a timeline semaphore. Each machine
-merges its ranks' candidates and the machines exchange theirs. Rollback and checkpoints apply to every rank.
+mapping locally. Each mixer and FFN ends a segment with its partial output projection in host memory; the host
+adds the ranks' partials and exchanges the sum with the other machine over 1-3 lanes (`link.rs`, TCP or USB4STREAM):
+two all-reduces per layer, 2 × layers + 1 segments per forward. Each machine merges its ranks' candidates and the
+machines exchange theirs. Rollback and checkpoints apply to every rank.
+
+- Decode, verification and draft steps (up to 8 columns) are one command buffer and one submission per rank. Each
+  segment after the first waits on a VkEvent the host sets (RADV: a command-processor poll of host memory, about
+  3 µs) and sets a done event the host polls; one event pair per rank serves every segment. The host keeps the
+  residual: it adds each all-reduced total and writes the next segment's normed rows, which the projections read from
+  host memory, so the GPUs run no residual norms. Device buffers of a rank come from 256 MiB allocations, so a
+  submission lists few memory objects (the kernel validates each one before the GPU starts).
+- Prefill segments are one submission each, submitted ahead and released by a timeline semaphore (a gated
+  submission would last the whole chunk, and amdgpu kills GPU jobs after about 10 s), adding the total on the GPUs.
+- A SIGINT, SIGTERM or SIGHUP during a gated forward sets the release events until the GPUs drain, then takes its
+  default action; a failed exchange drains the same way.
 
 ```sh
 trashcan qwen-bench MODEL --tp --pp 512 --tg 128                       # this machine's GPUs
@@ -157,16 +167,21 @@ trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP
 trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
 ```
 
-Qwen3.8-27B on incite and invite (four D700s, [results/qwen/tp-20261006](../results/qwen/tp-20261006/)): TP4
-matches the CPU reference to 4.1e-4 with the same greedy tokens, and runs at 91 tok/s prefill and 16.6 tok/s
-decode over USB4STREAM (82 / 15.6 over TCP), against 38 / 9.6 for the four-stage pipeline. The 9B gets 208 / 32
-with TP2 on one Mac against 127 / 23. A decode token spends most of its time on the GPUs (about 102 GB/s per GPU
-against 123 for a pipeline stage: narrower matrices and a cache flush per submission); the 128 cross-Mac
-exchanges add 12 ms. With MTP drafting (the block split like a trunk layer) the 27B decodes at 26 tok/s on the two
-Macs, 72% of drafts accepted; `qwen-check` passes on TP with and without drafting. `trashcan serve` takes the same
-`--tp` options and passes `scripts/test-server.py` that way. Measurement switches:
-`TRASHCAN_TP_SUBMIT=1` submits each segment when it is due instead of ahead; `TRASHCAN_TP_FREE=1` runs the
-segments back to back without all-reduces (wrong results, the GPU floor).
+Qwen3.8-27B on incite and invite (four D700s, [results/qwen/tp-20261006](../results/qwen/tp-20261006/),
+[results/qwen/tp-decode-20261006](../results/qwen/tp-decode-20261006/)): TP4 matches the CPU reference to 4.1e-4
+with the same greedy tokens, and runs at 91 tok/s prefill and 28.5 tok/s decode over USB4STREAM, against 38 / 9.6
+for the four-stage pipeline. The 9B gets 208 / 46 with TP2 on one Mac against 127 / 23. A 27B decode token takes
+35 ms: 29-30 ms on the GPUs (invite's run streaming kernels 5-7% slower than incite's at the same clocks, so they
+pace the exchanges) and 4-5.5 ms in the 128 cross-Mac exchanges. With MTP drafting (the block split like a trunk
+layer, each rank holding an equal share of the draft vocabulary's head rows) the 27B decodes at 39.6 tok/s on the
+two Macs and the 9B at 66 on one, 72% of drafts accepted; `qwen-check` passes on TP with and without drafting.
+`trashcan serve` takes the same `--tp` options and passes `scripts/test-server.py` that way. Measurement switches:
+`TRASHCAN_TP_EVENTS=0` (decode through per-segment submissions too), `TRASHCAN_TP_HOSTNORM=0` (GPU residual norms),
+`TRASHCAN_TP_ARENA=0`, `TRASHCAN_TP_PARTS=N` (split-K attention partitions times N, default 2),
+`TRASHCAN_TP_DRAFT_HEAD=0`; `TRASHCAN_TP_SUBMIT=1` submits each prefill segment when it is due instead of ahead;
+`TRASHCAN_TP_FREE=1` runs the segments without all-reduces (wrong results, the GPU floor);
+`TRASHCAN_TP_PROFILE=FILE` (with `TRASHCAN_TP_PROFILE_DISPATCH=1`) writes GPU timestamps per segment (and dispatch)
+aligned to host time, summarized by `tools/tp_profile.py` and `tools/tp_timeline.py`.
 
 The decision to use TP across Macs came from `trashcan allreduce-bench`
 ([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)): a cross-Mac all-reduce costs

@@ -1,0 +1,4 @@
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4 + MTP, 4479.3 MiB allocated
+GPU1: rank 1 of 4 + MTP, 4479.3 MiB allocated
+[clocks] 242 samples card0 (02:00.0) sclk/mclk: 850/1370 x210 450/1370 x1 300/150 x31  max 74C card1 (06:00.0) sclk/mclk: 850/1370 x208 450/1370 x13 300/150 x21  max 72C  log=results/clocks/checkmtp-27b-final.txt

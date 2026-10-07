@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 2 ranks, 2 on this machine
+GPU0: rank 0 of 2 + MTP, 3106.5 MiB allocated
+GPU1: rank 1 of 2 + MTP, 3106.5 MiB allocated
+[clocks] 81 samples card0 (02:00.0) sclk/mclk: 850/1370 x47 300/1370 x1 650/1370 x1 450/1370 x5 300/150 x25 450/150 x2  max 65C card1 (06:00.0) sclk/mclk: 850/1370 x27 450/1370 x6 300/150 x48  max 63C  log=results/clocks/dh-9b-on.txt

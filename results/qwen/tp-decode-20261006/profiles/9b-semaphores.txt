@@ -1,0 +1,22 @@
+rank 0: 125 steps (n=1)
+  step           mean   31542.5  median   31398.0 us
+  gpu segments   mean   26845.3  median   26840.3 us
+  launch         mean    3731.0  median    3566.7 us
+  notice         mean     458.0  median     457.7 us
+  host between   mean     508.1  median     513.8 us
+  segment  count        launch           gpu        notice          host  exchange+add
+  delta       24          59.3         359.0           7.1           6.6           6.6
+  ffn         32          51.9         358.2           7.0           6.6           6.6
+  attn         8          58.9         363.3           7.1           6.6           6.6
+  head         1          49.4        3834.5           7.1           nan           nan
+rank 1: 125 steps (n=1)
+  step           mean   31562.6  median   31414.6 us
+  gpu segments   mean   26735.6  median   26733.5 us
+  launch         mean    3859.2  median    3808.1 us
+  notice         mean     692.3  median     660.0 us
+  host between   mean     275.5  median     274.9 us
+  segment  count        launch           gpu        notice          host  exchange+add
+  delta       24          62.0         357.0           9.5           4.3           4.2
+  ffn         32          54.3         356.7           9.1           4.3           4.2
+  attn         8          61.3         362.7           8.7           4.3           4.2
+  head         1          51.7        3840.6           7.7           nan           nan

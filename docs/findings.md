@@ -2,6 +2,29 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-06 (later): tensor-parallel decode, 27B TP4 at 28.5 tok/s and 39.6 with MTP
+
+`results/qwen/tp-decode-20261006/`. Base binary measured in the same conditions: 18.5-19.0 (TP4 27B), 32.0 (TP2 9B);
+now 28.5-28.6 and 46.0, with MTP 28.5 → 39.6 and 50.0 → 66.1. Generated text unchanged; all checks pass.
+
+- A timeline-semaphore release through the kernel costs 52-62 µs per segment before the GPU starts; a VkEvent that the
+  command processor polls in host memory (one submission per forward) costs 3 µs. Completion notice through a VkEvent:
+  1-2 µs instead of 7-10.
+- A submission's start latency grows with the memory objects it lists (about 1-2 µs each on RADV/amdgpu): one
+  command buffer per forward, suballocated device memory and one event pair per rank took the first segment's start
+  from 1,178 to 108 µs.
+- The D700's L2 caches GPU reads of host memory, so all workgroups of a projection can read their input rows from
+  one host buffer; with the host keeping the residual and computing the norms (the one-workgroup GPU norm took
+  14-17 µs per segment), decode is 4-5% faster.
+- On GFX6 the command processor starts a `matvecq4narrow` dispatch (512-thread workgroups) only after the previous
+  one finishes; `matvecq4` dispatches overlap. Small dispatches issued before large ones run beside them.
+- RADV invalidates and writes back the whole L2 at every compute barrier on GFX6 (`can_skip_buffer_l2_flushes` is
+  false before GFX9); not changed here.
+- invite's GPUs stream 5-7% slower than incite's at the same 850/1370 MHz (latency-bound kernels match), so incite
+  waits on invite at most exchanges.
+- `matvecq4` reaches 199 GB/s on a whole 17408×5120 matrix but 133-167 GB/s on the 27B's TP4 shards; neither eight
+  rows per wave nor fusing projections into one dispatch helped.
+
 ## 2026-10-06: Qwen3.8-27B with tensor parallelism across incite and invite
 
 `--tp` splits every layer across GPUs, `--tp-stream`/`--tp-connect` across both Macs (`results/qwen/tp-20261006/`).
