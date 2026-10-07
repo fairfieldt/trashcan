@@ -1,7 +1,7 @@
 #!/bin/bash
 # Speculative-decoding depth sweep on incite: the three Gemma MTP benchmark prompts, 128 tokens each,
 # thinking off, one process per depth (0 = no MTP). TEMP sets the temperature (default 0, greedy).
-# Run inside ~/trashcan-exp/locked-run.sh from a workspace holding bin/trashcan.
+# Run under a gpuq lease (`gpuq run ID -- ...`) from a workspace holding bin/trashcan.
 # Output: OUT/d{depth}.out (text) and OUT/d{depth}.log (rates and MTP stats).
 # usage: scripts/qwen-spec-sweep.sh MODEL MTP OUT [DEPTH ...] [-- EXTRA ARGS]
 set -euo pipefail

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start the Responses server on a Qwen model, run scripts/test-server.py against it, stop it.
-# Run inside ~/trashcan-exp/locked-run.sh from a workspace holding bin/trashcan and scripts/.
+# Run under a gpuq lease (`gpuq run ID -- ...`) from a workspace holding bin/trashcan and scripts/.
 # usage: scripts/qwen-serve-test.sh MODEL LOG [EXTRA serve ARGS...]
 set -euo pipefail
 model=$1 log=$2

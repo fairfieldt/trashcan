@@ -1,6 +1,6 @@
 #!/bin/bash
 # Multi-turn chat with and without prefix reuse on incite: one user turn per line of TURNS, greedy, the
-# same chat with --checkpoints 8 and 0. Run inside ~/trashcan-exp/locked-run.sh from the workspace.
+# same chat with --checkpoints 8 and 0. Run under a gpuq lease (`gpuq run ID -- ...`) from the workspace.
 # Output: OUT/c{8,0}.out (text) and .log (per-turn prefill/decode rates, reused tokens).
 # usage: scripts/qwen-reuse.sh MODEL TURNS OUT [EXTRA qwen-chat ARGS...]
 set -euo pipefail

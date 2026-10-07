@@ -15,12 +15,12 @@ a model there, read `gpuq rules`, request and wait for a lease, and run GPU comm
 YIELD REQUESTED by finishing the current command and running `gpuq yield ID`.
 Never stop or start `ds4-qwen.service` yourself; gpuq manages it.
 
-# Shared GPUs on incite
+# Shared GPUs on the Mac Pros
 
-incite's two D700s are shared by several sessions through gpuq (dashboard http://incite.tdf.sh:8765/,
-MCP server `gpuq-incite`). Request a lease with `gpuq --on incite request LABEL --est MIN`, wait with
-`gpuq --on incite wait ID`, run GPU commands as `ssh incite 'gpuq run ID -- CMD'`, and release promptly.
-`~/trashcan-exp/locked-run.sh NAME CMD` still works: it and `gpuq run` both hold `~/trashcan-exp/.lock`,
-so they exclude each other. Never write into `~/trashcan` on incite (another checkout); use a
-`~/trashcan-exp/NAME` workspace. Build with `scripts/cross-build.sh` in the kbuild VM, not on incite.
-amdgpu kills a GPU job after about 10 s, so keep each queue submission short.
+The Mac Pros' D700s (incite, invite) are shared by several sessions through one gpuq queue per machine
+(dashboards http://incite.tdf.sh:8765/ and http://invite.tdf.sh:8765/). Before any GPU run, request a lease with
+`gpuq --on MACHINE request LABEL --est MIN`, wait with `gpuq --on MACHINE wait ID`, run GPU commands as
+`ssh MACHINE 'gpuq run ID -- CMD'`, and release promptly. For benchmarks, wrap the command in
+`scripts/with-clocks.sh CLOCKLOG CMD` to record sustained clocks. Never write into `~/trashcan` on incite (another
+checkout); use a `~/trashcan-exp/NAME` workspace. Build with `scripts/cross-build.sh` in the kbuild VM, not on
+the Macs. amdgpu kills a GPU job after about 10 s, so keep each queue submission short.

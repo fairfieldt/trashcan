@@ -291,7 +291,7 @@ reuses the whole first turn, reasoning included: 100 of 118 tokens.
 
 `scripts/cross-build.sh [DEST]` builds in the `kbuild` lima VM (aarch64 Debian 13 with an x86_64 cross
 toolchain and the same glibc as incite) in about 10 s and copies the binary to incite, keeping compile
-load off the benchmark machine. GPU runs on incite go through `~/trashcan-exp/locked-run.sh NAME CMD`,
+load off the benchmark machine. GPU runs on incite go through gpuq leases (`ssh incite 'gpuq run ID -- CMD'`, see AGENTS.md),
 which holds `~/trashcan-exp/.lock` and records clocks.
 
 ## Next: Qwen3.8-Flash-Next (`qwen4exp`)

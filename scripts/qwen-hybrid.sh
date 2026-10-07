@@ -1,6 +1,6 @@
 #!/bin/bash
 # Qwen3.8-27B on incite alone: a GPU node on localhost holds layers CUT..64 (both D700s, the head and the
-# MTP layer) and the driver runs layers 0..CUT on the CPU. Run inside ~/trashcan-exp/locked-run.sh.
+# MTP layer) and the driver runs layers 0..CUT on the CPU. Run under a gpuq lease (`gpuq run ID -- ...`).
 # usage: scripts/qwen-hybrid.sh CUT,MID COMMAND [ARGS...]   (COMMAND: qwen-check, qwen-chat, ...)
 set -euo pipefail
 cuts=$1 cmd=$2
