@@ -206,6 +206,10 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
     let pp_s = start.elapsed().as_secs_f64();
     // Milliseconds of the whole prefill in each phase of the tensor-parallel loop.
     let pp_tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, 1.));
+    let profile = match e.local.stages.first() {
+        Some(super::pipeline::Stage::Tp(t)) if std::env::var_os("TRASHCAN_TP_PROFILE").is_some() => Some(t.profile()),
+        _ => None,
+    };
     let (start, tp_before) = (Instant::now(), tp_seconds(e));
     let mut sampler = Sampler::new(0., 1, 1., 1)?;
     let speculative = spec.is_some();
@@ -226,7 +230,7 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
         .collect();
     Ok(json!({"pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
-        "pp_top":top.iter().take(8).collect::<Vec<_>>(),
+        "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
         "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"text":t.decode(&out, false)}))
 }
 

@@ -20,6 +20,7 @@ use crate::{generation::Sampler, gguf::Gguf, gpu::Instance, link::Lanes, vulkan:
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeMap,
     net::TcpListener,
     path::Path,
     rc::Rc,
@@ -40,6 +41,8 @@ pub struct TpGroup {
     remote: Vec<f32>,
     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
     threads: usize,
+    /// Profiling (`TRASHCAN_TP_PROFILE`): GPU time per kernel of the prefill forwards, per local rank.
+    profile: Vec<BTreeMap<String, (u64, f64)>>,
     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
     /// other machine, since the group was created.
     pub seconds: Phases,
@@ -178,7 +181,8 @@ impl TpGroup {
             ensure!(reply.get("ok").is_some(), "the other machine failed: {}", reply["error"]);
         }
         let len = c.d * max_batch;
-        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], threads: host_threads(), seconds: Phases::default() })
+        let profile = vec![BTreeMap::new(); shards.len()];
+        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], threads: host_threads(), profile, seconds: Phases::default() })
     }
 
     /// Forward `tokens` (embedded as `x`) at `pos`: candidates of the last column, or of every column of a
@@ -197,6 +201,11 @@ impl TpGroup {
             segments = s.tp_prepare(x, pos, n, verify, dump.is_some(), &micro)?;
         }
         self.launch(segments, &micro)?;
+        if n >= 64 && std::env::var_os("TRASHCAN_TP_PROFILE").is_some() {
+            for (s, p) in self.shards.iter().zip(self.profile.iter_mut()) {
+                s.tp_profile(p)?;
+            }
+        }
         let columns = self.candidates(if verify && n > 1 { n } else { 1 })?;
         if let Some(m) = dump {
             // Whole tensors from the first rank; the logits joined from every rank's vocabulary slice, the other
@@ -391,6 +400,21 @@ impl TpGroup {
         Ok(())
     }
 
+    /// Profiling: GPU milliseconds per kernel of the prefill forwards so far, per local rank, largest first.
+    pub fn profile(&self) -> Value {
+        Value::Array(
+            self.profile
+                .iter()
+                .map(|p| {
+                    let mut rows: Vec<_> = p.iter().collect();
+                    rows.sort_by(|a, b| b.1 .1.total_cmp(&a.1 .1));
+                    let total: f64 = rows.iter().filter(|r| !r.0.starts_with('(')).map(|r| r.1 .1).sum();
+                    json!({"busy_ms": total * 1e3, "kernels": rows.iter().map(|(k, (n, s))| json!([k, n, s * 1e3])).collect::<Vec<_>>()})
+                })
+                .collect(),
+        )
+    }
+
     /// Device memory of each local rank.
     pub fn device_mib(&self) -> Vec<f64> {
         self.shards.iter().map(GpuStage::device_mib).collect()
@@ -518,7 +542,9 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut lanes: Lanes) -
         };
         lanes.send_message(&message(json!({"ok": true}))?)?;
         let len = c.d * num("batch")?;
-        let mut group = TpGroup { gguf, c, shards, peer: Some(lanes), driver: false, sum: vec![0.; len], remote: vec![0.; len], threads: 1, seconds: Phases::default() };
+        let profile = vec![BTreeMap::new(); shards.len()];
+        let mut group =
+            TpGroup { gguf, c, shards, peer: Some(lanes), driver: false, sum: vec![0.; len], remote: vec![0.; len], threads: 1, profile, seconds: Phases::default() };
         return group.follow();
     }
 }

@@ -208,11 +208,28 @@ struct Graph {
     gpu: Rc<Device>,
     cmds: Vec<vk::CommandBuffer>,
     captures: Vec<(String, Buffer, usize)>,
+    stamps: Option<Stamps>,
 }
 impl Drop for Graph {
     fn drop(&mut self) {
         unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &self.cmds) };
+        if let Some(s) = &self.stamps {
+            unsafe { self.gpu.dev.destroy_query_pool(s.pool, None) };
+        }
     }
+}
+
+/// Profiling only (`TRASHCAN_TP_PROFILE`): a timestamp after every dispatch of a tensor-parallel graph, so each
+/// kernel's GPU time is the time since the previous stamp. An empty label marks the start of a submission; the
+/// time before it is the gap between submissions.
+struct Stamps {
+    pool: vk::QueryPool,
+    labels: Vec<String>,
+}
+const STAMPS: u32 = 4096;
+
+fn profiling() -> bool {
+    std::env::var_os("TRASHCAN_TP_PROFILE").is_some()
 }
 
 pub enum Output {
@@ -269,6 +286,8 @@ struct Tp {
     /// Graph of the forward in progress (for its captures), and the segments of the forward or draft step in
     /// progress with the vocabulary rows its head ranks.
     current: Option<Key>,
+    /// Graphs of the micro-batches of the forward in progress.
+    keys: Vec<Key>,
     cmds: Vec<vk::CommandBuffer>,
     head_rows: usize,
 }
@@ -407,6 +426,7 @@ struct Rec<'a> {
     /// total), of a micro-batch; 0 for a whole batch.
     slot: usize,
     row: usize,
+    stamps: std::cell::RefCell<Option<Stamps>>,
 }
 
 impl<'a> Rec<'a> {
@@ -417,10 +437,16 @@ impl<'a> Rec<'a> {
     /// A micro-batch of `n` rows starting at `row`, with its params in `slot`.
     fn at(s: &'a GpuStage, n: usize, dump: bool, slot: usize, row: usize) -> Result<Self> {
         let cmd = s.gpu.begin()?;
-        s.gpu.barrier(cmd);
-        s.gpu.copy(cmd, &s.params_host, slot * PARAMS_STRIDE, &s.params, slot * PARAMS_STRIDE, 16);
+        let stamps = if s.tp.is_some() && profiling() {
+            let ci = vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(STAMPS);
+            let pool = unsafe { s.gpu.dev.create_query_pool(&ci, None)? };
+            unsafe { s.gpu.dev.cmd_reset_query_pool(cmd, pool, 0, STAMPS) };
+            Some(Stamps { pool, labels: Vec::new() })
+        } else {
+            None
+        };
         let rows = (row * s.c.d * 4) as u64;
-        Ok(Self {
+        let r = Self {
             s,
             n,
             dump,
@@ -429,11 +455,17 @@ impl<'a> Rec<'a> {
                 gpu: s.gpu.clone(),
                 cmds: vec![cmd],
                 captures: Vec::new(),
+                stamps: None,
             },
             out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address) + rows,
             slot,
             row,
-        })
+            stamps: std::cell::RefCell::new(stamps),
+        };
+        r.stamp_at("", vk::PipelineStageFlags::TOP_OF_PIPE);
+        s.gpu.barrier(cmd);
+        s.gpu.copy(cmd, &s.params_host, slot * PARAMS_STRIDE, &s.params, slot * PARAMS_STRIDE, 16);
+        Ok(r)
     }
 
     /// Byte offset of this micro-batch's rows in the batch buffers.
@@ -466,18 +498,36 @@ impl<'a> Rec<'a> {
     fn split(&mut self) -> Result<()> {
         self.s.gpu.finish(self.cmd)?;
         self.cmd = self.s.gpu.begin()?;
+        self.stamp_at("", vk::PipelineStageFlags::TOP_OF_PIPE);
         self.s.gpu.barrier(self.cmd);
         self.graph.cmds.push(self.cmd);
         Ok(())
     }
 
-    fn finish(self) -> Result<Graph> {
+    /// Profiling: mark the end of the preceding dispatch as `label`.
+    fn stamp(&self, label: &str) {
+        self.stamp_at(label, vk::PipelineStageFlags::BOTTOM_OF_PIPE);
+    }
+
+    fn stamp_at(&self, label: &str, stage: vk::PipelineStageFlags) {
+        if let Some(s) = self.stamps.borrow_mut().as_mut() {
+            let i = s.labels.len() as u32;
+            if i < STAMPS {
+                unsafe { self.s.gpu.dev.cmd_write_timestamp(self.cmd, stage, s.pool, i) };
+                s.labels.push(label.to_owned());
+            }
+        }
+    }
+
+    fn finish(mut self) -> Result<Graph> {
         self.s.gpu.finish(self.cmd)?;
+        self.graph.stamps = self.stamps.into_inner();
         Ok(self.graph)
     }
 
     fn copy(&self, a: &Buffer, ao: usize, b: &Buffer, bo: usize, size: usize) {
         self.s.gpu.copy(self.cmd, a, ao, b, bo, size);
+        self.stamp("copy");
     }
 
     /// Under tensor parallelism only the replicated residual `x` and norm output `h` are whole tensors.
@@ -515,7 +565,9 @@ impl<'a> Rec<'a> {
             gx as u32,
             gy as u32,
             w,
-        )
+        )?;
+        self.stamp(&format!("{shader} {rows}x{k}"));
+        Ok(())
     }
 
     /// Optional residual add x += y, then h = RMS(x) * w when h is given, its rows `stride` apart
@@ -533,6 +585,7 @@ impl<'a> Rec<'a> {
             1,
             self.n as u32,
         );
+        self.stamp(if y.is_some() { "add_norm (+total)" } else { "add_norm" });
     }
 
     /// Gated DeltaNet from `h` into `y`.
@@ -553,6 +606,7 @@ impl<'a> Rec<'a> {
             self.n.div_ceil(8) as u32,
             &dl.ab,
         )?;
+        self.stamp("matf32");
         self.capture(format!("linear_attn_qkv_mixed-{il}"), &s.big, cd)?;
         self.capture(format!("z-{il}"), &s.z, vd)?;
         let (snap, snap_conv) = match (&dl.snaps, verify) {
@@ -568,6 +622,7 @@ impl<'a> Rec<'a> {
             cd.div_ceil(256) as u32,
             1,
         );
+        self.stamp("conv");
         self.capture(format!("conv_output_silu-{il}"), &s.conv_out, cd)?;
         let mut u = [0; 16];
         u[0] = cd as u32;
@@ -582,6 +637,7 @@ impl<'a> Rec<'a> {
             (c.v_heads * c.state / 16) as u32,
             1,
         );
+        self.stamp("gdn");
         self.capture(format!("attn_output-{il}"), &s.o, vd)?;
         let mut u = [0; 16];
         u[0] = vd as u32;
@@ -594,6 +650,7 @@ impl<'a> Rec<'a> {
             c.v_heads as u32,
             self.n as u32,
         );
+        self.stamp("gated_norm");
         self.capture(format!("final_output-{il}"), &s.o, vd)?;
         self.matrix(&dl.out, s.o.address, self.out, vd, d, false)?;
         self.capture(format!("linear_attn_out-{il}"), &s.y, d)
@@ -641,6 +698,7 @@ impl<'a> Rec<'a> {
                 heads as u32,
                 self.n as u32,
             );
+            self.stamp("qk");
         }
         self.capture(format!("Qcur-{il}"), &s.rq, qd)?;
         let mut u = [0; 16];
@@ -673,6 +731,7 @@ impl<'a> Rec<'a> {
                 self.n as u32,
             );
         }
+        self.stamp("attention");
         self.capture(format!("attn_pregate-{il}"), &s.o, qd)?;
         let mut u = [0; 16];
         u[0] = qd as u32;
@@ -684,6 +743,7 @@ impl<'a> Rec<'a> {
             qd.div_ceil(256) as u32,
             self.n as u32,
         );
+        self.stamp("gate");
         self.capture(format!("attn_gated-{il}"), &s.o, qd)?;
         self.matrix(&a.out, s.o.address, self.out, qd, d, false)?;
         self.capture(format!("attn_output-{il}"), &s.y, d)
@@ -703,6 +763,7 @@ impl<'a> Rec<'a> {
             c.ff.div_ceil(256) as u32,
             self.n as u32,
         );
+        self.stamp("swiglu");
         self.capture(format!("ffn_swiglu-{il}"), &s.act, c.ff)?;
         self.matrix(&f.down, s.act.address, self.out, c.ff, c.d, false)
     }
@@ -735,6 +796,7 @@ impl<'a> Rec<'a> {
             gy as u32,
             &hd.w,
         )?;
+        self.stamp("head");
         if self.dump {
             // A tensor-parallel rank holds a slice of the vocabulary; tp::TpGroup joins the slices.
             let name = if s.tp.is_some() { "result_output_part" } else { "result_output" };
@@ -765,6 +827,7 @@ impl<'a> Rec<'a> {
             1,
             cols as u32,
         );
+        self.stamp("topk");
         Ok(())
     }
 
@@ -965,6 +1028,7 @@ impl GpuStage {
                     done_value: 0,
                     released: 0,
                     current: None,
+                    keys: Vec::new(),
                     cmds: Vec::new(),
                     head_rows: 0,
                 })
@@ -1170,6 +1234,7 @@ impl GpuStage {
         let rows = self.c.vocab;
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         tp.current = keys.last().copied();
+        tp.keys = keys;
         Ok(tp.start(cmds, rows))
     }
 
@@ -1262,6 +1327,28 @@ impl GpuStage {
         }
         let start = self.vocab_start as u32;
         Ok(self.read_top(cols)?.into_iter().map(|c| c.into_iter().map(|(s, id)| (s, id + start)).collect()).collect())
+    }
+
+    /// Profiling: add the GPU time of every kernel of the latest forward to `into` (count, seconds), by label.
+    pub fn tp_profile(&self, into: &mut std::collections::BTreeMap<String, (u64, f64)>) -> Result<()> {
+        let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        for key in &tp.keys {
+            let Some(s) = self.graphs.get(key).and_then(|g| g.0.stamps.as_ref()) else { continue };
+            let mut ticks = vec![0u64; s.labels.len()];
+            if ticks.len() < 2 {
+                continue;
+            }
+            unsafe {
+                self.gpu.dev.get_query_pool_results(s.pool, 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)?;
+            }
+            for (i, label) in s.labels.iter().enumerate().skip(1) {
+                let seconds = ticks[i].wrapping_sub(ticks[i - 1]) as f64 * self.gpu.period as f64 * 1e-9;
+                let e = into.entry(if label.is_empty() { "(between submissions)".into() } else { label.clone() }).or_default();
+                e.0 += 1;
+                e.1 += seconds;
+            }
+        }
+        Ok(())
     }
 
     /// The captures of the latest forward (whole tensors only).
