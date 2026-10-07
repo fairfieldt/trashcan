@@ -1,0 +1,1 @@
+User reported incite had no power LED and no fan before manually powering it on. Both Macs share a power strip; other attached devices appeared unaffected.
