@@ -48,6 +48,22 @@ pub fn plan(g: &Gguf, c: &Config, devices: usize) -> Vec<(usize, usize)> {
     cuts.windows(2).map(|w| (w[0], w[1])).collect()
 }
 
+/// Size, budget and usage in MiB of a GPU's largest device-local heap (VK_EXT_memory_budget). RADV places
+/// allocations that do not fit elsewhere, so usage near the size means a stage does not fit.
+pub fn heap_mib(inst: &Instance, pd: ash::vk::PhysicalDevice) -> (f64, f64, f64) {
+    let mut b = ash::vk::PhysicalDeviceMemoryBudgetPropertiesEXT::default();
+    let mut p = ash::vk::PhysicalDeviceMemoryProperties2::default().push_next(&mut b);
+    unsafe { inst.instance.get_physical_device_memory_properties2(pd, &mut p) };
+    let mem = p.memory_properties;
+    let n = mem.memory_heap_count as usize;
+    let h = (0..n)
+        .filter(|&h| mem.memory_heaps[h].flags.contains(ash::vk::MemoryHeapFlags::DEVICE_LOCAL))
+        .max_by_key(|&h| mem.memory_heaps[h].size)
+        .unwrap_or(0);
+    let mib = |v: u64| v as f64 / 1048576.;
+    (mib(mem.memory_heaps[h].size), mib(b.heap_budget[h]), mib(b.heap_usage[h]))
+}
+
 pub enum Stage {
     Cpu(CpuStage),
     Gpu(GpuStage),
@@ -93,7 +109,12 @@ impl Local {
                     );
                     let gpu = Device::new(inst.clone(), pd)?;
                     let stage = GpuStage::new(gpu, &gguf, &c, first, last, is_head, context, max_batch)?;
-                    eprintln!("GPU{}: {:.1} MiB allocated", indices[i], stage.device_mib());
+                    let (size, budget, usage) = heap_mib(&inst, pd);
+                    eprintln!(
+                        "GPU{}: {:.1} MiB allocated; device-local heap {usage:.0} of {size:.0} MiB used, budget {budget:.0}",
+                        indices[i],
+                        stage.device_mib()
+                    );
                     stages.push(Stage::Gpu(stage));
                 }
             }

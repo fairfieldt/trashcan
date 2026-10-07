@@ -95,9 +95,61 @@ On disk the rows can keep the release's precision (Q8_0 here, 170 bytes; BF16 ro
 
 TBD
 
-## GPU stages
+## GPU stages (`engine/src/qwen4/gpu.rs`)
 
-TBD
+A stage owns a contiguous layer range on one D700, records one command buffer per layer per batch size and
+replays it with a new position, as the qwen35 stages do. The residual (4 x 2560 f32 per token) enters and
+leaves through host buffers; that is also the payload between machines (40 KiB per token). Every mixer applies
+the previous sublayer's write (`x_s += w_s y`) as it reads the residual, so a layer ends with a pending combine
+that the next mixer, the head or the stage output resolves.
+
+| part | kernels |
+|---|---|
+| mixer, up to 8 tokens | `qwen4_mix_down` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
+| mixer, prefill | `qwen4_hc_norm`, the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
+| dense matrices | Q4_0: the Gemma kernels (f32 scales, 5 bpw); Q8_0: `qwen4_q8_mv` (1-8 tokens), `qwen4_q8_gemm` (64 x 64 tiles), f16 scales, 8.5 bpw |
+| n-gram module | key/value projections, `qwen4_ple_gate`, `qwen4_ple_conv` (dilated convolution, 9-step history) |
+| DeltaNet | qwen35's `qwen_conv` and `qwen_gdn`, `qwen4_gated_norm` (sigmoid gate) |
+| QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
+| QSA, longer contexts | `qwen4_idx_store`/`qwen4_idx_pool` (raw key ring, pooled block keys), `qwen_qk` on the indexer queries, `qwen4_idx_select` (block scores and an exact radix top-512, ties to the earlier block), `qwen4_attention_sparse[_full]` |
+| MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; decode: `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot); prefill (16+ tokens): `qwen4_moe_route` groups slots by expert, `qwen4_moe_{gu,down}_grouped` decode each expert's rows once per 4 slots, `qwen4_moe_sum` |
+| experts | Q4_0 or IQ4_NL (f16 scale per 32, 4.5 bpw) or IQ4_XS (4.25 bpw), at their GGUF size; the shared expert is stacked as expert 512 and must share the routed format |
+| head | final mixer, qwen35's Q6_K `headvec`, top-64 |
+
+`qwen4 stage-bench` times stages alone (prefill chunks, then decode steps, back to back so the clocks stay up) with
+GPU timestamps around every layer and phase.
+
+### Validation on the D700s
+
+Layers 0-5 (n-gram module, DeltaNet, QSA and MoE) ran on incite's two GPUs with layers 6-47 and the head on a CPU
+node on the M3 Ultra (`--cuts 3,6 --nodes MAC:7071`), on an all-Q4_0 GGUF
+([results/qwen4/gpu-20261006](../results/qwen4/gpu-20261006/)):
+
+| check | result |
+|---|---|
+| 14-token prompt, 10 greedy tokens | identical to the CPU reference (fused and unfused mixers) |
+| DeltaNet and n-gram layers | rel 1e-6 |
+| QSA layer, dense | rel 4.4e-4 (the GPU's K/V cache is f16) |
+| logits | rel 4.3e-5 |
+| 3061-token prompt in 256-token chunks, layers 0-5 (sparse QSA, grouped experts) | QSA output rel 5.9e-4, indexer queries 2.4e-5, expert outputs <= 5.3e-4 |
+
+### Measured stage times (incite, 850/1370 MHz, all-Q4_0 GGUF, layers 0-5 on two GPUs)
+
+| phase | decode (1 token) | prefill (256-token chunk) |
+|---|---|---|
+| mixer (each of two) | 0.33 ms unfused, 0.14 ms fused | 4.5 ms |
+| DeltaNet | 0.31 ms | 18.8 ms |
+| QSA (dense) | 0.28 ms | 15.8 ms |
+| router and top-k | 0.10 ms | 3.8 ms |
+| experts (10 routed + shared) | 0.23 ms | 52.5 ms |
+| n-gram module (layer 1) | 0.35 ms | 8.6 ms |
+| DeltaNet layer total | 0.93-0.99 ms | 85-93 ms |
+
+With fused mixers six layers take 6.65 ms per decode step wall time (5.99 ms of GPU time plus the host relay
+between the two GPUs, the embedding and the n-gram rows), down from 9.05 ms unfused. The two mixers were half of a
+decode layer and almost none of its bytes (4 MB per mixer), so dispatch count, not bandwidth, was the cost. The
+experts read 30 MB per token at 4.5 bpw in 0.23 ms (130 GB/s). In prefill the grouped experts take 60% of a layer
+(0.53 TFLOP/s); 2 or 8 slots per pass instead of 4 were slower (54 and 81 ms).
 
 ## Commands
 
