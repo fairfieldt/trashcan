@@ -178,6 +178,12 @@ The 600-token checks prefill 512 tokens as micro-batches and 88 as one batch.
   its rows and tokens as vec4): bit for bit identical but half the speed, 0.9-1.1 against 1.9-2.1 TFLOP/s at the
   27B's per-rank shapes (`invite/gemm-bench-n256.json`; RADV: 100 VGPRs, no spills, one wave per SIMD, uncoalesced
   tile loads). `gemm` already gets most of its LDS reads by broadcast; its bank conflicts were the cheaper target.
+- **Two more GEMM variants** (`invite/gemm34-bench-n256.json`, `-n512.json`, run on the `gemm2` commit plus their
+  shaders): `gemm2` with its swizzled index written as two base addresses was 13-15% slower than `gemm2` (the
+  compiler's own addressing did better); a 64 x 128 tile with 4 rows x 8 tokens per lane (116 VGPRs) was 2.5-5%
+  faster than `gemm2` at 512 tokens except for the 4352-row shape, but at the 256-token micro-batches only for the
+  5120- and 3072-row shapes (2.5-4%) and 6-24% slower for the others (fewer workgroups, longer tails). Both
+  bit-identical, neither kept.
 - **Host threads without overlap**: they cut the 27B's sum and total from 1.04 s to 0.31 s per chunk (107.9 tok/s),
   but once the all-reduces overlap GPU work on one queue they no longer matter (133.2 against 133.7). With two
   queues they do again (+4.5%), and on one Mac they still do not (9B: 244.9 with 6 threads, 247.0 with 1).
