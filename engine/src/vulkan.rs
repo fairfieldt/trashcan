@@ -405,14 +405,6 @@ impl Device {
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gdn.spv")).as_slice(),
             ),
             (
-                "qwen_gdn_prepare",
-                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gdn_prepare.spv")).as_slice(),
-            ),
-            (
-                "qwen_gdn_prepared",
-                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gdn_prepared.spv")).as_slice(),
-            ),
-            (
                 "qwen_gated_norm",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gated_norm.spv")).as_slice(),
             ),

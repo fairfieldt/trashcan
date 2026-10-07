@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Model the live Rust MTP controller using saved aggregate costs/acceptance.
+"""Model the archived Rust MTP controller using saved aggregate costs/acceptance.
 
 This does not run inference or predict D700 throughput. It samples possible round
 outcomes from saved prefix-acceptance histograms; the original round order and
@@ -12,8 +12,8 @@ import subprocess
 import tempfile
 
 
-ROOT = Path(__file__).resolve().parents[4]
-DATA = ROOT / "results/qwen/improvements-20261007/incite"
+EXPERIMENT = Path(__file__).resolve().parents[1]
+DATA = Path(__file__).resolve().parent / "reference-inputs"
 
 
 def records(name):
@@ -36,9 +36,9 @@ for name, record in mtp.items():
     cases.append(f"({json.dumps(name)}, {serial_s!r}, {draft_s!r}, "
                  f"[{rounds - first}, {first - second}, {second}])")
 
-source = (ROOT / "engine/src/qwen/spec.rs").read_text()
-# Compile the production policy directly: the source of truth is the engine,
-# not a reimplementation in this experiment.
+source = (EXPERIMENT / "candidate-source/spec.rs").read_text()
+# Compile the original candidate policy preserved from source.tar.gz, so later
+# engine changes cannot silently alter this historical replay.
 policy = source[source.index("#[derive(Default)]\nstruct Cost"):
                 source.index("\npub struct Spec")]
 harness = r'''

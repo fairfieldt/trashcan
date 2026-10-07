@@ -1,13 +1,13 @@
 #version 460
 #include "common.glsl"
 // Qwen GQA: p.k is the query/KV head ratio (including six), padding each tile to 64 rows.
-// p.r1 is the first query in a bounded query score slab. All LDS
+// p.r1 is the first query in a bounded 64-token score slab. All LDS
 // producer/consumer phases use workgroup barriers; no wave scheduling assumptions.
 // Row softmax over materialized scores. Masked and padding entries become zero;
 // the reciprocal denominator is applied by attn_values.
 layout(local_size_x=64) in;
 void main(){
-uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x,nb=min(batch()-p.r1,p.m==0u?64u:p.m);
+uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x,nb=min(batch()-p.r1,64u);
 if(t>=nb)return;
 uint tq=1u<<findMSB(64u/p.k),t0=t&~(tq-1);
 uint pos0=position()+p.r1+t0,kstart=p.window>0&&pos0+1>p.window?pos0+1-p.window:0;

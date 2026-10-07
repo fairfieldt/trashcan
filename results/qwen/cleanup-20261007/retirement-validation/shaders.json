@@ -1,0 +1,142 @@
+{
+  "checked_utc": "2026-10-07T22:25:32.689420+00:00",
+  "kind": "local shader compilation; no GPU execution",
+  "shaders": [
+    {
+      "path": "engine/shaders/qwen_gdn.comp",
+      "source_sha256": "35c08c584272c37cded1f88e923a9f03d6ff8269d432310e496876b868a9a919",
+      "matches_baseline_source": "b0a2e68",
+      "spirv_sha256": "0f15f97b89631a744bf08e8c196812d285f54ee26751c93ab087bc84e483ff3b",
+      "commands": [
+        {
+          "argv": [
+            "glslc",
+            "--target-env=vulkan1.2",
+            "-O",
+            "-I/Users/fairfieldt/dev/trashcan/engine/shaders",
+            "/Users/fairfieldt/dev/trashcan/engine/shaders/qwen_gdn.comp",
+            "-o",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_gdn.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "spirv-val",
+            "--target-env",
+            "vulkan1.2",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_gdn.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "path": "engine/shaders/qwen_attn_scores.comp",
+      "source_sha256": "ef10c3f9507b82afecec64e8a596a20db1ba1508fd6f215e20c4fb65524b24ea",
+      "matches_baseline_source": "6d650c4",
+      "spirv_sha256": "d5f09a166d9be4a9d8136736f8eb72750a0a30b74d5cd78fd483294cb1adc547",
+      "commands": [
+        {
+          "argv": [
+            "glslc",
+            "--target-env=vulkan1.2",
+            "-O",
+            "-I/Users/fairfieldt/dev/trashcan/engine/shaders",
+            "/Users/fairfieldt/dev/trashcan/engine/shaders/qwen_attn_scores.comp",
+            "-o",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_attn_scores.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "spirv-val",
+            "--target-env",
+            "vulkan1.2",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_attn_scores.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "path": "engine/shaders/qwen_attn_softmax.comp",
+      "source_sha256": "9078d1a3aa4b10033ca5593b8201669c105912d580112d56643a8129595c3aad",
+      "matches_baseline_source": "6d650c4",
+      "spirv_sha256": "7262e2e924ed90404c172f8a624a825808ef84bae4cd43407feb05c8c8dc528d",
+      "commands": [
+        {
+          "argv": [
+            "glslc",
+            "--target-env=vulkan1.2",
+            "-O",
+            "-I/Users/fairfieldt/dev/trashcan/engine/shaders",
+            "/Users/fairfieldt/dev/trashcan/engine/shaders/qwen_attn_softmax.comp",
+            "-o",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_attn_softmax.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "spirv-val",
+            "--target-env",
+            "vulkan1.2",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_attn_softmax.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "path": "engine/shaders/qwen_attn_values.comp",
+      "source_sha256": "419fd1a54616bdad65a1db5188615e1478f4e75ea1099de1ebb79a03f1433635",
+      "matches_baseline_source": "6d650c4",
+      "spirv_sha256": "6775d7a3b098e783f3102223e0e219739e732cefb2bcc7d793059f16c97488f7",
+      "commands": [
+        {
+          "argv": [
+            "glslc",
+            "--target-env=vulkan1.2",
+            "-O",
+            "-I/Users/fairfieldt/dev/trashcan/engine/shaders",
+            "/Users/fairfieldt/dev/trashcan/engine/shaders/qwen_attn_values.comp",
+            "-o",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_attn_values.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        },
+        {
+          "argv": [
+            "spirv-val",
+            "--target-env",
+            "vulkan1.2",
+            "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/qwen-retired-shader-check-af6mra0s/qwen_attn_values.spv"
+          ],
+          "returncode": 0,
+          "stdout": "",
+          "stderr": ""
+        }
+      ]
+    }
+  ],
+  "runtime_sha256": {
+    "engine/src/qwen/gpu.rs": "9e1e774581f37802002fd87d6ae313a221b7a6a815616175f6986a46ffea7060",
+    "engine/src/micro.rs": "2f3a718e669750ab11502ad89e4a237e78ac72a0991e865d209bfafb2bb8aad9"
+  }
+}

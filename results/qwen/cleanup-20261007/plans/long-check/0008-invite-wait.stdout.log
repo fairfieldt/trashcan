@@ -1,0 +1,2 @@
+The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 109 -- CMD'`, and release with gpu_release / `gpuq release 109 -r RESULT` as soon as you are done.
+#109 [running] cleanup-check-4300 (owner: Qwen TP4 cooled hardware validation) · running 2 s, 6 min left of the estimate

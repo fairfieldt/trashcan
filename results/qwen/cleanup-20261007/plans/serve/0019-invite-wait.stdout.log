@@ -1,0 +1,2 @@
+The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 111 -- CMD'`, and release with gpu_release / `gpuq release 111 -r RESULT` as soon as you are done.
+#111 [running] cleanup-serve-mtp (owner: Qwen TP4 serving budget/cache regression) · running 2 s, 6 min left of the estimate

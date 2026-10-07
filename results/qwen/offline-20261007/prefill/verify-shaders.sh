@@ -1,14 +1,17 @@
 #!/bin/bash
-# Run from the repository root. Uses only the local shader compiler and validator.
+# Uses only archived source and the local shader compiler/validator; any cwd.
 set -euo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 baseline=b0a2e6884d06ac8798df70f7057910ff1ddff3fb
+experiment=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 tmp_gdn=$(mktemp -d /tmp/trashcan-gdn-proof.XXXXXX)
 trap 'rm -rf "$tmp_gdn"' EXIT
+tar -xzf "$experiment/source.tar.gz" -C "$tmp_gdn"
+cp "$experiment/candidate-source/qwen_gdn-baseline.comp" "$tmp_gdn/baseline.comp"
+cd "$tmp_gdn"
 set -x
 glslc --version
 spirv-val --version
-git show "$baseline:engine/shaders/qwen_gdn.comp" > "$tmp_gdn/baseline.comp"
 shasum -a 256 "$tmp_gdn/baseline.comp" \
     engine/shaders/common.glsl engine/shaders/qwen_gdn.comp \
     engine/shaders/qwen_gdn_body.glsl engine/shaders/qwen_gdn_math.glsl \

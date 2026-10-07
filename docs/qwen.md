@@ -62,7 +62,7 @@ uses the same recipe without an importance matrix, from `unsloth/Qwen3.5-9B-GGUF
 ## GPU stages (`engine/src/qwen/gpu.rs`)
 
 One command buffer per batch shape, replayed with a new position. Q4_0 projections reuse the Gemma kernels
-(`gemm` above 8 columns, `multivec4` for 5-8, `matvecq4*` for decode); verification widths 2-4 use
+(`gemm2` above 8 columns, `multivec4` for 5-8, `matvecq4*` for decode); verification widths 2-4 use
 `qwen_q4c2/3/4`. The head uses `headvec` (or the multi-column kernels for verification), `topk` and
 `merge` over 243 vocabulary chunks. New kernels:
 
@@ -80,11 +80,10 @@ One command buffer per batch shape, replayed with a new position. Q4_0 projectio
 
 Attention uses split-K decode (`attention_partial*` + merge) for up to 8 columns and scalar `attention`
 for other batches by default. `TRASHCAN_QWEN_ATTN=tiled` selects bounded 64-query tiled prefill at 64 or more
-columns, including the 27B's six-to-one GQA ratio. Cached graphs include a visible-key bucket. This path is
-opt-in pending investigation of an invite GPU timeout in the sustained mixed MTP test; its paired prefill
-measurements improve 4K by 8.6% and 8K by 22.1%, with matching generated IDs. See
-[the source, measurements and failure record](../results/qwen/improvements-20261007/README.md).
-`TRASHCAN_TP_KV_ONLY=1` similarly selects the MTP cache-only K/V update, removing discarded attention work.
+columns, including the 27B's six-to-one GQA ratio. Cached graphs include a visible-key bucket. Paired prefill
+measurements improve 4K by 8.6% and 8K by 22.1%, with matching generated IDs. Subsequent sustained validation
+completed without GPU resets, and an independent 8K comparison improved 110.34 to 134.43 tok/s. See
+[the resumed validation](../results/qwen/verification-20261007/resumed/README.md).
 
 ## Recurrent state: rollback and checkpoints
 
@@ -197,18 +196,14 @@ the node included. Without the request on the node, a decode token's cross-Mac e
 of 4.1 (27B decode 26.0 instead of 28.4 tok/s); the first TP4 record (16.6 tok/s, 26 with MTP) was measured that
 way, and the same binary gives 18.7 / 28.6 with the request (note in [tp-20261006](../results/qwen/tp-20261006/)).
 
-Measurement switches (per process: give the node the same ones; the micro-batch and thread counts travel with each
-forward):
+Measurement switches (per process: give the node the same ones; the thread count travels with each forward).
+Prefill uses two micro-batches for batches of at least 128 tokens and one otherwise:
 
 - decode: `TRASHCAN_TP_EVENTS=0` (per-segment submissions for small batches too), `TRASHCAN_TP_HOSTNORM=0` (GPU
   residual norms), `TRASHCAN_TP_ARENA=0`, `TRASHCAN_TP_PARTS=N` (split-K attention partitions times N, default 2),
   `TRASHCAN_TP_DRAFT_HEAD=0`;
-- prefill: `TRASHCAN_TP_MICRO=N` (micro-batches of batches of 128 tokens or more, default 2, 1 disables),
-  `TRASHCAN_TP_QUEUES=1` (both micro-batches on one queue), `TRASHCAN_TP_THREADS=N` (host threads for the sums; 6
-  across Macs, 1 on one Mac), `TRASHCAN_QWEN_GEMM=gemm` (the old GEMM kernel), `TRASHCAN_TP_VRAM_IO=1` (timing
-  only: partials and totals stay in VRAM, wrong results);
-- both: `TRASHCAN_TP_SUBMIT=1` submits each per-segment submission when it is due instead of ahead;
-  `TRASHCAN_TP_FREE=1` runs the segments without all-reduces (wrong results, the GPU floor);
+- prefill: `TRASHCAN_TP_QUEUES=1` (both micro-batches on one queue), `TRASHCAN_TP_THREADS=N` (host threads for
+  the sums; 6 across Macs, 1 on one Mac), `TRASHCAN_QWEN_GEMM=gemm` (the reference GEMM kernel);
 - profiling: `TRASHCAN_TP_PROFILE=FILE` records GPU timestamps at every segment boundary of every tensor-parallel
   graph (with `TRASHCAN_TP_PROFILE_DISPATCH=1` also around every dispatch and copy, labelled with the shader and a
   matrix's rows x row length) and writes one JSON line per local rank and graph (micro-batch) for every forward and
@@ -216,19 +211,14 @@ forward):
   micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
   prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
 
-Opt-in candidates: `TRASHCAN_QWEN_GDN=prepared` prepares DeltaNet Q/K normalization and
-gates once per head/token for batches above eight columns; `TRASHCAN_TP_SUM_DIRECT=1` writes the local ranks'
-sum in one pass only for one column with exactly two local ranks. Larger batches use the original sum path.
-Set either on both nodes. The direct-sum decode CPU phase took 27–31% less time in the full-clock TP4 paired
-measurements, saving 0.107–0.125 ms per token; no model-throughput gain is established. The one-column scope
-also covers draft steps, whose benefit has not been measured separately. The standalone host benchmark
-still permits every shape for comparison. See the [hardware measurements](../results/qwen/hardware-20261007/README.md).
 `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
 costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded
-sampled output when timings change. All three are off by default. Speculative decoding now caps drafts near
+sampled output when timings change. It remains optional: the Chinese fixture improved by about 6%, while
+the code fixture showed no consistent gain. Speculative decoding caps drafts near
 the output limit, leaving the final sampled token unprocessed; this can also change sampled RNG sequences.
-`qwen-gdn-bench --n 256 --k-heads 4 --v-heads 12 --position 0` compares original/prepared output and full state,
-timing preparation and recurrence together. See [local checks and the hardware validation plan](../results/qwen/offline-20261007/README.md).
+The short-output checks used 22% fewer target columns and 33% fewer drafts with identical greedy outputs.
+See the [hardware measurements](../results/qwen/hardware-20261007/README.md) and
+[retired experiments](../results/qwen/cleanup-20261007/README.md).
 
 Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead: 3-6%
 faster, identical results. `qwen_matf32` (the DeltaNet alpha/beta projection) has two variants with the same sums:

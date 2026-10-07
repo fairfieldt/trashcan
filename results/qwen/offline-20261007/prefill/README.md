@@ -1,5 +1,9 @@
 # Offline prefill candidate, October 7, 2026
 
+Historical experiment: prepared GDN was subsequently removed after hardware testing found no reliable
+model-prefill improvement. See the [cleanup record](../../cleanup-20261007/README.md). Commands below use
+archived source; GPU commands require the historical candidate binary.
+
 `TRASHCAN_QWEN_GDN=prepared` selects a preparation pass before the Gated DeltaNet
 recurrence for batches above eight tokens. The default remains unchanged. No Mac
 was contacted and no GPU run or measured D700 speedup is reported here.
@@ -24,14 +28,14 @@ Run from the repository root:
 
 ```sh
 bash results/qwen/offline-20261007/prefill/verify-shaders.sh \
-  > results/qwen/offline-20261007/prefill/shader-validation.log 2>&1
-PATH=/opt/homebrew/bin:$PATH cargo test --release preparation_ \
-  > results/qwen/offline-20261007/prefill/cpu-tests.log 2>&1
+  > /tmp/qwen-archived-shader-validation.log 2>&1
+bash results/qwen/offline-20261007/test-candidate.sh preparation_ \
+  > /tmp/qwen-archived-preparation-tests.log 2>&1
 ```
 
 `shader-validation.log` records compiler/validator versions, exact commands,
 source SHA256 hashes and compiled shader SHA256 hashes. The baseline shader is
-retrieved from `b0a2e6884d06ac8798df70f7057910ff1ddff3fb`. All compiled modules pass
+archived from `b0a2e6884d06ac8798df70f7057910ff1ddff3fb`. All compiled modules pass
 Vulkan 1.2 SPIR-V validation. The default shader is byte-identical to that
 baseline, with SHA256
 `0f15f97b89631a744bf08e8c196812d285f54ee26751c93ab087bc84e483ff3b`.

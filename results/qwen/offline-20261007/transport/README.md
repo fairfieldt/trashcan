@@ -1,5 +1,9 @@
 # TP transport allocation cleanup, local validation, 2026-10-07
 
+Historical experiment: exchange-buffer reuse was subsequently removed because TP4 measurements did not
+establish a model-throughput benefit. See the [cleanup record](../../cleanup-20261007/README.md).
+The measurements below describe the archived candidate; reproduction uses its source archive.
+
 This work ran only on `pinkerton`, an Apple M3 Ultra (32 logical CPUs), macOS 27 / Darwin 27.0.0, using rustc 1.92.0. No Mac Pro, GPU, CUDA, or remote resources were used. GPU clocks are not applicable.
 
 ## Source and change
@@ -53,10 +57,9 @@ TCP scheduling/syscall variation is larger than the isolated bookkeeping saving,
 ## Reproduction
 
 ```sh
-cargo test --release link::tests -- --nocapture
-cargo test --release link::tests::progress_benchmark -- --ignored --nocapture
-cargo test --release link::tests::exchange_benchmark -- --ignored --nocapture
-cargo clippy --release --tests
+bash results/qwen/offline-20261007/test-candidate.sh link::tests -- --nocapture
+bash results/qwen/offline-20261007/test-candidate.sh link::tests::progress_benchmark -- --ignored --nocapture
+bash results/qwen/offline-20261007/test-candidate.sh link::tests::exchange_benchmark -- --ignored --nocapture
 ```
 
 `loopback.log` is the first loopback run; `loopback-final.log` measures the final source after extracting the shared production bookkeeping helpers. `progress.log`, `tests.log`, and `clippy.log` preserve the other command outputs. Concurrent team work can change the total number of filtered tests and unrelated diagnostics.

@@ -1,4 +1,0 @@
-#version 460
-#include "common.glsl"
-#define GDN_PREPARED
-#include "qwen_gdn_body.glsl"

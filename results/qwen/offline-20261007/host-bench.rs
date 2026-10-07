@@ -2,7 +2,7 @@
 // CPU RAM only, not mapped D700 memory or end-to-end inference.
 #[path = "rejected-host-fusion.rs"]
 mod fusion;
-#[path = "../../../engine/src/qwen/host.rs"]
+#[path = "candidate-source/host.rs"]
 mod host;
 use std::{hint::black_box as bb, time::Instant};
 

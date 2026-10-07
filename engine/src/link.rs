@@ -160,46 +160,13 @@ fn tcp(s: TcpStream) -> Result<Lane> {
     Ok(Lane::Tcp(s))
 }
 
-/// Offsets in one lane's slice of the current exchange. Kept with the lanes so decode's 128 exchanges per
-/// token and prefill's flow-control rounds do not allocate temporary vectors.
-#[derive(Clone, Copy, Default)]
-struct Progress {
-    limit: usize,
-    end: usize,
-    sent: usize,
-    read: usize,
-}
-
-impl Progress {
-    fn start(progress: &mut [Self], bytes: usize, round: usize) {
-        let n = progress.len();
-        for (i, p) in progress.iter_mut().enumerate() {
-            let begin = bytes / 4 * i / n * 4;
-            let limit = bytes / 4 * (i + 1) / n * 4;
-            *p = Self { limit, end: limit.min(begin.saturating_add(round)), sent: begin, read: begin };
-        }
-    }
-
-    fn advance(progress: &mut [Self], round: usize) {
-        for p in progress {
-            p.end = p.limit.min(p.end.saturating_add(round));
-        }
-    }
-}
-
 /// The lanes to one neighbour, in an order both machines agree on.
 pub struct Lanes {
     lanes: Vec<Lane>,
-    progress: Vec<Progress>,
     pub kind: &'static str,
 }
 
 impl Lanes {
-    fn new(lanes: Vec<Lane>, kind: &'static str) -> Self {
-        let progress = vec![Progress::default(); lanes.len()];
-        Self { lanes, progress, kind }
-    }
-
     /// One TCP connection per address, in order. Each announces its index and the count, so the listener
     /// orders them the same way.
     pub fn connect(addrs: &[String]) -> Result<Self> {
@@ -211,7 +178,7 @@ impl Lanes {
             send(&mut lane, &record(HELLO, i, addrs.len()))?;
             lanes.push(lane);
         }
-        Ok(Self::new(lanes, "tcp"))
+        Ok(Self { lanes, kind: "tcp" })
     }
 
     /// Accept the TCP lanes of one peer session.
@@ -229,7 +196,7 @@ impl Lanes {
             ensure!(n == slots.len() && i < n && slots[i].is_none(), "unexpected lane {i} of {n} from {peer}");
             slots[i] = Some(lane);
             if slots.iter().all(Option::is_some) {
-                return Ok(Self::new(slots.into_iter().map(Option::unwrap).collect(), "tcp"));
+                return Ok(Self { lanes: slots.into_iter().map(Option::unwrap).collect(), kind: "tcp" });
             }
         }
     }
@@ -254,7 +221,7 @@ impl Lanes {
         for (i, lane) in lanes.iter_mut().enumerate() {
             greet(lane, i, n, wait).with_context(|| format!("stream lane {i} ({})", paths[i]))?;
         }
-        Ok(Self::new(lanes, "stream"))
+        Ok(Self { lanes, kind: "stream" })
     }
 
     pub fn count(&self) -> usize {
@@ -329,34 +296,38 @@ impl Lanes {
     pub fn exchange_within(&mut self, out: &[u8], inp: &mut [u8], stall: Duration) -> Result<()> {
         ensure!(out.len() == inp.len() && out.len().is_multiple_of(4), "exchange sizes must match and align to 4 bytes");
         const ROUND: usize = 256 << 10;
+        let n = self.lanes.len();
+        let cuts: Vec<usize> = (0..=n).map(|i| out.len() / 4 * i / n * 4).collect();
         let round = if self.kind == "stream" { ROUND } else { usize::MAX };
-        Progress::start(&mut self.progress, out.len(), round);
-        while self.progress.iter().any(|p| p.read < p.limit) {
-            self.exchange_round(out, inp, stall)?;
-            Progress::advance(&mut self.progress, round);
+        let mut begin: Vec<usize> = cuts[..n].to_vec();
+        while begin != cuts[1..] {
+            let ends: Vec<usize> = (0..n).map(|i| cuts[i + 1].min(begin[i].saturating_add(round))).collect();
+            self.exchange_round(out, inp, &begin, &ends, stall)?;
+            begin = ends;
         }
         Ok(())
     }
 
-    /// Move each lane's current round in both directions. All lanes finish the round before any advances,
-    /// preserving USB4STREAM's bounded amount of data in flight.
-    fn exchange_round(&mut self, out: &[u8], inp: &mut [u8], stall: Duration) -> Result<()> {
+    /// Move `out[begin[i]..end[i]]` out and into `inp` at the same offsets on every lane `i`.
+    fn exchange_round(&mut self, out: &[u8], inp: &mut [u8], begin: &[usize], end: &[usize], stall: Duration) -> Result<()> {
+        let mut sent = begin.to_vec();
+        let mut read = begin.to_vec();
         let mut last = Instant::now();
         loop {
             let mut busy = false;
-            for (lane, p) in self.lanes.iter_mut().zip(&mut self.progress) {
-                if p.sent < p.end {
-                    let k = step(lane.write(&out[p.sent..p.end]))?;
-                    p.sent += k;
+            for (i, lane) in self.lanes.iter_mut().enumerate() {
+                if sent[i] < end[i] {
+                    let k = step(lane.write(&out[sent[i]..end[i]]))?;
+                    sent[i] += k;
                     busy |= k > 0;
                 }
-                if p.read < p.end {
-                    let k = step(lane.read(&mut inp[p.read..p.end]))?;
-                    p.read += k;
+                if read[i] < end[i] {
+                    let k = step(lane.read(&mut inp[read[i]..end[i]]))?;
+                    read[i] += k;
                     busy |= k > 0;
                 }
             }
-            if self.progress.iter().all(|p| p.sent == p.end && p.read == p.end) {
+            if sent == end && read == end {
                 return Ok(());
             }
             if busy {
@@ -373,7 +344,7 @@ impl Lanes {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{hint::black_box, thread};
+    use std::thread;
 
     fn pair(count: usize, stream_rounds: bool) -> (Lanes, Lanes) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
@@ -469,52 +440,10 @@ mod tests {
         peer.join().unwrap();
     }
 
-    // The previous allocation-based implementation, kept only as a protocol reference and benchmark
-    // baseline. Testing a new endpoint against this checks compatibility with an unchanged peer.
-    fn reference_exchange(lanes: &mut Lanes, out: &[u8], inp: &mut [u8]) -> Result<()> {
-        let n = lanes.count();
-        let cuts: Vec<usize> = (0..=n).map(|i| out.len() / 4 * i / n * 4).collect();
-        let round = if lanes.kind == "stream" { 256 << 10 } else { usize::MAX };
-        let mut begin: Vec<usize> = cuts[..n].to_vec();
-        while begin != cuts[1..] {
-            let end: Vec<usize> = (0..n).map(|i| cuts[i + 1].min(begin[i].saturating_add(round))).collect();
-            let mut sent = begin.to_vec();
-            let mut read = begin.to_vec();
-            let mut last = Instant::now();
-            loop {
-                let mut busy = false;
-                for (i, lane) in lanes.lanes.iter_mut().enumerate() {
-                    if sent[i] < end[i] {
-                        let k = step(lane.write(&out[sent[i]..end[i]]))?;
-                        sent[i] += k;
-                        busy |= k > 0;
-                    }
-                    if read[i] < end[i] {
-                        let k = step(lane.read(&mut inp[read[i]..end[i]]))?;
-                        read[i] += k;
-                        busy |= k > 0;
-                    }
-                }
-                if sent == end && read == end {
-                    break;
-                }
-                if busy {
-                    last = Instant::now();
-                } else if last.elapsed() > STALL {
-                    bail!("reference lanes stalled");
-                } else {
-                    std::hint::spin_loop();
-                }
-            }
-            begin = end;
-        }
-        Ok(())
-    }
-
     #[test]
-    fn exchanges_match_unchanged_peer() {
+    fn exchanges_preserve_round_boundaries_and_control_messages() {
         // Empty lane slices, unequal slices, decode/verification shapes, exact round boundaries, and
-        // multi-round prefill; all reused within a session to catch stale progress offsets.
+        // multi-round prefill; sizes change within a session and control messages follow each exchange.
         let lengths = [0, 4, 8, 20, 5120 * 4, 3 * 5120 * 4, 3 * (256 << 10), 3 * (256 << 10) + 4, 256 * 5120 * 4, 4];
         for count in [1, 3, 5] {
             for stream_rounds in [false, true] {
@@ -524,7 +453,7 @@ mod tests {
                         for (iteration, len) in lengths.into_iter().enumerate() {
                             let out = payload(len, 1, iteration);
                             let mut inp = vec![0; len];
-                            reference_exchange(&mut b, &out, &mut inp).unwrap();
+                            b.exchange(&out, &mut inp).unwrap();
                             assert_eq!(inp, payload(len, 0, iteration));
                             assert_eq!(b.recv_message().unwrap(), iteration.to_le_bytes());
                             b.send_message(&iteration.to_le_bytes()).unwrap();
@@ -561,98 +490,5 @@ mod tests {
         assert!(error.to_string().contains("stalled"));
         drop(b);
         assert!(a.exchange(&[0; 4], &mut [0; 4]).is_err());
-    }
-
-    /// CPU-only transport comparison, explicitly excluded from ordinary tests. Each case alternates the
-    /// old and new implementations and prints all samples, since loopback scheduling can dwarf the change.
-    #[test]
-    #[ignore = "local transport microbenchmark"]
-    fn exchange_benchmark() {
-        for count in [1, 3] {
-            for stream_rounds in [false, true] {
-                for len in [5120 * 4, 3 * 5120 * 4, 256 * 5120 * 4] {
-                    let (mut a, mut b) = pair(count, stream_rounds);
-                    let iterations = if len > 100_000 { 40 } else { 2000 };
-                    for sample in 0..7 {
-                        for reference in if sample % 2 == 0 { [true, false] } else { [false, true] } {
-                            let out = payload(len, 0, 0);
-                            let mut inp = vec![0; len];
-                            let micros = thread::scope(|s| {
-                                let peer = s.spawn(|| {
-                                    let out = payload(len, 1, 0);
-                                    let mut inp = vec![0; len];
-                                    for _ in 0..iterations + 20 {
-                                        if reference { reference_exchange(&mut b, &out, &mut inp) } else { b.exchange(&out, &mut inp) }.unwrap();
-                                    }
-                                    assert_eq!(inp, payload(len, 0, 0));
-                                });
-                                for _ in 0..20 {
-                                    if reference { reference_exchange(&mut a, &out, &mut inp) } else { a.exchange(&out, &mut inp) }.unwrap();
-                                }
-                                let start = Instant::now();
-                                for _ in 0..iterations {
-                                    if reference { reference_exchange(&mut a, &out, &mut inp) } else { a.exchange(&out, &mut inp) }.unwrap();
-                                    black_box(&inp);
-                                }
-                                let micros = start.elapsed().as_secs_f64() * 1e6 / iterations as f64;
-                                peer.join().unwrap();
-                                assert_eq!(inp, payload(len, 1, 0));
-                                micros
-                            });
-                            println!("{{\"lanes\":{count},\"stream_rounds\":{stream_rounds},\"bytes\":{len},\"sample\":{sample},\"reference\":{reference},\"us\":{micros}}}");
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /// Isolate offset bookkeeping from socket syscalls/scheduling. There is no transport in this test:
-    /// each round is marked complete immediately, so this measures only the removed vector management.
-    #[test]
-    #[ignore = "local transport bookkeeping microbenchmark"]
-    fn progress_benchmark() {
-        for n in [1, 3] {
-            for len in [5120 * 4, 3 * 5120 * 4, 256 * 5120 * 4] {
-                let round = 256 << 10;
-                let mut progress = vec![Progress::default(); n];
-                let iterations = 500_000;
-                for sample in 0..7 {
-                    for reference in if sample % 2 == 0 { [true, false] } else { [false, true] } {
-                        let start = Instant::now();
-                        for _ in 0..iterations {
-                            let len = black_box(len);
-                            if reference {
-                                let cuts: Vec<usize> = (0..=n).map(|i| len / 4 * i / n * 4).collect();
-                                let mut begin: Vec<usize> = cuts[..n].to_vec();
-                                while begin != cuts[1..] {
-                                    let end: Vec<usize> = (0..n).map(|i| cuts[i + 1].min(begin[i].saturating_add(round))).collect();
-                                    let mut sent = begin.to_vec();
-                                    let mut read = begin.to_vec();
-                                    black_box((&sent, &read, &end));
-                                    sent.copy_from_slice(&end);
-                                    read.copy_from_slice(&end);
-                                    assert!(sent == end && read == end);
-                                    begin = end;
-                                }
-                            } else {
-                                Progress::start(&mut progress, len, round);
-                                while progress.iter().any(|p| p.read < p.limit) {
-                                    black_box(&progress);
-                                    for p in &mut progress {
-                                        p.sent = p.end;
-                                        p.read = p.end;
-                                    }
-                                    assert!(progress.iter().all(|p| p.sent == p.end && p.read == p.end));
-                                    Progress::advance(&mut progress, round);
-                                }
-                            }
-                        }
-                        let ns = start.elapsed().as_secs_f64() * 1e9 / iterations as f64;
-                        println!("{{\"lanes\":{n},\"bytes\":{len},\"sample\":{sample},\"reference\":{reference},\"ns\":{ns}}}");
-                    }
-                }
-            }
-        }
     }
 }

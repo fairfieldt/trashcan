@@ -344,7 +344,7 @@ impl Key {
 /// Micro-batches of a tensor-parallel batch have their own `pos, n` parameters, this many bytes apart.
 const PARAMS_STRIDE: usize = 256;
 /// Most micro-batches a tensor-parallel batch is split into.
-pub const MAX_MICRO: usize = 4;
+pub const MAX_MICRO: usize = 2;
 
 /// Split a batch of `n` columns into at most `count` micro-batches whose sizes are multiples of 64 (the GEMM tile)
 /// except the last: (first row, rows) of each.
@@ -424,7 +424,7 @@ pub struct GpuStage {
     vb: Buffer,
     rq: Buffer,
     scratch: Buffer,
-    /// Bounded tiled prefill scores and denominators, separate for each TP queue.
+    /// Bounded 64-query tiled prefill scores and denominators, separate for each TP queue.
     prefill_scores: Option<Buffer>,
 
     gate: Buffer,
@@ -448,17 +448,6 @@ pub struct GpuStage {
     split: Split,
     /// A tensor-parallel rank's share of the draft vocabulary `(vocab, first id, rows)` (`tp_draft_head`).
     draft_head: Option<(usize, usize, Head)>,
-}
-
-/// Timing only (`TRASHCAN_TP_VRAM_IO`, wrong results): tensor-parallel segments write their partials to and read
-/// their totals from VRAM instead of host memory, to measure what the host-memory traffic costs the GPUs.
-fn vram_io() -> bool {
-    std::env::var_os("TRASHCAN_TP_VRAM_IO").is_some()
-}
-
-/// Bounded query slab; wider slabs reduce dispatch/barrier count at a larger scratch cost.
-pub fn attention_slab() -> usize {
-    if std::env::var("TRASHCAN_QWEN_ATTN_SLAB").as_deref() == Ok("256") { 256 } else { 64 }
 }
 
 /// `TRASHCAN_QWEN_GEMM=gemm` selects the original projection kernel for A/B timing.
@@ -616,7 +605,7 @@ impl<'a> Rec<'a> {
                 stamps: None,
                 segments: 1,
             },
-            out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address) + (row * s.c.d * 4) as u64,
+            out: s.tp.as_ref().map_or(s.y.address, |t| t.part.address) + (row * s.c.d * 4) as u64,
             gated,
             keys: s.context.next_multiple_of(64),
             h_in: s.h.address + h_half as u64,
@@ -830,22 +819,9 @@ impl<'a> Rec<'a> {
         u[5] = c.k_heads as u32;
         u[6] = c.state as u32;
         u[12] = eps;
-        // Each state-row wave normally repeats the same normalization and gate transforms.
-        // Preparing them once adds a dispatch and memory round trip, so keep this prefill candidate
-        // opt-in until measured on the D700s. Decode and verification retain their exact path.
-        let prepared = self.n > 8 && std::env::var("TRASHCAN_QWEN_GDN").as_deref() == Ok("prepared");
-        if prepared {
-            s.gpu.dispatch(
-                self.cmd,
-                "qwen_gdn_prepare",
-                self.push([conv_out, dl.dt_a.address, ab, 0, 0, 0], u),
-                c.k_heads.max(c.v_heads).div_ceil(4) as u32,
-                self.n as u32,
-            );
-        }
         s.gpu.dispatch(
             self.cmd,
-            if prepared { "qwen_gdn_prepared" } else { "qwen_gdn" },
+            "qwen_gdn",
             self.push([conv_out, ab, dl.state.address, o, dl.dt_a.address, snap], u),
             (c.v_heads * c.state / 16) as u32,
             1,
@@ -869,22 +845,13 @@ impl<'a> Rec<'a> {
 
     /// Gated attention from `h` into `y`, caching K and V at the batch positions.
     fn attention(&mut self, a: &Attn, parts: u32, il: usize) -> Result<()> {
-        self.attention_inner(a, parts, il, false)
-    }
-
-    /// Target forwards extend the MTP cache but consume no MTP attention output.
-    fn attention_inner(&mut self, a: &Attn, parts: u32, il: usize, kv_only: bool) -> Result<()> {
-        let kv_only = kv_only && !self.dump;
         let (s, c) = (self.s, &self.s.c);
         let (d, hd, kvd) = (c.d, c.head_dim, c.kv_heads * c.head_dim);
         let qd = c.heads * hd;
         let h = self.h_in;
         let (big, kb, vb, rq, o, scratch) = (self.sc(&s.big), self.sc(&s.kb), self.sc(&s.vb), self.sc(&s.rq), self.sc(&s.o), self.sc(&s.scratch));
         // Tensor-parallel ranks issue the small K and V projections first (see `delta`).
-        if kv_only {
-            self.matrix(&a.k, h, kb, d, kvd, true)?;
-            self.matrix(&a.v, h, vb, d, kvd, false)?;
-        } else if s.tp.is_none() {
+        if s.tp.is_none() {
             self.matrix(&a.q, h, big, d, 2 * qd, true)?;
             self.matrix(&a.k, h, kb, d, kvd, true)?;
             self.matrix(&a.v, h, vb, d, kvd, false)?;
@@ -899,7 +866,6 @@ impl<'a> Rec<'a> {
             (kb, Some(&a.k_norm), 0, Some(&a.kc), c.kv_heads, hd, kvd, 1., true),
             (vb, None, 0, Some(&a.vc), c.kv_heads, hd, kvd, 1f32, false),
         ] {
-            if kv_only && cache.is_none() { continue; }
             let mut u = [0; 16];
             u[1] = if norm.is_some() { c.rot as u32 } else { 0 };
             u[2] = width as u32;
@@ -929,7 +895,6 @@ impl<'a> Rec<'a> {
                 self.n as u32,
             );
         }
-        if kv_only { return Ok(()); }
         self.capture(format!("Qcur-{il}"), &s.rq, qd)?;
         let mut u = [0; 16];
         u[4] = c.heads as u32;
@@ -939,16 +904,14 @@ impl<'a> Rec<'a> {
         if parts == 0 && s.prefill_scores.is_some() && self.n >= 64 {
             let score = self.sc(s.prefill_scores.as_ref().unwrap());
             let stride = s.context.next_multiple_of(64);
-            let slab = attention_slab();
-            u[2] = slab as u32;
             u[0] = stride as u32;
             u[1] = (c.heads / c.kv_heads) as u32;
             let tq = 1usize << (64 / (c.heads / c.kv_heads)).ilog2();
-            for first in (0..self.n).step_by(slab) {
+            for first in (0..self.n).step_by(64) {
                 u[13] = first as u32;
-                let nb = (self.n - first).min(slab);
+                let nb = (self.n - first).min(64);
                 let groups = c.kv_heads * nb.div_ceil(tq);
-                let p = self.push([rq, a.kc.address, a.vc.address, o, score, score + (slab * c.heads * stride * 4) as u64], u);
+                let p = self.push([rq, a.kc.address, a.vc.address, o, score, score + (64 * c.heads * stride * 4) as u64], u);
                 s.gpu.dispatch(self.cmd, "qwen_attn_scores", p, self.keys.div_ceil(64) as u32, groups as u32);
                 s.gpu.dispatch(self.cmd, "qwen_attn_softmax", p, c.heads as u32, nb as u32);
                 s.gpu.dispatch(self.cmd, "qwen_attn_values", p, (hd / 64) as u32, groups as u32);
@@ -1284,9 +1247,9 @@ impl GpuStage {
             rq: work(qd)?,
             // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`).
             scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8 * halves, false, false, None)?,
-            // Opt in while the sustained distributed MTP hang is under investigation.
+            // Tiled prefill keeps bounded score scratch separate for each active queue.
             prefill_scores: if max_batch >= 64 && std::env::var("TRASHCAN_QWEN_ATTN").as_deref() == Ok("tiled") {
-                Some(gpu.buffer(c.heads * attention_slab() * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)
+                Some(gpu.buffer(c.heads * 64 * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)
             } else { None },
             gate: work(c.ff)?,
             up: work(c.ff)?,
@@ -1306,8 +1269,8 @@ impl GpuStage {
                     total: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
                     hin: gpu.buffer(c.d * 8 * 4, true, false, None)?,
                     hostnorm: false,
-                    done: [gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?],
-                    release: [gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?],
+                    done: [gpu.timeline(false)?, gpu.timeline(false)?],
+                    release: [gpu.timeline(false)?, gpu.timeline(false)?],
                     base: [0; MAX_MICRO],
                     done_value: [0; MAX_MICRO],
                     released: [0; MAX_MICRO],
@@ -1409,7 +1372,7 @@ impl GpuStage {
         let mut r = Rec::at(self, n, dump, k.slot, k.row, k.gated)?;
         if k.keys > 0 { r.keys = k.keys; }
         let (rows, x, h) = (r.rows(), r.x(), r.sc(&self.h));
-        let total = (if vram_io() { self.y.address } else { tp.total.address }) + rows as u64;
+        let total = tp.total.address + rows as u64;
         if host {
             r.h_in = tp.hin.address;
         } else {
@@ -1457,7 +1420,7 @@ impl GpuStage {
             r.mtp_inputs(m, m.hin.address);
             r.matrix(&m.eh, m.cat.address, x, 2 * d, d, false)?;
             r.add_norm(x, None, Some(h), Some(&m.attn_norm), 0);
-            r.attention_inner(&m.attn, parts, self.c.layers, std::env::var("TRASHCAN_TP_KV_ONLY").as_deref() == Ok("1"))?;
+            r.attention(&m.attn, parts, self.c.layers)?;
             r.copy(&m.hin, n * d * 4, &m.hin, 0, d * 4);
         }
         r.finish()
@@ -1652,17 +1615,12 @@ impl GpuStage {
         Ok(())
     }
 
-    /// Submit segment `j` of the forward in progress on its queue; submitted `ahead`, it waits for the host's
-    /// release.
-    fn tp_send(&mut self, j: usize, ahead: bool) -> Result<()> {
+    /// Submit segment `j` of the forward in progress on its queue, waiting for the host's release.
+    fn tp_send(&mut self, j: usize) -> Result<()> {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         let (m, i) = tp.at(j);
-        let mut waits = [(vk::Semaphore::null(), 0); 2];
-        let mut count = 0;
-        if ahead {
-            waits[count] = (tp.release[m], tp.base[m] + i);
-            count += 1;
-        }
+        let mut waits = [(tp.release[m], tp.base[m] + i), (vk::Semaphore::null(), 0)];
+        let mut count = 1;
         let second = tp.dual && m == 1;
         if second {
             // The second micro-batch continues the first one's recurrent state and attention cache.
@@ -1672,11 +1630,6 @@ impl GpuStage {
         let done = (tp.done[m], tp.base[m] + i + 1);
         tp.done_value[m] = done.1;
         self.gpu.submit_on(if second { self.gpu.queue2 } else { self.gpu.queue }, tp.cmds[j], &waits[..count], &[done])
-    }
-
-    /// Submit segment `j` of the forward in progress, to run as soon as the GPU is free.
-    pub fn tp_submit(&mut self, j: usize) -> Result<()> {
-        self.tp_send(j, false)
     }
 
     /// Whether the forward or draft step in progress is event-gated.
@@ -1700,7 +1653,7 @@ impl GpuStage {
             return self.gpu.submit_all(&tp.cmds, (tp.done[0], tp.done_value[0]));
         }
         let count = tp.cmds.len();
-        (0..count).try_for_each(|j| self.tp_send(j, true))
+        (0..count).try_for_each(|j| self.tp_send(j))
     }
 
     /// Let segment `j` (submitted ahead) and the earlier segments of its micro-batch run.

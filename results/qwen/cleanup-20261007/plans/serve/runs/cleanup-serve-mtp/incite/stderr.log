@@ -1,0 +1,5 @@
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4 + MTP, 4283.2 MiB allocated
+GPU1: rank 1 of 4 + MTP, 4283.2 MiB allocated
+Responses server listening on http://127.0.0.1:8017 (model: budget-cleanup-serve-mtp)
+[clocks] 220 samples card0 (02:00.0) sclk/mclk: 850/1370 x168 300/1370 x2 450/1370 x4 300/150 x44 450/150 x2  max 67C card1 (06:00.0) sclk/mclk: 850/1370 x154 300/1370 x1 450/1370 x5 300/150 x59 450/150 x1  max 65C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/cleanup-serve-mtp/clocks.txt

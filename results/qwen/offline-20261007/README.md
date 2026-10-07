@@ -2,6 +2,11 @@
 
 This preserves the initial offline investigation. The subsequent [hardware record](../hardware-20261007/README.md) contains the target-host measurements, fan deployment, decisions, and final-source validation; pending checks below describe the original plan.
 
+Current status: prepared GDN, direct sum, and exchange-buffer reuse were subsequently removed from the runtime
+because model-level measurements did not establish a benefit. See the [cleanup record](../cleanup-20261007/README.md).
+The original source archive and measurements remain intact. Local reproductions use archived sources;
+`reproduction-validation.json` records their checks after removal.
+
 Starting source: `b0a2e68` on main. Three sub-agents investigated prefill, decode/MTP,
 and transport; the coordinating agent tested host reductions and integrated the work.
 The Mac Pros were unavailable, and no connection, GPU lease, deployment, or benchmark
@@ -32,7 +37,7 @@ projection variants already lacked measured wins and were not reintroduced.
 | Direct two-local-rank sum | `TRASHCAN_TP_SUM_DIRECT=1` on both nodes | One output pass instead of copy then add; bitwise ordered-sum tests and local CPU measurements. Mapped D700 memory remains unmeasured. |
 | Choose MTP or serial decoding from completed-round costs | `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on driver | Opt-in controller with warmup, periodic probes, and hysteresis. Offline replay is a cost-model illustration, not a throughput result. |
 
-The GPU and adaptive performance candidates remain opt-in. Benchmark records include
+At this stage the GPU and adaptive performance candidates remained opt-in. Benchmark records include
 their flags; both nodes report per-process prefill/reduction flags in host metadata.
 Existing scalar/tiled attention, query slab, and KV-only defaults are unchanged.
 
@@ -40,7 +45,7 @@ Later hardware follow-up narrowed `TRASHCAN_TP_SUM_DIRECT=1` in the runtime to o
 two local ranks, still off by default. Paired full-clock TP4 measurements reduced the decode CPU sum
 phase by 27–31% (0.107–0.125 ms per token), without establishing a model-throughput gain. Prefill showed
 no gain. This offline record and its all-shape `host-bench.rs` reproduction describe the original broader
-candidate; the general helper remains available to that benchmark. See the
+candidate; the general helper is now archived in `candidate-source/host.rs` for that benchmark. See the
 [hardware record](../hardware-20261007/README.md) for the measured source and subsequent validation.
 
 Short-budget sampling can consume a different random-number sequence because unused
@@ -73,9 +78,7 @@ Reproduction:
 ```sh
 rustc --edition=2021 -O results/qwen/offline-20261007/host-bench.rs -o target/tp-host-bench
 target/tp-host-bench
-PATH=/opt/homebrew/bin:$PATH cargo test --release
-PATH=/opt/homebrew/bin:$PATH cargo clippy --release --tests
-BUILD_ONLY=1 scripts/cross-build.sh
+bash results/qwen/offline-20261007/test-candidate.sh -- --nocapture
 ```
 
 See the [transport record](transport/README.md) for protocol tests, raw measurements,

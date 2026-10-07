@@ -1,0 +1,43 @@
+[
+  {
+    "binary": "trashcan-clean",
+    "env": "TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 6,
+    "timeout": 240,
+    "fan_regime": "dynamic-smc-maximum",
+    "source_archive": "source.tar.gz",
+    "name": "cleanup-serve-plain",
+    "mode": "plain"
+  },
+  {
+    "binary": "trashcan-clean",
+    "env": "TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 6,
+    "timeout": 240,
+    "fan_regime": "dynamic-smc-maximum",
+    "source_archive": "source.tar.gz",
+    "name": "cleanup-serve-mtp",
+    "mode": "mtp"
+  },
+  {
+    "binary": "trashcan-clean",
+    "env": "TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 6,
+    "timeout": 240,
+    "fan_regime": "dynamic-smc-maximum",
+    "source_archive": "source.tar.gz",
+    "name": "cleanup-serve-adaptive",
+    "mode": "adaptive"
+  },
+  {
+    "binary": "trashcan-clean",
+    "env": "TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 6,
+    "timeout": 240,
+    "fan_regime": "dynamic-smc-maximum",
+    "source_archive": "source.tar.gz",
+    "name": "cleanup-serve-uncached",
+    "mode": "plain",
+    "no_prefix_cache": true
+  }
+]

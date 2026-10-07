@@ -1,0 +1,59 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling memchr v2.8.3
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling utf8parse v0.2.2
+   Compiling serde_json v1.0.151
+   Compiling serde v1.0.229
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling anstyle v1.0.14
+   Compiling cfg-if v1.0.5
+   Compiling zerocopy v0.8.59
+   Compiling itoa v1.0.18
+   Compiling anstyle-query v1.1.5
+   Compiling libc v0.2.190
+   Compiling memo-map v0.3.4
+   Compiling strsim v0.11.1
+   Compiling anyhow v1.0.104
+   Compiling regex-syntax v0.8.11
+   Compiling ash v0.38.0+1.3.281
+   Compiling heck v0.5.0
+   Compiling clap_lex v1.1.1
+   Compiling bit-vec v0.8.0
+   Compiling httpdate v1.0.3
+   Compiling ascii v1.1.0
+   Compiling trashcan v0.1.0 (/tmp/trashcan-offline-cpu.Z0e9BJ/engine)
+   Compiling log v0.4.34
+   Compiling chunked_transfer v1.5.0
+   Compiling bytemuck v1.25.2
+   Compiling libloading v0.8.9
+   Compiling anstyle-parse v1.0.0
+   Compiling bit-set v0.8.0
+   Compiling tiny_http v0.12.0
+   Compiling anstream v1.0.0
+   Compiling aho-corasick v1.1.5
+   Compiling clap_builder v4.6.7
+   Compiling memmap2 v0.9.11
+   Compiling syn v3.0.6
+   Compiling syn v2.0.119
+   Compiling regex-automata v0.4.18
+   Compiling zerocopy-derive v0.8.59
+   Compiling serde_derive v1.0.229
+   Compiling clap_derive v4.6.7
+   Compiling fancy-regex v0.19.2
+   Compiling clap v4.6.7
+   Compiling minijinja v2.24.0
+   Compiling half v2.7.1
+   Compiling minijinja-contrib v2.24.0
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.71s
+     Running unittests src/main.rs (/tmp/trashcan-offline-cpu.Z0e9BJ/target/release/deps/trashcan-9ec54b64f59fe4fe)
+
+running 2 tests
+test qwen::gdn::tests::preparation_owns_every_element_once_and_preserves_values ... ok
+test qwen::gdn::tests::preparation_matches_f32_recurrence_and_microbatch_continuation ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 0.02s
+

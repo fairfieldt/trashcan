@@ -1,5 +1,9 @@
 # Qwen3.8-27B TP4 improvements, 2026-10-07
 
+Historical status below was superseded by [successful resumed validation](../verification-20261007/resumed/README.md).
+Tiled attention remains; KV-only MTP was later [removed](../cleanup-20261007/README.md) because its component
+saving did not establish a generation-throughput benefit. Original measurements are preserved below.
+
 Work on main from `3fe97ca`, incite + invite, four D700s, three USB4STREAM lanes. Builds use the kbuild VM;
 GPU commands use paired gpuq leases and `scripts/with-clocks.sh`. Both machines use the performance governor
 and a scoped 0-us CPU latency request during measurements; governors are restored after each lease.

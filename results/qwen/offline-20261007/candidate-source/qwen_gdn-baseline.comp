@@ -1,0 +1,44 @@
+#version 460
+#include "common.glsl"
+// Gated DeltaNet recurrence. Rows of a value head's state (one per value dim) evolve independently:
+//   S *= exp(g); d = (v_row - S_row.k) * beta; S_row += d k; o_row = S_row.q / sqrt(dim)
+// with q and k L2-normalized. Each wave owns ROWS rows of one head and lane l holds key dims l and l + 64
+// (dim must be 128). Tokens are processed in order with the rows in registers.
+// a: convolved [t][q | k | v], b: raw gates [t][alpha(heads) | beta(heads)], c: state [head][row][dim]
+// (read/write), d: output [t][head][dim], e: [dt bias(heads) | A(heads)], f: optional snapshots
+// [t][head][row][dim] of the state after every token but the last (verification batches).
+// p.heads = value heads, p.kvheads = key heads (value head h reads key head h % kvheads), p.dim = 128,
+// p.n = convolved channels per token, p.r0 = eps bits. Position 0 starts from a zero state.
+#define ROWS 4
+layout(local_size_x=256) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,per_head=p.dim/(4*ROWS);
+uint vh=gl_WorkGroupID.x/per_head,row0=(gl_WorkGroupID.x%per_head)*(4*ROWS)+gl_SubgroupID*ROWS;
+uint kh=vh%p.kvheads,kd=p.kvheads*p.dim;
+bool fresh=position()==0;
+vec2 s[ROWS];
+[[unroll]]for(uint r=0;r<ROWS;r++){uint at=(vh*p.dim+row0+r)*p.dim;s[r]=fresh?vec2(0):vec2(c_f.v[at+lane],c_f.v[at+lane+64]);}
+float dt=e_f.v[vh],A=e_f.v[p.heads+vh],eps=uintBitsToFloat(p.r0),scale=inversesqrt(float(p.dim));
+uint nb=batch();
+for(uint t=0;t<nb;t++){
+    uint base=t*p.n;
+    vec2 q=vec2(a_f.v[base+kh*p.dim+lane],a_f.v[base+kh*p.dim+lane+64]);
+    vec2 k=vec2(a_f.v[base+kd+kh*p.dim+lane],a_f.v[base+kd+kh*p.dim+lane+64]);
+    q*=inversesqrt(subgroupAdd(dot(q,q))+eps)*scale;
+    k*=inversesqrt(subgroupAdd(dot(k,k))+eps);
+    float x=b_f.v[t*2*p.heads+vh]+dt;
+    float decay=exp((x>20.0?x:log(1.0+exp(x)))*A);
+    float beta=1.0/(1.0+exp(-b_f.v[t*2*p.heads+p.heads+vh]));
+    [[unroll]]for(uint r=0;r<ROWS;r++){
+        float v=a_f.v[base+2*kd+vh*p.dim+row0+r];
+        s[r]*=decay;
+        float delta=(v-subgroupAdd(dot(s[r],k)))*beta;
+        s[r]+=k*delta;
+        float o=subgroupAdd(dot(s[r],q));
+        if(lane==0)d_f.v[(t*p.heads+vh)*p.dim+row0+r]=o;
+    }
+    if(p.f!=0&&t+1<nb){uint snap=t*p.heads*p.dim*p.dim;
+    [[unroll]]for(uint r=0;r<ROWS;r++){uint at=snap+(vh*p.dim+row0+r)*p.dim;f_f.v[at+lane]=s[r].x;f_f.v[at+lane+64]=s[r].y;}}
+}
+[[unroll]]for(uint r=0;r<ROWS;r++){uint at=(vh*p.dim+row0+r)*p.dim;c_f.v[at+lane]=s[r].x;c_f.v[at+lane+64]=s[r].y;}
+}

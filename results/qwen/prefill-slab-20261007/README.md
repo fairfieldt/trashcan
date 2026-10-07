@@ -1,5 +1,9 @@
 # Prefill query-slab experiment, October 7
 
+Historical status below was superseded by recovery: the completed candidate measured 143.654 tok/s,
+between the two baseline runs. The 256-query option was subsequently [removed](../cleanup-20261007/README.md).
+The measured 64-query tiled implementation remains. Original interruption notes and evidence follow.
+
 **Validation incomplete:** the user confirmed that the shared circuit breaker tripped
 while the first distributed candidate run was active. The user subsequently ran Apple Diagnostics on both Macs and reported no issues
 on either. Their return after the circuit change is pending the user’s notification. The local harness is no longer running;

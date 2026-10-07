@@ -1,0 +1,5 @@
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4, 4116.3 MiB allocated
+GPU1: rank 1 of 4, 4116.3 MiB allocated
+Responses server listening on http://127.0.0.1:8017 (model: budget-cleanup-serve-plain)
+[clocks] 224 samples card0 (02:00.0) sclk/mclk: 850/1370 x176 450/1370 x2 300/150 x46  max 64C card1 (06:00.0) sclk/mclk: 850/1370 x159 650/1370 x1 450/1370 x7 300/150 x56 450/150 x1  max 63C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/cleanup-serve-plain/clocks.txt

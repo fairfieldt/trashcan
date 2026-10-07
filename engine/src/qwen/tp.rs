@@ -43,7 +43,7 @@ use std::{
 pub fn host_settings() -> Value {
     let governor = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").ok().map(|s| s.trim().to_owned());
     let affinity = std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("Cpus_allowed_list:").map(|x| x.trim().to_owned())));
-    let experiments: BTreeMap<_, _> = ["TRASHCAN_QWEN_ATTN", "TRASHCAN_QWEN_ATTN_SLAB", "TRASHCAN_TP_KV_ONLY", "TRASHCAN_QWEN_GDN", "TRASHCAN_TP_SUM_DIRECT"]
+    let experiments: BTreeMap<_, _> = ["TRASHCAN_QWEN_ATTN"]
         .into_iter().map(|name| (name, std::env::var(name).ok())).collect();
     json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok()),"experiments":experiments})
 }
@@ -64,8 +64,6 @@ pub struct TpGroup {
     remote: Vec<f32>,
     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
     threads: usize,
-    /// Opt-in one-column, two-local-rank sum: measured CPU phase saving, no model throughput claim.
-    direct_sum: bool,
     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
     /// other machine, since the group was created.
     pub seconds: Phases,
@@ -231,15 +229,9 @@ fn shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usi
     Ok((g, c, shards))
 }
 
-/// Micro-batches a forward of `n` tokens is split into, so that the host all-reduces one while the GPUs run
-/// another: `TRASHCAN_TP_MICRO` (1: none), by default 2 for batches of at least 128 tokens.
+/// Split batches of at least 128 tokens in two, so the host all-reduces one while the GPUs run the other.
 fn micro_count(n: usize) -> usize {
-    let want = std::env::var("TRASHCAN_TP_MICRO").ok().and_then(|v| v.parse().ok()).unwrap_or(2);
-    if n >= 128 {
-        usize::clamp(want, 1, MAX_MICRO)
-    } else {
-        1
-    }
+    if n >= 128 { 2 } else { 1 }
 }
 
 /// Host threads that add partials and write totals (`TRASHCAN_TP_THREADS`), for all-reduces of at least
@@ -363,7 +355,6 @@ impl TpGroup {
             sum: vec![0.; len],
             remote: vec![0.; len],
             threads,
-            direct_sum: std::env::var("TRASHCAN_TP_SUM_DIRECT").as_deref() == Ok("1"),
             seconds: Phases::default(),
             first,
             profile,
@@ -382,6 +373,8 @@ impl TpGroup {
     }
 
     fn run(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: Option<&mut Captures>, micro: usize) -> Result<Vec<Candidates>> {
+        // Reject retired peer configurations before recording/submitting different graphs on each host.
+        ensure!((1..=MAX_MICRO).contains(&micro), "unsupported TP micro-batch count {micro}");
         let micro = micro_batches(n, micro);
         let mut segments = 0;
         for s in self.shards.iter_mut() {
@@ -472,19 +465,15 @@ impl TpGroup {
 
     /// Run the segments prepared on every rank as the micro-batches `micro`, all-reducing between them.
     fn launch(&mut self, segments: usize, micro: &[(usize, usize)]) -> Result<()> {
-        // By default every segment is submitted ahead and released by a semaphore signal, which costs the host
-        // far less than a vkQueueSubmit per segment (TRASHCAN_TP_SUBMIT=1 submits each segment instead). An
-        // event-gated forward is always one submission.
-        let ahead = self.shards[0].tp_gated() || std::env::var_os("TRASHCAN_TP_SUBMIT").is_none();
-        if ahead {
-            let start = Instant::now();
-            for s in self.shards.iter_mut() {
-                s.tp_submit_all()?;
-            }
-            self.seconds.submit += start.elapsed().as_secs_f64();
+        // Submit every segment ahead. Prefill segments await timeline signals; an event-gated forward is
+        // one submission whose later segments await host-set events.
+        let start = Instant::now();
+        for s in self.shards.iter_mut() {
+            s.tp_submit_all()?;
         }
-        let result = self.segments(segments, micro, ahead);
-        if result.is_err() && ahead {
+        self.seconds.submit += start.elapsed().as_secs_f64();
+        let result = self.segments(segments, micro);
+        if result.is_err() {
             for s in self.shards.iter_mut() {
                 let _ = s.tp_release_all();
             }
@@ -527,34 +516,10 @@ impl TpGroup {
     /// Run the segments of the forward prepared on every rank, all-reducing between them. Segment `j` belongs to
     /// micro-batch `j % m` of the `m` in `micro`; its all-reduce releases segment `j + m`, the next one of the same
     /// micro-batch, while the GPUs run the segments in between.
-    fn segments(&mut self, segments: usize, micro: &[(usize, usize)], ahead: bool) -> Result<()> {
-        if ahead && std::env::var_os("TRASHCAN_TP_FREE").is_some() {
-            // Timing only: the segments without all-reduces (wrong results), the GPU floor: back to back when
-            // released by semaphore, each released as soon as all ranks finished the previous one when gated.
-            let start = Instant::now();
-            if self.shards[0].tp_gated() {
-                for j in 0..segments {
-                    for s in self.shards.iter_mut() {
-                        s.tp_release(j)?;
-                    }
-                    for s in &self.shards {
-                        s.tp_wait(j)?;
-                    }
-                }
-            } else {
-                for s in self.shards.iter_mut() {
-                    s.tp_release_all()?;
-                }
-                for s in &self.shards {
-                    s.tp_wait(segments - 1)?;
-                }
-            }
-            self.seconds.wait += start.elapsed().as_secs_f64();
-            return Ok(());
-        }
+    fn segments(&mut self, segments: usize, micro: &[(usize, usize)]) -> Result<()> {
         let m = micro.len();
         // The first segment of every micro-batch needs no total.
-        self.release(0..m.min(segments), ahead)?;
+        self.release(0..m.min(segments))?;
         for j in 0..segments {
             let start = Instant::now();
             for (r, s) in self.shards.iter().enumerate() {
@@ -570,25 +535,21 @@ impl TpGroup {
                 if let Some(p) = self.profile.as_mut() {
                     p.exchanged.push(host_ns());
                 }
-                self.release(j + m..j + m + 1, ahead)?;
+                self.release(j + m..j + m + 1)?;
             }
         }
         Ok(())
     }
 
-    /// Let the segments `range` run: release them (submitted ahead) or submit them.
-    fn release(&mut self, range: std::ops::Range<usize>, ahead: bool) -> Result<()> {
+    /// Release the already-submitted segments `range` through their events or timeline semaphores.
+    fn release(&mut self, range: std::ops::Range<usize>) -> Result<()> {
         let start = Instant::now();
         if let Some(p) = self.profile.as_mut() {
             p.release.extend(range.clone().map(|_| host_ns()));
         }
         for s in self.shards.iter_mut() {
             for j in range.clone() {
-                if ahead {
-                    s.tp_release(j)?;
-                } else {
-                    s.tp_submit(j)?;
-                }
+                s.tp_release(j)?;
             }
         }
         self.seconds.submit += start.elapsed().as_secs_f64();
@@ -609,14 +570,7 @@ impl TpGroup {
             *p = s.tp_part(row, n);
         }
         let parts = &parts[..self.shards.len()];
-        // Only one-column two-rank reductions have a repeated target-host component win.
-        // Keep larger batches on the original path; the standalone helper remains shape-general.
-        let direct = self.direct_sum && n == 1 && parts.len() == 2;
         parallel(sum, threads, |at, out| {
-            if direct {
-                super::host::sum_partials(out, parts, at);
-                return;
-            }
             out.copy_from_slice(&parts[0][at..at + out.len()]);
             for p in &parts[1..] {
                 for (a, b) in out.iter_mut().zip(&p[at..]) {

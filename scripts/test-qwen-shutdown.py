@@ -183,7 +183,6 @@ def main():
         cancel_bench('decode-hup', signal.SIGHUP)
         cancel_bench('decode-repeat', signal.SIGINT, second=signal.SIGTERM)
         cancel_bench('timeline-decode', signal.SIGTERM, {'TRASHCAN_TP_EVENTS': '0'})
-        cancel_bench('per-segment', signal.SIGTERM, {'TRASHCAN_TP_EVENTS': '0', 'TRASHCAN_TP_SUBMIT': '1'})
         cancel_bench('dual-prefill', signal.SIGTERM, pp=4096, n=128)
         cancel_bench('mtp-verify', signal.SIGTERM, mtp=True, n=3)
 

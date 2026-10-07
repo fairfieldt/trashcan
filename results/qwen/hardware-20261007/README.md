@@ -1,5 +1,10 @@
 # Qwen3.8-27B TP4 hardware validation, October 7
 
+This is the historical test record for the binaries listed below. Prepared GDN, direct sum, and exchange-buffer
+reuse were subsequently removed because they did not establish a model-throughput benefit. Larger attention
+slabs and KV-only MTP were also retired. See the [cleanup record](../cleanup-20261007/README.md) for current
+code and validation; the measurements and source archives here are unchanged.
+
 This follows the offline implementation in `7ef122b` and the user's confirmation
 that incite and invite were available for tests. Each Mac supplies two D700 ranks.
 GPU work is queued separately on both hosts through gpuq. Experiment files and binaries are in
@@ -366,7 +371,7 @@ The saved command above identifies this run; its output directory already exists
 and the controller refuses to overwrite it. See `scripts/SERVE-FINAL-PLAN.md` for
 safe previews and unique-name requirements.
 
-## Retained changes and limits
+## Decisions at the end of this test campaign (superseded by cleanup)
 
 - Default: reuse TP exchange progress storage, with unchanged protocol and
   measured lower allocator/bookkeeping cost. No general model-throughput gain
