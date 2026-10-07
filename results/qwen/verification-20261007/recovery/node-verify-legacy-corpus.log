@@ -1,0 +1,8 @@
+CPU latency request: 0 us, scoped to this command
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7177, GPUs [0, 1]
+tp-node: session over 1 tcp lanes
+GPU0: rank 2 of 4 + MTP, 4541.9 MiB allocated
+GPU1: rank 3 of 4 + MTP, 4541.9 MiB allocated
+cat: /sys/class/drm/card0/device/hwmon/hwmon2/freq1_input: Device or resource busy
+scripts/clockmon.sh: line 10: / 1000000 : syntax error: operand expected (error token is "/ 1000000 ")
+[clocks] 383 samples card0 (02:00.0) sclk/mclk: 850/1370 x269 450/1370 x5 300/150 x109  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x254 650/1370 x1 450/1370 x4 300/150 x124  max 61C  log=results/clocks/node-verify-legacy-corpus.txt

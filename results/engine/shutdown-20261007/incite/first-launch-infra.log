@@ -1,0 +1,39 @@
+CPU latency request: 0 us, scoped to this command
+{"event": "binary", "name": "baseline", "sha256": "b52ecdeb0403a3678ea7863b5157a813cdc546c1584c0444d0093d85d0554ddb", "unix": 1791394288.4351416}
+{"event": "binary", "name": "candidate", "sha256": "eabd996f914ee40242d0c1595d146100430ced2525434ba2321868d3ade1a102", "unix": 1791394288.7720103}
+{"event": "kernel", "version": "7.2.9-p2p", "boot": "38f2ea0a-69e7-4c43-98ce-df86d1f225ec", "unix": 1791394288.7725801}
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/shutdown-20261007/scripts/test-qwen-shutdown.py", line 160, in main
+    for path in governors: path.write_text('performance')
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_local.py", line 557, in write_text
+    return PathBase.write_text(self, data, encoding, errors, newline)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_abc.py", line 651, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_local.py", line 539, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/sys/devices/system/cpu/cpu21/cpufreq/scaling_governor'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/shutdown-20261007/scripts/test-qwen-shutdown.py", line 216, in <module>
+    if __name__ == '__main__': main()
+                               ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/shutdown-20261007/scripts/test-qwen-shutdown.py", line 213, in main
+    for path, value in governors.items(): path.write_text(value)
+                                          ~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_local.py", line 557, in write_text
+    return PathBase.write_text(self, data, encoding, errors, newline)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_abc.py", line 651, in write_text
+    with self.open(mode='w', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/pathlib/_local.py", line 539, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '/sys/devices/system/cpu/cpu21/cpufreq/scaling_governor'
+[clocks] 4 samples card0 (02:00.0) sclk/mclk: 300/150 x4  max 43C card1 (06:00.0) sclk/mclk: 300/150 x4  max 41C  log=results/clocks.txt

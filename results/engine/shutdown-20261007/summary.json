@@ -1,0 +1,243 @@
+[
+  {
+    "run": "baseline-plain",
+    "rep": 0,
+    "pp_tok_s": 254.6907843087047,
+    "tg_tok_s": 46.25416087705804,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 49
+      },
+      "tg": {
+        "samples": 10,
+        "full": 10,
+        "counts": {
+          "850,1370,850,1370": 10
+        },
+        "max_c": 49
+      }
+    }
+  },
+  {
+    "run": "baseline-plain",
+    "rep": 1,
+    "pp_tok_s": 257.40799703260063,
+    "tg_tok_s": 46.27854778359594,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 51
+      },
+      "tg": {
+        "samples": 10,
+        "full": 10,
+        "counts": {
+          "850,1370,850,1370": 10
+        },
+        "max_c": 51
+      }
+    }
+  },
+  {
+    "run": "candidate-plain",
+    "rep": 0,
+    "pp_tok_s": 254.60072903277776,
+    "tg_tok_s": 46.23100455022197,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 7,
+        "counts": {
+          "450,1370,850,1370": 1,
+          "850,1370,850,1370": 7
+        },
+        "max_c": 53
+      },
+      "tg": {
+        "samples": 11,
+        "full": 11,
+        "counts": {
+          "850,1370,850,1370": 11
+        },
+        "max_c": 53
+      }
+    }
+  },
+  {
+    "run": "candidate-plain",
+    "rep": 1,
+    "pp_tok_s": 257.08013697761936,
+    "tg_tok_s": 46.278308131507465,
+    "clocks": {
+      "pp": {
+        "samples": 7,
+        "full": 7,
+        "counts": {
+          "850,1370,850,1370": 7
+        },
+        "max_c": 55
+      },
+      "tg": {
+        "samples": 11,
+        "full": 11,
+        "counts": {
+          "850,1370,850,1370": 11
+        },
+        "max_c": 55
+      }
+    }
+  },
+  {
+    "run": "candidate-mtp",
+    "rep": 0,
+    "pp_tok_s": 248.47418493931548,
+    "tg_tok_s": 65.99903102182,
+    "clocks": {
+      "pp": {
+        "samples": 7,
+        "full": 7,
+        "counts": {
+          "850,1370,850,1370": 7
+        },
+        "max_c": 56
+      },
+      "tg": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 56
+      }
+    }
+  },
+  {
+    "run": "candidate-mtp",
+    "rep": 1,
+    "pp_tok_s": 251.3913631836947,
+    "tg_tok_s": 66.17660741582208,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 57
+      },
+      "tg": {
+        "samples": 7,
+        "full": 7,
+        "counts": {
+          "850,1370,850,1370": 7
+        },
+        "max_c": 58
+      }
+    }
+  },
+  {
+    "run": "baseline-mtp",
+    "rep": 0,
+    "pp_tok_s": 248.31268366915054,
+    "tg_tok_s": 66.0229249576384,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 59
+      },
+      "tg": {
+        "samples": 7,
+        "full": 7,
+        "counts": {
+          "850,1370,850,1370": 7
+        },
+        "max_c": 59
+      }
+    }
+  },
+  {
+    "run": "baseline-mtp",
+    "rep": 1,
+    "pp_tok_s": 250.53505063014393,
+    "tg_tok_s": 66.14387361976054,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 60
+      },
+      "tg": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 60
+      }
+    }
+  },
+  {
+    "run": "after-cancellation",
+    "rep": 0,
+    "pp_tok_s": 248.91447038215333,
+    "tg_tok_s": 66.03843311230928,
+    "clocks": {
+      "pp": {
+        "samples": 7,
+        "full": 7,
+        "counts": {
+          "850,1370,850,1370": 7
+        },
+        "max_c": 64
+      },
+      "tg": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 65
+      }
+    }
+  },
+  {
+    "run": "after-cancellation",
+    "rep": 1,
+    "pp_tok_s": 250.3348440002996,
+    "tg_tok_s": 66.19310173813285,
+    "clocks": {
+      "pp": {
+        "samples": 8,
+        "full": 8,
+        "counts": {
+          "850,1370,850,1370": 8
+        },
+        "max_c": 66
+      },
+      "tg": {
+        "samples": 7,
+        "full": 7,
+        "counts": {
+          "850,1370,850,1370": 7
+        },
+        "max_c": 66
+      }
+    }
+  }
+]

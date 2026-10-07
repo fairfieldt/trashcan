@@ -108,11 +108,11 @@ prefill A/B measurements resumed after a fresh boot with the platform tracer act
 see `results/qwen/prefill-slab-20261007/`. Inference cancellation work and the
 post-repaste temperature comparison remain unfinished and uncommitted.
 
-The first independent hardware check is Apple Diagnostics on incite, connected
-directly to a known-good outlet and with Thunderbolt peripherals disconnected.
-On this Intel Mac, hold D at startup, or Option-D if needed, then record every
-reference code. This checks hardware outside Linux. A pass would not rule out an
-intermittent load fault. [Apple's instructions](https://support.apple.com/en-gb/102550).
+The user ran Apple Diagnostics on both incite and invite and reported that neither
+found issues. No reference codes were supplied. This is an independent check outside
+Linux; it does not rule out an intermittent failure under load. The user will notify
+us when the Macs are back after the circuit change. GPU testing remains stopped.
+[Apple's instructions](https://support.apple.com/en-gb/102550).
 
 Any subsequent reproduction should change one variable, use a fresh boot rather
 than a machine that already recovered from a GPU reset, and keep external traces

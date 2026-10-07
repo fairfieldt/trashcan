@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/Users/fairfieldt/dev/trashcan/scripts/verify-qwen-tp.py", line 38, in <module>
+    run('incite',leased(a.incite,'ENV='+shlex.quote(env)+' '+command))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fairfieldt/dev/trashcan/scripts/verify-qwen-tp.py", line 13, in run
+    def run(host,cmd,check=True):return subprocess.run(['ssh',host,cmd],check=check)
+                                        ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['ssh', 'incite', 'gpuq run 62 -- bash -c \'cd /home/fairfieldt/trashcan-exp/improvements-20261007; ENV=\'"\'"\'TRASHCAN_QWEN_ATTN=scalar TRASHCAN_TP_KV_ONLY=0\'"\'"\' scripts/run.sh repaste-plain ./verify-shutdown qwen-bench /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --corpus corpus-verify.jsonl --tg 128 --reps 2 --context 4096\'']' returned non-zero exit status 1.

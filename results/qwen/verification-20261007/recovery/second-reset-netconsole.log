@@ -1,0 +1,92 @@
+2026-10-07T08:59:00.967 169.254.153.67 [  253.928969] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:00.995 169.254.153.67 [  253.956974] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:01.991 169.254.153.67 [  254.952983] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:02.023 169.254.153.67 [  254.984979] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:03.016 169.254.153.67 [  255.976992] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:03.044 169.254.153.67 [  256.004992] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:04.041 169.254.153.67 [  257.001002] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:04.067 169.254.153.67 [  257.029015] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:05.059 169.254.153.67 [  258.021029] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:05.096 169.254.153.67 [  258.057004] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:06.088 169.254.153.67 [  259.049013] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:06.115 169.254.153.67 [  259.077020] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:07.111 169.254.153.67 [  260.073024] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:07.143 169.254.153.67 [  260.105022] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:08.135 169.254.153.67 [  261.097035] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:08.167 169.254.153.67 [  261.129029] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:09.159 169.254.153.67 [  262.121044] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:09.191 169.254.153.67 [  262.153037] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:10.179 169.254.153.67 [  263.141074] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:10.215 169.254.153.67 [  263.177067] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:11.207 169.254.153.67 [  264.169153] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:11.239 169.254.153.67 [  264.201148] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:12.231 169.254.153.67 [  265.193228] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:12.263 169.254.153.67 [  265.225232] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:13.255 169.254.153.67 [  266.217312] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:13.287 169.254.153.67 [  266.249309] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:14.279 169.254.153.67 [  267.241384] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:14.311 169.254.153.67 [  267.273393] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:15.299 169.254.153.67 [  268.261467] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:15.331 169.254.153.67 [  268.293463] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:16.328 169.254.153.67 [  269.289542] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:16.359 169.254.153.67 [  269.317536] thunderbolt 2-1: failed request link state change, aborting
+2026-10-07T08:59:16.839 192.168.0.83 [60111.785093] thunderbolt 2-1: host disconnected
+2026-10-07T08:59:17.349 169.254.153.67 [  270.309625] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:18.377 169.254.153.67 [  271.337698] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:19.407 169.254.153.67 [  272.361765] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:20.430 169.254.153.67 [  273.385840] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:20.999 192.168.0.83 [60115.947703] thunderbolt 1-1: host disconnected
+2026-10-07T08:59:21.089 169.254.153.67 [  274.049871] thunderbolt 1-3: host disconnected
+2026-10-07T08:59:21.449 169.254.153.67 [  274.409906] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:22.472 169.254.153.67 [  275.429969] thunderbolt 0-3: failed request link state change, aborting
+2026-10-07T08:59:23.245 192.168.0.83 [60118.193561] thunderbolt 0-3: host disconnected
+2026-10-07T08:59:25.692 192.168.0.83 [60120.637710] thunderbolt 2-1: new host found, vendor=0x1d6b device=0x4
+2026-10-07T08:59:25.695 192.168.0.83 [60120.637720] thunderbolt 2-1: Linux invite
+2026-10-07T08:59:25.701 169.254.153.67 [  278.662287] thunderbolt 2-1: new host found, vendor=0x1d6b device=0x4
+2026-10-07T08:59:25.702 169.254.153.67 [  278.662538] thunderbolt 2-1: Linux incite
+2026-10-07T08:59:28.424 169.254.153.67 [  281.382473] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+2026-10-07T08:59:28.426 169.254.153.67 [  281.382732] thunderbolt 1-3: Linux incite
+2026-10-07T08:59:28.444 192.168.0.83 [60123.389822] thunderbolt 1-1: new host found, vendor=0x1d6b device=0x4
+2026-10-07T08:59:28.445 192.168.0.83 [60123.389833] thunderbolt 1-1: Linux invite
+2026-10-07T08:59:30.455 192.168.0.83 [60125.401941] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+2026-10-07T08:59:30.455 192.168.0.83 [60125.401952] thunderbolt 0-3: Linux invite
+2026-10-07T08:59:30.474 169.254.153.67 [  283.434585] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+2026-10-07T08:59:30.474 169.254.153.67 [  283.434852] thunderbolt 0-3: Linux incite
+2026-10-07T08:59:50.601 169.254.153.67 [  303.563533] amdgpu 0000:06:00.0: Dumping IP State
+2026-10-07T08:59:50.601 169.254.153.67 [  303.563537] amdgpu 0000:02:00.0: Dumping IP State
+2026-10-07T08:59:50.601 169.254.153.67 [  303.563798] amdgpu 0000:06:00.0: Dumping IP State Completed
+2026-10-07T08:59:50.601 169.254.153.67 [  303.564034] amdgpu 0000:02:00.0: Dumping IP State Completed
+2026-10-07T08:59:50.601 169.254.153.67 [  303.564272] amdgpu 0000:06:00.0: [drm] AMDGPU device coredump file has been created
+2026-10-07T08:59:50.601 169.254.153.67 [  303.564500] amdgpu 0000:02:00.0: [drm] AMDGPU device coredump file has been created
+2026-10-07T08:59:50.601 169.254.153.67 [  303.564729] amdgpu 0000:06:00.0: [drm] Check your /sys/class/drm/card1/device/devcoredump/data
+2026-10-07T08:59:50.601 169.254.153.67 [  303.564965] amdgpu 0000:02:00.0: [drm] Check your /sys/class/drm/card0/device/devcoredump/data
+2026-10-07T08:59:50.601 169.254.153.67 [  303.565208] amdgpu 0000:06:00.0: ring comp_1.0.0 timeout, signaled seq=3152, emitted seq=3153
+2026-10-07T08:59:50.602 169.254.153.67 [  303.565449] amdgpu 0000:02:00.0: ring comp_1.0.0 timeout, signaled seq=3152, emitted seq=3153
+2026-10-07T08:59:50.602 169.254.153.67 [  303.565697] amdgpu 0000:06:00.0:  Process verify-base pid 4514 thread verify-base pid 6351
+2026-10-07T08:59:50.602 169.254.153.67 [  303.565945] amdgpu 0000:02:00.0:  Process verify-base pid 4514 thread verify-base pid 6350
+2026-10-07T08:59:50.602 169.254.153.67 [  303.566198] amdgpu 0000:06:00.0: GPU reset begin!. Source:  1
+2026-10-07T08:59:50.602 169.254.153.67 [  303.566450] amdgpu 0000:02:00.0: GPU reset begin!. Source:  1
+2026-10-07T08:59:51.020 169.254.153.67 [  303.987001] amdgpu 0000:02:00.0: PCI CONFIG reset
+2026-10-07T08:59:51.028 169.254.153.67 [  303.991872] amdgpu 0000:02:00.0: GPU reset succeeded, trying to resume
+2026-10-07T08:59:51.028 169.254.153.67 [  303.991916] amdgpu 0000:02:00.0: [drm] PCIE gen 3 link speeds already enabled
+2026-10-07T08:59:51.028 169.254.153.67 [  303.992566] amdgpu 0000:02:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F400000000).
+2026-10-07T08:59:51.028 169.254.153.67 [  303.992585] amdgpu 0000:02:00.0: VRAM is lost due to GPU reset!
+2026-10-07T08:59:51.088 169.254.153.67 [  304.053558] amdgpu 0000:06:00.0: PCI CONFIG reset
+2026-10-07T08:59:51.092 169.254.153.67 [  304.058368] amdgpu 0000:06:00.0: GPU reset succeeded, trying to resume
+2026-10-07T08:59:51.092 169.254.153.67 [  304.058412] amdgpu 0000:06:00.0: [drm] PCIE gen 3 link speeds already enabled
+2026-10-07T08:59:51.092 169.254.153.67 [  304.059043] amdgpu 0000:06:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F400000000).
+2026-10-07T08:59:51.092 169.254.153.67 [  304.059061] amdgpu 0000:06:00.0: VRAM is lost due to GPU reset!
+2026-10-07T08:59:51.368 169.254.153.67 [  304.334830] amdgpu 0000:02:00.0: [drm] UVD initialized successfully.
+2026-10-07T08:59:51.588 169.254.153.67 [  304.553115] amdgpu 0000:06:00.0: [drm] UVD initialized successfully.
+2026-10-07T08:59:51.668 169.254.153.67 [  304.631666] amdgpu 0000:02:00.0: GPU reset(1) succeeded!
+2026-10-07T08:59:51.668 169.254.153.67 [  304.631677] amdgpu 0000:02:00.0: [drm] device wedged, but no recovery needed
+2026-10-07T08:59:51.952 169.254.153.67 [  304.915632] amdgpu 0000:06:00.0: GPU reset(1) succeeded!
+2026-10-07T08:59:51.952 169.254.153.67 [  304.915927] amdgpu 0000:06:00.0: [drm] device wedged, but no recovery needed
+2026-10-07T09:01:13.679 169.254.153.67 [  386.631478] pcieport 0000:00:03.0: AER: Uncorrectable (Non-Fatal) error message received from 0000:00:03.0
+2026-10-07T09:01:13.679 169.254.153.67 [  386.631808] pcieport 0000:00:03.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal), type=Transaction Layer, (Requester ID)
+2026-10-07T09:01:13.679 169.254.153.67 [  386.632105] pcieport 0000:00:03.0:   device [8086:0e08] error status/mask=00004000/00000000
+2026-10-07T09:01:13.679 169.254.153.67 [  386.632406] pcieport 0000:00:03.0:    [14] CmpltTO                (First)
+2026-10-07T09:01:13.679 169.254.153.67 [  386.648979] snd_hda_intel 0000:06:00.1: Unable to change power state from D3hot to D0, device inaccessible
+2026-10-07T09:01:13.812 192.168.0.83 [60228.766733] thunderbolt 0-3: host disconnected
+2026-10-07T09:01:13.865 192.168.0.83 [60228.818744] thunderbolt 1-1: host disconnected
+2026-10-07T09:01:13.865 192.168.0.83 [60228.818745] thunderbolt 2-1: host disconnected

@@ -1,0 +1,14 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 127.0.0.1:42929, GPUs [0, 1]
+tp-node: session over 1 tcp lanes
+GPU0: rank 2 of 4, 4129.9 MiB allocated
+GPU1: rank 3 of 4, 4129.9 MiB allocated
+tp-node: session ended: Connection reset by peer (os error 104)
+tp-node: session over 1 tcp lanes
+GPU0: rank 2 of 4, 4129.9 MiB allocated
+GPU1: rank 3 of 4, 4129.9 MiB allocated
+tp-node: session ended: Connection reset by peer (os error 104)
+tp-node: session over 1 tcp lanes
+GPU0: rank 2 of 4, 4129.9 MiB allocated
+GPU1: rank 3 of 4, 4129.9 MiB allocated
+tp-node: session ended: Connection reset by peer (os error 104)
+tp-node: session ended: interrupted by signal 15

@@ -1,0 +1,6 @@
+CPU latency request: 0 us, scoped to this command
+{"tokens": 1, "micro": 1, "seconds": 0.3040618079999149, "unix": 1791397669.2755077}
+{"tokens": 128, "micro": 2, "seconds": 1.9806221750000077, "unix": 1791397694.417553}
+{"tokens": 1, "micro": 1, "seconds": 0.22293447599986393, "unix": 1791397717.1867707}
+PASS: three lost-peer sessions drained and node accepted fresh sessions
+[clocks] 255 samples card0 (02:00.0) sclk/mclk: 850/1370 x111 650/1370 x1 450/1370 x8 300/150 x135  max 56C card1 (06:00.0) sclk/mclk: 850/1370 x46 450/1370 x12 300/150 x197  max 54C  log=drain-results/clocks.txt

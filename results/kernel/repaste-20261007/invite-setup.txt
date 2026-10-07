@@ -1,0 +1,6 @@
+f748a0353938fde8d463b861fd956d4bdd31e070875a5651fc2fde42eec8efd3  /home/fairfieldt/trashcan-exp/improvements-20261007/verify-shutdown
+Linux invite 7.2.9-p2p #2p2p SMP PREEMPT_DYNAMIC Tue Oct  6 15:52:10 PDT 2026 x86_64 GNU/Linux
+17105e70-09ac-496f-bda1-6d03e2a72fca
+active
+active
+1977

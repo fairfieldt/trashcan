@@ -1,0 +1,58 @@
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	?	0	?	2	firmware	-	-	-
+1-3	?	1	?	2	firmware	-	-	-
+2-1	?	2	?	2	firmware	-	-	-
+thunderbolt_stream     40960  9
+thunderbolt_net        53248  0
+thunderbolt           581632  11 thunderbolt_stream,thunderbolt_net
+configfs               69632  4 thunderbolt_stream,netconsole,thunderbolt
+[60367.013532] thunderbolt 0-3: new host found, vendor=0xa27 device=0xa
+[60367.013541] thunderbolt 0-3: Apple, Inc. Macintosh
+[60369.061583] thunderbolt 1-1: new host found, vendor=0xa27 device=0xa
+[60369.061589] thunderbolt 1-1: Apple, Inc. Macintosh
+[60373.957975] thunderbolt 2-1: new host found, vendor=0xa27 device=0xa
+[60373.957984] thunderbolt 2-1: Apple, Inc. Macintosh
+[60407.559206] thunderbolt 1-1: failed read XDomain properties from df03058a-4192-2055-94a5-2fee00c131fd
+[60407.559218] thunderbolt 0-3: failed read XDomain properties from 7ce38daf-7361-d351-bf46-df35003f2723
+[60407.559218] thunderbolt 2-1: failed read XDomain properties from 14fa9896-946c-525c-8f40-e8408c5e081c
+[62434.643787] thunderbolt 1-1: host disconnected
+[62436.582810] thunderbolt 0-3: host disconnected
+[62441.684820] thunderbolt 0000:5d:00.0: 0:2: failed to reach state TB_PORT_UP. Ignoring port...
+[62441.815215] thunderbolt 2-1: host disconnected
+[62442.693516] thunderbolt 1-1: new host found, vendor=0x1d6b device=0x4
+[62442.693531] thunderbolt 1-1: Linux invite
+[62446.501491] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[62446.501512] thunderbolt 0-3: Linux invite
+[62449.957553] thunderbolt 2-1: new host found, vendor=0x1d6b device=0x4
+[62449.957565] thunderbolt 2-1: Linux invite
+[62530.689194] systemd-journald[497]: Received SIGTERM from PID 1 (systemd).
+[62530.689398] systemd[1]: Stopping systemd-journald.service - Journal Service...
+[62530.767607] systemd[1]: systemd-journald.service: Deactivated successfully.
+[62530.768236] systemd[1]: Stopped systemd-journald.service - Journal Service.
+[62530.768354] systemd[1]: systemd-journald.service: Consumed 22.191s CPU time, 82.6M memory peak, 548K memory swap peak.
+[62530.775396] systemd[1]: Starting systemd-journald.service - Journal Service...
+[62530.832698] systemd-journald[2518230]: Collecting audit messages is disabled.
+[62530.848654] systemd[1]: Started systemd-journald.service - Journal Service.
+[62531.527058] CRASHCAPTURE_TEST_incite
+[64316.080840] thunderbolt 2-1: host disconnected
+[64316.176744] thunderbolt 0-3: host disconnected
+[64316.204791] thunderbolt 1-1: host disconnected
+[66884.082217] thunderbolt 0-3: new host found, vendor=0xa27 device=0xa
+[66884.082236] thunderbolt 0-3: Apple, Inc. Macintosh
+[66886.162442] thunderbolt 1-3: new host found, vendor=0xa27 device=0xa
+[66886.162460] thunderbolt 1-3: Apple, Inc. Macintosh
+[66890.514390] thunderbolt 2-1: new host found, vendor=0xa27 device=0xa
+[66890.514406] thunderbolt 2-1: Apple, Inc. Macintosh
+[66924.755623] thunderbolt 1-3: failed read XDomain properties from df03058a-4192-2055-94a5-2fee00c131fd
+[66924.755645] thunderbolt 0-3: failed read XDomain properties from 7ce38daf-7361-d351-bf46-df35003f2723
+[66924.787646] thunderbolt 2-1: failed read XDomain properties from 14fa9896-946c-525c-8f40-e8408c5e081c
+/sys/kernel/config/thunderbolt/stream
+/sys/kernel/config/thunderbolt/stream/0-3.1
+/sys/kernel/config/thunderbolt/stream/1-1.1
+/sys/kernel/config/thunderbolt/stream/2-1.1
+/sys/kernel/config/thunderbolt/stream/0-3.0
+/sys/kernel/config/thunderbolt/stream/0-3.0/xmac
+/sys/kernel/config/thunderbolt/stream/1-1.0
+/sys/kernel/config/thunderbolt/stream/1-1.0/xmac
+/sys/kernel/config/thunderbolt/stream/2-1.0
+/sys/kernel/config/thunderbolt/stream/2-1.0/xmac

@@ -1,0 +1,4 @@
+tp-node: /home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf on 127.0.0.1:43113, GPUs [1]
+tp-node: session over 1 tcp lanes
+GPU1: rank 1 of 2, 2771.6 MiB allocated
+tp-node: session ended: interrupted by signal 15

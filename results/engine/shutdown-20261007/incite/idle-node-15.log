@@ -1,0 +1,2 @@
+tp-node: /home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf on 127.0.0.1:34759, GPUs [1]
+tp-node: session ended: interrupted by signal 15
