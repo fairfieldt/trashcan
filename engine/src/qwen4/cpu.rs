@@ -234,11 +234,6 @@ impl CpuStage {
         }
     }
 
-    /// Whether this stage needs the gathered n-gram rows.
-    pub fn owns_ple(&self) -> bool {
-        !self.ple_conv.is_empty()
-    }
-
     /// Run the layers over `n` tokens at `pos` in place on the `n x hc x d` residual. `ple` holds the gathered
     /// n-gram rows (`n x d`) when this stage owns the PLE layer. Position 0 starts a new sequence.
     pub fn forward(

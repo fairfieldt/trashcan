@@ -2,6 +2,24 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-06: Qwen3.8-Flash-Next (`qwen4exp`) stages on the D700s
+
+Details in [qwen4.md](qwen4.md); results in `results/qwen4/`.
+
+- The CPU reference (`engine/src/qwen4/`) matches llama.cpp: identical greedy tokens on a short and a 3061-token
+  (sparse attention) prompt, and teacher-forced layers within llama.cpp's own Q8_0 activation rounding, which
+  `--emulate-ggml` reproduces (including its f32 BLAS path for batches of 32 or more).
+- Dense matrices are where quantization hurts: all of them at Q4_0 cost KLD 0.196 against the Q8_0 model, the
+  121B expert parameters at Q4_0 only 0.040 (IQ4_XS/IQ4_NL 0.036). The hyper-connection mixers alone cost 0.119.
+- Fusing each hyper-connection mixer into two dispatches took a decode layer from 1.3 to 0.93 ms (Q4_0 dense): the
+  mixers were half the time and almost none of the bytes.
+- Scoring QSA blocks in the select kernel's single workgroup made a 32K-context decode step 13.25 ms for one
+  attention layer; spreading the scoring over workgroups with coalesced key reads made it 2.16 ms, bit-identical.
+- RADV over-commits device-local memory into system RAM without failing the allocation: a 6480 MiB stage on the
+  5888 MiB heap ran, with its head 18x slower. Stages now check VK_EXT_memory_budget after loading.
+- A six-Mac stage (4 layers, IQ4 experts, Q8_0 dense, 32K context, 128-token chunks, a twelfth of the head)
+  allocates 5830 MiB and runs on one D700; the budget model matches 15 measured stages within 0.2 MiB.
+
 ## 2026-10-06: Linux 7.2.9 kernel and Thunderbolt 2 links
 
 incite moved to Linux 7.2.9 (`7.2.9-p2p`, [kernel.md](kernel.md)) to get USB4STREAM. Thunderbolt was measured

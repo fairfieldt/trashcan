@@ -821,10 +821,6 @@ impl GpuStage {
         self.gpu.device_bytes.get() as f64 / 1048576.
     }
 
-    pub fn owns_ple(&self) -> bool {
-        self.ple.is_some()
-    }
-
     fn record(&self, n: usize, parts: u32, dump: bool) -> Result<Graph> {
         let gpu = &self.gpu;
         let c = &self.c;
