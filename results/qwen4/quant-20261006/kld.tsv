@@ -1,4 +1,5 @@
 name	changed_from_q8_0	gguf_mib_incl_q8_ngram_table	gguf_bpw	ppl	ppl_ratio	ppl_ratio_err	kld_mean	kld_err	kld_p99	same_top_pct	same_top_err	rms_dp_pct
+G-iq4	routed and shared experts IQ4_XS gate/up, IQ4_NL down; head Q6_K (six-Mac recipe)	119230.85	5.65	2.210672	1.001580	0.002757	0.039069	0.000929	0.609086	95.066	0.155	6.287
 E-iq4xs	routed experts IQ4_XS gate/up, IQ4_NL down	119494.87	5.67	2.214287	1.003218	0.002656	0.035708	0.000915	0.562788	95.267	0.152	6.088
 E-q4_0	routed experts Q4_0	121894.79	5.78	2.213495	1.002859	0.002756	0.040151	0.001081	0.585590	94.871	0.158	6.453
 E-mxfp4	routed experts MXFP4	118294.87	5.61	2.204079	0.998593	0.003614	0.065578	0.001597	1.003992	93.718	0.174	8.154

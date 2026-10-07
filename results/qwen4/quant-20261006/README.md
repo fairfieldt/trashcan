@@ -29,6 +29,7 @@ in every candidate but T-q4_0).
 
 | candidate | `--tensor-type` overrides | mean KLD | same top token |
 |---|---|---|---|
+| G-iq4 | `ffn_{gate,up}_{exps,shexp}=iq4_xs ffn_down_{exps,shexp}=iq4_nl`, `--output-tensor-type q6_k` | 0.0391 | 95.07% |
 | E-iq4xs | `ffn_gate_exps=iq4_xs ffn_up_exps=iq4_xs ffn_down_exps=iq4_nl` | 0.0357 | 95.27% |
 | E-q4_0 | `ffn_gate_exps=q4_0 ffn_up_exps=q4_0 ffn_down_exps=q4_0` | 0.0402 | 94.87% |
 | E-mxfp4 | `ffn_gate_exps=mxfp4 ffn_up_exps=mxfp4 ffn_down_exps=mxfp4` | 0.0656 | 93.72% |
@@ -43,8 +44,8 @@ in every candidate but T-q4_0).
 The dense matrices are the sensitive part: the hyper-connection mixers (about 14% of the dense parameters) cost the
 most, and the DeltaNet and QSA projections each cost more than all 121B expert parameters at 4 bits; the shared
 experts (about 5% of the dense parameters) cost half as much as all routed experts at IQ4. Pending at the time of
-writing, from `scripts/queue3.sh`: G-iq4 (the six-Mac recipe), E-iq3xxs, E-iq4mx and E-iq2mx; `kld.tsv` and this
-table are updated as they finish.
+writing, from `scripts/queue3.sh`: E-iq3xxs, E-iq4mx and E-iq2mx; `kld.tsv` and this table are updated as they
+finish.
 
 The E-, N-, T- and A- candidates were deleted after measuring (each regenerates with the command above in 2-26
 minutes). Kept on the Mac's external disk (`/Volumes/Green/Qwen/flash-next/cand/`) and on incite

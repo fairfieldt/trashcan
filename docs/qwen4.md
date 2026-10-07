@@ -107,6 +107,7 @@ share of positions where both pick the same top token
 
 | candidate | changed from Q8_0 | mean KLD | same top token | PPL ratio |
 |---|---|---|---|---|
+| **G-iq4** | **the six-Mac recipe: routed and shared experts IQ4_XS gate/up, IQ4_NL down; head Q6_K** | **0.0391** | **95.1%** | **1.002** |
 | E-iq4xs | experts IQ4_XS gate/up, IQ4_NL down | 0.0357 | 95.3% | 1.003 |
 | E-q4_0 | experts Q4_0 | 0.0402 | 94.9% | 1.003 |
 | E-mxfp4 | experts MXFP4 | 0.0656 | 93.7% | 0.999 |
@@ -124,7 +125,8 @@ share of positions where both pick the same top token
   matrices in Q8_0, which the GPU stages read with `qwen4_q8_mv`, `qwen4_q8_gemm` and fused Q8_0 mixers: about
   34 MB more per DeltaNet layer than Q4_0 and 0.25 ms more per decode step of a layer.
 - **IQ4_XS gate/up with IQ4_NL down is the best 4-bit expert format** and also the smallest (the down rows are
-  640 wide, which rules out the 256-element formats there). MXFP4 is clearly worse on this model.
+  640 wide, which rules out the 256-element formats there). MXFP4 is clearly worse on this model. Quantizing the
+  shared experts alike (the GPU stacks them with the routed ones) and the head to Q6_K adds only 0.003 (G-iq4).
 - **2-bit experts cost as much as 4-bit dense matrices** (KLD 0.21, the same top token 88.6% of the time against
   95.3%). Four Macs at 2 bits is a large quality step, not a small one.
 - **The n-gram table should keep the release's precision.** A Q4_0 table costs KLD 0.023, which is why the
