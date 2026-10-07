@@ -13,6 +13,8 @@ pub struct Device {
     pub inst: Rc<Instance>,
     pub dev: ash::Device,
     pub queue: vk::Queue,
+    /// A second queue of the same family (the first one again if the family has only one).
+    pub queue2: vk::Queue,
     pub pool: vk::CommandPool,
     pub mem: vk::PhysicalDeviceMemoryProperties,
     pub layout: vk::PipelineLayout,
@@ -126,11 +128,13 @@ impl Device {
                     .contains(vk::SubgroupFeatureFlags::ARITHMETIC),
             "kernels require 64-lane compute subgroups with arithmetic"
         );
-        let (family, _) = inst.compute_family(pd)?;
-        let priority = [1.0];
+        let (family, available) = inst.compute_family(pd)?;
+        // A second queue of the family lets tensor-parallel micro-batches run concurrently.
+        let priority = [1.0, 1.0];
+        let queues = available.clamp(1, 2) as usize;
         let queue_info = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(family)
-            .queue_priorities(&priority)];
+            .queue_priorities(&priority[..queues])];
         let extensions = [
             ash::khr::external_memory_fd::NAME.as_ptr(),
             ash::ext::external_memory_dma_buf::NAME.as_ptr(),
@@ -152,6 +156,7 @@ impl Device {
             .push_next(&mut f12);
         let dev = unsafe { inst.instance.create_device(pd, &ci, None)? };
         let queue = unsafe { dev.get_device_queue(family, 0) };
+        let queue2 = if queues > 1 { unsafe { dev.get_device_queue(family, 1) } } else { queue };
         let pool = unsafe {
             dev.create_command_pool(
                 &vk::CommandPoolCreateInfo::default()
@@ -550,6 +555,7 @@ impl Device {
             inst,
             dev,
             queue,
+            queue2,
             pool,
             mem,
             layout,
@@ -1036,6 +1042,22 @@ impl Device {
         unsafe {
             self.dev.queue_submit(self.queue, &ci, fence)?;
         }
+        Ok(())
+    }
+    /// Submit `cmd` to `queue`, waiting for every timeline value in `waits` and signalling those in `signals`.
+    pub fn submit_on(&self, queue: vk::Queue, cmd: vk::CommandBuffer, waits: &[(vk::Semaphore, u64)], signals: &[(vk::Semaphore, u64)]) -> Result<()> {
+        let commands = [cmd];
+        let (ws, wv): (Vec<_>, Vec<_>) = waits.iter().copied().unzip();
+        let (ss, sv): (Vec<_>, Vec<_>) = signals.iter().copied().unzip();
+        let stages = vec![vk::PipelineStageFlags::ALL_COMMANDS; waits.len()];
+        let mut ti = vk::TimelineSemaphoreSubmitInfo::default().wait_semaphore_values(&wv).signal_semaphore_values(&sv);
+        let ci = [vk::SubmitInfo::default()
+            .command_buffers(&commands)
+            .wait_semaphores(&ws)
+            .wait_dst_stage_mask(&stages)
+            .signal_semaphores(&ss)
+            .push_next(&mut ti)];
+        unsafe { self.dev.queue_submit(queue, &ci, vk::Fence::null())? };
         Ok(())
     }
     /// Submit the full schedule in one API call per GPU. Each element still has

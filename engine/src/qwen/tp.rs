@@ -104,9 +104,11 @@ fn micro_count(n: usize) -> usize {
 }
 
 /// Host threads that add partials and write totals (`TRASHCAN_TP_THREADS`), for all-reduces of at least
-/// PARALLEL_MIN elements; decode and verification batches stay on the calling thread.
-fn host_threads() -> usize {
-    std::env::var("TRASHCAN_TP_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(1).clamp(1, 16)
+/// PARALLEL_MIN elements; decode and verification batches stay on the calling thread. By default 6 when the
+/// group spans two machines, where the all-reduce of one micro-batch is on the path to the next segment, else 1.
+fn host_threads(peer: bool) -> usize {
+    let default = if peer { 6 } else { 1 };
+    std::env::var("TRASHCAN_TP_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(default).clamp(1, 16)
 }
 const PARALLEL_MIN: usize = 1 << 16;
 
@@ -182,7 +184,8 @@ impl TpGroup {
         }
         let len = c.d * max_batch;
         let profile = vec![BTreeMap::new(); shards.len()];
-        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], threads: host_threads(), profile, seconds: Phases::default() })
+        let threads = host_threads(peer.is_some());
+        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], threads, profile, seconds: Phases::default() })
     }
 
     /// Forward `tokens` (embedded as `x`) at `pos`: candidates of the last column, or of every column of a
@@ -311,7 +314,7 @@ impl TpGroup {
             // Timing only: every segment back to back without all-reduces (wrong results), the GPU floor.
             let start = Instant::now();
             for s in self.shards.iter_mut() {
-                s.tp_release(segments - 1)?;
+                s.tp_release_all()?;
             }
             for s in &self.shards {
                 s.tp_wait(segments - 1)?;
@@ -341,13 +344,11 @@ impl TpGroup {
     fn release(&mut self, range: std::ops::Range<usize>, ahead: bool) -> Result<()> {
         let start = Instant::now();
         for s in self.shards.iter_mut() {
-            if ahead {
-                if let Some(last) = range.clone().last() {
-                    s.tp_release(last)?;
-                }
-            } else {
-                for i in range.clone() {
-                    s.tp_submit(i)?;
+            for j in range.clone() {
+                if ahead {
+                    s.tp_release(j)?;
+                } else {
+                    s.tp_submit(j)?;
                 }
             }
         }
