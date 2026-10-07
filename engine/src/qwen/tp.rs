@@ -64,7 +64,7 @@ pub struct TpGroup {
     remote: Vec<f32>,
     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
     threads: usize,
-    /// Locally tested one-pass two-rank sum; opt-in until measured on the Mac Pros.
+    /// Opt-in one-column, two-local-rank sum: measured CPU phase saving, no model throughput claim.
     direct_sum: bool,
     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
     /// other machine, since the group was created.
@@ -609,7 +609,9 @@ impl TpGroup {
             *p = s.tp_part(row, n);
         }
         let parts = &parts[..self.shards.len()];
-        let direct = self.direct_sum;
+        // Only one-column two-rank reductions have a repeated target-host component win.
+        // Keep larger batches on the original path; the standalone helper remains shape-general.
+        let direct = self.direct_sum && n == 1 && parts.len() == 2;
         parallel(sum, threads, |at, out| {
             if direct {
                 super::host::sum_partials(out, parts, at);

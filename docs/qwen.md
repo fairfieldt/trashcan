@@ -216,9 +216,14 @@ forward):
   micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
   prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
 
-Offline candidates (Mac validation pending): `TRASHCAN_QWEN_GDN=prepared` prepares DeltaNet Q/K normalization and
-gates once per head/token for batches above eight columns; `TRASHCAN_TP_SUM_DIRECT=1` writes the two local ranks'
-sum in one pass. Set either on both nodes. `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
+Opt-in candidates: `TRASHCAN_QWEN_GDN=prepared` prepares DeltaNet Q/K normalization and
+gates once per head/token for batches above eight columns; `TRASHCAN_TP_SUM_DIRECT=1` writes the local ranks'
+sum in one pass only for one column with exactly two local ranks. Larger batches use the original sum path.
+Set either on both nodes. The direct-sum decode CPU phase took 27–31% less time in the full-clock TP4 paired
+measurements, saving 0.107–0.125 ms per token; no model-throughput gain is established. The one-column scope
+also covers draft steps, whose benefit has not been measured separately. The standalone host benchmark
+still permits every shape for comparison. See the [hardware measurements](../results/qwen/hardware-20261007/README.md).
+`TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
 costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded
 sampled output when timings change. All three are off by default. Speculative decoding now caps drafts near
 the output limit, leaving the final sampled token unprocessed; this can also change sampled RNG sequences.

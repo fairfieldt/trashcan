@@ -29,7 +29,7 @@ read_rpm() {
     printf '%s\n' "$((10#$value))"
 }
 
-[[ $INTERVAL =~ ^[1-9][0-9]*$ ]] && (( INTERVAL <= 10 )) || fail 'INTERVAL must be 1..10 seconds'
+[[ $INTERVAL =~ ^([1-9]|10)$ ]] || fail 'INTERVAL must be 1..10 seconds'
 minimum=$(read_rpm "$smc/fan1_min") || fail 'cannot read a valid SMC minimum'
 (( minimum > 0 )) || fail 'invalid SMC minimum'
 last_max= failures=0 logged_max=

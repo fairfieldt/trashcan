@@ -100,6 +100,12 @@ class FanPolicyTest(unittest.TestCase):
         self.assertFalse(rows)
         self.assertIn('unavailable at startup', result.stderr)
 
+    def test_oversized_interval_cannot_wrap_into_allowed_range(self):
+        result, rows = self.run_policy(INTERVAL='18446744073709551617')
+        self.assertEqual(result.returncode, 1)
+        self.assertFalse(rows)
+        self.assertIn('INTERVAL must be 1..10 seconds', result.stderr)
+
     def test_malformed_limit_returns_to_automatic_immediately(self):
         result, rows = self.run_policy([{'fan1_max': 'broken'}, {'stop': True}])
         self.assertEqual(result.returncode, 1)

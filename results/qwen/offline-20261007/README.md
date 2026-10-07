@@ -1,5 +1,7 @@
 # Qwen3.8-27B TP4 offline optimization work, October 7
 
+This preserves the initial offline investigation. The subsequent [hardware record](../hardware-20261007/README.md) contains the target-host measurements, fan deployment, decisions, and final-source validation; pending checks below describe the original plan.
+
 Starting source: `b0a2e68` on main. Three sub-agents investigated prefill, decode/MTP,
 and transport; the coordinating agent tested host reductions and integrated the work.
 The Mac Pros were unavailable, and no connection, GPU lease, deployment, or benchmark
@@ -33,6 +35,13 @@ projection variants already lacked measured wins and were not reintroduced.
 The GPU and adaptive performance candidates remain opt-in. Benchmark records include
 their flags; both nodes report per-process prefill/reduction flags in host metadata.
 Existing scalar/tiled attention, query slab, and KV-only defaults are unchanged.
+
+Later hardware follow-up narrowed `TRASHCAN_TP_SUM_DIRECT=1` in the runtime to one column with exactly
+two local ranks, still off by default. Paired full-clock TP4 measurements reduced the decode CPU sum
+phase by 27–31% (0.107–0.125 ms per token), without establishing a model-throughput gain. Prefill showed
+no gain. This offline record and its all-shape `host-bench.rs` reproduction describe the original broader
+candidate; the general helper remains available to that benchmark. See the
+[hardware record](../hardware-20261007/README.md) for the measured source and subsequent validation.
 
 Short-budget sampling can consume a different random-number sequence because unused
 drafts are omitted. Adaptive mode also makes its choices from timing, so identical

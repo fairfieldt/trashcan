@@ -254,6 +254,7 @@ fn bench_ids(e: &mut Chain, t: &Tokenizer, ids: &[u32], tg: usize, sampler: &mut
             "mtp_kv_only":std::env::var("TRASHCAN_TP_KV_ONLY").as_deref()==Ok("1"),
             "prepared_gdn":std::env::var("TRASHCAN_QWEN_GDN").as_deref()==Ok("prepared"),
             "direct_sum":std::env::var("TRASHCAN_TP_SUM_DIRECT").as_deref()==Ok("1"),
+            "direct_sum_max_columns":1,"direct_sum_required_local_ranks":2,
             "adaptive_mtp":std::env::var("TRASHCAN_QWEN_ADAPTIVE_MTP").as_deref()==Ok("1")}, "pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
         "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
