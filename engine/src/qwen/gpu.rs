@@ -358,6 +358,11 @@ fn vram_io() -> bool {
     std::env::var_os("TRASHCAN_TP_VRAM_IO").is_some()
 }
 
+/// `TRASHCAN_QWEN_GEMM=gemm` records prefill projections with the original `gemm` kernel (for A/B timing).
+fn gemm_reference() -> bool {
+    std::env::var("TRASHCAN_QWEN_GEMM").is_ok_and(|v| v == "gemm")
+}
+
 /// Whether two tensor-parallel micro-batches run on two queues (`TRASHCAN_TP_QUEUES=1`: one queue).
 fn two_queues() -> bool {
     std::env::var("TRASHCAN_TP_QUEUES").map_or(true, |v| v != "1")
@@ -591,7 +596,8 @@ impl<'a> Rec<'a> {
             3 => ("qwen_q4c3", rows.div_ceil(16), 1),
             4 => ("qwen_q4c4", rows.div_ceil(16), 1),
             5..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
-            _ => ("gemm", rows.div_ceil(64), n.div_ceil(64)),
+            // gemm2 is gemm with conflict-free weight-tile reads and the next block loaded ahead: identical results.
+            _ => (if gemm_reference() { "gemm" } else { "gemm2" }, rows.div_ceil(64), n.div_ceil(64)),
         };
         self.s.gpu.dispatch_matrix(
             self.cmd,

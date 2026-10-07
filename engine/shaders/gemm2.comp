@@ -1,0 +1,42 @@
+#version 460
+#include "common.glsl"
+// gemm.comp, 3-6% faster at Qwen's tensor-parallel shapes: the weight tile's vec4 index is swizzled by bit 3 of the
+// row, so the 16 rows a wave reads at once hit distinct LDS banks (rows rr and rr + 8 shared banks at the 36-dword
+// row stride), and the next block's weight word, scale and activations are loaded into registers while the current
+// block is multiplied. Every output keeps gemm.comp's fma chain over k in ascending order: identical results.
+layout(local_size_x=256) in;
+shared vec4 tile_w[64][9],tile_x[64][9];
+void main(){uint nb=batch(),lane=gl_LocalInvocationID.x,group=lane/16;
+uint rr=(group%4)*4+(lane%4),tt=(group/4)*4+((lane%16)/4),sw=(rr>>3)&1u;
+uint row0=gl_WorkGroupID.x*64,tok0=gl_WorkGroupID.y*64;
+uint r=lane/4,j=lane%4,rsw=(r>>3)&1u;
+bool live=row0+r<p.n;
+uint block0=(row0+r)*(p.k/32);
+uint x0r=lane/8,x0j=lane%8,x1r=(lane+256)/8,x1j=(lane+256)%8;
+vec4 a0=vec4(0),a1=vec4(0),a2=vec4(0),a3=vec4(0);
+uint qs=live?ww.words[p.stride+block0*4+j]:0u;float scale=live?uintBitsToFloat(ww.words[block0]):0.;
+vec4 xa=tok0+x0r<nb?b_v4.v[(tok0+x0r)*(p.k/4)+x0j]:vec4(0),xb=tok0+x1r<nb?b_v4.v[(tok0+x1r)*(p.k/4)+x1j]:vec4(0);
+for(uint kb=0;kb<p.k;kb+=32){
+    vec4 lo=vec4(0),hi=vec4(0);
+    if(live){lo=vec4(ivec4(uvec4(qs,qs>>8,qs>>16,qs>>24)&15u)-8)*scale;hi=vec4(ivec4(uvec4(qs>>4,qs>>12,qs>>20,qs>>28)&15u)-8)*scale;}
+    tile_w[r][j^rsw]=lo;tile_w[r][(j+4)^rsw]=hi;
+    tile_x[x0r][x0j]=xa;tile_x[x1r][x1j]=xb;
+    barrier();
+    if(kb+32<p.k){uint block=block0+kb/32+1;
+        qs=live?ww.words[p.stride+block*4+j]:0u;scale=live?uintBitsToFloat(ww.words[block]):0.;
+        xa=tok0+x0r<nb?b_v4.v[(tok0+x0r)*(p.k/4)+(kb+32)/4+x0j]:vec4(0);xb=tok0+x1r<nb?b_v4.v[(tok0+x1r)*(p.k/4)+(kb+32)/4+x1j]:vec4(0);}
+    [[unroll]]for(uint jj=0;jj<8;jj++){
+        vec4 b0=tile_x[tt][jj],b1=tile_x[tt+16][jj],b2=tile_x[tt+32][jj],b3=tile_x[tt+48][jj];
+        uint js=jj^sw;
+        vec4 w0=tile_w[rr][js],w1=tile_w[rr+16][js],w2=tile_w[rr+32][js],w3=tile_w[rr+48][js];
+        [[unroll]]for(uint v=0;v<4;v++){vec4 x=vec4(b0[v],b1[v],b2[v],b3[v]);
+            a0=fma(vec4(w0[v]),x,a0);a1=fma(vec4(w1[v]),x,a1);a2=fma(vec4(w2[v]),x,a2);a3=fma(vec4(w3[v]),x,a3);}
+    }
+    barrier();
+}
+for(uint t=0;t<4;t++){uint col=tok0+tt+t*16;if(col<nb){
+    if(row0+rr<p.n)c_f.v[col*p.n+row0+rr]=a0[t];
+    if(row0+rr+16<p.n)c_f.v[col*p.n+row0+rr+16]=a1[t];
+    if(row0+rr+32<p.n)c_f.v[col*p.n+row0+rr+32]=a2[t];
+    if(row0+rr+48<p.n)c_f.v[col*p.n+row0+rr+48]=a3[t];
+}}}

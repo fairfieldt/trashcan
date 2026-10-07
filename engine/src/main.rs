@@ -229,7 +229,7 @@ enum Cmd {
         #[arg(long, default_value_t = 256)]
         n: usize,
         /// Kernels to compare; the first is the reference.
-        #[arg(long, value_delimiter = ',', default_value = "gemm")]
+        #[arg(long, value_delimiter = ',', default_value = "gemm,gemm2")]
         kernels: Vec<String>,
         #[arg(long, default_value_t = 20)]
         iterations: u32,

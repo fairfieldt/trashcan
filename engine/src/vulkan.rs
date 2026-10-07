@@ -338,6 +338,7 @@ impl Device {
                 "gemm",
                 include_bytes!(concat!(env!("OUT_DIR"), "/gemm.spv")).as_slice(),
             ),
+            ("gemm2", include_bytes!(concat!(env!("OUT_DIR"), "/gemm2.spv")).as_slice()),
             (
                 "qwen_add_norm",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_add_norm.spv")).as_slice(),
