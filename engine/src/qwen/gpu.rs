@@ -424,7 +424,7 @@ pub struct GpuStage {
     vb: Buffer,
     rq: Buffer,
     scratch: Buffer,
-    /// Bounded 64-query tiled prefill scores and denominators, separate for each TP queue.
+    /// Bounded tiled prefill scores and denominators, separate for each TP queue.
     prefill_scores: Option<Buffer>,
 
     gate: Buffer,
@@ -456,7 +456,12 @@ fn vram_io() -> bool {
     std::env::var_os("TRASHCAN_TP_VRAM_IO").is_some()
 }
 
-/// `TRASHCAN_QWEN_GEMM=gemm` records prefill projections with the original `gemm` kernel (for A/B timing).
+/// Bounded query slab; wider slabs reduce dispatch/barrier count at a larger scratch cost.
+pub fn attention_slab() -> usize {
+    if std::env::var("TRASHCAN_QWEN_ATTN_SLAB").as_deref() == Ok("256") { 256 } else { 64 }
+}
+
+/// `TRASHCAN_QWEN_GEMM=gemm` selects the original projection kernel for A/B timing.
 fn gemm_reference() -> bool {
     std::env::var("TRASHCAN_QWEN_GEMM").is_ok_and(|v| v == "gemm")
 }
@@ -921,14 +926,16 @@ impl<'a> Rec<'a> {
         if parts == 0 && s.prefill_scores.is_some() && self.n >= 64 {
             let score = self.sc(s.prefill_scores.as_ref().unwrap());
             let stride = s.context.next_multiple_of(64);
+            let slab = attention_slab();
+            u[2] = slab as u32;
             u[0] = stride as u32;
             u[1] = (c.heads / c.kv_heads) as u32;
             let tq = 1usize << (64 / (c.heads / c.kv_heads)).ilog2();
-            for first in (0..self.n).step_by(64) {
+            for first in (0..self.n).step_by(slab) {
                 u[13] = first as u32;
-                let nb = (self.n - first).min(64);
+                let nb = (self.n - first).min(slab);
                 let groups = c.kv_heads * nb.div_ceil(tq);
-                let p = self.push([rq, a.kc.address, a.vc.address, o, score, score + (64 * c.heads * stride * 4) as u64], u);
+                let p = self.push([rq, a.kc.address, a.vc.address, o, score, score + (slab * c.heads * stride * 4) as u64], u);
                 s.gpu.dispatch(self.cmd, "qwen_attn_scores", p, self.keys.div_ceil(64) as u32, groups as u32);
                 s.gpu.dispatch(self.cmd, "qwen_attn_softmax", p, c.heads as u32, nb as u32);
                 s.gpu.dispatch(self.cmd, "qwen_attn_values", p, (hd / 64) as u32, groups as u32);
@@ -1266,7 +1273,7 @@ impl GpuStage {
             scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8 * halves, false, false, None)?,
             // Opt in while the sustained distributed MTP hang is under investigation.
             prefill_scores: if max_batch >= 64 && std::env::var("TRASHCAN_QWEN_ATTN").as_deref() == Ok("tiled") {
-                Some(gpu.buffer(c.heads * 64 * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)
+                Some(gpu.buffer(c.heads * attention_slab() * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)
             } else { None },
             gate: work(c.ff)?,
             up: work(c.ff)?,

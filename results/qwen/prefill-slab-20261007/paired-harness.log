@@ -1,0 +1,43 @@
+Ticket #67 created.
+#67 [queued] slab-64-a (owner: Qwen27B prefill slab comparison) · position 1 · est 5 min, next up
+    ! Waiting at position 1, next up. Wait with `gpuq wait 67` (in the background in Claude Code).
+
+Ticket #55 created.
+#55 [queued] slab-64-a (owner: Qwen27B prefill slab comparison) · position 1 · est 5 min, next up
+    ! Waiting at position 1, next up. Wait with `gpuq wait 55` (in the background in Claude Code).
+
+The GPU is yours. Run GPU commands as `ssh incite 'gpuq run 67 -- CMD'`, and release with gpu_release / `gpuq release 67 -r RESULT` as soon as you are done.
+#67 [running] slab-64-a (owner: Qwen27B prefill slab comparison) · running 0 s, 5 min left of the estimate
+    ! 5 min left on your estimate. Extend now if you need longer.
+
+The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 55 -- CMD'`, and release with gpu_release / `gpuq release 55 -r RESULT` as soon as you are done.
+#55 [running] slab-64-a (owner: Qwen27B prefill slab comparison) · running 0 s, 5 min left of the estimate
+    ! 5 min left on your estimate. Extend now if you need longer.
+
+slab-64-a
+#67 released. Thanks.
+#67 [done] slab-64-a (owner: Qwen27B prefill slab comparison) · released · result: slab-64-a completed; clocks and outputs saved
+    ! Ended: released. Request again if you need the GPU.
+
+#55 released. Thanks.
+#55 [done] slab-64-a (owner: Qwen27B prefill slab comparison) · released · result: slab-64-a completed; clocks and outputs saved
+    ! Ended: released. Request again if you need the GPU.
+
+slab-256-b cooling [63.0, 62.0, 77.0, 66.0]
+Ticket #68 created.
+#68 [queued] slab-256-b (owner: Qwen27B prefill slab comparison) · position 1 · est 5 min, next up
+    ! Waiting at position 1, next up. Wait with `gpuq wait 68` (in the background in Claude Code).
+
+Ticket #56 created.
+#56 [queued] slab-256-b (owner: Qwen27B prefill slab comparison) · position 1 · est 5 min, next up
+    ! Waiting at position 1, next up. Wait with `gpuq wait 56` (in the background in Claude Code).
+
+The GPU is yours. Run GPU commands as `ssh incite 'gpuq run 68 -- CMD'`, and release with gpu_release / `gpuq release 68 -r RESULT` as soon as you are done.
+#68 [running] slab-256-b (owner: Qwen27B prefill slab comparison) · running 0 s, 5 min left of the estimate
+    ! 5 min left on your estimate. Extend now if you need longer.
+
+The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 56 -- CMD'`, and release with gpu_release / `gpuq release 56 -r RESULT` as soon as you are done.
+#56 [running] slab-256-b (owner: Qwen27B prefill slab comparison) · running 0 s, 5 min left of the estimate
+    ! 5 min left on your estimate. Extend now if you need longer.
+
+slab-256-b

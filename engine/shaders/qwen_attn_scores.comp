@@ -1,7 +1,7 @@
 #version 460
 #include "common.glsl"
 // Qwen GQA: p.k is the query/KV head ratio (including six), padding each tile to 64 rows.
-// p.r1 is the first query in a bounded 64-token score slab. All LDS
+// p.r1 is the first query in a bounded query score slab. All LDS
 // producer/consumer phases use workgroup barriers; no wave scheduling assumptions.
 // Batched attention scores S = K Q^T: 64 keys x 64 query rows per workgroup, 32 dims per step.
 // a: Q f32 [token][head][dim]; b: K cache f16 [slot][kvhead][dim]; e: S f32 [token*heads+head][p.n].
@@ -10,7 +10,7 @@
 layout(local_size_x=256) in;
 shared vec4 tile_k[64][9],tile_q[64][9];
 void main(){
-uint nb=min(batch()-p.r1,64u),lane=gl_LocalInvocationID.x,group=lane/16;
+uint nb=min(batch()-p.r1,p.m==0u?64u:p.m),lane=gl_LocalInvocationID.x,group=lane/16;
 uint rr=(group%4)*4+(lane%4),tt=(group/4)*4+((lane%16)/4);
 uint hq=p.k,tq=1u<<findMSB(64u/hq),qt=(nb+tq-1)/tq;
 uint kh=gl_WorkGroupID.y/qt,t0=(gl_WorkGroupID.y%qt)*tq;

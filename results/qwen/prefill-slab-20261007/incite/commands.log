@@ -1,0 +1,2 @@
+2026-10-07T12:07:41-07:00 slab-64-a ./trashcan qwen-bench /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --pp 4096 --tg 8 --context 8192 --reps 2
+2026-10-07T12:08:10-07:00 slab-64-a ./trashcan qwen-bench /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --pp 4096 --tg 8 --context 8192 --reps 2

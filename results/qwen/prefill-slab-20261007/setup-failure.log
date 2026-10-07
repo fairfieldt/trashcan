@@ -1,0 +1,45 @@
+Ticket #66 created.
+#66 [queued] slab-64-a (owner: Qwen27B prefill slab comparison) · position 1 · est 5 min, next up
+    ! Waiting at position 1, next up. Wait with `gpuq wait 66` (in the background in Claude Code).
+
+Ticket #54 created.
+#54 [queued] slab-64-a (owner: Qwen27B prefill slab comparison) · position 1 · est 5 min, next up
+    ! Waiting at position 1, next up. Wait with `gpuq wait 54` (in the background in Claude Code).
+
+The GPU is yours. Run GPU commands as `ssh incite 'gpuq run 66 -- CMD'`, and release with gpu_release / `gpuq release 66 -r RESULT` as soon as you are done.
+#66 [running] slab-64-a (owner: Qwen27B prefill slab comparison) · running 0 s, 5 min left of the estimate
+    ! 5 min left on your estimate. Extend now if you need longer.
+
+The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 54 -- CMD'`, and release with gpu_release / `gpuq release 54 -r RESULT` as soon as you are done.
+#54 [running] slab-64-a (owner: Qwen27B prefill slab comparison) · running 0 s, 5 min left of the estimate
+    ! 5 min left on your estimate. Extend now if you need longer.
+
+slab-64-a
+bash: line 1: results/node-slab-64-a.log: No such file or directory
+Traceback (most recent call last):
+  File "/Users/fairfieldt/dev/trashcan/results/qwen/prefill-slab-20261007/scripts/cooled.py", line 25, in <module>
+    run('incite',leased(a.incite,'ENV='+shlex.quote(env)+' '+command))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fairfieldt/dev/trashcan/results/qwen/prefill-slab-20261007/scripts/cooled.py", line 12, in run
+    def run(host,cmd,check=True):return subprocess.run(['ssh',host,cmd],check=check)
+                                        ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['ssh', 'incite', 'gpuq run 66 -- bash -c \'cd /home/fairfieldt/trashcan-exp/prefill-lds-20261007; ENV=\'"\'"\'TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64\'"\'"\' scripts/run.sh slab-64-a ./trashcan qwen-bench /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --pp 4096 --tg 8 --context 8192 --reps 2\'']' returned non-zero exit status 1.
+#66 released. Thanks.
+#66 [done] slab-64-a (owner: Qwen27B prefill slab comparison) · released · result: slab-64-a failed; diagnostics saved
+    ! Ended: released. Request again if you need the GPU.
+
+#54 released. Thanks.
+#54 [done] slab-64-a (owner: Qwen27B prefill slab comparison) · released · result: slab-64-a failed; diagnostics saved
+    ! Ended: released. Request again if you need the GPU.
+
+Traceback (most recent call last):
+  File "/Users/fairfieldt/dev/trashcan/results/qwen/prefill-slab-20261007/scripts/cooled-sweep.py", line 27, in <module>
+    print(case['name'],flush=True);subprocess.run(cmd,check=True);success=True
+                                   ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 578, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['python3', '/Users/fairfieldt/dev/trashcan/results/qwen/prefill-slab-20261007/scripts/cooled.py', '--incite', '66', '--invite', '54', '--binary', 'trashcan', '--name', 'slab-64-a', '--env', 'TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64', '--command', 'qwen-bench', '--args', '--pp 4096 --tg 8 --context 8192 --reps 2']' returned non-zero exit status 1.

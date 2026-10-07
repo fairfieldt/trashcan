@@ -1,0 +1,1 @@
+[clocks] 43 samples card0 (02:00.0) sclk/mclk: 850/1370 x42 300/150 x1  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x40 300/150 x3  max 48C  log=results/slab-clocks.txt

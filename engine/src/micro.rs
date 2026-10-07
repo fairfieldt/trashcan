@@ -873,19 +873,21 @@ pub fn qwen_attention(tokens: usize, n: usize, heads: usize, iterations: usize) 
         let params = d.upload(bytemuck::cast_slice(&[(tokens - n) as u32, n as u32, 0u32, 0]))?;
         let out = d.buffer(n * heads * 256 * 4, false, false, None)?;
         let stride = tokens.next_multiple_of(64);
-        let scratch = d.buffer(64 * heads * (stride + 1) * 4, false, false, None)?;
-        let mut p = Push { ptr: [q.address, k.address, v.address, out.address, scratch.address, scratch.address + (64 * heads * stride * 4) as u64, params.address, 0], ..Default::default() };
+        let scratch = d.buffer(256 * heads * (stride + 1) * 4, false, false, None)?;
+        let mut p = Push { ptr: [q.address, k.address, v.address, out.address, scratch.address, scratch.address + (256 * heads * stride * 4) as u64, params.address, 0], ..Default::default() };
         p.u[0] = stride as u32; p.u[1] = heads as u32; p.u[4] = heads as u32;
         p.u[5] = 1; p.u[6] = 256; p.u[7] = tokens as u32; p.u[15] = n as u32;
         let mut reference = None;
-        for tiled in [false, true] {
+        let mut tiled_reference: Option<Vec<f32>> = None;
+        for (variant, tiled, slab) in [("scalar", false, 64usize), ("tiled64", true, 64), ("tiled256", true, 256)] {
             let cmd = d.begin()?;
             for _ in 0..iterations {
                 if tiled {
                     let tq = 1usize << (64 / heads).ilog2();
-                    for first in (0..n).step_by(64) {
+                    p.u[2] = slab as u32;
+                    for first in (0..n).step_by(slab) {
                         p.u[13] = first as u32;
-                        let nb = (n - first).min(64);
+                        let nb = (n - first).min(slab);
                         d.dispatch(cmd, "qwen_attn_scores", p, stride.div_ceil(64) as u32, nb.div_ceil(tq) as u32);
                         d.dispatch(cmd, "qwen_attn_softmax", p, heads as u32, nb as u32);
                         d.dispatch(cmd, "qwen_attn_values", p, 4, nb.div_ceil(tq) as u32);
@@ -903,7 +905,10 @@ pub fn qwen_attention(tokens: usize, n: usize, heads: usize, iterations: usize) 
                 Some(r) => floats.iter().zip(r).map(|(a, b)| (a - b).abs()).fold(0f32, f32::max),
             };
             ensure!(floats.iter().all(|v| v.is_finite()) && error < 2e-5, "attention mismatch GPU{gpu}: {error}");
-            println!("{}", serde_json::json!({"gpu":gpu,"tokens":tokens,"n":n,"heads":heads,"tiled":tiled,"ms":ms,"max_abs_error":error,"pass":true}));
+            if variant == "tiled256" {
+                ensure!(floats.iter().zip(tiled_reference.as_ref().unwrap()).all(|(a, b)| a.to_bits() == b.to_bits()), "wide/narrow slab bit mismatch GPU{gpu}");
+            } else if variant == "tiled64" { tiled_reference = Some(floats.to_vec()); }
+            println!("{}", serde_json::json!({"gpu":gpu,"tokens":tokens,"n":n,"heads":heads,"tiled":tiled,"variant":variant,"ms":ms,"max_abs_error":error,"pass":true}));
         }
     }
     Ok(())
