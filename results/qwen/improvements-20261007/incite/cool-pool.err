@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4 + MTP, 4541.9 MiB allocated
+GPU1: rank 1 of 4 + MTP, 4541.9 MiB allocated
+[clocks] 129 samples card0 (02:00.0) sclk/mclk: 850/1370 x82 450/1370 x12 300/150 x35  max 72C card1 (06:00.0) sclk/mclk: 850/1370 x66 650/1370 x1 450/1370 x8 300/150 x53 450/150 x1  max 70C  log=results/clocks/cool-pool.txt

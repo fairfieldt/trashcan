@@ -2,6 +2,22 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-07: Qwen27B TP4 prefill experiments and mixed-prompt coverage
+
+`results/qwen/improvements-20261007/`: bounded tiled attention supports GQA ratio six. Paired scalar/tiled
+prefill at 512/2048/4096/8192 tokens: 150.46/153.72, 139.21/143.90, 124.86/135.59, 106.93/130.61 tok/s.
+The 8K pair held all four GPUs at 850/1370 throughout prefill; all generated IDs match. Summation order changes
+and the eight prefill candidate scores differ by up to 0.00149. KV-only MTP cache extension cuts the verification
+head segment about 9%, without a demonstrated material whole-generation gain. Worker pools, CPU pinning,
+prefetch/two-row kernels and compact scales did not improve application throughput and were not retained.
+
+Benchmark JSONL now covers mixed prompts, tools, thinking and seeded sampling, repeats with resident weights,
+records token IDs and exact clock windows, and reports CPU settings from both Macs. Profile tallies reset per prefill.
+Plain corpus completed; MTP completed seven cases with 31-89% acceptance before invite's second GPU timed out,
+reset and lost all Thunderbolt links at the sustained case. Invite became unreachable over LAN/Tailscale;
+root cause and sustained MTP/server validation remain unresolved. Both new GPU paths are opt-in until recovery
+and investigation. Full data, source hashes, correctness checks and the saved kernel trace are in that report.
+
 ## 2026-10-07: tensor-parallel decode and prefill in one build; `qwen-tp-node` waits through idle time
 
 `results/qwen/tp-merged-20261006/`: the event-gated decode and the two-queue micro-batch prefill together. Qwen3.8-27B

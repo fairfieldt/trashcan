@@ -6,7 +6,7 @@ use serde_json::{json, Value};
 use std::{
     io::{self, Write},
     path::Path,
-    time::Instant,
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 /// All local AMD GPUs unless a CPU stage or an explicit list is requested.
@@ -197,25 +197,39 @@ fn check_prompt(t: &Tokenizer, tokens: usize) -> Result<Vec<u32>> {
 
 pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&mut Spec>) -> Result<Value> {
     let ids = check_prompt(t, pp)?;
+    bench_ids(e, t, &ids, tg, &mut Sampler::new(0., 1, 1., 1)?, &[], spec)
+}
+
+fn bench_ids(e: &mut Chain, t: &Tokenizer, ids: &[u32], tg: usize, sampler: &mut Sampler, stop: &[u32], spec: Option<&mut Spec>) -> Result<Value> {
+    ensure!(!ids.is_empty() && ids.len() + tg <= e.context, "prompt and generation exceed context");
+    let pp = ids.len();
+    // Each case is cold with respect to recurrent state and cache positions; weights stay resident.
+    e.pos = 0;
+    if let Some(super::pipeline::Stage::Tp(group)) = e.local.stages.first_mut() { group.reset_profile_tally(); }
     let tp_seconds = |e: &Chain| match e.local.stages.first() {
         Some(super::pipeline::Stage::Tp(t)) => Some(t.seconds),
         _ => None,
     };
+    let wall = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
+    let pp_start = wall();
     let (start, tp_before) = (Instant::now(), tp_seconds(e));
-    let top = e.prefill(&ids)?;
+    let top = e.prefill(ids)?;
     let pp_s = start.elapsed().as_secs_f64();
+    let pp_end = wall();
     // Milliseconds of the whole prefill in each phase of the tensor-parallel loop.
     let pp_tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, 1.));
     let profile = match e.local.stages.first() {
         Some(super::pipeline::Stage::Tp(t)) if std::env::var_os("TRASHCAN_TP_PROFILE").is_some() => Some(t.profile()),
         _ => None,
     };
+    let tg_start = wall();
     let (start, tp_before) = (Instant::now(), tp_seconds(e));
-    let mut sampler = Sampler::new(0., 1, 1., 1)?;
     let speculative = spec.is_some();
     let mut spec = spec;
-    let out = generate(e, top[0].1, tg, &mut sampler, &[], spec.as_deref_mut(), |_| Ok(()))?;
+    let pending = sampler.sample(&top);
+    let out = generate(e, pending, tg, sampler, stop, spec.as_deref_mut(), |_| Ok(()))?;
     let tg_s = start.elapsed().as_secs_f64();
+    let tg_end = wall();
     // Milliseconds per generated token in each phase of the tensor-parallel loop.
     let tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, out.len().max(1) as f64));
     let mib: Vec<f64> = e
@@ -228,10 +242,45 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
             _ => Vec::new(),
         })
         .collect();
-    Ok(json!({"pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
+    let peer_host = match e.local.stages.first() {
+        Some(super::pipeline::Stage::Tp(group)) => group.peer_host.clone(),
+        _ => None,
+    };
+    Ok(json!({"pp_window_unix": [pp_start, pp_end], "tg_window_unix": [tg_start, tg_end],
+        "host": super::tp::host_settings(), "peer_host":peer_host,
+        "experimental": {"tiled_attention":std::env::var("TRASHCAN_QWEN_ATTN").as_deref()==Ok("tiled"),"mtp_kv_only":std::env::var("TRASHCAN_TP_KV_ONLY").as_deref()==Ok("1")}, "pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
         "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
-        "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"text":t.decode(&out, false)}))
+        "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"token_ids":out,"text":t.decode(&out, false)}))
+}
+
+/// Stream one result per chat case and repetition. The first repetition can be discarded as warm-up;
+/// output ids permit exact greedy comparisons while sampled runs retain their seed and settings.
+pub fn bench_corpus(e: &mut Chain, t: &Tokenizer, path: &Path, tg: usize, reps: usize, mut spec: Option<&mut Spec>) -> Result<()> {
+    ensure!(reps > 0, "repetitions must be positive");
+    let data = std::fs::read_to_string(path)?;
+    let stop = Specials::new(t).stop;
+    for line in data.lines().filter(|l| !l.trim().is_empty()) {
+        let case: Value = serde_json::from_str(line)?;
+        let messages: Vec<Value> = serde_json::from_value(case["messages"].clone())?;
+        let thinking = case["thinking"].as_bool().unwrap_or(false);
+        let tools: Vec<Value> = serde_json::from_value(case.get("tools").cloned().unwrap_or_else(|| json!([])))?;
+        let ids = t.encode(&t.render_with_tools(&messages, thinking, &tools)?, true, true);
+        let temperature = case["temperature"].as_f64().unwrap_or(0.) as f32;
+        let top_k = case["top_k"].as_u64().unwrap_or(if temperature == 0. { 1 } else { 20 }) as usize;
+        let top_p = case["top_p"].as_f64().unwrap_or(0.8) as f32;
+        let seed = case["seed"].as_u64().unwrap_or(1);
+        let tokens = case["max_tokens"].as_u64().unwrap_or(tg as u64) as usize;
+        for rep in 0..reps {
+            if let Some(s) = spec.as_deref_mut() { s.stats = Default::default(); }
+            let mut result = bench_ids(e, t, &ids, tokens, &mut Sampler::new(temperature, top_k, top_p, seed)?, &stop, spec.as_deref_mut())?;
+            result["case"] = case.clone();
+            result["rep"] = json!(rep);
+            println!("{result}");
+            io::stdout().flush()?;
+        }
+    }
+    Ok(())
 }
 
 /// Run a prompt, dump the last token's activations in the reference format and decode greedily.

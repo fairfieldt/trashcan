@@ -326,6 +326,7 @@ pub enum Output {
 struct Key {
     n: usize,
     parts: u32,
+    keys: usize,
     dump: bool,
     verify: bool,
     slot: usize,
@@ -336,7 +337,7 @@ struct Key {
 
 impl Key {
     fn whole(n: usize, parts: u32, dump: bool, verify: bool) -> Self {
-        Key { n, parts, dump, verify, slot: 0, row: 0, head: true, gated: false }
+        Key { n, parts, keys: 0, dump, verify, slot: 0, row: 0, head: true, gated: false }
     }
 }
 
@@ -423,6 +424,9 @@ pub struct GpuStage {
     vb: Buffer,
     rq: Buffer,
     scratch: Buffer,
+    /// Bounded 64-query tiled prefill scores and denominators, separate for each TP queue.
+    prefill_scores: Option<Buffer>,
+
     gate: Buffer,
     up: Buffer,
     act: Buffer,
@@ -485,6 +489,10 @@ fn partitions(pos: usize, n: usize) -> u32 {
         257..=1024 => 32,
         _ => 64,
     }
+}
+
+fn prefill_key_limit(context: usize, pos: usize, n: usize) -> usize {
+    (pos + n).max(64).next_power_of_two().min(context.next_multiple_of(64))
 }
 
 fn upload_q4(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, name: &str) -> Result<Buffer> {
@@ -554,6 +562,8 @@ struct Rec<'a> {
     out: u64,
     /// Event-gated tensor-parallel graph (`gated`).
     gated: bool,
+    /// Upper bound of visible keys in this cached tiled-attention graph.
+    keys: usize,
     /// The normed rows the mixers and FFNs project: `h` (this micro-batch's half of it).
     h_in: u64,
     /// Params slot, and first row in the batch buffers (`input`, `x`, the MTP embeddings, the partial and the
@@ -603,6 +613,7 @@ impl<'a> Rec<'a> {
             },
             out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address) + (row * s.c.d * 4) as u64,
             gated,
+            keys: s.context.next_multiple_of(64),
             h_in: s.h.address + h_half as u64,
             slot,
             row,
@@ -840,13 +851,22 @@ impl<'a> Rec<'a> {
 
     /// Gated attention from `h` into `y`, caching K and V at the batch positions.
     fn attention(&mut self, a: &Attn, parts: u32, il: usize) -> Result<()> {
+        self.attention_inner(a, parts, il, false)
+    }
+
+    /// Target forwards extend the MTP cache but consume no MTP attention output.
+    fn attention_inner(&mut self, a: &Attn, parts: u32, il: usize, kv_only: bool) -> Result<()> {
+        let kv_only = kv_only && !self.dump;
         let (s, c) = (self.s, &self.s.c);
         let (d, hd, kvd) = (c.d, c.head_dim, c.kv_heads * c.head_dim);
         let qd = c.heads * hd;
         let h = self.h_in;
         let (big, kb, vb, rq, o, scratch) = (self.sc(&s.big), self.sc(&s.kb), self.sc(&s.vb), self.sc(&s.rq), self.sc(&s.o), self.sc(&s.scratch));
         // Tensor-parallel ranks issue the small K and V projections first (see `delta`).
-        if s.tp.is_none() {
+        if kv_only {
+            self.matrix(&a.k, h, kb, d, kvd, true)?;
+            self.matrix(&a.v, h, vb, d, kvd, false)?;
+        } else if s.tp.is_none() {
             self.matrix(&a.q, h, big, d, 2 * qd, true)?;
             self.matrix(&a.k, h, kb, d, kvd, true)?;
             self.matrix(&a.v, h, vb, d, kvd, false)?;
@@ -861,6 +881,7 @@ impl<'a> Rec<'a> {
             (kb, Some(&a.k_norm), 0, Some(&a.kc), c.kv_heads, hd, kvd, 1., true),
             (vb, None, 0, Some(&a.vc), c.kv_heads, hd, kvd, 1f32, false),
         ] {
+            if kv_only && cache.is_none() { continue; }
             let mut u = [0; 16];
             u[1] = if norm.is_some() { c.rot as u32 } else { 0 };
             u[2] = width as u32;
@@ -890,13 +911,29 @@ impl<'a> Rec<'a> {
                 self.n as u32,
             );
         }
+        if kv_only { return Ok(()); }
         self.capture(format!("Qcur-{il}"), &s.rq, qd)?;
         let mut u = [0; 16];
         u[4] = c.heads as u32;
         u[5] = c.kv_heads as u32;
         u[6] = hd as u32;
         u[7] = s.context as u32;
-        if parts == 0 {
+        if parts == 0 && s.prefill_scores.is_some() && self.n >= 64 {
+            let score = self.sc(s.prefill_scores.as_ref().unwrap());
+            let stride = s.context.next_multiple_of(64);
+            u[0] = stride as u32;
+            u[1] = (c.heads / c.kv_heads) as u32;
+            let tq = 1usize << (64 / (c.heads / c.kv_heads)).ilog2();
+            for first in (0..self.n).step_by(64) {
+                u[13] = first as u32;
+                let nb = (self.n - first).min(64);
+                let groups = c.kv_heads * nb.div_ceil(tq);
+                let p = self.push([rq, a.kc.address, a.vc.address, o, score, score + (64 * c.heads * stride * 4) as u64], u);
+                s.gpu.dispatch(self.cmd, "qwen_attn_scores", p, self.keys.div_ceil(64) as u32, groups as u32);
+                s.gpu.dispatch(self.cmd, "qwen_attn_softmax", p, c.heads as u32, nb as u32);
+                s.gpu.dispatch(self.cmd, "qwen_attn_values", p, (hd / 64) as u32, groups as u32);
+            }
+        } else if parts == 0 {
             s.gpu.dispatch(
                 self.cmd,
                 "attention",
@@ -1227,6 +1264,10 @@ impl GpuStage {
             rq: work(qd)?,
             // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`).
             scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8 * halves, false, false, None)?,
+            // Opt in while the sustained distributed MTP hang is under investigation.
+            prefill_scores: if max_batch >= 64 && std::env::var("TRASHCAN_QWEN_ATTN").as_deref() == Ok("tiled") {
+                Some(gpu.buffer(c.heads * 64 * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)
+            } else { None },
             gate: work(c.ff)?,
             up: work(c.ff)?,
             act: work(c.ff)?,
@@ -1287,6 +1328,7 @@ impl GpuStage {
         let (n, parts, dump, verify) = (k.n, k.parts, k.dump, k.verify);
         let d = self.c.d;
         let mut r = Rec::new(self, n, dump)?;
+        if k.keys > 0 { r.keys = k.keys; }
         r.copy(&self.input, 0, &self.x, 0, n * d * 4);
         let mut pending = false;
         for l in &self.layers {
@@ -1345,6 +1387,7 @@ impl GpuStage {
         let (hd, tp) = (self.head.as_ref().context("a tensor-parallel rank needs its head rows")?, self.tp.as_ref().unwrap());
         let host = hostnorm(k.gated, dump);
         let mut r = Rec::at(self, n, dump, k.slot, k.row, k.gated)?;
+        if k.keys > 0 { r.keys = k.keys; }
         let (rows, x, h) = (r.rows(), r.x(), r.sc(&self.h));
         let total = (if vram_io() { self.y.address } else { tp.total.address }) + rows as u64;
         if host {
@@ -1394,7 +1437,7 @@ impl GpuStage {
             r.mtp_inputs(m, m.hin.address);
             r.matrix(&m.eh, m.cat.address, x, 2 * d, d, false)?;
             r.add_norm(x, None, Some(h), Some(&m.attn_norm), 0);
-            r.attention(&m.attn, parts, self.c.layers)?;
+            r.attention_inner(&m.attn, parts, self.c.layers, std::env::var("TRASHCAN_TP_KV_ONLY").as_deref() == Ok("1"))?;
             r.copy(&m.hin, n * d * 4, &m.hin, 0, d * 4);
         }
         r.finish()
@@ -1465,7 +1508,7 @@ impl GpuStage {
         let mut keys = Vec::new();
         for (slot, &(row, rows)) in micro.iter().enumerate() {
             self.params_host.write_at(slot * PARAMS_STRIDE, bytemuck::cast_slice(&[(pos + row) as u32, rows as u32, 0, 0]))?;
-            let key = Key { n: rows, parts: tp_partitions(pos + row, rows), dump, verify, slot, row, head: slot + 1 == micro.len(), gated };
+            let key = Key { n: rows, parts: tp_partitions(pos + row, rows), keys: self.prefill_keys(pos + row, rows), dump, verify, slot, row, head: slot + 1 == micro.len(), gated };
             self.tick += 1;
             if let Some(e) = self.graphs.get_mut(&key) {
                 e.1 = self.tick;
@@ -1499,17 +1542,28 @@ impl GpuStage {
         Ok(tp.start(cmds, segments * micro.len(), rows, micro.len(), dual, gated))
     }
 
-    /// Record the graphs of a tensor-parallel prefill of `n` tokens as the micro-batches `micro` ahead of the first
-    /// prompt (they do not depend on the position).
+    fn prefill_keys(&self, pos: usize, n: usize) -> usize {
+        if self.prefill_scores.is_some() && n >= 64 {
+            prefill_key_limit(self.context, pos, n)
+        } else { 0 }
+    }
+
+    /// Record full-chunk graphs at load, including the visible-key buckets of tiled attention.
     pub fn tp_warm(&mut self, n: usize, micro: &[(usize, usize)]) -> Result<()> {
         ensure!(n > 8, "only prefill batches are recorded ahead");
         for (slot, &(row, rows)) in micro.iter().enumerate() {
             let parts = tp_partitions(row, rows);
-            let key = Key { n: rows, parts, dump: false, verify: false, slot, row, head: slot + 1 == micro.len(), gated: false };
-            if !self.graphs.contains_key(&key) {
-                let graph = self.record(key)?;
-                self.tick += 1;
-                self.graphs.insert(key, (graph, self.tick));
+            let mut keys = self.prefill_keys(row, rows);
+            loop {
+                let key = Key { n: rows, parts, keys, dump: false, verify: false, slot, row, head: slot + 1 == micro.len(), gated: false };
+                if !self.graphs.contains_key(&key) {
+                    if self.graphs.len() >= GRAPH_CACHE_CAPACITY { break; }
+                    let graph = self.record(key)?;
+                    self.tick += 1;
+                    self.graphs.insert(key, (graph, self.tick));
+                }
+                if keys == 0 || keys >= self.context.next_multiple_of(64) { break; }
+                keys = (keys * 2).min(self.context.next_multiple_of(64));
             }
         }
         Ok(())
@@ -1834,7 +1888,8 @@ impl GpuStage {
         self.input.write(bytemuck::cast_slice(x))?;
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = Key::whole(n, partitions(pos, n), dump.is_some(), verify);
+        let mut key = Key::whole(n, partitions(pos, n), dump.is_some(), verify);
+        key.keys = self.prefill_keys(pos, n);
         self.tick += 1;
         if let Some(e) = self.graphs.get_mut(&key) {
             e.1 = self.tick;
@@ -2004,5 +2059,19 @@ impl Drop for GpuStage {
                 self.gpu.dev.destroy_event(tp.gate.1, None);
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod prefill_key_tests {
+    use super::prefill_key_limit;
+    #[test]
+    fn visible_key_buckets_cover_microbatch_offsets_and_non_power_of_two_contexts() {
+        for (context, pos, n, expected) in [(8192, 0, 256, 256), (8192, 256, 256, 512),
+            (8192, 512, 256, 1024), (8192, 7936, 256, 8192), (12288, 8192, 256, 12288)] {
+            let limit = prefill_key_limit(context, pos, n);
+            assert_eq!(limit, expected);
+            assert!(limit >= pos + n && limit <= context);
+        }
     }
 }

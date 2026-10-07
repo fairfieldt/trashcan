@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4, 4341.7 MiB allocated
+GPU1: rank 1 of 4, 4341.7 MiB allocated
+[clocks] 132 samples card0 (02:00.0) sclk/mclk: 850/1370 x103 450/1370 x1 300/150 x28  max 80C card1 (06:00.0) sclk/mclk: 850/1370 x81 300/1370 x2 450/1370 x6 300/150 x42 450/150 x1  max 77C  log=results/clocks/ab-kv-pp2048-1.txt

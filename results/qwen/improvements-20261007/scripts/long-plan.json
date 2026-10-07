@@ -1,0 +1,58 @@
+[
+  {
+    "name": "long-512-old",
+    "args": "--pp 512 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=0",
+    "minutes": 4
+  },
+  {
+    "name": "long-512-tiled",
+    "args": "--pp 512 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=1 TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 4
+  },
+  {
+    "name": "long-2048-old",
+    "args": "--pp 2048 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=0",
+    "minutes": 4
+  },
+  {
+    "name": "long-2048-tiled",
+    "args": "--pp 2048 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=1 TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 4
+  },
+  {
+    "name": "long-4096-old",
+    "args": "--pp 4096 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=0",
+    "minutes": 4
+  },
+  {
+    "name": "long-4096-tiled",
+    "args": "--pp 4096 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=1 TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 4
+  },
+  {
+    "name": "long-8192-old",
+    "args": "--pp 8192 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=0",
+    "minutes": 4
+  },
+  {
+    "name": "long-8192-tiled",
+    "args": "--pp 8192 --tg 32 --context 12288 --reps 1",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=1 TRASHCAN_QWEN_ATTN=tiled",
+    "minutes": 4
+  },
+  {
+    "name": "check-tiled",
+    "command": "qwen-check",
+    "args": "--tokens 4300 --steps 128 --context 12288",
+    "env": "TRASHCAN_TP_WORKERS=0 TRASHCAN_TP_KV_ONLY=1 TRASHCAN_QWEN_ATTN=tiled",
+    "mtp": true,
+    "minutes": 4
+  }
+]

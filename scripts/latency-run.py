@@ -12,6 +12,7 @@ with open("/dev/cpu_dma_latency", "wb", buffering=0) as request:
     request.write(struct.pack("=i", 0))
     # Only the open requires privilege. Run the benchmark as the invoking user.
     command_env = os.environ.copy()
+    command_env["TRASHCAN_CPU_LATENCY_US"] = "0"
     if os.geteuid() == 0 and "SUDO_UID" in os.environ:
         uid, gid = int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"])
         user = pwd.getpwuid(uid)

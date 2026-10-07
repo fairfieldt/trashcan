@@ -1,0 +1,4 @@
+{"gpu":0,"heads":6,"max_abs_error":0.0,"ms":20.070671400000002,"n":64,"pass":true,"tiled":false,"tokens":4096}
+{"gpu":0,"heads":6,"max_abs_error":1.4156103134155273e-7,"ms":1.7837608000000003,"n":64,"pass":true,"tiled":true,"tokens":4096}
+{"gpu":1,"heads":6,"max_abs_error":0.0,"ms":20.089731,"n":64,"pass":true,"tiled":false,"tokens":4096}
+{"gpu":1,"heads":6,"max_abs_error":1.4156103134155273e-7,"ms":1.7791815999999998,"n":64,"pass":true,"tiled":true,"tokens":4096}

@@ -1,0 +1,96 @@
+diff --git a/engine/src/qwen/mod.rs b/engine/src/qwen/mod.rs
+index 5ff18e9..0984499 100644
+--- a/engine/src/qwen/mod.rs
++++ b/engine/src/qwen/mod.rs
+@@ -10,6 +10,7 @@ pub mod gpu;
+ pub mod native;
+ pub mod net;
+ pub mod pipeline;
++mod reduce;
+ pub mod spec;
+ pub mod tp;
+ 
+diff --git a/engine/src/qwen/tp.rs b/engine/src/qwen/tp.rs
+index 3278f0f..377b8a6 100644
+--- a/engine/src/qwen/tp.rs
++++ b/engine/src/qwen/tp.rs
+@@ -18,6 +18,7 @@ use super::{
+     embed,
+     gpu::{micro_batches, GpuStage, Split, MAX_MICRO, TOP_K},
+     pipeline::Draft,
++    reduce::Workers,
+     vector, Config,
+ };
+ use crate::{
+@@ -52,6 +53,8 @@ pub struct TpGroup {
+     remote: Vec<f32>,
+     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
+     threads: usize,
++    workers: Option<Workers>,
++    persistent: bool,
+     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
+     /// other machine, since the group was created.
+     pub seconds: Phases,
+@@ -340,6 +343,8 @@ impl TpGroup {
+             sum: vec![0.; len],
+             remote: vec![0.; len],
+             threads,
++            workers: Some(Workers::new(threads)?),
++            persistent: std::env::var("TRASHCAN_TP_WORKERS").as_deref() != Ok("0"),
+             seconds: Phases::default(),
+             first,
+             profile,
+@@ -577,6 +582,11 @@ impl TpGroup {
+     fn allreduce(&mut self, row: usize, n: usize, seg: usize) -> Result<()> {
+         let len = n * self.c.d;
+         let threads = if len >= PARALLEL_MIN { self.threads } else { 1 };
++        if self.workers.as_ref().unwrap().threads() != self.threads {
++            drop(self.workers.take());
++            self.workers = Some(Workers::new(self.threads)?);
++        }
++        let persistent = self.persistent;
+         let start = Instant::now();
+         let sum = &mut self.sum[..len];
+         // Fixed arrays rather than vectors: decode runs 128 all-reduces per token.
+@@ -585,6 +595,11 @@ impl TpGroup {
+             *p = s.tp_part(row, n);
+         }
+         let parts = &parts[..self.shards.len()];
++        if persistent {
++            let mut sources = [std::ptr::null(); LOCAL];
++            for (dst, src) in sources.iter_mut().zip(parts) { *dst = src.as_ptr(); }
++            unsafe { self.workers.as_mut().unwrap().sum(sum, &sources[..parts.len()], &[], threads > 1); }
++        } else {
+         parallel(sum, threads, |at, out| {
+             out.copy_from_slice(&parts[0][at..at + out.len()]);
+             for p in &parts[1..] {
+@@ -593,6 +608,7 @@ impl TpGroup {
+                 }
+             }
+         });
++        }
+         let added = Instant::now();
+         let mut exchanged = added;
+         let mut remote = None;
+@@ -618,6 +634,13 @@ impl TpGroup {
+                 *t = Ptr(s.tp_total(row, n));
+             }
+             let totals = &totals[..self.shards.len()];
++            if persistent {
++                let mut sources = [sum.as_ptr(), std::ptr::null()];
++                let count = if let Some(r) = remote { sources[1] = r.as_ptr(); 2 } else { 1 };
++                let mut targets = [std::ptr::null_mut(); LOCAL];
++                for (dst, src) in targets.iter_mut().zip(totals) { *dst = src.0; }
++                unsafe { self.workers.as_mut().unwrap().sum(sum, &sources[..count], &targets[..totals.len()], threads > 1); }
++            } else {
+             parallel(sum, threads, |at, out| {
+                 if let Some(r) = remote {
+                     for (a, b) in out.iter_mut().zip(&r[at..]) {
+@@ -628,6 +651,7 @@ impl TpGroup {
+                     unsafe { std::ptr::copy_nonoverlapping(out.as_ptr(), t.0.add(at), out.len()) };
+                 }
+             });
++            }
+         }
+         let (summed, totalled) = ((added - start).as_secs_f64(), exchanged.elapsed().as_secs_f64());
+         self.seconds.add += summed + totalled;

@@ -1,0 +1,546 @@
+diff --git a/engine/build.rs b/engine/build.rs
+index cbd9510..385f70d 100644
+--- a/engine/build.rs
++++ b/engine/build.rs
+@@ -49,6 +49,11 @@ fn main() {
+         "qwen_q4c3",
+         "qwen_q4c4",
+         "qwen_topk",
++        "qwen_attn_scores",
++        "qwen_attn_softmax",
++        "qwen_attn_values",
++        "matvecq4p",
++        "qwen_q4c3r2",
+         // Qwen3.8-Flash-Next (qwen4exp)
+         "qwen4_hc_norm",
+         "qwen4_hc_mix",
+diff --git a/engine/shaders/qwen_q4cols_body.glsl b/engine/shaders/qwen_q4cols_body.glsl
+index 6160245..83c008d 100644
+--- a/engine/shaders/qwen_q4cols_body.glsl
++++ b/engine/shaders/qwen_q4cols_body.glsl
+@@ -8,7 +8,7 @@
+ layout(local_size_x=WAVES*64) in;
+ void main() {
+     uint lane=gl_SubgroupInvocationID,nb=batch(),t=gl_WorkGroupID.y*COLS;
+-    uint first=gl_WorkGroupID.x*16+gl_SubgroupID*ROWS,part=lane%4,blocks=p.k/32;
++    uint first=gl_WorkGroupID.x*(WAVES*ROWS)+gl_SubgroupID*ROWS,part=lane%4,blocks=p.k/32;
+     if(t>=nb)return;
+     float sums[COLS][ROWS];
+     uint base[COLS];
+diff --git a/engine/src/main.rs b/engine/src/main.rs
+index 5e17e7e..842ff3e 100644
+--- a/engine/src/main.rs
++++ b/engine/src/main.rs
+@@ -224,6 +224,11 @@ enum Cmd {
+         pp: usize,
+         #[arg(long, default_value_t = 128)]
+         tg: usize,
++        /// JSONL chat cases; each line specifies name, messages and optional sampling settings.
++        #[arg(long)]
++        corpus: Option<PathBuf>,
++        #[arg(long, default_value_t = 1)]
++        reps: usize,
+     },
+     /// Time Q4_0 GEMM kernels at ROWSxK shapes (random weights) and check each against `gemm` bit for bit.
+     QwenGemmBench {
+@@ -243,6 +248,17 @@ enum Cmd {
+         #[arg(long, default_value_t = 500)]
+         warmup_ms: u64,
+     },
++    /// Compare Qwen tiled prefill attention against scalar attention on deterministic inputs.
++    QwenAttentionBench {
++        #[arg(long, default_value_t = 4096)]
++        tokens: usize,
++        #[arg(long, default_value_t = 256)]
++        n: usize,
++        #[arg(long, default_value_t = 6)]
++        heads: usize,
++        #[arg(long, default_value_t = 10)]
++        iterations: usize,
++    },
+     /// Time decode, verification batches, rollback and MTP drafts.
+     QwenSpecBench {
+         model: PathBuf,
+@@ -904,11 +920,21 @@ fn main() -> Result<()> {
+             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+             qwen::chat::chat(&mut chain, &t, prompt, system, thinking, max_tokens, &mut sampler, spec.as_mut())
+         }
+-        Cmd::QwenBench { model, run, pp, tg } => {
++        Cmd::QwenBench { model, run, pp, tg, corpus, reps } => {
+             let mut chain = run.chain(&model)?;
+             let mut spec = run.spec(&chain)?;
+             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+-            println!("{}", qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?);
++            if let Some(path) = corpus {
++                qwen::chat::bench_corpus(&mut chain, &t, &path, tg, reps, spec.as_mut())?;
++            } else {
++                anyhow::ensure!(reps > 0, "repetitions must be positive");
++                for rep in 0..reps {
++                    if let Some(s) = spec.as_mut() { s.stats = Default::default(); }
++                    let mut row = qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?;
++                    row["rep"] = serde_json::json!(rep);
++                    println!("{row}");
++                }
++            }
+             Ok(())
+         }
+         Cmd::QwenGemmBench { shapes, n, kernels, iterations, gpu, warmup_ms } => {
+@@ -921,6 +947,7 @@ fn main() -> Result<()> {
+                 .collect::<Result<Vec<(usize, usize)>>>()?;
+             micro::gemm(&shapes, n, &kernels, iterations, gpu, warmup_ms)
+         }
++        Cmd::QwenAttentionBench { tokens, n, heads, iterations } => micro::qwen_attention(tokens, n, heads, iterations),
+         Cmd::QwenSpecBench { model, run, tokens, reps } => {
+             let mut chain = run.chain(&model)?;
+             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
+diff --git a/engine/src/micro.rs b/engine/src/micro.rs
+index c802bd7..db82345 100644
+--- a/engine/src/micro.rs
++++ b/engine/src/micro.rs
+@@ -379,6 +379,8 @@ pub fn bench(
+     ensure!(
+         [
+             "matvecq4",
++            "matvecq4p",
++            "qwen_q4c3r2",
+             "matvecq4narrow",
+             "multivec",
+             "multivec2",
+@@ -396,7 +398,7 @@ pub fn bench(
+         "unsupported kernel"
+     );
+     ensure!(
+-        batch == 1 || !matches!(shader, "matvecq4" | "matvecq4narrow" | "headvec"),
++        batch == 1 || !matches!(shader, "matvecq4" | "matvecq4p" | "matvecq4narrow" | "headvec"),
+         "single-column kernel needs batch 1"
+     );
+     let g = Gguf::open(path)?;
+@@ -438,11 +440,14 @@ pub fn bench(
+     } else {
+         "gemm"
+     };
+-    let group_rows = if shader == "gemm" {
++    let group_rows = if shader == "qwen_q4c3r2" {
++        8
++    } else if shader == "gemm" {
+         64
+     } else if matches!(
+         shader,
+         "matvecq4"
++            | "matvecq4p"
+             | "matvecq4narrow"
+             | "headvec"
+             | "multivec4"
+@@ -565,7 +570,7 @@ pub fn bench(
+         // Keep weights, inputs and both outputs alive until the Device is dropped;
+         // its cached weight descriptors must never see a recycled VkBuffer handle.
+         let reference = d.buffer(n * batch * 4, false, false, None)?;
+-        let compare_bits = (2..=8).contains(&batch) && shader != "gemm";
++        let compare_bits = ((2..=8).contains(&batch) && shader != "gemm") || shader == "matvecq4p";
+         if shader.starts_with("qwen_q4c") {
+             // Each column must match the one-column decode kernel for this shape bit for bit.
+             let single = crate::vulkan::q4_decode_shader(n, k);
+@@ -579,6 +584,14 @@ pub fn bench(
+             d.finish(cmd)?;
+             d.run(cmd)?;
+             ensure!(result == reference.download()?, "matrix output bits differ from {single} per column: GPU {gpu}, {tensor}, batch {batch}, {shader}");
++        } else if shader == "matvecq4p" {
++            let mut rp = p;
++            rp.ptr[2] = reference.address;
++            let cmd = d.begin()?;
++            d.dispatch_matrix(cmd, "matvecq4", rp, n.div_ceil(16) as u32, 1, &w)?;
++            d.finish(cmd)?;
++            d.run(cmd)?;
++            ensure!(result == reference.download()?, "prefetched output bits differ from matvecq4");
+         } else if compare_bits {
+             let mut rp = p;
+             rp.ptr[2] = reference.address;
+@@ -854,3 +867,57 @@ pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations:
+     drop(keep);
+     Ok(())
+ }
++
++/// Deterministic attention checks for Qwen's GQA ratio six, padded tiles, tails, and later positions.
++pub fn qwen_attention(tokens: usize, n: usize, heads: usize, iterations: usize) -> Result<()> {
++    ensure!(tokens >= n && n > 0 && heads > 0 && heads <= 64 && iterations > 0, "invalid attention shape");
++    let inst = Rc::new(Instance::new()?);
++    for (gpu, pd) in inst.amd_gpus()?.into_iter().enumerate() {
++        let d = Device::new(inst.clone(), pd)?;
++        let mut state = 1234567u32;
++        let mut sample = || { state ^= state << 13; state ^= state >> 17; state ^= state << 5; (state as f64 / u32::MAX as f64 * 2. - 1.) as f32 };
++        let queries: Vec<_> = (0..n * heads * 256).map(|_| sample() / 16.).collect();
++        let keys: Vec<_> = (0..tokens * 256).map(|_| half::f16::from_f32(sample()).to_bits()).collect();
++        let values: Vec<_> = (0..tokens * 256).map(|_| half::f16::from_f32(sample()).to_bits()).collect();
++        let q = d.upload(bytemuck::cast_slice(&queries))?;
++        let k = d.upload(bytemuck::cast_slice(&keys))?;
++        let v = d.upload(bytemuck::cast_slice(&values))?;
++        let params = d.upload(bytemuck::cast_slice(&[(tokens - n) as u32, n as u32, 0u32, 0]))?;
++        let out = d.buffer(n * heads * 256 * 4, false, false, None)?;
++        let stride = tokens.next_multiple_of(64);
++        let scratch = d.buffer(64 * heads * (stride + 1) * 4, false, false, None)?;
++        let mut p = Push::default();
++        p.ptr = [q.address, k.address, v.address, out.address, scratch.address, scratch.address + (64 * heads * stride * 4) as u64, params.address, 0];
++        p.u[0] = stride as u32; p.u[1] = heads as u32; p.u[4] = heads as u32;
++        p.u[5] = 1; p.u[6] = 256; p.u[7] = tokens as u32; p.u[15] = n as u32;
++        let mut reference = None;
++        for tiled in [false, true] {
++            let cmd = d.begin()?;
++            for _ in 0..iterations {
++                if tiled {
++                    let tq = 1usize << (64 / heads).ilog2();
++                    for first in (0..n).step_by(64) {
++                        p.u[13] = first as u32;
++                        let nb = (n - first).min(64);
++                        d.dispatch(cmd, "qwen_attn_scores", p, stride.div_ceil(64) as u32, nb.div_ceil(tq) as u32);
++                        d.dispatch(cmd, "qwen_attn_softmax", p, heads as u32, nb as u32);
++                        d.dispatch(cmd, "qwen_attn_values", p, 4, nb.div_ceil(tq) as u32);
++                    }
++                } else { d.dispatch(cmd, "attention", p, heads as u32, n as u32); }
++            }
++            d.finish(cmd)?;
++            d.run_reusable(cmd)?;
++            let start = Instant::now(); d.run(cmd)?;
++            let ms = start.elapsed().as_secs_f64() * 1e3 / iterations as f64;
++            let bytes = out.download()?;
++            let floats: &[f32] = bytemuck::cast_slice(&bytes);
++            let error = match &reference {
++                None => { reference = Some(floats.to_vec()); 0f32 },
++                Some(r) => floats.iter().zip(r).map(|(a, b)| (a - b).abs()).fold(0f32, f32::max),
++            };
++            ensure!(floats.iter().all(|v| v.is_finite()) && error < 2e-5, "attention mismatch GPU{gpu}: {error}");
++            println!("{}", serde_json::json!({"gpu":gpu,"tokens":tokens,"n":n,"heads":heads,"tiled":tiled,"ms":ms,"max_abs_error":error,"pass":true}));
++        }
++    }
++    Ok(())
++}
+diff --git a/engine/src/qwen/chat.rs b/engine/src/qwen/chat.rs
+index 4b8ac46..e3edf1b 100644
+--- a/engine/src/qwen/chat.rs
++++ b/engine/src/qwen/chat.rs
+@@ -6,7 +6,7 @@ use serde_json::{json, Value};
+ use std::{
+     io::{self, Write},
+     path::Path,
+-    time::Instant,
++    time::{Instant, SystemTime, UNIX_EPOCH},
+ };
+ 
+ /// All local AMD GPUs unless a CPU stage or an explicit list is requested.
+@@ -197,25 +197,38 @@ fn check_prompt(t: &Tokenizer, tokens: usize) -> Result<Vec<u32>> {
+ 
+ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&mut Spec>) -> Result<Value> {
+     let ids = check_prompt(t, pp)?;
++    bench_ids(e, t, &ids, tg, &mut Sampler::new(0., 1, 1., 1)?, &[], spec)
++}
++
++fn bench_ids(e: &mut Chain, t: &Tokenizer, ids: &[u32], tg: usize, sampler: &mut Sampler, stop: &[u32], spec: Option<&mut Spec>) -> Result<Value> {
++    ensure!(!ids.is_empty() && ids.len() + tg <= e.context, "prompt and generation exceed context");
++    let pp = ids.len();
++    // Each case is cold with respect to recurrent state and cache positions; weights stay resident.
++    e.pos = 0;
+     let tp_seconds = |e: &Chain| match e.local.stages.first() {
+         Some(super::pipeline::Stage::Tp(t)) => Some(t.seconds),
+         _ => None,
+     };
++    let wall = || SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64();
++    let pp_start = wall();
+     let (start, tp_before) = (Instant::now(), tp_seconds(e));
+     let top = e.prefill(&ids)?;
+     let pp_s = start.elapsed().as_secs_f64();
++    let pp_end = wall();
+     // Milliseconds of the whole prefill in each phase of the tensor-parallel loop.
+     let pp_tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, 1.));
+     let profile = match e.local.stages.first() {
+         Some(super::pipeline::Stage::Tp(t)) if std::env::var_os("TRASHCAN_TP_PROFILE").is_some() => Some(t.profile()),
+         _ => None,
+     };
++    let tg_start = wall();
+     let (start, tp_before) = (Instant::now(), tp_seconds(e));
+-    let mut sampler = Sampler::new(0., 1, 1., 1)?;
+     let speculative = spec.is_some();
+     let mut spec = spec;
+-    let out = generate(e, top[0].1, tg, &mut sampler, &[], spec.as_deref_mut(), |_| Ok(()))?;
++    let pending = sampler.sample(&top);
++    let out = generate(e, pending, tg, sampler, stop, spec.as_deref_mut(), |_| Ok(()))?;
+     let tg_s = start.elapsed().as_secs_f64();
++    let tg_end = wall();
+     // Milliseconds per generated token in each phase of the tensor-parallel loop.
+     let tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, out.len().max(1) as f64));
+     let mib: Vec<f64> = e
+@@ -228,10 +241,41 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
+             _ => Vec::new(),
+         })
+         .collect();
+-    Ok(json!({"pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
++    let governor = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").ok().map(|s| s.trim().to_owned());
++    let affinity = std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("Cpus_allowed_list:").map(|x| x.trim().to_owned())));
++    Ok(json!({"pp_window_unix": [pp_start, pp_end], "tg_window_unix": [tg_start, tg_end],
++        "host": {"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok()}, "pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
+         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
+         "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
+-        "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"text":t.decode(&out, false)}))
++        "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"token_ids":out,"text":t.decode(&out, false)}))
++}
++
++/// Stream one result per chat case and repetition. The first repetition can be discarded as warm-up;
++/// output ids permit exact greedy comparisons while sampled runs retain their seed and settings.
++pub fn bench_corpus(e: &mut Chain, t: &Tokenizer, path: &Path, tg: usize, reps: usize, mut spec: Option<&mut Spec>) -> Result<()> {
++    ensure!(reps > 0, "repetitions must be positive");
++    let data = std::fs::read_to_string(path)?;
++    let stop = Specials::new(t).stop;
++    for line in data.lines().filter(|l| !l.trim().is_empty()) {
++        let case: Value = serde_json::from_str(line)?;
++        let messages: Vec<Value> = serde_json::from_value(case["messages"].clone())?;
++        let thinking = case["thinking"].as_bool().unwrap_or(false);
++        let ids = t.encode(&t.render(&messages, thinking)?, true, true);
++        let temperature = case["temperature"].as_f64().unwrap_or(0.) as f32;
++        let top_k = case["top_k"].as_u64().unwrap_or(if temperature == 0. { 1 } else { 20 }) as usize;
++        let top_p = case["top_p"].as_f64().unwrap_or(0.8) as f32;
++        let seed = case["seed"].as_u64().unwrap_or(1);
++        let tokens = case["max_tokens"].as_u64().unwrap_or(tg as u64) as usize;
++        for rep in 0..reps {
++            if let Some(s) = spec.as_deref_mut() { s.stats = Default::default(); }
++            let mut result = bench_ids(e, t, &ids, tokens, &mut Sampler::new(temperature, top_k, top_p, seed)?, &stop, spec.as_deref_mut())?;
++            result["case"] = case.clone();
++            result["rep"] = json!(rep);
++            println!("{result}");
++            io::stdout().flush()?;
++        }
++    }
++    Ok(())
+ }
+ 
+ /// Run a prompt, dump the last token's activations in the reference format and decode greedily.
+diff --git a/engine/src/qwen/gpu.rs b/engine/src/qwen/gpu.rs
+index 7946e67..6e01d01 100644
+--- a/engine/src/qwen/gpu.rs
++++ b/engine/src/qwen/gpu.rs
+@@ -423,6 +423,9 @@ pub struct GpuStage {
+     vb: Buffer,
+     rq: Buffer,
+     scratch: Buffer,
++    /// Bounded 64-query tiled prefill scores and denominators, separate for each TP queue.
++    prefill_scores: Option<Buffer>,
++
+     gate: Buffer,
+     up: Buffer,
+     act: Buffer,
+@@ -718,10 +721,11 @@ impl<'a> Rec<'a> {
+         // one-column decode bit for bit, as fast as multivec or slightly faster on Qwen shapes.
+         // Tensor-parallel ranks use matvecq4 at every shape: a matvecq4narrow dispatch (512-thread workgroups)
+         // only starts once the previous one has finished on the D700s, so independent projections cannot overlap.
+-        let decode = if self.s.tp.is_some() { "matvecq4" } else { q4_decode_shader(rows, k) };
++        let decode = if self.s.tp.is_some() { if std::env::var("TRASHCAN_QWEN_MV").as_deref() == Ok("prefetch") { "matvecq4p" } else { "matvecq4" } } else { q4_decode_shader(rows, k) };
+         let (shader, gx, gy) = match n {
+             1 => (decode, rows.div_ceil(16), 1),
+             2 => ("qwen_q4c2", rows.div_ceil(16), 1),
++            3 if std::env::var("TRASHCAN_QWEN_VERIFY").as_deref() == Ok("rows2") => ("qwen_q4c3r2", rows.div_ceil(8), 1),
+             3 => ("qwen_q4c3", rows.div_ceil(16), 1),
+             4 => ("qwen_q4c4", rows.div_ceil(16), 1),
+             5..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
+@@ -840,13 +844,22 @@ impl<'a> Rec<'a> {
+ 
+     /// Gated attention from `h` into `y`, caching K and V at the batch positions.
+     fn attention(&mut self, a: &Attn, parts: u32, il: usize) -> Result<()> {
++        self.attention_inner(a, parts, il, false)
++    }
++
++    /// Target forwards extend the MTP cache but consume no MTP attention output.
++    fn attention_inner(&mut self, a: &Attn, parts: u32, il: usize, kv_only: bool) -> Result<()> {
++        let kv_only = kv_only && !self.dump;
+         let (s, c) = (self.s, &self.s.c);
+         let (d, hd, kvd) = (c.d, c.head_dim, c.kv_heads * c.head_dim);
+         let qd = c.heads * hd;
+         let h = self.h_in;
+         let (big, kb, vb, rq, o, scratch) = (self.sc(&s.big), self.sc(&s.kb), self.sc(&s.vb), self.sc(&s.rq), self.sc(&s.o), self.sc(&s.scratch));
+         // Tensor-parallel ranks issue the small K and V projections first (see `delta`).
+-        if s.tp.is_none() {
++        if kv_only {
++            self.matrix(&a.k, h, kb, d, kvd, true)?;
++            self.matrix(&a.v, h, vb, d, kvd, false)?;
++        } else if s.tp.is_none() {
+             self.matrix(&a.q, h, big, d, 2 * qd, true)?;
+             self.matrix(&a.k, h, kb, d, kvd, true)?;
+             self.matrix(&a.v, h, vb, d, kvd, false)?;
+@@ -861,6 +874,7 @@ impl<'a> Rec<'a> {
+             (kb, Some(&a.k_norm), 0, Some(&a.kc), c.kv_heads, hd, kvd, 1., true),
+             (vb, None, 0, Some(&a.vc), c.kv_heads, hd, kvd, 1f32, false),
+         ] {
++            if kv_only && cache.is_none() { continue; }
+             let mut u = [0; 16];
+             u[1] = if norm.is_some() { c.rot as u32 } else { 0 };
+             u[2] = width as u32;
+@@ -890,13 +904,29 @@ impl<'a> Rec<'a> {
+                 self.n as u32,
+             );
+         }
++        if kv_only { return Ok(()); }
+         self.capture(format!("Qcur-{il}"), &s.rq, qd)?;
+         let mut u = [0; 16];
+         u[4] = c.heads as u32;
+         u[5] = c.kv_heads as u32;
+         u[6] = hd as u32;
+         u[7] = s.context as u32;
+-        if parts == 0 {
++        if parts == 0 && s.prefill_scores.is_some() && self.n >= 64 {
++            let score = self.sc(s.prefill_scores.as_ref().unwrap());
++            let stride = s.context.next_multiple_of(64);
++            u[0] = stride as u32;
++            u[1] = (c.heads / c.kv_heads) as u32;
++            let tq = 1usize << (64 / (c.heads / c.kv_heads)).ilog2();
++            for first in (0..self.n).step_by(64) {
++                u[13] = first as u32;
++                let nb = (self.n - first).min(64);
++                let groups = c.kv_heads * nb.div_ceil(tq);
++                let p = self.push([rq, a.kc.address, a.vc.address, o, score, score + (64 * c.heads * stride * 4) as u64], u);
++                s.gpu.dispatch(self.cmd, "qwen_attn_scores", p, stride.div_ceil(64) as u32, groups as u32);
++                s.gpu.dispatch(self.cmd, "qwen_attn_softmax", p, c.heads as u32, nb as u32);
++                s.gpu.dispatch(self.cmd, "qwen_attn_values", p, (hd / 64) as u32, groups as u32);
++            }
++        } else if parts == 0 {
+             s.gpu.dispatch(
+                 self.cmd,
+                 "attention",
+@@ -1227,6 +1257,9 @@ impl GpuStage {
+             rq: work(qd)?,
+             // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`).
+             scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8 * halves, false, false, None)?,
++            prefill_scores: if std::env::var("TRASHCAN_QWEN_ATTN").as_deref() == Ok("tiled") {
++                Some(gpu.buffer(c.heads * 64 * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)
++            } else { None },
+             gate: work(c.ff)?,
+             up: work(c.ff)?,
+             act: work(c.ff)?,
+@@ -1394,7 +1427,7 @@ impl GpuStage {
+             r.mtp_inputs(m, m.hin.address);
+             r.matrix(&m.eh, m.cat.address, x, 2 * d, d, false)?;
+             r.add_norm(x, None, Some(h), Some(&m.attn_norm), 0);
+-            r.attention(&m.attn, parts, self.c.layers)?;
++            r.attention_inner(&m.attn, parts, self.c.layers, std::env::var("TRASHCAN_TP_KV_ONLY").as_deref() != Ok("0"))?;
+             r.copy(&m.hin, n * d * 4, &m.hin, 0, d * 4);
+         }
+         r.finish()
+diff --git a/engine/src/qwen/mod.rs b/engine/src/qwen/mod.rs
+index 5ff18e9..0984499 100644
+--- a/engine/src/qwen/mod.rs
++++ b/engine/src/qwen/mod.rs
+@@ -10,6 +10,7 @@ pub mod gpu;
+ pub mod native;
+ pub mod net;
+ pub mod pipeline;
++mod reduce;
+ pub mod spec;
+ pub mod tp;
+ 
+diff --git a/engine/src/qwen/tp.rs b/engine/src/qwen/tp.rs
+index 3278f0f..377b8a6 100644
+--- a/engine/src/qwen/tp.rs
++++ b/engine/src/qwen/tp.rs
+@@ -18,6 +18,7 @@ use super::{
+     embed,
+     gpu::{micro_batches, GpuStage, Split, MAX_MICRO, TOP_K},
+     pipeline::Draft,
++    reduce::Workers,
+     vector, Config,
+ };
+ use crate::{
+@@ -52,6 +53,8 @@ pub struct TpGroup {
+     remote: Vec<f32>,
+     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
+     threads: usize,
++    workers: Option<Workers>,
++    persistent: bool,
+     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
+     /// other machine, since the group was created.
+     pub seconds: Phases,
+@@ -340,6 +343,8 @@ impl TpGroup {
+             sum: vec![0.; len],
+             remote: vec![0.; len],
+             threads,
++            workers: Some(Workers::new(threads)?),
++            persistent: std::env::var("TRASHCAN_TP_WORKERS").as_deref() != Ok("0"),
+             seconds: Phases::default(),
+             first,
+             profile,
+@@ -577,6 +582,11 @@ impl TpGroup {
+     fn allreduce(&mut self, row: usize, n: usize, seg: usize) -> Result<()> {
+         let len = n * self.c.d;
+         let threads = if len >= PARALLEL_MIN { self.threads } else { 1 };
++        if self.workers.as_ref().unwrap().threads() != self.threads {
++            drop(self.workers.take());
++            self.workers = Some(Workers::new(self.threads)?);
++        }
++        let persistent = self.persistent;
+         let start = Instant::now();
+         let sum = &mut self.sum[..len];
+         // Fixed arrays rather than vectors: decode runs 128 all-reduces per token.
+@@ -585,6 +595,11 @@ impl TpGroup {
+             *p = s.tp_part(row, n);
+         }
+         let parts = &parts[..self.shards.len()];
++        if persistent {
++            let mut sources = [std::ptr::null(); LOCAL];
++            for (dst, src) in sources.iter_mut().zip(parts) { *dst = src.as_ptr(); }
++            unsafe { self.workers.as_mut().unwrap().sum(sum, &sources[..parts.len()], &[], threads > 1); }
++        } else {
+         parallel(sum, threads, |at, out| {
+             out.copy_from_slice(&parts[0][at..at + out.len()]);
+             for p in &parts[1..] {
+@@ -593,6 +608,7 @@ impl TpGroup {
+                 }
+             }
+         });
++        }
+         let added = Instant::now();
+         let mut exchanged = added;
+         let mut remote = None;
+@@ -618,6 +634,13 @@ impl TpGroup {
+                 *t = Ptr(s.tp_total(row, n));
+             }
+             let totals = &totals[..self.shards.len()];
++            if persistent {
++                let mut sources = [sum.as_ptr(), std::ptr::null()];
++                let count = if let Some(r) = remote { sources[1] = r.as_ptr(); 2 } else { 1 };
++                let mut targets = [std::ptr::null_mut(); LOCAL];
++                for (dst, src) in targets.iter_mut().zip(totals) { *dst = src.0; }
++                unsafe { self.workers.as_mut().unwrap().sum(sum, &sources[..count], &targets[..totals.len()], threads > 1); }
++            } else {
+             parallel(sum, threads, |at, out| {
+                 if let Some(r) = remote {
+                     for (a, b) in out.iter_mut().zip(&r[at..]) {
+@@ -628,6 +651,7 @@ impl TpGroup {
+                     unsafe { std::ptr::copy_nonoverlapping(out.as_ptr(), t.0.add(at), out.len()) };
+                 }
+             });
++            }
+         }
+         let (summed, totalled) = ((added - start).as_secs_f64(), exchanged.elapsed().as_secs_f64());
+         self.seconds.add += summed + totalled;
+diff --git a/engine/src/vulkan.rs b/engine/src/vulkan.rs
+index efb9bc6..bcc96ee 100644
+--- a/engine/src/vulkan.rs
++++ b/engine/src/vulkan.rs
+@@ -311,6 +311,11 @@ impl Device {
+                 "attention_merge",
+                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge.spv")).as_slice(),
+             ),
++            ("qwen_attn_scores", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_scores.spv")).as_slice()),
++            ("qwen_attn_softmax", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_softmax.spv")).as_slice()),
++            ("qwen_attn_values", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_values.spv")).as_slice()),
++            ("qwen_q4c3r2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_q4c3r2.spv")).as_slice()),
++            ("matvecq4p", include_bytes!(concat!(env!("OUT_DIR"), "/matvecq4p.spv")).as_slice()),
+             (
+                 "attn_scores",
+                 include_bytes!(concat!(env!("OUT_DIR"), "/attn_scores.spv")).as_slice(),
+diff --git a/scripts/latency-run.py b/scripts/latency-run.py
+index 30adf34..75c8076 100755
+--- a/scripts/latency-run.py
++++ b/scripts/latency-run.py
+@@ -12,6 +12,7 @@ with open("/dev/cpu_dma_latency", "wb", buffering=0) as request:
+     request.write(struct.pack("=i", 0))
+     # Only the open requires privilege. Run the benchmark as the invoking user.
+     command_env = os.environ.copy()
++    command_env["TRASHCAN_CPU_LATENCY_US"] = "0"
+     if os.geteuid() == 0 and "SUDO_UID" in os.environ:
+         uid, gid = int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"])
+         user = pwd.getpwuid(uid)

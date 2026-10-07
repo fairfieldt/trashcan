@@ -38,6 +38,14 @@ use std::{
     time::{Duration, Instant},
 };
 
+/// Benchmark provenance. The latency marker is set by the wrapper holding the PM QoS request;
+/// without the wrapper its value is unknown, rather than assumed to be zero.
+pub fn host_settings() -> Value {
+    let governor = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").ok().map(|s| s.trim().to_owned());
+    let affinity = std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("Cpus_allowed_list:").map(|x| x.trim().to_owned())));
+    json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok())})
+}
+
 pub type Candidates = Vec<(f32, u32)>;
 
 pub struct TpGroup {
@@ -46,6 +54,8 @@ pub struct TpGroup {
     shards: Vec<GpuStage>,
     /// The other machine of the group, if any.
     peer: Option<Lanes>,
+    /// Host settings reported by the peer at setup; absent with an older node.
+    pub peer_host: Option<Value>,
     /// This machine starts every operation and tells the other one.
     driver: bool,
     sum: Vec<f32>,
@@ -318,12 +328,16 @@ impl TpGroup {
         for s in shards.iter_mut() {
             s.tp_draft_head(&gguf, draft_vocab)?;
         }
+        let mut peer_host = None;
         if let Some(l) = peer.as_mut() {
             let reply: Value = serde_json::from_slice(&l.recv_message()?)?;
             ensure!(reply.get("ok").is_some(), "the other machine failed: {}", reply["error"]);
+            peer_host = reply.get("host").cloned();
         }
         let threads = host_threads(peer.is_some());
-        Self::assemble(gguf, c, shards, peer, 0, max_batch, threads)
+        let mut group = Self::assemble(gguf, c, shards, peer, 0, max_batch, threads)?;
+        group.peer_host = peer_host;
+        Ok(group)
     }
 
     /// A group of the local `shards` (ranks from `first`); the driver when it has no peer or `first` is 0.
@@ -337,6 +351,7 @@ impl TpGroup {
             shards,
             driver: peer.is_none() || first == 0,
             peer,
+            peer_host: None,
             sum: vec![0.; len],
             remote: vec![0.; len],
             threads,
@@ -638,6 +653,11 @@ impl TpGroup {
         Ok(())
     }
 
+    /// Start a new prefill tally while preserving the trace's graph labels and step identities.
+    pub fn reset_profile_tally(&mut self) {
+        if let Some(p) = &mut self.profile { p.kernels.iter_mut().for_each(BTreeMap::clear); }
+    }
+
     /// Profiling (`TRASHCAN_TP_PROFILE`): GPU milliseconds of the prefill forwards so far per local rank: `busy_ms`
     /// in segments, and per label (count, ms), largest first (every dispatch with `TRASHCAN_TP_PROFILE_DISPATCH=1`).
     pub fn profile(&self) -> Value {
@@ -784,7 +804,7 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut lanes: Lanes) -
         for st in shards.iter_mut() {
             st.tp_draft_head(&gguf, draft_vocab)?;
         }
-        lanes.send_message(&message(json!({"ok": true}))?)?;
+        lanes.send_message(&message(json!({"ok": true, "host": host_settings()}))?)?;
         let mut group = TpGroup::assemble(gguf, c, shards, Some(lanes), num("first")?, num("batch")?, 1)?;
         return group.follow();
     }

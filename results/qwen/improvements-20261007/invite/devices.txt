@@ -1,0 +1,65 @@
+GPU0: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 02:00.0  (Mesa 25.0.7-2+deb13u1, Vulkan 1.3.305)
+  shape: 2 shader engines x 2 arrays x 8 CUs = 32 CUs, 4 SIMDs/CU, wave64 , 10 wave slots/SIMD, 256 VGPRs/SIMD, 512 SGPRs/SIMD
+  compute: max workgroup 1024 invocations [1024, 1024, 1024], shared mem 32 KiB, subgroup 64 (ops BASIC | VOTE | ARITHMETIC | BALLOT | SHUFFLE | SHUFFLE_RELATIVE | CLUSTERED | QUAD | ROTATE_KHR | ROTATE_CLUSTERED_KHR)
+  limits: storage buffer range 4096 MiB, max allocation count 4294967295, timestamp period 37.037037 ns
+  heap 0: 5888 MiB DEVICE_LOCAL
+  heap 1: 32140 MiB 
+  heap 2: 256 MiB DEVICE_LOCAL
+  memory type 0: heap 0 DEVICE_LOCAL
+  memory type 1: heap 0 DEVICE_LOCAL
+  memory type 2: heap 1 HOST_VISIBLE | HOST_COHERENT
+  memory type 3: heap 2 DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT
+  memory type 4: heap 2 DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT
+  memory type 5: heap 1 HOST_VISIBLE | HOST_COHERENT | HOST_CACHED
+  memory type 6: heap 1 HOST_VISIBLE | HOST_COHERENT | HOST_CACHED
+  queue family 0: 1 x GRAPHICS | COMPUTE | TRANSFER
+  queue family 1: 2 x COMPUTE | TRANSFER
+  queue family 2: 1 x SPARSE_BINDING
+  [ok] VK_KHR_external_memory_fd
+  [ok] VK_EXT_external_memory_dma_buf
+  [ok] VK_KHR_external_semaphore_fd
+  [ok] VK_EXT_external_memory_host
+  [ok] VK_EXT_pci_bus_info
+  [ok] VK_AMD_shader_core_properties
+  [ok] shaderInt16
+  [ok] shaderInt64
+  [ok] storageBuffer16BitAccess
+  [ok] timelineSemaphore
+  [ok] vulkanMemoryModel
+  [ok] bufferDeviceAddress
+  [ok] subgroupSizeControl
+  [info] shaderFloat16 = 0, shaderInt8 = 1 (not required)
+  device created: queue family 1 with 2 queues
+GPU1: AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) @ 06:00.0  (Mesa 25.0.7-2+deb13u1, Vulkan 1.3.305)
+  shape: 2 shader engines x 2 arrays x 8 CUs = 32 CUs, 4 SIMDs/CU, wave64 , 10 wave slots/SIMD, 256 VGPRs/SIMD, 512 SGPRs/SIMD
+  compute: max workgroup 1024 invocations [1024, 1024, 1024], shared mem 32 KiB, subgroup 64 (ops BASIC | VOTE | ARITHMETIC | BALLOT | SHUFFLE | SHUFFLE_RELATIVE | CLUSTERED | QUAD | ROTATE_KHR | ROTATE_CLUSTERED_KHR)
+  limits: storage buffer range 4096 MiB, max allocation count 4294967295, timestamp period 37.037037 ns
+  heap 0: 5888 MiB DEVICE_LOCAL
+  heap 1: 32140 MiB 
+  heap 2: 256 MiB DEVICE_LOCAL
+  memory type 0: heap 0 DEVICE_LOCAL
+  memory type 1: heap 0 DEVICE_LOCAL
+  memory type 2: heap 1 HOST_VISIBLE | HOST_COHERENT
+  memory type 3: heap 2 DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT
+  memory type 4: heap 2 DEVICE_LOCAL | HOST_VISIBLE | HOST_COHERENT
+  memory type 5: heap 1 HOST_VISIBLE | HOST_COHERENT | HOST_CACHED
+  memory type 6: heap 1 HOST_VISIBLE | HOST_COHERENT | HOST_CACHED
+  queue family 0: 1 x GRAPHICS | COMPUTE | TRANSFER
+  queue family 1: 2 x COMPUTE | TRANSFER
+  queue family 2: 1 x SPARSE_BINDING
+  [ok] VK_KHR_external_memory_fd
+  [ok] VK_EXT_external_memory_dma_buf
+  [ok] VK_KHR_external_semaphore_fd
+  [ok] VK_EXT_external_memory_host
+  [ok] VK_EXT_pci_bus_info
+  [ok] VK_AMD_shader_core_properties
+  [ok] shaderInt16
+  [ok] shaderInt64
+  [ok] storageBuffer16BitAccess
+  [ok] timelineSemaphore
+  [ok] vulkanMemoryModel
+  [ok] bufferDeviceAddress
+  [ok] subgroupSizeControl
+  [info] shaderFloat16 = 0, shaderInt8 = 1 (not required)
+  device created: queue family 1 with 2 queues
+all requirements met

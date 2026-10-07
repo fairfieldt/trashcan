@@ -443,6 +443,7 @@ pub fn bench(
     } else if matches!(
         shader,
         "matvecq4"
+
             | "matvecq4narrow"
             | "headvec"
             | "multivec4"
@@ -852,5 +853,58 @@ pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations:
     }
     unsafe { d.dev.destroy_query_pool(q, None) };
     drop(keep);
+    Ok(())
+}
+
+/// Deterministic attention checks for Qwen's GQA ratio six, padded tiles, tails, and later positions.
+pub fn qwen_attention(tokens: usize, n: usize, heads: usize, iterations: usize) -> Result<()> {
+    ensure!(tokens >= n && n > 0 && heads > 0 && heads <= 64 && iterations > 0, "invalid attention shape");
+    let inst = Rc::new(Instance::new()?);
+    for (gpu, pd) in inst.amd_gpus()?.into_iter().enumerate() {
+        let d = Device::new(inst.clone(), pd)?;
+        let mut state = 1234567u32;
+        let mut sample = || { state ^= state << 13; state ^= state >> 17; state ^= state << 5; (state as f64 / u32::MAX as f64 * 2. - 1.) as f32 };
+        let queries: Vec<_> = (0..n * heads * 256).map(|_| sample() / 16.).collect();
+        let keys: Vec<_> = (0..tokens * 256).map(|_| half::f16::from_f32(sample()).to_bits()).collect();
+        let values: Vec<_> = (0..tokens * 256).map(|_| half::f16::from_f32(sample()).to_bits()).collect();
+        let q = d.upload(bytemuck::cast_slice(&queries))?;
+        let k = d.upload(bytemuck::cast_slice(&keys))?;
+        let v = d.upload(bytemuck::cast_slice(&values))?;
+        let params = d.upload(bytemuck::cast_slice(&[(tokens - n) as u32, n as u32, 0u32, 0]))?;
+        let out = d.buffer(n * heads * 256 * 4, false, false, None)?;
+        let stride = tokens.next_multiple_of(64);
+        let scratch = d.buffer(64 * heads * (stride + 1) * 4, false, false, None)?;
+        let mut p = Push { ptr: [q.address, k.address, v.address, out.address, scratch.address, scratch.address + (64 * heads * stride * 4) as u64, params.address, 0], ..Default::default() };
+        p.u[0] = stride as u32; p.u[1] = heads as u32; p.u[4] = heads as u32;
+        p.u[5] = 1; p.u[6] = 256; p.u[7] = tokens as u32; p.u[15] = n as u32;
+        let mut reference = None;
+        for tiled in [false, true] {
+            let cmd = d.begin()?;
+            for _ in 0..iterations {
+                if tiled {
+                    let tq = 1usize << (64 / heads).ilog2();
+                    for first in (0..n).step_by(64) {
+                        p.u[13] = first as u32;
+                        let nb = (n - first).min(64);
+                        d.dispatch(cmd, "qwen_attn_scores", p, stride.div_ceil(64) as u32, nb.div_ceil(tq) as u32);
+                        d.dispatch(cmd, "qwen_attn_softmax", p, heads as u32, nb as u32);
+                        d.dispatch(cmd, "qwen_attn_values", p, 4, nb.div_ceil(tq) as u32);
+                    }
+                } else { d.dispatch(cmd, "attention", p, heads as u32, n as u32); }
+            }
+            d.finish(cmd)?;
+            d.run_reusable(cmd)?;
+            let start = Instant::now(); d.run(cmd)?;
+            let ms = start.elapsed().as_secs_f64() * 1e3 / iterations as f64;
+            let bytes = out.download()?;
+            let floats: &[f32] = bytemuck::cast_slice(&bytes);
+            let error = match &reference {
+                None => { reference = Some(floats.to_vec()); 0f32 },
+                Some(r) => floats.iter().zip(r).map(|(a, b)| (a - b).abs()).fold(0f32, f32::max),
+            };
+            ensure!(floats.iter().all(|v| v.is_finite()) && error < 2e-5, "attention mismatch GPU{gpu}: {error}");
+            println!("{}", serde_json::json!({"gpu":gpu,"tokens":tokens,"n":n,"heads":heads,"tiled":tiled,"ms":ms,"max_abs_error":error,"pass":true}));
+        }
+    }
     Ok(())
 }

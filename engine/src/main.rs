@@ -224,6 +224,11 @@ enum Cmd {
         pp: usize,
         #[arg(long, default_value_t = 128)]
         tg: usize,
+        /// JSONL chat cases; each line specifies name, messages and optional sampling settings.
+        #[arg(long)]
+        corpus: Option<PathBuf>,
+        #[arg(long, default_value_t = 1)]
+        reps: usize,
     },
     /// Time Q4_0 GEMM kernels at ROWSxK shapes (random weights) and check each against `gemm` bit for bit.
     QwenGemmBench {
@@ -242,6 +247,17 @@ enum Cmd {
         gpu: usize,
         #[arg(long, default_value_t = 500)]
         warmup_ms: u64,
+    },
+    /// Compare Qwen tiled prefill attention against scalar attention on deterministic inputs.
+    QwenAttentionBench {
+        #[arg(long, default_value_t = 4096)]
+        tokens: usize,
+        #[arg(long, default_value_t = 256)]
+        n: usize,
+        #[arg(long, default_value_t = 6)]
+        heads: usize,
+        #[arg(long, default_value_t = 10)]
+        iterations: usize,
     },
     /// Time decode, verification batches, rollback and MTP drafts.
     QwenSpecBench {
@@ -904,11 +920,21 @@ fn main() -> Result<()> {
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
             qwen::chat::chat(&mut chain, &t, prompt, system, thinking, max_tokens, &mut sampler, spec.as_mut())
         }
-        Cmd::QwenBench { model, run, pp, tg } => {
+        Cmd::QwenBench { model, run, pp, tg, corpus, reps } => {
             let mut chain = run.chain(&model)?;
             let mut spec = run.spec(&chain)?;
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
-            println!("{}", qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?);
+            if let Some(path) = corpus {
+                qwen::chat::bench_corpus(&mut chain, &t, &path, tg, reps, spec.as_mut())?;
+            } else {
+                anyhow::ensure!(reps > 0, "repetitions must be positive");
+                for rep in 0..reps {
+                    if let Some(s) = spec.as_mut() { s.stats = Default::default(); }
+                    let mut row = qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?;
+                    row["rep"] = serde_json::json!(rep);
+                    println!("{row}");
+                }
+            }
             Ok(())
         }
         Cmd::QwenGemmBench { shapes, n, kernels, iterations, gpu, warmup_ms } => {
@@ -921,6 +947,7 @@ fn main() -> Result<()> {
                 .collect::<Result<Vec<(usize, usize)>>>()?;
             micro::gemm(&shapes, n, &kernels, iterations, gpu, warmup_ms)
         }
+        Cmd::QwenAttentionBench { tokens, n, heads, iterations } => micro::qwen_attention(tokens, n, heads, iterations),
         Cmd::QwenSpecBench { model, run, tokens, reps } => {
             let mut chain = run.chain(&model)?;
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;

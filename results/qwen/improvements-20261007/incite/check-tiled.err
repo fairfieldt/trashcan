@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4 + MTP, 4645.9 MiB allocated
+GPU1: rank 1 of 4 + MTP, 4645.9 MiB allocated
+[clocks] 286 samples card0 (02:00.0) sclk/mclk: 850/1370 x231 450/1370 x4 300/150 x50 450/150 x1  max 79C card1 (06:00.0) sclk/mclk: 850/1370 x219 300/1370 x1 450/1370 x8 300/150 x58  max 77C  log=results/clocks/check-tiled.txt

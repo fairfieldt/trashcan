@@ -311,6 +311,9 @@ impl Device {
                 "attention_merge",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge.spv")).as_slice(),
             ),
+            ("qwen_attn_scores", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_scores.spv")).as_slice()),
+            ("qwen_attn_softmax", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_softmax.spv")).as_slice()),
+            ("qwen_attn_values", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_values.spv")).as_slice()),
             (
                 "attn_scores",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attn_scores.spv")).as_slice(),

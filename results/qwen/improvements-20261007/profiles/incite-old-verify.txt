@@ -1,0 +1,104 @@
+rank 0: 21 steps (n=3)
+  step           mean   58215.0  median   58115.9 us
+  gpu segments   mean   46440.9  median   46443.4 us
+  launch         mean     515.2  median     515.8 us
+  notice         mean     113.2  median     114.1 us
+  host between   mean   11145.7  median   11059.7 us
+  segment  count        launch           gpu        notice          host  exchange+add
+  delta       48           3.1         272.4           1.1         103.9         103.8
+  ffn         64           3.1         384.9           0.7          66.0          65.9
+  attn        16           3.1         353.8           1.0         103.6         103.4
+  head         1           3.2        3013.8           0.4           nan           nan
+  segment  dispatch                             count  gap med  exec med exec sum/step
+  ffn      qwen_q4c3 4352x5120                    128    -69.0     198.1       24788.1
+  ffn      qwen_q4c3 5120x4352                     64      1.2     132.7        8509.3
+  delta    qwen_q4c3 2560x5120                     48    -72.1     134.4        6454.4
+  delta    qwen_q4c3 1536x5120                     48    -52.3      72.6        3487.0
+  delta    qwen_q4c3 5120x1536                     48      1.2      69.0        3319.4
+  delta    qwen_matf32_u16 24x5120                 48      0.3      52.7        2535.5
+  head     multivec4x3 62080x5120                   1      0.1    2035.3        2037.1
+  delta    qwen_gdn 96x1                           48      1.8      41.9        2013.7
+  attn     qwen_q4c3 3072x5120                     16    -51.9     114.4        1829.8
+  attn     qwen_q4c3 256x5120                      32    -24.8      52.3        1671.6
+  attn     attention_partial64 384x3               16      1.2     101.6        1625.5
+  attn     qwen_q4c3 5120x1536                     16      1.2      69.5        1113.2
+  attn     attention_merge64 6x3                   16      1.5      38.7         618.1
+  attn     qwen_qk 1x3                             32    -13.3      13.5         429.9
+  delta    qwen_gated_norm 12x3                    48      3.3       7.7         369.9
+  delta    qwen_conv 10x1                          48      1.0       6.8         325.0
+  head     qwen_q4c3 5120x10240                     1      1.3     289.3         289.2
+  ffn      qwen_swiglu 17x3                        64      1.0       3.9         251.1
+  attn     qwen_qk 6x3                             16      1.0      13.8         220.3
+  head     qwen_topk 61x3                           1      1.0     123.3         123.2
+  head     qwen_q4c3 3072x5120                      1    -47.3     108.4         108.5
+  head     attention_partial64 384x3                1      1.2     101.9         101.7
+  head     qwen_q4c3 256x5120                       2    -22.9      47.9          95.7
+  head     qwen_topk 4x3                            1      1.5      74.1          74.1
+  attn     qwen_gate 6x3                           16      1.2       4.4          70.3
+  head     qwen_q4c3 5120x1536                      1      1.0      69.9          69.8
+  head     qwen_topk 1x3                            1      1.0      69.3          69.4
+  head     qwen_add_norm_j20 1x3                    3      1.3      13.8          41.4
+  head     attention_merge64 6x3                    1      1.5      38.5          38.6
+  head     qwen_qk 1x3                              2    -13.3      13.3          26.7
+  head     copy 61440                               2      1.3       8.4          16.9
+  head     qwen_qk 6x3                              1      1.0      13.8          13.7
+  head     qwen_gate 6x3                            1      1.2       4.4           4.5
+  delta    copy 16                                  1      1.5       3.4           3.4
+  head     copy 20480                               1      3.3       2.1           2.1
+  delta    (tail)                                  48      4.1       0.0           0.0
+  ffn      (tail)                                  64      2.2       0.0           0.0
+  attn     (tail)                                  16      4.3       0.0           0.0
+  head     (tail)                                   1      1.6       0.0           0.0
+  per step: dispatch exec 62.75 ms, gaps between dispatches -16.31 ms
+rank 1: 21 steps (n=3)
+  step           mean   58220.6  median   58122.3 us
+  gpu segments   mean   46430.0  median   46432.1 us
+  launch         mean     517.3  median     517.8 us
+  notice         mean     258.7  median     253.8 us
+  host between   mean   11014.5  median   10929.6 us
+  segment  count        launch           gpu        notice          host  exchange+add
+  delta       48           3.1         272.3           1.8         103.0         102.9
+  ffn         64           3.1         384.9           0.9          64.6          64.5
+  attn        16           3.1         353.5           1.9         102.4         102.3
+  head         1           3.3        3016.3           1.0           nan           nan
+  segment  dispatch                             count  gap med  exec med exec sum/step
+  ffn      qwen_q4c3 4352x5120                    128    -69.4     196.8       24788.0
+  ffn      qwen_q4c3 5120x4352                     64      1.3     132.7        8510.3
+  delta    qwen_q4c3 2560x5120                     48    -72.1     134.2        6446.4
+  delta    qwen_q4c3 1536x5120                     48    -52.3      72.4        3482.6
+  delta    qwen_q4c3 5120x1536                     48      1.2      69.0        3321.0
+  delta    qwen_matf32_u16 24x5120                 48      0.3      52.7        2533.1
+  head     multivec4x3 62080x5120                   1      0.3    2038.1        2037.7
+  delta    qwen_gdn 96x1                           48      1.8      41.9        2014.6
+  attn     qwen_q4c3 3072x5120                     16    -51.6     114.2        1828.2
+  attn     qwen_q4c3 256x5120                      32    -24.7      52.1        1666.4
+  attn     attention_partial64 384x3               16      1.2     101.6        1624.4
+  attn     qwen_q4c3 5120x1536                     16      1.2      69.5        1112.5
+  attn     attention_merge64 6x3                   16      1.5      38.5         617.9
+  attn     qwen_qk 1x3                             32    -13.3      13.5         430.4
+  delta    qwen_gated_norm 12x3                    48      3.3       7.7         370.3
+  delta    qwen_conv 10x1                          48      1.0       6.8         324.6
+  head     qwen_q4c3 5120x10240                     1      1.3     289.3         289.1
+  ffn      qwen_swiglu 17x3                        64      1.0       4.0         251.4
+  attn     qwen_qk 6x3                             16      1.0      13.8         220.4
+  head     qwen_topk 61x3                           1      1.0     123.0         123.1
+  head     qwen_q4c3 3072x5120                      1    -47.3     108.9         108.8
+  head     attention_partial64 384x3                1      1.2     101.5         101.5
+  head     qwen_q4c3 256x5120                       2    -22.8      47.9          95.8
+  head     qwen_topk 4x3                            1      1.5      74.1          74.1
+  attn     qwen_gate 6x3                           16      1.2       4.4          70.2
+  head     qwen_topk 1x3                            1      1.0      69.3          69.4
+  head     qwen_q4c3 5120x1536                      1      1.2      69.2          69.3
+  head     qwen_add_norm_j20 1x3                    3      1.3      13.8          41.4
+  head     attention_merge64 6x3                    1      1.5      38.5          38.6
+  head     qwen_qk 1x3                              2    -13.3      13.3          26.7
+  head     copy 61440                               2      1.3       8.4          16.8
+  head     qwen_qk 6x3                              1      1.0      13.8          13.7
+  head     qwen_gate 6x3                            1      1.2       4.4           4.5
+  delta    copy 16                                  1      1.5       2.8           2.7
+  head     copy 20480                               1      3.4       2.2           2.2
+  delta    (tail)                                  48      4.1       0.0           0.0
+  ffn      (tail)                                  64      2.2       0.0           0.0
+  attn     (tail)                                  16      4.1       0.0           0.0
+  head     (tail)                                   1      1.5       0.0           0.0
+  per step: dispatch exec 62.73 ms, gaps between dispatches -16.30 ms

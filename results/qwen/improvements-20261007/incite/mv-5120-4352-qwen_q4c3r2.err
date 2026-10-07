@@ -1,0 +1,2 @@
+CPU latency request: 0 us, scoped to this command
+[clocks] 6 samples card0 (02:00.0) sclk/mclk: 850/1370 x6  max 77C card1 (06:00.0) sclk/mclk: 850/1370 x6  max 75C  log=results/clocks/mv-5120-4352-qwen_q4c3r2.txt

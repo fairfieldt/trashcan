@@ -78,9 +78,13 @@ One command buffer per batch shape, replayed with a new position. Q4_0 projectio
 | `qwen_swiglu` | SwiGLU |
 | `qwen_q4c2/3/4` | 2-4 columns of a Q4_0 projection in the decode kernels' formulation: each row's nibbles are converted once and shared, and every column keeps `matvecq4`'s bias, FMA chain and reduction, so it equals a one-column decode bit for bit |
 
-Attention uses the existing scalar kernels: split-K decode (`attention_partial*` + merge) for up to 8
-columns and the unsplit `attention` for prefill. The tiled prefill kernels assume a power-of-two query
-group (Qwen has 6 query heads per KV head), so long prompts are not yet fast.
+Attention uses split-K decode (`attention_partial*` + merge) for up to 8 columns and scalar `attention`
+for other batches by default. `TRASHCAN_QWEN_ATTN=tiled` selects bounded 64-query tiled prefill at 64 or more
+columns, including the 27B's six-to-one GQA ratio. Cached graphs include a visible-key bucket. This path is
+opt-in pending investigation of an invite GPU timeout in the sustained mixed MTP test; its paired prefill
+measurements improve 4K by 8.6% and 8K by 22.1%, with matching generated IDs. See
+[the source, measurements and failure record](../results/qwen/improvements-20261007/README.md).
+`TRASHCAN_TP_KV_ONLY=1` similarly selects the MTP cache-only K/V update, removing discarded attention work.
 
 ## Recurrent state: rollback and checkpoints
 

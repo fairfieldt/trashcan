@@ -49,6 +49,9 @@ fn main() {
         "qwen_q4c3",
         "qwen_q4c4",
         "qwen_topk",
+        "qwen_attn_scores",
+        "qwen_attn_softmax",
+        "qwen_attn_values",
         // Qwen3.8-Flash-Next (qwen4exp)
         "qwen4_hc_norm",
         "qwen4_hc_mix",
