@@ -108,13 +108,27 @@ over all three at once, 0.18 ms ping; a model copy with `tar | socat` runs at 50
 Apple SSD ([results](../results/kernel/tb-nodes-20261006/README.md)). After one Mac reboots, the other can keep a
 stale peer from its firmware; reload `thunderbolt` on both, and replug a link that comes back with one lane.
 
-## Fan curve
+## Fan control
 
-One SMC fan (`applesmc`, 790-1900 rpm) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing. Since
-2026-10-05 `fancurve.service` (`scripts/fancurve.sh`, installed in `/usr/local/sbin`) sets it from the hottest of the
-two GPU edge sensors and the CPU package: 790 rpm at 40 °C or below, linear to 1900 rpm at 50 °C. Idle is about 58 °C,
-so in practice the fan stays at 1900 rpm. An unreadable sensor means full speed. `systemctl stop fancurve` returns
-the fan to SMC control. To change the thresholds, set `Environment=T_LOW=... T_HIGH=...` in a drop-in.
+One SMC fan (`applesmc`) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing.
+`fancurve.service` (`scripts/fancurve.sh`, installed in `/usr/local/sbin`) now keeps the fan at the
+**current SMC-reported maximum at every temperature**, as requested on 2026-10-07. It reads
+`fan1_max` every two seconds, follows increases and decreases, and reasserts manual mode and
+the exact target if the SMC changes either. It does not force a hardcoded RPM above the reported limit.
+
+The former curve cached 1900 RPM during boot even after `fan1_max` rose to roughly 2355–2363 RPM.
+The October 7 probe's initial snapshots show output/input still near 1900 RPM with those higher live limits.
+A bounded test then reached 2362 RPM on incite (target 2363) and 2356 RPM on invite (target 2357)
+after 30 seconds. These are fan-speed measurements, not airflow or throughput measurements.
+Evidence is under `results/qwen/hardware-20261007/fans/`.
+
+Two transient maximum-read failures may retain the last valid limit; the third failure returns control
+to automatic SMC and exits for systemd to retry. At startup, an unavailable/invalid limit has no fallback.
+Malformed limits, control/target read errors, or failed readback also return control to the SMC.
+`systemctl stop fancurve` returns automatic SMC control. `INTERVAL` may be set to 1–10 seconds;
+`SMC_PATH` is an optional sysfs path override used by local tests. The service is enabled by the existing
+node system provisioner. Deploy only the fan script/unit and restart this service when changing fan policy;
+the full system provisioner also restarts unrelated services.
 
 ## Suspend is disabled
 

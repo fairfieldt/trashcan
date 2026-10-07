@@ -1,57 +1,69 @@
 #!/bin/bash
-# Aggressive fan curve for a Mac Pro 6,1. One SMC fan cools both D700s and the CPU, so its speed follows
-# the hottest of the two GPU edge sensors and the CPU package: minimum at or below T_LOW, linear to full speed at
-# T_HIGH and above. A sensor that can't be read means full speed. Stopping the service hands the fan back to the SMC.
-# Installed as /usr/local/sbin/fancurve.sh, run by fancurve.service.
-set -u
-T_LOW=${T_LOW:-40}     # °C
-T_HIGH=${T_HIGH:-50}   # °C
+# Keep the Mac Pro 6,1 main fan at the live SMC maximum, at every temperature.
+# fan1_max can change after boot, so never cache a successful reading indefinitely.
+# Stop/failure returns control to the SMC. Installed as /usr/local/sbin/fancurve.sh.
+set -euo pipefail
 INTERVAL=${INTERVAL:-2}
-smc=/sys/devices/platform/applesmc.768
-min=$(cat $smc/fan1_min)
-max=$(cat $smc/fan1_max)
+smc=${SMC_PATH:-/sys/devices/platform/applesmc.768}
 
 restore() {
-    echo 0 > $smc/fan1_manual
-    echo "fan back to SMC control"
-    exit 0
-}
-trap restore TERM INT
-
-hottest() {
-    local f t m=0
-    for f in /sys/class/drm/card[0-9]/device/hwmon/hwmon*/temp1_input \
-             /sys/devices/platform/coretemp.0/hwmon/hwmon*/temp1_input; do
-        t=$(cat "$f" 2>/dev/null) || return 1
-        (( t > m )) && m=$t
-    done
-    echo $(( m / 1000 ))
-}
-
-echo "curve: ${min} rpm at <=${T_LOW} C, ${max} rpm at >=${T_HIGH} C"
-last=
-while :; do
-    if t=$(hottest); then
-        if (( t <= T_LOW )); then
-            rpm=$min
-        elif (( t >= T_HIGH )); then
-            rpm=$max
-        else
-            rpm=$(( min + (max - min) * (t - T_LOW) / (T_HIGH - T_LOW) ))
-        fi
+    local status=$?
+    trap - EXIT
+    if printf '0\n' > "$smc/fan1_manual"; then
+        echo 'fan returned to automatic SMC control'
     else
-        t='?'
-        rpm=$max
+        echo 'cannot return fan to automatic SMC control' >&2
+        status=1
     fi
-    # Re-assert manual mode if the SMC took it back.
-    if [[ $(cat $smc/fan1_manual) != 1 ]]; then
-        echo 1 > $smc/fan1_manual
-        last=
+    exit "$status"
+}
+trap restore EXIT
+trap 'exit 0' TERM INT
+
+fail() { echo "fan control: $*" >&2; exit 1; }
+# Return 1 only for a failed read; malformed values are not transient read errors.
+read_rpm() {
+    local value
+    value=$(cat "$1" 2>/dev/null) || return 1
+    [[ $value =~ ^[0-9]{1,9}$ ]] || return 2
+    printf '%s\n' "$((10#$value))"
+}
+
+[[ $INTERVAL =~ ^[1-9][0-9]*$ ]] && (( INTERVAL <= 10 )) || fail 'INTERVAL must be 1..10 seconds'
+minimum=$(read_rpm "$smc/fan1_min") || fail 'cannot read a valid SMC minimum'
+(( minimum > 0 )) || fail 'invalid SMC minimum'
+last_max= failures=0 logged_max=
+echo "fan policy: live SMC maximum at all temperatures; refresh every ${INTERVAL}s"
+while :; do
+    if maximum=$(read_rpm "$smc/fan1_max"); then
+        (( maximum >= minimum )) || fail "SMC maximum $maximum is below minimum $minimum"
+        if (( failures > 0 )); then echo 'SMC maximum readable again'; fi
+        failures=0
+        last_max=$maximum
+    else
+        read_status=$?
+        (( read_status == 1 )) || fail 'invalid SMC maximum value'
+        failures=$((failures + 1))
+        [[ -n $last_max ]] || fail 'SMC maximum unavailable at startup'
+        (( failures < 3 )) || fail 'SMC maximum unreadable for three polls'
+        if (( failures == 1 )); then
+            echo "SMC maximum temporarily unreadable; retaining last valid target $last_max rpm" >&2
+        fi
+        maximum=$last_max
     fi
-    if [[ $rpm != "$last" ]]; then
-        echo $rpm > $smc/fan1_output
-        echo "hottest ${t} C -> ${rpm} rpm"
-        last=$rpm
+    manual=$(cat "$smc/fan1_manual") || fail 'cannot read fan control mode'
+    [[ $manual == 0 || $manual == 1 ]] || fail 'invalid fan control mode'
+    output=$(read_rpm "$smc/fan1_output") || fail 'cannot read fan target'
+    if [[ $manual != 1 ]]; then printf '1\n' > "$smc/fan1_manual"; fi
+    if [[ $manual != 1 || $output != "$maximum" ]]; then
+        printf '%s\n' "$maximum" > "$smc/fan1_output"
+    fi
+    [[ $(cat "$smc/fan1_manual") == 1 ]] || fail 'manual control readback failed'
+    [[ $(read_rpm "$smc/fan1_output") == "$maximum" ]] || fail 'fan target readback failed'
+    # Report policy changes and reclaimed control, not a few RPM of SMC jitter.
+    if [[ -z $logged_max || $manual != 1 ]] || (( maximum - logged_max >= 50 || logged_max - maximum >= 50 )); then
+        echo "fan target $maximum rpm (live SMC maximum)"
+        logged_max=$maximum
     fi
     sleep "$INTERVAL" & wait $!
 done
