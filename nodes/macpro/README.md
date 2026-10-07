@@ -90,6 +90,8 @@ to every node. For nodes a < b on buses da and db, the link is 10.99.(16a+b).(4(
 ```bash
 ssh incite tblink status        # links, lanes, addresses, carrier; flags a link still showing the Mac firmware
 ping invite.tb1                 # from incite: the bus 1 cable
+/usr/local/sbin/tblink links    # for programs: tab-separated with a header; state is up, no_carrier,
+                                # no_interface, firmware (stuck on a rebooted peer), loop or unknown
 ```
 
 **After a node reboots, replug its neighbours' ends of the cables.** While a Mac reboots, its firmware answers on

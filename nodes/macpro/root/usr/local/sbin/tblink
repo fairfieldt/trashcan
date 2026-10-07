@@ -11,7 +11,8 @@
 # Thunderbolt modules on this node; run it on the stuck node's neighbour first, then on the node.
 #
 # usage: tblink run      (tblink.service)
-#        tblink status
+#        tblink status   (for people)
+#        tblink links    (for programs: tab-separated, header line, one line per link)
 #        tblink reload
 set -u
 NODES=/etc/tblink/nodes.tsv
@@ -110,9 +111,31 @@ case ${1:-} in
         done
         sed -n '/^# BEGIN tblink$/,/^# END tblink$/p' /etc/hosts | grep -v '^#'
         ;;
+    links)
+        me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
+        printf 'xdomain\tpeer\tlocal_bus\tpeer_bus\tlanes\tstate\tiface\taddress\tpeer_address\n'
+        links | while read -r xd nhi lbus rindex rhost rbus iface vendor; do
+            lanes=$(cat "$DEVS/$xd/rx_lanes" 2>/dev/null || echo 0)
+            addr=- peer=-
+            if [ "$vendor" = "$APPLE_FIRMWARE" ]; then
+                state=firmware
+            elif [ "$rindex" = 0 ] || [ -z "$me" ]; then
+                state=unknown
+            elif [ "$rindex" = "$me" ]; then
+                state=loop
+            else
+                read -r addr peer < <(addresses "$me" "$lbus" "$rindex" "$rbus")
+                addr=${addr%/*}
+                if [ "$iface" = - ]; then state=no_interface
+                elif [ "$(cat "/sys/class/net/$iface/carrier" 2>/dev/null)" = 1 ]; then state=up
+                else state=no_carrier; fi
+            fi
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$xd" "$rhost" "$lbus" "$rbus" "$lanes" "$state" "$iface" "$addr" "$peer"
+        done
+        ;;
     reload)
         modprobe -r thunderbolt_stream thunderbolt_net 2>/dev/null
         modprobe -r thunderbolt && modprobe thunderbolt_net && echo "Thunderbolt modules reloaded"
         ;;
-    *) echo "usage: tblink run|status|reload" >&2; exit 2 ;;
+    *) echo "usage: tblink run|status|links|reload" >&2; exit 2 ;;
 esac
