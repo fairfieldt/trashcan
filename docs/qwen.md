@@ -111,8 +111,9 @@ every column's top score also equals serial decoding's bit for bit in these chec
 ## Machines
 
 `plan` (`pipeline.rs`) balances uploaded bytes (Q4_0 repacked to 20 bytes per block, plus the 1.25-byte Q6
-head on the last stage) over every device in the chain. `--cuts a,b,...` overrides it with the first layer
-of each later stage.
+head and, when drafting, the MTP layer on the last stage) over every device in the chain: the 27B on four
+GPUs with drafting becomes 0-18, 18-36, 36-54 and 54-64 + head + MTP, about 4.0 GiB of weights each.
+`--cuts a,b,...` overrides it with the first layer of each later stage.
 
 The driver embeds tokens, runs its own stages, then sends the hidden rows to the next machine
 (`net.rs`). Each machine runs its stages and forwards; the last one returns the top 64 candidates back
@@ -154,7 +155,7 @@ head:
   the output follows the target distribution;
 - `--draft-vocab N` (default 65536) makes the draft head rank only token ids below N, a prefix of the
   repacked head: 93% of generated tokens fall below 32768 and 98.5% below 65536 in our samples, and a 9B
-  draft step drops from 8.4 ms (full head) to 4.1 ms.
+  draft step drops from 8.4 ms (full head) to 4.0 ms.
 
 The MTP weights come as a separate GGUF holding `blk.N.nextn.*` and the block's tensors (our trunk GGUFs
 have none). The 27B's is ggml-org's `mtp-Qwen3.8-27B-BF16.gguf`; the 9B's is converted from the `mtp.*`
