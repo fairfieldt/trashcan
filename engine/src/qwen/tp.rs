@@ -12,7 +12,7 @@
 use super::{
     cpu::Captures,
     embed,
-    gpu::{GpuStage, Split, TOP_K},
+    gpu::{micro_batches, GpuStage, Split, MAX_MICRO, TOP_K},
     pipeline::Draft,
     Config,
 };
@@ -38,6 +38,8 @@ pub struct TpGroup {
     driver: bool,
     sum: Vec<f32>,
     remote: Vec<f32>,
+    /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
+    threads: usize,
     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
     /// other machine, since the group was created.
     pub seconds: Phases,
@@ -87,6 +89,48 @@ fn shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usi
     Ok((g, c, shards))
 }
 
+/// Micro-batches a forward of `n` tokens is split into, so that the host all-reduces one while the GPUs run
+/// another: `TRASHCAN_TP_MICRO` (1: none), by default 2 for batches of at least 128 tokens.
+fn micro_count(n: usize) -> usize {
+    let want = std::env::var("TRASHCAN_TP_MICRO").ok().and_then(|v| v.parse().ok()).unwrap_or(2);
+    if n >= 128 {
+        usize::clamp(want, 1, MAX_MICRO)
+    } else {
+        1
+    }
+}
+
+/// Host threads that add partials and write totals (`TRASHCAN_TP_THREADS`), for all-reduces of at least
+/// PARALLEL_MIN elements; decode and verification batches stay on the calling thread.
+fn host_threads() -> usize {
+    std::env::var("TRASHCAN_TP_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(1).clamp(1, 16)
+}
+const PARALLEL_MIN: usize = 1 << 16;
+
+/// A host buffer that several threads write in disjoint ranges.
+#[derive(Clone, Copy)]
+struct Ptr(*mut f32);
+unsafe impl Send for Ptr {}
+unsafe impl Sync for Ptr {}
+
+/// `f(offset, chunk)` over `threads` contiguous chunks of `out`, the last on the calling thread.
+fn parallel<F: Fn(usize, &mut [f32]) + Sync>(out: &mut [f32], threads: usize, f: F) {
+    if threads <= 1 || out.is_empty() {
+        return f(0, out);
+    }
+    let (len, size) = (out.len(), out.len().div_ceil(threads).next_multiple_of(16));
+    std::thread::scope(|s| {
+        let f = &f;
+        for (i, chunk) in out.chunks_mut(size).enumerate() {
+            if (i + 1) * size >= len {
+                f(i * size, chunk);
+            } else {
+                s.spawn(move || f(i * size, chunk));
+            }
+        }
+    });
+}
+
 /// Highest scores first, ties by lower id (as the GPU merge orders them), at most TOP_K.
 fn best(c: &mut Candidates) {
     c.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
@@ -134,22 +178,25 @@ impl TpGroup {
             ensure!(reply.get("ok").is_some(), "the other machine failed: {}", reply["error"]);
         }
         let len = c.d * max_batch;
-        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], seconds: Phases::default() })
+        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], threads: host_threads(), seconds: Phases::default() })
     }
 
     /// Forward `tokens` (embedded as `x`) at `pos`: candidates of the last column, or of every column of a
     /// verification batch, which also keeps the per-column recurrent states for `rollback`.
     pub fn forward(&mut self, x: &[f32], pos: usize, tokens: &[u32], verify: bool, dump: Option<&mut Captures>) -> Result<Vec<Candidates>> {
-        self.tell(json!({"forward": {"pos": pos, "tokens": tokens, "verify": verify, "dump": dump.is_some()}}))?;
-        self.run(x, pos, tokens.len(), verify, dump)
+        let micro = if verify || dump.is_some() { 1 } else { micro_count(tokens.len()) };
+        let threads = self.threads;
+        self.tell(json!({"forward": {"pos": pos, "tokens": tokens, "verify": verify, "dump": dump.is_some(), "micro": micro, "threads": threads}}))?;
+        self.run(x, pos, tokens.len(), verify, dump, micro)
     }
 
-    fn run(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: Option<&mut Captures>) -> Result<Vec<Candidates>> {
+    fn run(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: Option<&mut Captures>, micro: usize) -> Result<Vec<Candidates>> {
+        let micro = micro_batches(n, micro);
         let mut segments = 0;
         for s in self.shards.iter_mut() {
-            segments = s.tp_prepare(x, pos, n, verify, dump.is_some())?;
+            segments = s.tp_prepare(x, pos, n, verify, dump.is_some(), &micro)?;
         }
-        self.launch(segments, n)?;
+        self.launch(segments, &micro)?;
         let columns = self.candidates(if verify && n > 1 { n } else { 1 })?;
         if let Some(m) = dump {
             // Whole tensors from the first rank; the logits joined from every rank's vocabulary slice, the other
@@ -222,12 +269,12 @@ impl TpGroup {
         for s in self.shards.iter_mut() {
             segments = s.tp_draft_prepare(&emb, pos, first, vocab)?;
         }
-        self.launch(segments, 1)?;
+        self.launch(segments, &[(0, 1)])?;
         Ok(self.candidates(1)?.remove(0))
     }
 
-    /// Run the segments prepared on every rank, all-reducing `n` columns between them.
-    fn launch(&mut self, segments: usize, n: usize) -> Result<()> {
+    /// Run the segments prepared on every rank as the micro-batches `micro`, all-reducing between them.
+    fn launch(&mut self, segments: usize, micro: &[(usize, usize)]) -> Result<()> {
         // By default every segment is submitted ahead and released by a semaphore signal, which costs the host
         // far less than a vkQueueSubmit per segment (TRASHCAN_TP_SUBMIT=1 submits each segment instead).
         let ahead = std::env::var_os("TRASHCAN_TP_SUBMIT").is_none();
@@ -238,7 +285,7 @@ impl TpGroup {
             }
             self.seconds.submit += start.elapsed().as_secs_f64();
         }
-        let result = self.segments(segments, n, ahead);
+        let result = self.segments(segments, micro, ahead);
         if result.is_err() && ahead {
             for s in self.shards.iter_mut() {
                 let _ = s.tp_release_all();
@@ -247,8 +294,10 @@ impl TpGroup {
         result
     }
 
-    /// Run the segments of the forward prepared on every rank, all-reducing between them.
-    fn segments(&mut self, segments: usize, n: usize, ahead: bool) -> Result<()> {
+    /// Run the segments of the forward prepared on every rank, all-reducing between them. Segment `j` belongs to
+    /// micro-batch `j % m` of the `m` in `micro`; its all-reduce releases segment `j + m`, the next one of the same
+    /// micro-batch, while the GPUs run the segments in between.
+    fn segments(&mut self, segments: usize, micro: &[(usize, usize)], ahead: bool) -> Result<()> {
         if ahead && std::env::var_os("TRASHCAN_TP_FREE").is_some() {
             // Timing only: every segment back to back without all-reduces (wrong results), the GPU floor.
             let start = Instant::now();
@@ -261,52 +310,78 @@ impl TpGroup {
             self.seconds.wait += start.elapsed().as_secs_f64();
             return Ok(());
         }
-        for i in 0..segments {
+        let m = micro.len();
+        // The first segment of every micro-batch needs no total.
+        self.release(0..m.min(segments), ahead)?;
+        for j in 0..segments {
             let start = Instant::now();
-            for s in self.shards.iter_mut() {
-                if ahead {
-                    s.tp_release(i)?;
-                } else {
-                    s.tp_submit(i)?;
-                }
-            }
-            let submitted = Instant::now();
             for s in &self.shards {
-                s.tp_wait(i)?;
+                s.tp_wait(j)?;
             }
-            self.seconds.submit += (submitted - start).as_secs_f64();
-            self.seconds.wait += submitted.elapsed().as_secs_f64();
-            if i + 1 < segments {
-                self.allreduce(n)?;
+            self.seconds.wait += start.elapsed().as_secs_f64();
+            if j + m < segments {
+                let (row, n) = micro[j % m];
+                self.allreduce(row, n)?;
+                self.release(j + m..j + m + 1, ahead)?;
             }
         }
         Ok(())
     }
 
-    /// Add every rank's partial projection of the latest segment and hand the total to the local ranks.
-    fn allreduce(&mut self, n: usize) -> Result<()> {
+    /// Let the segments `range` run: release them (submitted ahead) or submit them.
+    fn release(&mut self, range: std::ops::Range<usize>, ahead: bool) -> Result<()> {
+        let start = Instant::now();
+        for s in self.shards.iter_mut() {
+            if ahead {
+                if let Some(last) = range.clone().last() {
+                    s.tp_release(last)?;
+                }
+            } else {
+                for i in range.clone() {
+                    s.tp_submit(i)?;
+                }
+            }
+        }
+        self.seconds.submit += start.elapsed().as_secs_f64();
+        Ok(())
+    }
+
+    /// Add every rank's partial projection of rows `row..row + n` of the latest segment and hand their total
+    /// to the local ranks.
+    fn allreduce(&mut self, row: usize, n: usize) -> Result<()> {
         let len = n * self.c.d;
+        let threads = if len >= PARALLEL_MIN { self.threads } else { 1 };
         let start = Instant::now();
         let sum = &mut self.sum[..len];
-        sum.copy_from_slice(self.shards[0].tp_part(n));
-        for s in &self.shards[1..] {
-            for (a, b) in sum.iter_mut().zip(s.tp_part(n)) {
-                *a += b;
+        let parts: Vec<&[f32]> = self.shards.iter().map(|s| s.tp_part(row, n)).collect();
+        parallel(sum, threads, |at, out| {
+            out.copy_from_slice(&parts[0][at..at + out.len()]);
+            for p in &parts[1..] {
+                for (a, b) in out.iter_mut().zip(&p[at..]) {
+                    *a += b;
+                }
             }
-        }
+        });
         let added = Instant::now();
         let mut exchanged = added;
+        let mut remote = None;
         if let Some(l) = self.peer.as_mut() {
-            let remote = &mut self.remote[..len];
-            l.exchange(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(remote))?;
+            l.exchange(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(&mut self.remote[..len]))?;
             exchanged = Instant::now();
-            for (a, b) in sum.iter_mut().zip(remote.iter()) {
-                *a += b;
+            remote = Some(&self.remote[..len]);
+        }
+        // Add the other machine's sum and write the total for every local GPU in the same pass.
+        let totals: Vec<Ptr> = self.shards.iter().map(|s| Ptr(s.tp_total(row, n))).collect();
+        parallel(sum, threads, |at, out| {
+            if let Some(r) = remote {
+                for (a, b) in out.iter_mut().zip(&r[at..]) {
+                    *a += b;
+                }
             }
-        }
-        for s in &self.shards {
-            s.tp_set_total(sum);
-        }
+            for t in &totals {
+                unsafe { std::ptr::copy_nonoverlapping(out.as_ptr(), t.0.add(at), out.len()) };
+            }
+        });
         let (summed, totalled) = ((added - start).as_secs_f64(), exchanged.elapsed().as_secs_f64());
         self.seconds.add += summed + totalled;
         self.seconds.sum += summed;
@@ -358,7 +433,9 @@ impl TpGroup {
                 let x = embed(&self.gguf, &self.c, &tokens)?;
                 let pos = f["pos"].as_u64().context("forward position")? as usize;
                 let mut dump = f["dump"].as_bool().unwrap_or(false).then(Captures::new);
-                self.run(&x, pos, tokens.len(), f["verify"].as_bool().unwrap_or(false), dump.as_mut())?;
+                let micro = f["micro"].as_u64().unwrap_or(1) as usize;
+                self.threads = f["threads"].as_u64().unwrap_or(1).clamp(1, 16) as usize;
+                self.run(&x, pos, tokens.len(), f["verify"].as_bool().unwrap_or(false), dump.as_mut(), micro)?;
             } else if let Some(d) = m.get("draft") {
                 let num = |k: &str| d[k].as_u64().with_context(|| format!("draft {k}")).map(|v| v as usize);
                 self.draft_step(num("token")? as u32, num("pos")?, d["first"].as_bool().unwrap_or(false), num("vocab")?)?;
@@ -441,7 +518,7 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut lanes: Lanes) -
         };
         lanes.send_message(&message(json!({"ok": true}))?)?;
         let len = c.d * num("batch")?;
-        let mut group = TpGroup { gguf, c, shards, peer: Some(lanes), driver: false, sum: vec![0.; len], remote: vec![0.; len], seconds: Phases::default() };
+        let mut group = TpGroup { gguf, c, shards, peer: Some(lanes), driver: false, sum: vec![0.; len], remote: vec![0.; len], threads: 1, seconds: Phases::default() };
         return group.follow();
     }
 }

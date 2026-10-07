@@ -226,6 +226,7 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
         .collect();
     Ok(json!({"pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
+        "pp_top":top.iter().take(8).collect::<Vec<_>>(),
         "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"text":t.decode(&out, false)}))
 }
 

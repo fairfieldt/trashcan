@@ -22,7 +22,7 @@ use ash::vk;
 use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = 64;
-const GRAPH_CACHE_CAPACITY: usize = 16;
+const GRAPH_CACHE_CAPACITY: usize = 24;
 
 impl Tp {
     /// Begin the segments `cmds`: both timelines only grow, so their values start above everything signalled
@@ -221,8 +221,36 @@ pub enum Output {
     Top(Vec<Vec<(f32, u32)>>),
 }
 
-/// (batch, attention partitions, dump, verify)
-type Key = (usize, u32, bool, bool);
+/// One recorded graph: batch, attention partitions, dump, verify, and for a micro-batch of a tensor-parallel batch
+/// its params slot, first row in the batch buffers and whether it ends with the LM head.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+struct Key {
+    n: usize,
+    parts: u32,
+    dump: bool,
+    verify: bool,
+    slot: usize,
+    row: usize,
+    head: bool,
+}
+
+impl Key {
+    fn whole(n: usize, parts: u32, dump: bool, verify: bool) -> Self {
+        Key { n, parts, dump, verify, slot: 0, row: 0, head: true }
+    }
+}
+
+/// Micro-batches of a tensor-parallel batch have their own `pos, n` parameters, this many bytes apart.
+const PARAMS_STRIDE: usize = 256;
+/// Most micro-batches a tensor-parallel batch is split into.
+pub const MAX_MICRO: usize = 4;
+
+/// Split a batch of `n` columns into at most `count` micro-batches whose sizes are multiples of 64 (the GEMM tile)
+/// except the last: (first row, rows) of each.
+pub fn micro_batches(n: usize, count: usize) -> Vec<(usize, usize)> {
+    let size = n.div_ceil(count.clamp(1, MAX_MICRO)).next_multiple_of(64).min(n.max(1));
+    (0..n).step_by(size).map(|r| (r, size.min(n - r))).collect()
+}
 
 /// Tensor-parallel segments: the host buffers of the all-reduces and the timeline the host polls.
 struct Tp {
@@ -375,13 +403,23 @@ struct Rec<'a> {
     graph: Graph,
     /// Where the mixers' and FFNs' output projections go: `y`, or the host partial under tensor parallelism.
     out: u64,
+    /// Params slot, and first row in the batch buffers (`input`, `x`, the MTP embeddings, the partial and the
+    /// total), of a micro-batch; 0 for a whole batch.
+    slot: usize,
+    row: usize,
 }
 
 impl<'a> Rec<'a> {
     fn new(s: &'a GpuStage, n: usize, dump: bool) -> Result<Self> {
+        Self::at(s, n, dump, 0, 0)
+    }
+
+    /// A micro-batch of `n` rows starting at `row`, with its params in `slot`.
+    fn at(s: &'a GpuStage, n: usize, dump: bool, slot: usize, row: usize) -> Result<Self> {
         let cmd = s.gpu.begin()?;
         s.gpu.barrier(cmd);
-        s.gpu.copy(cmd, &s.params_host, 0, &s.params, 0, 16);
+        s.gpu.copy(cmd, &s.params_host, slot * PARAMS_STRIDE, &s.params, slot * PARAMS_STRIDE, 16);
+        let rows = (row * s.c.d * 4) as u64;
         Ok(Self {
             s,
             n,
@@ -392,8 +430,20 @@ impl<'a> Rec<'a> {
                 cmds: vec![cmd],
                 captures: Vec::new(),
             },
-            out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address),
+            out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address) + rows,
+            slot,
+            row,
         })
+    }
+
+    /// Byte offset of this micro-batch's rows in the batch buffers.
+    fn rows(&self) -> usize {
+        self.row * self.s.c.d * 4
+    }
+
+    /// This micro-batch's rows of the residual.
+    fn x(&self) -> u64 {
+        self.s.x.address + self.rows() as u64
     }
 
     /// End a tensor-parallel segment: the host reads the partial projection after this submission, then
@@ -407,7 +457,7 @@ impl<'a> Rec<'a> {
 
     fn push(&self, ptr: [u64; 6], u: [u32; 16]) -> Push {
         Push {
-            ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.s.params.address, 0],
+            ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.s.params.address + (self.slot * PARAMS_STRIDE) as u64, 0],
             u,
         }
     }
@@ -733,8 +783,8 @@ impl<'a> Rec<'a> {
     fn mtp_inputs(&mut self, m: &Mtp, hidden: u64) {
         let s = self.s;
         let d = s.c.d;
-        self.copy(&m.emb, 0, &s.x, 0, self.n * d * 4);
-        self.add_norm(s.x.address, None, Some(m.cat.address), Some(&m.enorm), 2 * d);
+        self.copy(&m.emb, self.rows(), &s.x, self.rows(), self.n * d * 4);
+        self.add_norm(self.x(), None, Some(m.cat.address), Some(&m.enorm), 2 * d);
         self.add_norm(hidden, None, Some(m.cat.address + (d * 4) as u64), Some(&m.hnorm), 2 * d);
     }
 }
@@ -879,8 +929,8 @@ impl GpuStage {
             context,
             input: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
             output: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
-            params: gpu.buffer(16, false, false, None)?,
-            params_host: gpu.buffer(16, true, false, None)?,
+            params: gpu.buffer(PARAMS_STRIDE * MAX_MICRO, false, false, None)?,
+            params_host: gpu.buffer(PARAMS_STRIDE * MAX_MICRO, true, false, None)?,
             x: alloc(c.d)?,
             h: alloc(c.d)?,
             y: alloc(c.d)?,
@@ -931,10 +981,11 @@ impl GpuStage {
         self.gpu.device_bytes.get() as f64 / 1048576.
     }
 
-    fn record(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
+    fn record(&self, k: Key) -> Result<Graph> {
         if self.tp.is_some() {
-            return self.record_tp(n, parts, dump, verify);
+            return self.record_tp(k);
         }
+        let (n, parts, dump, verify) = (k.n, k.parts, k.dump, k.verify);
         let d = self.c.d;
         let mut r = Rec::new(self, n, dump)?;
         r.copy(&self.input, 0, &self.x, 0, n * d * 4);
@@ -986,17 +1037,21 @@ impl GpuStage {
 
     /// Tensor-parallel graph: every mixer and FFN ends a submission with its partial projection in host
     /// memory, and the next submission adds the all-reduced total to the replicated residual. The last
-    /// submission ranks this rank's vocabulary rows. 2 * layers + 1 submissions.
-    fn record_tp(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
+    /// submission ranks this rank's vocabulary rows (unless `k` is a micro-batch before the last). 2 * layers + 1
+    /// submissions. A micro-batch works on its own rows of the batch buffers, so the segments of several
+    /// micro-batches can alternate on the queue (`tp_prepare`).
+    fn record_tp(&self, k: Key) -> Result<Graph> {
+        let (n, parts, dump, verify) = (k.n, k.parts, k.dump, k.verify);
         let d = self.c.d;
         let (hd, tp) = (self.head.as_ref().context("a tensor-parallel rank needs its head rows")?, self.tp.as_ref().unwrap());
-        let total = if vram_io() { self.y.address } else { tp.total.address };
-        let mut r = Rec::new(self, n, dump)?;
-        r.copy(&self.input, 0, &self.x, 0, n * d * 4);
+        let mut r = Rec::at(self, n, dump, k.slot, k.row)?;
+        let (rows, x) = (r.rows(), r.x());
+        let total = (if vram_io() { self.y.address } else { tp.total.address }) + rows as u64;
+        r.copy(&self.input, rows, &self.x, rows, n * d * 4);
         let mut added = None;
         for l in &self.layers {
             let il = l.il;
-            r.add_norm(self.x.address, added, Some(self.h.address), Some(&l.attn_norm), 0);
+            r.add_norm(x, added, Some(self.h.address), Some(&l.attn_norm), 0);
             if added.is_some() {
                 r.capture(format!("l_out-{}", il - 1), &self.x, d)?;
             }
@@ -1006,24 +1061,27 @@ impl GpuStage {
                 Mixer::Attention(a) => r.attention(a, parts, il)?,
             }
             r.end_segment()?;
-            r.add_norm(self.x.address, Some(total), Some(self.h.address), Some(&l.post_norm), 0);
+            r.add_norm(x, Some(total), Some(self.h.address), Some(&l.post_norm), 0);
             r.capture(format!("attn_residual-{il}"), &self.x, d)?;
             r.capture(format!("attn_post_norm-{il}"), &self.h, d)?;
             r.ffn(&l.ffn, il)?;
             r.end_segment()?;
             added = Some(total);
         }
-        r.add_norm(self.x.address, added, Some(self.h.address), Some(&hd.norm), 0);
+        r.add_norm(x, added, Some(self.h.address), Some(&hd.norm), 0);
         r.capture(format!("l_out-{}", self.last - 1), &self.x, d)?;
         r.capture("result_norm".into(), &self.h, d)?;
-        r.head(hd, &self.h, if verify { n } else { 1 }, self.c.vocab)?;
+        if k.head {
+            r.head(hd, &self.h, if verify { n } else { 1 }, self.c.vocab)?;
+        }
         if let Some(m) = &self.mtp {
-            // Extend the MTP layer's KV cache over this batch (token p pairs with the target's row p - 1). Only
-            // its K and V are kept, so the block stops after the attention and needs no all-reduce.
+            // Extend the MTP layer's KV cache over this batch (token p pairs with the target's row p - 1, which for
+            // a later micro-batch the previous one left in row 0). Only its K and V are kept, so the block stops
+            // after the attention and needs no all-reduce.
             r.copy(&self.h, 0, &m.hin, d * 4, n * d * 4);
             r.mtp_inputs(m, m.hin.address);
-            r.matrix(&m.eh, m.cat.address, self.x.address, 2 * d, d, false)?;
-            r.add_norm(self.x.address, None, Some(self.h.address), Some(&m.attn_norm), 0);
+            r.matrix(&m.eh, m.cat.address, x, 2 * d, d, false)?;
+            r.add_norm(x, None, Some(self.h.address), Some(&m.attn_norm), 0);
             r.attention(&m.attn, parts, self.c.layers)?;
             r.copy(&m.hin, n * d * 4, &m.hin, 0, d * 4);
         }
@@ -1051,16 +1109,29 @@ impl GpuStage {
         r.finish()
     }
 
-    /// Start a tensor-parallel forward of `n` tokens at `pos` (see `forward`): write the input rows and find
-    /// or record the graph. Returns its number of submissions; the caller submits and waits for each in turn
-    /// and writes the all-reduced total between them.
-    pub fn tp_prepare(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: bool) -> Result<usize> {
+    /// Start a tensor-parallel forward of `n` tokens at `pos` (see `forward`) as the micro-batches `micro`
+    /// ((first row, rows) covering the batch in order; one for the whole batch): write the input rows and find
+    /// or record each micro-batch's graph. Their segments alternate: segment `j` is segment `j / m` of
+    /// micro-batch `j % m`, so the host can all-reduce one micro-batch while the GPU runs the next. Returns the
+    /// number of segments; the caller releases them in order, writing each all-reduced total before the
+    /// segment of the same micro-batch that reads it.
+    pub fn tp_prepare(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: bool, micro: &[(usize, usize)]) -> Result<usize> {
         let d = self.c.d;
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(pos + n <= self.context, "context exhausted");
         ensure!(x.len() == n * d, "hidden state length mismatch");
         let verify = verify && n > 1;
         ensure!(!verify || n <= self.verify, "verification batch exceeds the configured {} columns", self.verify);
+        ensure!(!micro.is_empty() && micro.len() <= MAX_MICRO, "1 to {MAX_MICRO} micro-batches");
+        ensure!(micro.len() == 1 || !(verify || dump), "verification and dumps run as one batch");
+        ensure!(
+            micro.iter().scan(0, |next, &(row, rows)| {
+                let ok = row == *next && rows > 0;
+                *next = row + rows;
+                Some(ok)
+            }).all(|ok| ok) && micro.last().is_some_and(|&(row, rows)| row + rows == n),
+            "micro-batches must cover the batch in order"
+        );
         self.input.write(bytemuck::cast_slice(x))?;
         if let Some(m) = &self.mtp {
             // The input rows are the batch's token embeddings, which the MTP block also reads.
@@ -1072,25 +1143,33 @@ impl GpuStage {
                 self.gpu.run(cmd)?;
             }
         }
-        self.params_host.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump, verify);
-        self.tick += 1;
-        if let Some(e) = self.graphs.get_mut(&key) {
-            e.1 = self.tick;
-        } else {
-            if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
-                let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
-                self.graphs.remove(&victim);
+        let mut keys = Vec::new();
+        for (slot, &(row, rows)) in micro.iter().enumerate() {
+            self.params_host.write_at(slot * PARAMS_STRIDE, bytemuck::cast_slice(&[(pos + row) as u32, rows as u32, 0, 0]))?;
+            let key = Key { n: rows, parts: partitions(pos + row, rows), dump, verify, slot, row, head: slot + 1 == micro.len() };
+            self.tick += 1;
+            if let Some(e) = self.graphs.get_mut(&key) {
+                e.1 = self.tick;
+            } else {
+                // The graphs of this forward were used last, so they are never the victim.
+                if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
+                    let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
+                    self.graphs.remove(&victim);
+                }
+                let graph = self.record(key)?;
+                self.graphs.insert(key, (graph, self.tick));
             }
-            let graph = self.record(n, key.1, key.2, key.3)?;
-            self.graphs.insert(key, (graph, self.tick));
+            keys.push(key);
         }
         self.last_n = n;
         self.verified = verify;
-        let cmds = self.graphs[&key].0.cmds.clone();
+        let lists: Vec<&[vk::CommandBuffer]> = keys.iter().map(|k| self.graphs[k].0.cmds.as_slice()).collect();
+        let segments = lists[0].len();
+        ensure!(lists.iter().all(|l| l.len() == segments), "micro-batch graphs differ in segments");
+        let cmds: Vec<vk::CommandBuffer> = (0..segments).flat_map(|i| lists.iter().map(move |l| l[i])).collect();
         let rows = self.c.vocab;
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
-        tp.current = Some(key);
+        tp.current = keys.last().copied();
         Ok(tp.start(cmds, rows))
     }
 
@@ -1161,17 +1240,19 @@ impl GpuStage {
         Ok(())
     }
 
-    /// This rank's partial projection of the `n` tokens of the latest segment.
-    pub fn tp_part(&self, n: usize) -> &[f32] {
-        let part = &self.tp.as_ref().unwrap().part;
-        unsafe { std::slice::from_raw_parts(part.ptr as *const f32, n * self.c.d) }
+    /// This rank's partial projection of the `n` tokens from batch row `row` (a micro-batch's rows) of the
+    /// latest segment.
+    pub fn tp_part(&self, row: usize, n: usize) -> &[f32] {
+        let (part, d) = (&self.tp.as_ref().unwrap().part, self.c.d);
+        assert!((row + n) * d * 4 <= part.size);
+        unsafe { std::slice::from_raw_parts((part.ptr as *const f32).add(row * d), n * d) }
     }
 
-    /// The all-reduced total for the next segment.
-    pub fn tp_set_total(&self, total: &[f32]) {
-        let t = &self.tp.as_ref().unwrap().total;
-        assert!(total.len() * 4 <= t.size);
-        unsafe { std::ptr::copy_nonoverlapping(total.as_ptr(), t.ptr as *mut f32, total.len()) };
+    /// Where the host writes the all-reduced total of the `n` rows from `row` for the next segment.
+    pub fn tp_total(&self, row: usize, n: usize) -> *mut f32 {
+        let (t, d) = (&self.tp.as_ref().unwrap().total, self.c.d);
+        assert!((row + n) * d * 4 <= t.size);
+        unsafe { (t.ptr as *mut f32).add(row * d) }
     }
 
     /// Top candidates of this rank's vocabulary rows after the last segment, with model token ids.
@@ -1278,7 +1359,7 @@ impl GpuStage {
         self.input.write(bytemuck::cast_slice(x))?;
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump.is_some(), verify);
+        let key = Key::whole(n, partitions(pos, n), dump.is_some(), verify);
         self.tick += 1;
         if let Some(e) = self.graphs.get_mut(&key) {
             e.1 = self.tick;
@@ -1288,7 +1369,7 @@ impl GpuStage {
                 let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
                 self.graphs.remove(&victim);
             }
-            let graph = self.record(n, key.1, key.2, key.3)?;
+            let graph = self.record(key)?;
             self.graphs.insert(key, (graph, self.tick));
         }
         let graph = &self.graphs[&key].0;

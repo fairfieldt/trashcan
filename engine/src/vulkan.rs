@@ -173,12 +173,12 @@ impl Device {
         };
         let pool_sizes = [vk::DescriptorPoolSize {
             ty: vk::DescriptorType::STORAGE_BUFFER,
-            descriptor_count: 32768,
+            descriptor_count: 65536,
         }];
         let descriptor_pool = unsafe {
             dev.create_descriptor_pool(
                 &vk::DescriptorPoolCreateInfo::default()
-                    .max_sets(4096)
+                    .max_sets(8192)
                     .pool_sizes(&pool_sizes),
                 None,
             )?
@@ -1171,6 +1171,16 @@ impl Buffer {
         );
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr, bytes.len());
+        }
+        Ok(())
+    }
+    pub fn write_at(&self, offset: usize, bytes: &[u8]) -> Result<()> {
+        ensure!(
+            !self.ptr.is_null() && offset + bytes.len() <= self.size,
+            "invalid host write"
+        );
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(offset), bytes.len());
         }
         Ok(())
     }
