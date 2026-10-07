@@ -487,6 +487,7 @@ impl Device {
                     ("attention_partial128", Some(128)),
                 ],
                 "qwen_add_norm_wide" => &[("qwen_add_norm_j16", Some(16)), ("qwen_add_norm_j20", Some(20))],
+                "qwen_matf32" => &[("qwen_matf32", Some(1)), ("qwen_matf32_u16", Some(16))],
                 "attention_partial_heads2" => &[
                     ("attention_partial_heads2", None),
                     ("attention_partial_heads2_16", Some(16)),

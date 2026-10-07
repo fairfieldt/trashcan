@@ -778,9 +778,11 @@ impl<'a> Rec<'a> {
         let mut u = [0; 16];
         u[0] = (2 * c.v_heads) as u32;
         u[1] = d as u32;
+        // Decode and verification batches take 16 loads per lane, larger batches the plain loop: with the 16-load
+        // path compiled in, a 9B TP2 prefill was 4% slower.
         s.gpu.dispatch_matrix(
             self.cmd,
-            "qwen_matf32",
+            if self.n <= 4 { "qwen_matf32_u16" } else { "qwen_matf32" },
             self.push([0, h, ab, 0, 0, 0], u).defer_barrier(!old),
             (2 * c.v_heads).div_ceil(4) as u32,
             self.n.div_ceil(8) as u32,

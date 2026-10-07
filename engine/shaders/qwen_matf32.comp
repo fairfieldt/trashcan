@@ -3,8 +3,9 @@
 // Small f32 projection (DeltaNet alpha/beta): y[t][row] = W[row] . x[t]. One wave per row and eight tokens,
 // so each weight is read once per eight columns. W in set 0, x in b, y in c. p.n rows, p.k row length.
 // Up to four columns (decode, verification) with p.k a multiple of 64 * U take U loads per lane at a time
-// instead of one; every column's sum keeps the same order either way.
-#define U 16
+// instead of one; every column's sum keeps the same order either way. U is 16 in qwen_matf32_u16 and 1 in
+// qwen_matf32, for larger batches: with the 16-load path compiled in (80 more values per lane) they ran slower.
+layout(constant_id=0) const uint U=16;
 layout(local_size_x=256) in;
 void main(){uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x*4+gl_SubgroupID,t0=gl_WorkGroupID.y*8,nb=batch();
 if(row>=p.n||t0>=nb)return;uint cols=min(8u,nb-t0);float sums[8];
