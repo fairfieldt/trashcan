@@ -18,6 +18,10 @@ use std::{
 const O_NONBLOCK: i32 = 0o4000;
 /// A lane that makes no progress for this long has failed (the peer died or the link dropped).
 pub const STALL: Duration = Duration::from_secs(30);
+/// An idle wait for the next message (`Lanes::recv_message_idle`) polls without pausing this long, since the
+/// messages of a busy peer follow each other closely, then pauses this long between polls.
+const BUSY: Duration = Duration::from_millis(50);
+const NAP: Duration = Duration::from_millis(1);
 const MAGIC: u32 = 0x454e_414c;
 const HELLO: u32 = 1;
 const READY: u32 = 2;
@@ -236,6 +240,32 @@ impl Lanes {
         recv(&mut self.lanes[0], &mut len)?;
         let mut bytes = vec![0u8; u32::from_le_bytes(len) as usize];
         recv(&mut self.lanes[0], &mut bytes)?;
+        Ok(bytes)
+    }
+
+    /// `recv_message` for a message that may come hours later (the next request to a server): no deadline for
+    /// its first bytes, polled in short sleeps once the lane has been quiet for `BUSY`, so an idle machine leaves
+    /// its cores alone; the rest must then arrive within `STALL`. The end of the lane (the other side closed it)
+    /// or a reset is an error, as is a lane handshake (the other side started a new session).
+    pub fn recv_message_idle(&mut self) -> Result<Vec<u8>> {
+        let lane = &mut self.lanes[0];
+        let mut len = [0u8; 4];
+        let start = Instant::now();
+        let got = loop {
+            match step(lane.read(&mut len)).context("the other machine closed the lanes")? {
+                0 if start.elapsed() < BUSY => std::hint::spin_loop(),
+                0 => std::thread::sleep(NAP),
+                n => break n,
+            }
+        };
+        recv(lane, &mut len[got..])?;
+        if u32::from_le_bytes(len) == MAGIC {
+            // Take the rest of the hello, so the next session's handshake reads whole records.
+            recv(lane, &mut [0u8; 12])?;
+            bail!("the other machine started a new session");
+        }
+        let mut bytes = vec![0u8; u32::from_le_bytes(len) as usize];
+        recv(lane, &mut bytes)?;
         Ok(bytes)
     }
 

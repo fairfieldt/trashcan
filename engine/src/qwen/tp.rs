@@ -684,13 +684,12 @@ impl TpGroup {
         Ok(())
     }
 
-    /// The other machine's side: carry out the driver's operations until it disconnects or says goodbye.
+    /// The other machine's side: carry out the driver's operations until it says goodbye or the lanes close.
+    /// The driver can stay quiet for hours between operations (a server between requests), so the wait for the
+    /// next one has no deadline; the messages and exchanges within an operation still fail when the lanes stall.
     fn follow(&mut self) -> Result<()> {
         loop {
-            let bytes = match self.peer.as_mut().context("no driver")?.recv_message() {
-                Ok(b) => b,
-                Err(_) => return Ok(()),
-            };
+            let bytes = self.peer.as_mut().context("no driver")?.recv_message_idle()?;
             let m: Value = serde_json::from_slice(&bytes)?;
             if let Some(f) = m.get("forward") {
                 let tokens: Vec<u32> = serde_json::from_value(f["tokens"].clone())?;
@@ -746,8 +745,9 @@ pub fn serve(model: &Path, mtp: Option<&Path>, gpus: &[usize], listen: Option<&s
             Some(l) => Lanes::accept(l),
             None => Lanes::streams(streams, true),
         };
-        if let Err(e) = lanes.and_then(|l| session(model, mtp, gpus, l)) {
-            eprintln!("tp-node: session ended: {e:#}");
+        match lanes.and_then(|l| session(model, mtp, gpus, l)) {
+            Ok(()) => eprintln!("tp-node: session ended"),
+            Err(e) => eprintln!("tp-node: session ended: {e:#}"),
         }
         if listener.is_none() {
             // Let the driver close its ends of the streams before they reopen.
