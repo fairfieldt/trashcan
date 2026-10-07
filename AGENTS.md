@@ -18,7 +18,7 @@ Never stop or start `ds4-qwen.service` yourself; gpuq manages it.
 # Shared GPUs on the Mac Pros
 
 The Mac Pros' D700s (incite, invite) are shared by several sessions through one gpuq queue per machine
-(dashboards http://incite.tdf.sh:8765/ and http://invite.tdf.sh:8765/). Before any GPU run, request a lease with
+(dashboards https://gpuq.tdf.sh/m/incite/ and https://gpuq.tdf.sh/m/invite/). Before any GPU run, request a lease with
 `gpuq --on MACHINE request LABEL --est MIN`, wait with `gpuq --on MACHINE wait ID`, run GPU commands as
 `ssh MACHINE 'gpuq run ID -- CMD'`, and release promptly. For benchmarks, wrap the command in
 `scripts/with-clocks.sh CLOCKLOG CMD` to record sustained clocks. Never write into `~/trashcan` on incite (another
