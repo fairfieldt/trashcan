@@ -164,7 +164,7 @@ with TP2 on one Mac against 127 / 23. A decode token spends most of its time on 
 against 123 for a pipeline stage: narrower matrices and a cache flush per submission); the 128 cross-Mac
 exchanges add 12 ms. With MTP drafting (the block split like a trunk layer) the 27B decodes at 26 tok/s on the two
 Macs, 72% of drafts accepted; `qwen-check` passes on TP with and without drafting. `trashcan serve` takes the same
-`--tp` options. Measurement switches:
+`--tp` options and passes `scripts/test-server.py` that way. Measurement switches:
 `TRASHCAN_TP_SUBMIT=1` submits each segment when it is due instead of ahead; `TRASHCAN_TP_FREE=1` runs the
 segments back to back without all-reduces (wrong results, the GPU floor).
 

@@ -85,8 +85,10 @@ decoding (9B: 65% accepted, 40.4 against 24.5 tok/s; 27B: 68.5%, 21.4 against 13
 - The 27B's 128 cross-Mac exchanges take 94 µs each in the model against 34 µs in the benchmark: the exchange
   includes waiting for the slower Mac.
 
+`scripts/test-server.py` passes against `trashcan serve 27B --tp-stream ... --mtp ...` with `qwen-tp-node --mtp` on
+invite (`test-server-27b-tp4-mtp.txt`, server log `incite/serve-27b.log`).
+
 ## Not yet
 
-`scripts/test-server.py` against `serve --tp-stream` (the server takes `--tp`, `--tp-connect`, `--tp-stream`); prefill
-all-reduces are still the naive host path (about 21.6 ms per 512-token all-reduce in the benchmark); GPU efficiency
-at the per-rank shapes.
+Prefill all-reduces are still the naive host path (about 21.6 ms per 512-token all-reduce in the benchmark); GPU
+efficiency at the per-rank shapes; USB4STREAM setup and device permissions outside `tbstream-up.sh`.
