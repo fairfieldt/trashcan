@@ -163,8 +163,8 @@ rows and returns the final hidden state with its candidates; every other stage s
 result travels back, and the candidates are merged. Two CPU processes with the head in two halves reproduce the
 reference's logits exactly; incite's two GPUs and the Mac node with the head in three give the same tokens and
 logits within rel 3.4e-7 of the unsplit run. Scoring a slice on one D700 takes 1.12 ms for 1/12 of the vocabulary,
-2.03 ms for 1/3, 2.62 ms for 1/2 and 4.60 ms for all of it (about 0.7 ms fixed per slice), so twelve slices scored
-one after another cost about 13 ms per token against 4.6 ms for one GPU.
+2.03 ms for 1/3, 2.62 ms for 1/2 and 4.60 ms for all of it (1,024 rows: 0.79 ms, so about 0.75 ms is fixed per
+slice), so twelve slices scored one after another cost about 13 ms per token against 4.6 ms for one GPU.
 
 **Recommendation.** Six Macs: IQ4_XS gate/up and IQ4_NL down for routed and shared experts, Q8_0 dense matrices,
 Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of

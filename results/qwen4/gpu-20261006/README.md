@@ -52,7 +52,8 @@ after `--start` tokens, prefill chunks of `--batch` from position 0, and the las
 | `stagebench-giq4-44-48-head.json` | `--ranges 44:48 --head --gpus 1 --prefill 2`, G-iq4 | 6480 MiB on a 5888 MiB heap: RADV put the excess in system memory and the head took 84 ms. Stages now refuse to load past the budget |
 
 `head-slice-bench.log` (`head-slice-bench.sh`): wall time to score one hidden state with 20,736, 82,944, 124,160
-and 248,320 head rows on one D700 (`--head-rows`): 1.12, 2.03, 2.62 and 4.60 ms.
+and 248,320 head rows on one D700 (`--head-rows`): 1.12, 2.03, 2.62 and 4.60 ms; 1,024 rows take 0.79 ms, so about
+0.75 ms of every slice is fixed (the single-workgroup `topk`/`merge` passes and the submission round trip).
 
 ## VRAM
 
