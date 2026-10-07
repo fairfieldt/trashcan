@@ -1,0 +1,7 @@
+#!/bin/sh
+# Start netconsole on the interface that carries the default route (the Mac Pro has two NICs), sending to
+# NETCONSOLE_TARGET (ip/mac of the workstation running scripts/netconsole-listen.py) from /etc/default/netconsole-target.
+. /etc/default/netconsole-target
+dev=$(ip -4 route show default | awk '{print $5; exit}')
+[ -n "$dev" ] || { echo "no default route" >&2; exit 1; }
+exec /usr/sbin/modprobe netconsole netconsole=6666@/$dev,6666@$NETCONSOLE_TARGET

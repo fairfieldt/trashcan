@@ -1,13 +1,15 @@
 #!/bin/bash
-# Push the workspace to incite (~/trashcan) and pull results back into results/.
-# usage: scripts/sync.sh [push|pull|both]   (default: push)
+# Push the workspace to a Mac Pro node (~/trashcan; default incite) and pull results back into results/.
+# usage: [HOST=name] scripts/sync.sh [push|pull|both]   (default: push)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mode=${1:-push}
+host=${HOST:-incite}
 if [ "$mode" = push ] || [ "$mode" = both ]; then
-    rsync -a --delete --exclude target --exclude /tools/dump-activations/dump --exclude /bench/xgpu/xgpu --exclude '/bench/xgpu/*.spv' Cargo.toml Cargo.lock README.md engine scripts bench tools tests docs incite:trashcan/
-    rsync -a kernel/build.sh kernel/build-7.2.sh kernel/configs kernel/patches kernel/patches-7.2 kernel/upstream incite:trashcan/kernel/
+    ssh "$host" 'mkdir -p ~/trashcan/kernel'
+    rsync -a --delete --exclude target --exclude /tools/dump-activations/dump --exclude /bench/xgpu/xgpu --exclude '/bench/xgpu/*.spv' Cargo.toml Cargo.lock README.md engine scripts bench tools tests docs "$host":trashcan/
+    rsync -a kernel/build.sh kernel/build-7.2.sh kernel/configs kernel/patches kernel/patches-7.2 kernel/upstream "$host":trashcan/kernel/
 fi
 if [ "$mode" = pull ] || [ "$mode" = both ]; then
-    rsync -a incite:trashcan/results/ results/
+    rsync -a "$host":trashcan/results/ results/
 fi

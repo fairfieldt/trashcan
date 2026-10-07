@@ -54,6 +54,8 @@ The headers package contains x86-64 host tools, so out-of-tree modules build on 
 
 ## Installing and booting
 
+For a new Mac Pro, `nodes/macpro/provision.sh` does all of this (`nodes/macpro/README.md`). By hand:
+
 ```bash
 cd ~/kernel/7.2/debs && sudo dpkg -i linux-image-7.2.9-p2p_*.deb linux-headers-7.2.9-p2p_*.deb
 ```
@@ -111,10 +113,11 @@ shuts down cleanly either way.
 
 ## When something goes wrong
 
-- Kernel messages stream to the Mac: `netconsole.service` (`/usr/local/sbin/netconsole-start`) sends to
-  192.168.0.212:6666 from whichever NIC holds the default route; on the Mac, `scripts/netconsole-listen.py` appends
-  them to `~/dev/claude-work/trashcan-kbuild/netconsole-incite.log`. If the Mac's address changes, edit
-  `netconsole-start`.
+- Kernel messages stream to the Mac: `netconsole.service` (`/usr/local/sbin/netconsole-start`) sends to the
+  address in `/etc/default/netconsole-target` (port 6666) from whichever NIC holds the default route; on the Mac,
+  `scripts/netconsole-listen.py` appends them, prefixed with the sender's IP, to
+  `~/dev/claude-work/trashcan-kbuild/netconsole-incite.log`. If the Mac's address changes, rerun
+  `nodes/macpro/provision.sh HOST system`.
 - `/etc/sysctl.d/90-trashcan-panic.conf`: an oops, hard lockup or soft lockup panics, and a panic reboots after
   10 s. Apple's firmware disables the iTCO hardware watchdog (`NO_REBOOT`), so this is the only automatic recovery.
 - After an oops or with hung tasks, `systemctl reboot` can wait forever on stuck processes. Use

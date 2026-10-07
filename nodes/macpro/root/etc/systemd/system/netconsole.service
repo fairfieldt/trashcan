@@ -1,0 +1,13 @@
+[Unit]
+Description=Send kernel messages to the workstation (/etc/default/netconsole-target)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/netconsole-start
+ExecStop=/usr/sbin/modprobe -r netconsole
+
+[Install]
+WantedBy=multi-user.target

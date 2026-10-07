@@ -12,8 +12,9 @@ written in Rust on raw Vulkan, with tensor parallelism across the two GPUs. llam
 - `engine/`: the Rust/Vulkan engine: decode, chunked prefill, tokenizer, chat and optional MTP
 - `docs/implementation.md`: build/run commands, validation recipes and measured implementation status
 - `bench/xgpu/`: cross-GPU sync and copy microbenchmark
-- `kernel/`: custom kernel build (D700 fixes + PCI P2P)
-- `scripts/`: incite helpers (`sync.sh` pushes the workspace and pulls `results/`)
+- `kernel/`: incite's kernel, 7.2.9-p2p (D700 fixes, PCI P2P, USB4STREAM); see `docs/kernel.md`
+- `nodes/macpro/`: `provision.sh` sets up a Mac Pro 6,1 with fresh Debian 13 as a node like incite
+- `scripts/`: node helpers (`sync.sh` pushes the workspace and pulls `results/`; `HOST=` picks the node)
 - `tools/`: llama.cpp activation dumper and `compare_activations.py`
 - `tests/fixtures/`: tokenizer fixture from llama.cpp
 - `reference/llama.cpp-patches/`: our local llama.cpp patches from the investigation

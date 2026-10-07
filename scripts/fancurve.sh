@@ -1,5 +1,5 @@
 #!/bin/bash
-# Aggressive fan curve for incite (Mac Pro 6,1). One SMC fan cools both D700s and the CPU, so its speed follows
+# Aggressive fan curve for a Mac Pro 6,1. One SMC fan cools both D700s and the CPU, so its speed follows
 # the hottest of the two GPU edge sensors and the CPU package: minimum at or below T_LOW, linear to full speed at
 # T_HIGH and above. A sensor that can't be read means full speed. Stopping the service hands the fan back to the SMC.
 # Installed as /usr/local/sbin/fancurve.sh, run by fancurve.service.
