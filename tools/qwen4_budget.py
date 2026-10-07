@@ -10,7 +10,9 @@ stages the final mixer and their share of the head (Q6_K repacked to int8 with f
 weight). `--check` compares the model with every stage measured on incite.
 
 `--lean` models three savings that are not implemented: prefill reuses the fused mixer matrix (no separate down
-copy), and the router and indexer projections in Q8_0. `--q2-down rco` puts one layer per GPU (RCO's least
+copy), and the router and indexer projections in Q8_0. `--more` adds three more: the head kept at Q6_K size (6.56
+bits per weight instead of the 10-bit repack), f16 pooled indexer keys, and block scores computed in tiles of 4096
+blocks instead of the whole context at once. `--q2-down rco` puts one layer per GPU (RCO's least
 sensitive: 1, 5, 8, 12, 16, 20, 24, 30, 33, 36, 40, 45) at Q2_0 down projections, routed and shared.
 
 GPU formats (bits per weight): dense Q4_0 5.0 (f32 scales), Q8_0 8.5; experts Q4_0 and IQ4_NL 4.5, IQ4_XS 4.25,
@@ -60,6 +62,9 @@ def ring_rows(batch):
     return -(-(batch + KPOOL) // KPOOL) * KPOOL
 
 
+MORE = False  # set by --more (see the module docstring)
+
+
 def layer_bytes(il, r, context, batch, lean=False, kv='f16', ring=True, q2=False):
     dense = r['dense']
     b = 2 * mixer_bytes(dense, lean=lean)
@@ -69,7 +74,7 @@ def layer_bytes(il, r, context, batch, lean=False, kv='f16', ring=True, q2=False
         if indexed(context, kv):
             b += (IDX_HEADS * IDX_DIM + IDX_DIM) * D * (Q8 / 8 if lean else 4)      # indexer projections
             b += (ring_rows(batch) if ring else context) * IDX_DIM * 4              # raw keys
-            b += context // KPOOL * IDX_DIM * 4                                     # pooled keys
+            b += context // KPOOL * IDX_DIM * (2 if MORE else 4)                    # pooled keys
     else:
         b += (D * CONV_DIM + D * VALUE_DIM + VALUE_DIM * D) * dense / 8             # qkv, z, out
         b += 2 * V_HEADS * D * 4 + CONV_DIM * 4 * 4 + 3 * CONV_DIM * 4              # alpha/beta, conv w, conv state
@@ -85,7 +90,8 @@ def scratch_bytes(batch, context, kv='f16'):
     per_token = (6 * W + RANK + 2 * (RANK + 8) + 4 * D + HC + max(CONV_DIM, 2 * QD) + CONV_DIM + VALUE_DIM
                  + 2 * V_HEADS + max(VALUE_DIM, QD) + 2 * KVD + QD + (E + 1) + 3 * 11
                  + 11 * FF + (11 * D if batch >= 16 else 0) + IDX_DIM + 2 * IDX_HEADS * IDX_DIM
-                 + ((context // KPOOL + BUDGET) if indexed(context, kv) else 0)
+                 + ((min(context // KPOOL, 4096) if MORE else context // KPOOL) + BUDGET if indexed(context, kv)
+                    else 0)
                  + (KVD if kv == 'q8' else 0) + (KVD if kv != 'f16' else 0))           # f32 K/V before the q8 store
     return per_token * batch * 4 + HEADS * 64 * (HEAD_DIM + 2) * 4 * 8
 
@@ -94,7 +100,7 @@ def head_bytes(r, rows=VOCAB, ends=True):
     """Head rows (10-bit repack), their logits and candidate scratch; the stage that ends the model adds the final
     mixer."""
     chunks = -(-rows // 1024)
-    return (rows * D * HEAD_BITS / 8 + rows * 4 + chunks * 64 * 8
+    return (rows * D * (6.5625 if MORE else HEAD_BITS) / 8 + rows * 4 + chunks * 64 * 8
             + (mixer_bytes(r['dense'], inject=False) if ends else 0))
 
 
@@ -164,18 +170,23 @@ def check():
 
 
 def grid(context):
-    """Six Macs, IQ4_XS/IQ4_NL experts, head over all 12 GPUs, 128-token chunks: the worst GPU's headroom."""
+    """Six Macs, IQ4_XS/IQ4_NL experts, head over all 12 GPUs: headroom on the fullest GPU per long-context option."""
+    global MORE
     r = RECIPES['IQ4_XS gate/up + IQ4_NL down']
-    print(f'six Macs, IQ4_XS/IQ4_NL experts, Q8_0 dense, head over 12 GPUs, 128-token chunks, context {context}: '
-          f'MiB left on the fullest GPU of {HEAP / MIB:.0f}')
-    print(f'{"K/V cache":10s} {"Q2_0 down":14s} {"current":>9s} {"--lean":>9s}')
+    print(f'six Macs, IQ4_XS/IQ4_NL experts, Q8_0 dense, head over 12 GPUs, context {context}: MiB left on the fullest '
+          f'GPU of {HEAP / MIB:.0f}')
+    cols = [('current, 128-token chunks', False, False, 128), ('--lean', True, False, 128),
+            ('--lean --more', True, True, 128), ('--lean --more, 64-token chunks', True, True, 64)]
+    print(f'{"K/V cache":10s} {"Q2_0 down":14s}' + ''.join(f' | {c[0]:>30s}' for c in cols))
     for kv in ('f16', 'k16v8', 'q8'):
         for q2 in ((), RCO_Q2):
             row = []
-            for lean in (False, True):
-                p = plan(6, r, context, 128, 12, lean, kv, q2)
+            for _, lean, more, batch in cols:
+                MORE = more
+                p = plan(6, r, context, batch, 12, lean, kv, q2)
                 row.append((HEAP - max(u + h for _, _, u, h in p)) / MIB)
-            print(f'{kv:10s} {"1 of 4 layers" if q2 else "none":14s} {row[0]:+9.0f} {row[1]:+9.0f}')
+            MORE = False
+            print(f'{kv:10s} {"1 of 4 layers" if q2 else "none":14s}' + ''.join(f' | {x:+30.0f}' for x in row))
 
 
 if __name__ == '__main__':
@@ -188,7 +199,9 @@ if __name__ == '__main__':
     ap.add_argument('--q2-down', default='', choices=('', 'rco'))
     ap.add_argument('--check', action='store_true')
     ap.add_argument('--grid', action='store_true')
+    ap.add_argument('--more', action='store_true')
     a = ap.parse_args()
+    MORE = a.more
     if a.check:
         check()
         raise SystemExit
