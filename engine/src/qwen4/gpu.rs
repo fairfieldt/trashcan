@@ -22,8 +22,9 @@ use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = crate::qwen::gpu::TOP_K;
 const GRAPH_CACHE_CAPACITY: usize = 6;
-/// Phase timestamps per layer (n-gram module, two mixers, sublayer, router, experts).
-const MARKS: usize = 6;
+/// Phase timestamps per layer (n-gram module, two mixers, sublayer (sparse QSA: projections, block selection,
+/// attention), router, experts).
+const MARKS: usize = 8;
 /// Batches of at least this many tokens group expert slots by expert (each expert's rows decoded once).
 const GROUPED_MIN: usize = 16;
 
@@ -645,20 +646,18 @@ impl GpuStage {
         u[7] = self.context as u32;
         u[9] = c.kpool as u32;
         let _ = attn;
+        // Scores over every block a recorded graph may see (the position changes on replay; groups past it exit).
+        gpu.dispatch(
+            current.get(),
+            "qwen4_idx_score",
+            push([self.iqr.address, ix.pooled.address, self.scores.address, 0, 0, 0], u),
+            (self.context / c.kpool).div_ceil(64) as u32,
+            n.div_ceil(8) as u32,
+        );
         gpu.dispatch(
             current.get(),
             "qwen4_idx_select",
-            push(
-                [
-                    self.iqr.address,
-                    ix.pooled.address,
-                    self.scores.address,
-                    self.sel.address,
-                    0,
-                    0,
-                ],
-                u,
-            ),
+            push([0, 0, self.scores.address, self.sel.address, 0, 0], u),
             1,
             n as u32,
         );
@@ -1118,7 +1117,9 @@ impl GpuStage {
                     u[6] = hd as u32;
                     u[7] = self.context as u32;
                     if let Some(ix) = index {
+                        mark(&mut graph, li, "qkv");
                         self.index_select(&current, ix, &u, n)?;
+                        mark(&mut graph, li, "index");
                         capture(
                             &mut graph,
                             format!("indexer_q-{il}"),

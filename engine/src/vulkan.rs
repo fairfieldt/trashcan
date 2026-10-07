@@ -394,6 +394,7 @@ impl Device {
             ("qwen4_idx_store", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_store.spv")).as_slice()),
             ("qwen4_idx_pool", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_pool.spv")).as_slice()),
             ("qwen4_idx_select", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_select.spv")).as_slice()),
+            ("qwen4_idx_score", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_score.spv")).as_slice()),
             ("qwen4_attention_sparse", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_attention_sparse.spv")).as_slice()),
             (
                 "qwen4_attention_sparse_full",

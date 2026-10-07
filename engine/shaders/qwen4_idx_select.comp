@@ -1,29 +1,17 @@
 #version 460
 #include "common.glsl"
 // QSA block selection for token t at position p: with nb = (p + 1) / kind complete blocks, keep all of them while
-// nb <= p.m, else the p.m best by score = sum over heads of relu(q_h . pooled_b) / sqrt(dim) (ties to the earlier
-// block), listed in increasing block order. The 4-pass radix select runs on the order-preserving bits of the
-// scores. One workgroup per token.
-// a: indexer queries [t][heads][dim] (normed, rotated), b: pooled keys [cap / kind][dim], c: scores scratch
-// [t][cap / kind], d: selected blocks [t][p.m] (u32). p.heads, p.dim (<= 128), p.kind, p.m, p.cap.
+// nb <= p.m, else the p.m best by the scores from qwen4_idx_score (ties to the earlier block), listed in increasing
+// block order. The 4-pass radix select runs on the order-preserving bits of the scores. One workgroup per token.
+// c: scores [t][cap / kind], d: selected blocks [t][p.m] (u32). p.kind, p.m, p.cap.
 layout(local_size_x=256) in;
-// The scores are written and read back by other invocations of the workgroup: keep them coherent.
-layout(set=2,binding=2,std430) coherent buffer Scores { float v[]; } sc;
-shared float q[512];
+#define sc c_f
 shared uint hist[256],cnt_gt[256],cnt_eq[256];
 shared uint s_prefix,s_rem,s_gt;
 uint key(float s){uint u=floatBitsToUint(s);return (u&0x80000000u)!=0?~u:u|0x80000000u;}
 void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
 uint p1=position()+t+1,nb=p1/p.kind,stride=p.cap/p.kind,top=p.m;
 if(nb<=top){for(uint j=l;j<nb;j+=256)d_u.v[t*top+j]=j;return;}
-uint qd=p.heads*p.dim;
-for(uint j=l;j<qd;j+=256)q[j]=a_f.v[t*qd+j];
-barrier();
-float scale=inversesqrt(float(p.dim));
-for(uint b=l;b<nb;b+=256){float s=0;
-    for(uint h=0;h<p.heads;h++){float dt=0;for(uint j=0;j<p.dim;j++)dt=fma(q[h*p.dim+j],b_f.v[(b%stride)*p.dim+j],dt);s+=max(dt,0.0);}
-    sc.v[t*stride+b]=s*scale;}
-memoryBarrierBuffer();barrier();
 // Radix select of the top-th largest key, most significant byte first.
 if(l==0){s_prefix=0;s_rem=top;s_gt=0;}
 for(int pass=3;pass>=0;pass--){

@@ -92,9 +92,16 @@ pub fn stage_bench(
         add(&mut pre, collect(local), prefill as f64);
     }
     let pre_wall = t0.elapsed().as_secs_f64() / prefill.max(1) as f64;
+    // The chunk that ends the `start` prefill is timed too: at long contexts QSA attends sparsely there.
+    let mut late = Vec::new();
+    let mut late_pos = 0;
     for chunk in (0..start).step_by(batch) {
         let n = batch.min(start - chunk);
         run(local, &stream[chunk..chunk + n], chunk)?;
+        late_pos = chunk;
+    }
+    if start > 0 {
+        add(&mut late, collect(local), 1.);
     }
     let mut dec = Vec::new();
     let t0 = std::time::Instant::now();
@@ -114,6 +121,6 @@ pub fn stage_bench(
     Ok(
         serde_json::json!({"batch": batch, "prefill_chunks": prefill, "prefill_wall_ms": pre_wall * 1e3,
         "prefill": json(&pre), "decode_steps": decode, "decode_start": start, "decode_wall_ms": dec_wall * 1e3,
-        "decode": json(&dec), "device_mib": mib}),
+        "decode": json(&dec), "device_mib": mib, "late_chunk_pos": late_pos, "late_chunk": json(&late)}),
     )
 }

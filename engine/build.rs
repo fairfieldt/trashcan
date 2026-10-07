@@ -63,6 +63,7 @@ fn main() {
         "qwen4_idx_store",
         "qwen4_idx_pool",
         "qwen4_idx_select",
+        "qwen4_idx_score",
         "qwen4_attention_sparse",
         "qwen4_attention_sparse_full",
         "qwen4_q8_mv",
