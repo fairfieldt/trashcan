@@ -26,7 +26,8 @@ The three links scale almost linearly: each controller has its own PCIe Gen2 x4 
 x8 isn't a limit at this rate. Both directions on one link give about 11 Gb/s combined, as on the single-cable
 test earlier the same day; not investigated (default CPU settings).
 
-sockperf UDP ping-pong, 64 B, link 1 while it was single-lane: 63.8 us median, 68.1 us p99.
+sockperf UDP ping-pong, 64 B, link 1: 63.8 us median, 68.1 us p99 at the default 128 us throttle (single-lane at
+the time); **42.1 us median, 53.9 us p99** with `thunderbolt_net throttling=32000`, now the node default.
 
 ## Copying files
 

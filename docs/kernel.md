@@ -92,7 +92,8 @@ shuts down cleanly either way.
 
 ## Thunderbolt on 7.2
 
-- `thunderbolt_net`: load with `throttling=32000` for 40 us round trips (default 128000 gives 128 us). NetworkManager
+- `thunderbolt_net`: nodes load it with `throttling=32000` (`/etc/modprobe.d/thunderbolt-net.conf`, from
+  `nodes/macpro/root/`) for 40 us round trips; the kernel default of 128000 gives 128 us. NetworkManager
   leaves `thunderbolt*` interfaces alone (`/etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf`).
 - USB4STREAM: `sudo modprobe thunderbolt_stream` (nothing loads it automatically), then create the stream on one
   end and fill in the other end's HopIDs by hand; the far end only auto-configures if the peer's properties arrived

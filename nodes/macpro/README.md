@@ -43,7 +43,7 @@ models take about 70 s over the LAN.
 | `packages` | Build tools, AMD firmware, Mesa Vulkan, `glslc`, kernel build dependencies, `iperf3`, `sockperf` |
 | `tailscale` | Tailscale's apt repository and `tailscaled`, with `fairfieldt` as operator |
 | `rust` | rustup with the stable toolchain |
-| `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, `tblink`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
+| `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, `tblink`, `thunderbolt_net throttling=32000`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
 | `tblink` | Records the node's Thunderbolt controller UUIDs in `tblink/nodes.tsv` (commit it) and copies the table to every node |
 | `kernel` | Installs the `7.2.9-p2p` image and headers and pins `GRUB_DEFAULT` to that entry by id |
 | `workspace` | `HOST=NEW_HOST scripts/sync.sh push`, then `cargo build --release` and `make -C bench/xgpu` |
