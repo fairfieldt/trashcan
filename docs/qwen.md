@@ -158,8 +158,8 @@ trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2
 ```
 
 Qwen3.8-27B on incite and invite (four D700s, [results/qwen/tp-20261006](../results/qwen/tp-20261006/)): TP4
-matches the CPU reference to 4.1e-4 with the same greedy tokens, and runs at 143 tok/s prefill and 16.6 tok/s
-decode over USB4STREAM (140 / 15.6 over TCP), against 38 / 9.6 for the four-stage pipeline. The 9B gets 251 / 32
+matches the CPU reference to 4.1e-4 with the same greedy tokens, and runs at 149 tok/s prefill and 16.6 tok/s
+decode over USB4STREAM (140 / 15.6 over TCP), against 38 / 9.6 for the four-stage pipeline. The 9B gets 264 / 32
 with TP2 on one Mac against 127 / 23. A decode token spends most of its time on the GPUs (about 102 GB/s per GPU
 against 123 for a pipeline stage: narrower matrices and a cache flush per submission); the 128 cross-Mac
 exchanges add 12 ms. With MTP drafting (the block split like a trunk layer) the 27B decodes at 26 tok/s on the two
@@ -174,11 +174,13 @@ position parameters. Each GPU runs the second micro-batch on the second queue of
 waiting for the first micro-batch's segment i (whose recurrent state and attention cache it continues). The host
 all-reduces one micro-batch while the GPUs run the other, and each queue fills the other's bubbles (`qwen_gdn`,
 host-memory traffic). The prefill's candidates are bit for bit those of one batch. The 27B prefills 512 tokens in
-3.6 s instead of 5.6, within a few percent of the GPU floor, where Q4_0 GEMMs at 55-63% of the D700's peak now take
-most of the time. Switches: `TRASHCAN_TP_MICRO` (default 2, 1 disables), `TRASHCAN_TP_QUEUES=1` (one queue),
-`TRASHCAN_TP_THREADS` (host threads for the sums; 6 across Macs, 1 on one Mac), `TRASHCAN_TP_PROFILE=1` (GPU time per
-kernel in `qwen-bench`'s `pp_profile`), `TRASHCAN_TP_VRAM_IO=1` (timing only: partials and totals stay in VRAM).
-`trashcan qwen-gemm-bench --shapes ROWSxK,...` times Q4_0 GEMM kernels and checks variants against `gemm` bit for bit.
+3.4 s instead of 5.6. The prefill is now GPU-bound, mostly in Q4_0 GEMMs at about 2.1 TFLOP/s (60% of the D700's
+peak). Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead:
+3-6% faster, identical results (`TRASHCAN_QWEN_GEMM=gemm` restores the old kernel). Switches: `TRASHCAN_TP_MICRO`
+(default 2, 1 disables), `TRASHCAN_TP_QUEUES=1` (one queue), `TRASHCAN_TP_THREADS` (host threads for the sums; 6
+across Macs, 1 on one Mac), `TRASHCAN_TP_PROFILE=1` (GPU time per kernel in `qwen-bench`'s `pp_profile`),
+`TRASHCAN_TP_VRAM_IO=1` (timing only: partials and totals stay in VRAM). `trashcan qwen-gemm-bench --shapes
+ROWSxK,...` times Q4_0 GEMM kernels and checks variants against `gemm` bit for bit.
 
 The decision to use TP across Macs came from `trashcan allreduce-bench`
 ([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)): a cross-Mac all-reduce costs

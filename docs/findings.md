@@ -4,8 +4,8 @@ Newest first. Numbers are from incite unless noted; raw outputs are under `resul
 
 ## 2026-10-06 (later): tensor-parallel prefill hides its all-reduces
 
-`results/qwen/tp-prefill-20261006/`. Qwen3.8-27B on TP4 across both Macs: pp512 143 tok/s (was 90-92), pp2048 136
-(87); over TCP 140 (82). Qwen3.5-9B TP2: 251 (208-210). Prefill candidates bit for bit unchanged.
+`results/qwen/tp-prefill-20261006/`. Qwen3.8-27B on TP4 across both Macs: pp512 149 tok/s (was 90-92), pp2048 141
+(87); over TCP 140 (82). Qwen3.5-9B TP2: 264 (208-210). Prefill candidates bit for bit unchanged.
 
 - Before, the GPUs and the host took turns: of a 27B chunk's 5.6 s, 3.65 s waited on the GPUs and 2.0 s went to
   the host (sum 0.5, exchange 0.9, totals 0.5). Without all-reduces the GPUs needed 3.64 s.
@@ -20,7 +20,9 @@ Newest first. Numbers are from incite unless noted; raw outputs are under `resul
   at 1.2 TFLOP/s because of their 10 MiB of partials), now partly hidden by the second queue.
 - The prefill GEMM runs at 1.9-2.2 TFLOP/s (55-63% of 3.48) at the 27B's per-rank shapes and is 88% of the GPU
   time. An 8x8 register tile per lane (one wave per 64x64 tile) was bit-identical but half as fast: occupancy 1 and
-  uncoalesced tile loads, while `gemm` already gets most of its LDS reads by broadcast.
+  uncoalesced tile loads, while `gemm` already gets most of its LDS reads by broadcast. Its weight-tile reads did
+  have 2-way bank conflicts (rows rr and rr + 8 at a 36-dword stride): an XOR swizzle of the vec4 index plus loading
+  the next block into registers ahead (`gemm2`) is 3-6% faster with identical results, +4-5% end to end.
 
 ## 2026-10-06: Qwen3.8-27B with tensor parallelism across incite and invite
 

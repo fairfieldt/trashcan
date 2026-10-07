@@ -2,23 +2,23 @@
 
 Before this work a tensor-parallel prefill chunk ran the GPUs, then the host all-reduce, in strict alternation.
 Now each chunk runs as two micro-batches on two compute queues: the host all-reduces one micro-batch while the
-GPUs run the other, and the second queue fills the first one's bubbles. Every prefill candidate is bitwise the same
-as before.
+GPUs run the other, and the second queue fills the first one's bubbles. A faster GEMM kernel then cut the GPU time
+itself. Every prefill candidate is bitwise the same as before.
 
 | Model, layout (incite + invite, USB4STREAM × 3 unless noted) | pp512 tok/s before | after | pp2048 before | after |
 |---|---|---|---|---|
-| **Qwen3.8-27B, TP4 across both Macs** | 89.8, 91.6 | **143.3, 143.0** | 87.3 | **136.3** |
-| Qwen3.8-27B, TP4, TCP × 3 | 81.9 (`../tp-20261006`) | 140.0 (before the warm-up below) | | |
-| **Qwen3.5-9B, TP2 on incite** | 209.9, 208.2 | **251.0, 250.7** | 203.0 | **238.3** |
+| **Qwen3.8-27B, TP4 across both Macs** | 89.8, 91.6 | **148.5, 148.7** | 87.3 | **140.5** |
+| Qwen3.8-27B, TP4, TCP × 3 | 81.9 (`../tp-20261006`) | 140.0 (before the last two steps) | | |
+| **Qwen3.5-9B, TP2 on incite** | 209.9, 208.2 | **264.5, 263.2** | 203.0 | **248.6** |
 
-Decode is unchanged (single-token forwards take the old path): 27B tg 16.2-17.0 tok/s (before 16.6), 9B tg 32.1
+Decode is unchanged (single-token forwards take the old path): 27B tg 16.2-17.0 tok/s (before 16.6), 9B tg 32.0-32.2
 (before 32.2-32.3), with the same GPU wait per token (27B 45 ms, 9B 29.7 ms). The spread in 27B tg is the cross-Mac
 exchange (9.5-13.3 ms per token across all runs, versions alike).
 
-Hardware bound vs measured: with every all-reduce removed (`TRASHCAN_TP_FREE`, wrong results), the same two-queue
-graphs run at 145.2 tok/s for the 27B, measured before the graphs were recorded at load: the GPU floor of this code.
-The full run of that version reached 139.3, 96% of it. Before this work the GPU floor was 140.8 and the full run
-reached 64% of it.
+Hardware bound vs measured: with every all-reduce removed (`TRASHCAN_TP_FREE`, wrong results), the two-queue graphs
+of 662fa3b run at 145.2 tok/s for the 27B, the GPU floor of that version, whose full run reached 139.3 (96%).
+Before this work the GPU floor was 140.8 and the full run reached 64% of it. The floor is now set by the GPUs:
+GEMMs at about 2.1 TFLOP/s, 60% of the D700's 3.48 TFLOP/s peak.
 
 ## Tested source and commands
 
@@ -33,22 +33,26 @@ trashcan-exp/prefill/trashcan` (kbuild VM). Each run name's prefix gives the com
 | `gemm-bench-` | 47773ad + the `gemm8` shaders below (not kept) | `qwen-gemm-bench` |
 | `dq-`, `final-`, `free-dq-`, `check-27b-*`, `validate-*` | 662fa3b | two compute queues; 6 host threads across Macs |
 | `warm-` | b4ee502 | full-chunk graphs recorded at load; no allocations per TP submission |
+| `gemm2-bench-`, `g2-` | b1dfa58 (the bench also ran a swizzle-only variant) | `gemm2`: conflict-free weight-tile reads, next block loaded ahead |
 
 ```sh
-# incite (driver), inside a gpuq lease, performance governor on both Macs, scripts as in ../tp-20261006
+# incite (driver), inside a gpuq lease, performance governor on both Macs (gov.sh)
 ./run.sh NAME ./trashcan qwen-bench ~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf \
     --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --pp 512 --tg 32
 ./run.sh NAME ./trashcan qwen-bench ~/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf --tp --pp 512 --tg 32
 # invite (the other Mac's ranks), inside its own lease
 ./node.sh NAME ~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf [--mtp MTP.gguf]
+# one GPU
+./run.sh NAME ./trashcan qwen-gemm-bench --n 256 --iterations 20 --kernels gemm,gemm2
 ```
 
 `run.sh` is `scripts/with-clocks.sh results/tp-prefill/clocks/NAME.txt sudo -n env $ENV python3
 scripts/latency-run.py CMD > NAME.json 2> NAME.err`; `node.sh` runs `qwen-tp-node MODEL --stream ...` under
 `with-clocks.sh`. `ENV` carried the switches (`TRASHCAN_TP_MICRO`, `TRASHCAN_TP_THREADS`, `TRASHCAN_TP_QUEUES`,
-`TRASHCAN_TP_FREE`, `TRASHCAN_TP_VRAM_IO`, `TRASHCAN_TP_PROFILE`); `incite/commands.log` and `invite/commands.log`
-list every command. The driver passes its micro-batch and thread counts to the node with each forward; FREE,
-VRAM_IO and the queue count are per process, so the node was restarted with the same setting.
+`TRASHCAN_TP_FREE`, `TRASHCAN_TP_VRAM_IO`, `TRASHCAN_TP_PROFILE`, `TRASHCAN_QWEN_GEMM`); `incite/commands.log` and
+`invite/commands.log` list every command. The driver passes its micro-batch and thread counts to the node with each
+forward; FREE, VRAM_IO, the queue count and the GEMM kernel are per process, so the node was restarted with the same
+setting.
 
 ## Where the time went before (`base-`, `free-`, `freevram-`)
 
@@ -82,8 +86,8 @@ Per-kernel GPU time of one 27B rank for 512 tokens (`prof-27b-tp4-m1`, `-m2` wit
 | everything else | | 61 | 57 | |
 | **busy** | | **3591** | **3686** | |
 
-GEMMs are 88% of the GPU time and run at 55-63% of the D700's 3.48 TFLOP/s; the mixer out-projections are held to
-1.2 TFLOP/s by their 10 MiB of shader stores into host memory (about 1.5 GB/s, `docs/findings.md` 2026-10-02).
+GEMMs are 88% of the GPU time; the mixer out-projections are held to 1.2 TFLOP/s by their 10 MiB of shader stores
+into host memory (about 1.5 GB/s, `docs/findings.md` 2026-10-02).
 
 ## Steps and what each measured
 
@@ -127,22 +131,40 @@ threads when the group spans two Macs.
 **Graphs at load (b4ee502).** The first prompt chunk used to record the two micro-batch graphs (about 80 ms for the
 27B: `pp_seconds` minus the loop phases is 0.11 s for the first chunk and 0.03 s for later ones). They are now
 recorded when the group loads. TP submissions and all-reduces also use fixed arrays instead of vectors, which keeps
-decode's submit time at 0.39-0.41 ms per 9B token (0.44-0.46 with the vectors). Final: 27B 143.3, 143.0 (pp2048
-136.3); 9B 251.0, 250.7 (pp2048 238.3).
+decode's submit time at 0.39-0.41 ms per 9B token (0.44-0.46 with the vectors). 27B 143.3, 143.0 (pp2048 136.3);
+9B 251.0, 250.7 (pp2048 238.3).
+
+**A faster GEMM (b1dfa58).** In `gemm`'s inner loop a wave reads 16 weight rows at once from LDS, and rows `rr` and
+`rr + 8` share banks at the 36-dword row stride. `gemm2` swizzles the weight tile's vec4 index by bit 3 of the row
+and loads the next Q4_0 block's word, scale and activations into registers while multiplying the current one. Each
+output keeps `gemm`'s fma chain over k, so the results are identical (0 mismatches in `qwen-gemm-bench`, validate
+dumps identical). Per GEMM at the 27B's TP4 shapes and 256 tokens (`invite/gemm2-bench-n256.json`, ms):
+
+| rows x K | gemm | swizzle only | gemm2 |
+|---|---|---|---|
+| 4352x5120 | 5.797 | 5.648 | 5.513 |
+| 5120x4352 | 5.351 | 5.233 | 5.185 |
+| 5120x1536 | 1.938 | 1.900 | 1.861 |
+| 2560x5120 | 3.393 | 3.280 | 3.197 |
+| 1536x5120 | 2.086 | 2.035 | 1.987 |
+| 3072x5120 | 3.984 | 3.867 | 3.772 |
+
+End to end (`g2-`, same binary, `TRASHCAN_QWEN_GEMM=gemm` for the old kernel): 9B TP2 251.6, 250.7 → 264.5, 263.2;
+27B TP4 148.5, 148.7 against 143.3, 143.0 (b4ee502); pp2048 140.5 and 248.6. `gemm2` also serves the pipeline path's
+prefill.
 
 ## Correctness
 
-All with the two-queue code (662fa3b; the 9B check and the 27B check repeated on b4ee502):
-
 | check | result |
 |---|---|
-| `qwen-validate` 27B TP4 vs our CPU reference | worst 4.11e-4 over 946 tensors, logits 4.11e-4, top-10 10/10, greedy 10/10 (`tp4-27b-vs-qwen38-27b-q4-ref.txt`) |
+| `qwen-validate` 27B TP4 vs our CPU reference (662fa3b) | worst 4.11e-4 over 946 tensors, logits 4.11e-4, top-10 10/10, greedy 10/10 (`tp4-27b-vs-qwen38-27b-q4-ref.txt`) |
 | same vs llama.cpp CPU | logits 3.28e-2, greedy 10/10 (`tp4-27b-vs-qwen38-27b-q4-cpu.txt`) |
 | same vs the TP4 dump of `../tp-20261006` | 0 difference over 258 tensors (`tp4-27b-vs-previous-tp4.txt`) |
-| `qwen-validate` 9B TP2 vs our CPU reference / llama.cpp / previous TP2 | 3.74e-4 (logits 2.35e-4) / logits 2.14e-2 / 0 difference; greedy 10/10 |
-| `qwen-check` 27B TP4, 600 tokens, verify 3, 128 steps | pass: restore exact, 85 rounds, 0 column mismatches, score error 0, text as before |
-| `qwen-check --mtp` 27B TP4, 256 steps | pass: speculative identical, 148 of 216 drafts accepted (85 + 63), as before |
-| `qwen-check` 9B TP2 with and without `--mtp` (invite) | pass; micro-batched and whole-batch prefills give identical reports apart from timings (144 of 222 drafts accepted) |
+| `qwen-validate` 9B TP2 vs our CPU reference / llama.cpp / previous TP2 (662fa3b) | 3.74e-4 (logits 2.35e-4) / logits 2.14e-2 / 0 difference; greedy 10/10 |
+| `qwen-validate` 9B TP2 with `gemm2` (b1dfa58) vs `gemm` | 0 difference over 130 tensors (`tp2-9b-gemm2-vs-gemm.txt`) |
+| `qwen-check` 27B TP4, 600 tokens, verify 3, 128 steps (662fa3b, b4ee502, b1dfa58) | pass: restore exact, 85 rounds, 0 column mismatches, score error 0, text as before |
+| `qwen-check --mtp` 27B TP4, 256 steps (662fa3b) | pass: speculative identical, 148 of 216 drafts accepted (85 + 63), as before |
+| `qwen-check` 9B TP2 with and without `--mtp` (invite; 1f88548, 662fa3b, b4ee502) | pass; micro-batched and whole-batch prefills give identical reports apart from timings (144 of 222 drafts accepted) |
 | prefill candidates, every bench | `pp_top` bit for bit equal across all versions and settings for each prompt length |
 | long prompts | 27B pp2048 and pp4096, 9B pp2048 and pp4096 (invite) |
 
@@ -155,29 +177,32 @@ The 600-token checks prefill 512 tokens as micro-batches and 88 as one batch.
 - **An 8 × 8 register tile per lane** for the Q4_0 GEMM (one wave per 64 × 64 tile, k-major LDS so each lane reads
   its rows and tokens as vec4): bit for bit identical but half the speed, 0.9-1.1 against 1.9-2.1 TFLOP/s at the
   27B's per-rank shapes (`invite/gemm-bench-n256.json`; RADV: 100 VGPRs, no spills, one wave per SIMD, uncoalesced
-  tile loads). The existing `gemm` already shares most LDS reads by broadcast; LDS bandwidth is not its limit.
+  tile loads). `gemm` already gets most of its LDS reads by broadcast; its bank conflicts were the cheaper target.
 - **Host threads without overlap**: they cut the 27B's sum and total from 1.04 s to 0.31 s per chunk (107.9 tok/s),
   but once the all-reduces overlap GPU work on one queue they no longer matter (133.2 against 133.7). With two
   queues they do again (+4.5%), and on one Mac they still do not (9B: 244.9 with 6 threads, 247.0 with 1).
 
 Not tried: SDMA copies (RADV exposes no transfer queue on GCN 1.0, `docs/findings.md`), f16 partials and bigger
-stream rounds (the exchange and the host work are hidden behind GPU work now; f16 would also change the numerics).
+stream rounds (the exchange and the host work are hidden behind GPU work now: TCP and USB4STREAM prefill alike;
+f16 would also change the numerics).
 
 ## What is left
 
-The 27B runs within a few percent of the two-queue GPU floor (145.2 tok/s), and that floor is the GPUs: 3.4 s per
-512 tokens per rank, 88% of it Q4_0 GEMMs at 55-63% of peak; then `qwen_gdn` (0.19 s, a sequential walk over the
-tokens) and the host-memory traffic, both now partly hidden by the second queue. Long prompts slow down in the scalar
-prefill attention (pp4096 126.5).
+The prefill is GPU-bound: per 512 tokens a 27B rank spends about 3.2 s in kernels, most of it Q4_0 GEMMs at about
+2.1 TFLOP/s (60% of peak), then `qwen_gdn` (0.19 s, a sequential walk over the tokens) and the host-memory traffic
+of the partials and totals (about 0.3 s, now partly hidden by the second queue). Long prompts slow down in the scalar
+prefill attention (27B pp4096 126.5 against 140.5 at pp512 in the same version).
 
 ## Files
 
 - `incite/*.json`, `*.err`: driver runs (bench JSON with `pp_tp_ms`, `pp_top`, `tg_tp_ms`; `pp_profile` in `prof-`);
   `incite/clocks/`: clock logs; `incite/tp4-27b/greedy.txt`.
-- `invite/`: node logs and clocks, the 9B checks, profiles and A/B runs on invite, the GEMM bench, `tp2-9b/greedy.txt`.
-- `*-vs-*.txt`: `tools/compare_activations.py` against `~/dev/claude-work/trashcan-20261006/ref/` and the previous
-  TP dumps in `~/dev/claude-work/trashcan-20261006/tp/` (the new dumps are in
+- `invite/`: node logs and clocks, the 9B checks, profiles and A/B runs on invite, the GEMM benches,
+  `tp2-9b/greedy.txt`.
+- `*-vs-*.txt`: `tools/compare_activations.py` against `~/dev/claude-work/trashcan-20261006/ref/`, the previous TP
+  dumps in `~/dev/claude-work/trashcan-20261006/tp/`, and each other (the new dumps are in
   `~/dev/claude-work/trashcan-20261006/prefill/validate/`).
+- `run.sh`, `node.sh`, `gov.sh`: the run wrappers.
 
-Clocks: 91 clock summaries, both cards at 850/1370 MHz in every run while computing (the low samples are model
-loading and idle time) except the GEMM bench, which used one card; maximum 81 C.
+Clocks: 103 clock summaries, both cards at 850/1370 MHz in every run while computing (the low samples are model
+loading and idle time) except the two GEMM benches, which used one card; maximum 81 C.

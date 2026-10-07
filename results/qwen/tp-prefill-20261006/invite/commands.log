@@ -35,3 +35,5 @@
 2026-10-06T22:42:30-07:00 warm-9b-tp2-invite-b:  ./trashcan qwen-bench /home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf --tp --pp 512 --tg 32
 2026-10-06T22:42:48-07:00 warm-check-9b-tp2:  ./trashcan qwen-check /home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf --tp --verify 3 --tokens 600 --steps 128
 2026-10-06T22:46:53-07:00 node node-warm-27b:  /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-06T23:04:11-07:00 gemm2-bench-n256:  ./trashcan qwen-gemm-bench --n 256 --iterations 20 --kernels gemm,gemm2,gemm2p,gemm
+2026-10-06T23:11:00-07:00 node node-g2-27b:  /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf
