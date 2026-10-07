@@ -54,6 +54,7 @@ after `--start` tokens, prefill chunks of `--batch` from position 0, and the las
 `head-slice-bench.log` (`head-slice-bench.sh`): wall time to score one hidden state with 20,736, 82,944, 124,160
 and 248,320 head rows on one D700 (`--head-rows`): 1.12, 2.03, 2.62 and 4.60 ms; 1,024 rows take 0.79 ms, so about
 0.75 ms of every slice is fixed (the single-workgroup `topk`/`merge` passes and the submission round trip).
+`head-slice-bench-2gpu.txt`: two GPUs scoring a twelfth each at the same time take 1.12 ms together.
 
 ## VRAM
 

@@ -124,6 +124,14 @@ pub fn stage_bench(
             }
         }
     }
+    let mut together = 0.;
+    if slices.len() > 1 {
+        let t0 = std::time::Instant::now();
+        for _ in 0..16 {
+            local.head_slices(&h, None)?;
+        }
+        together = t0.elapsed().as_secs_f64() / 16. * 1e3;
+    }
     let mib: Vec<f64> = local
         .stages
         .iter()
@@ -136,6 +144,6 @@ pub fn stage_bench(
         serde_json::json!({"batch": batch, "prefill_chunks": prefill, "prefill_wall_ms": pre_wall * 1e3,
         "prefill": json(&pre), "decode_steps": decode, "decode_start": start, "decode_wall_ms": dec_wall * 1e3,
         "decode": json(&dec), "device_mib": mib, "late_chunk_pos": late_pos, "late_chunk": json(&late),
-        "head_slice_wall_ms": slices}),
+        "head_slice_wall_ms": slices, "head_slices_together_wall_ms": together}),
     )
 }

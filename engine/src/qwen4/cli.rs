@@ -1,5 +1,5 @@
 //! `trashcan qwen4 ...` commands.
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use clap::Subcommand;
 use std::path::{Path, PathBuf};
 
@@ -74,10 +74,10 @@ pub enum Cmd {
         /// Give the last stage the final mixer and the LM head.
         #[arg(long)]
         head: bool,
-        /// Give the last stage these LM head rows instead (a:b); unless it ends the model, the bench times scoring
-        /// a hidden state with them.
-        #[arg(long)]
-        head_rows: Option<String>,
+        /// LM head rows (a:b) for the last stages, one entry per stage; stages that do not end the model are timed
+        /// scoring a hidden state with them, alone and all at once.
+        #[arg(long, value_delimiter = ',')]
+        head_rows: Vec<String>,
         #[arg(long, default_value_t = 2048)]
         context: usize,
         #[arg(long, default_value_t = 256)]
@@ -269,9 +269,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 let g = crate::gguf::Gguf::open(&model)?;
                 heads[ranges.len() - 1] = Some((0, super::Config::new(&g)?.vocab));
             }
-            if let Some(r) = head_rows {
+            ensure!(head_rows.len() <= ranges.len(), "more head row ranges than stages");
+            for (k, r) in head_rows.iter().enumerate() {
                 let (a, b) = r.split_once(':').context("head rows look like 0:82944")?;
-                heads[ranges.len() - 1] = Some((a.parse()?, b.parse()?));
+                heads[ranges.len() - head_rows.len() + k] = Some((a.parse()?, b.parse()?));
             }
             let mut local = super::pipeline::Local::new(&model, &devices, &ranges, &heads, context, batch)?;
             if let (Some(tf), Some(out)) = (tokens_file, out) {

@@ -151,11 +151,19 @@ impl Local {
     }
 
     /// Score a final hidden state with the head rows of the stages that do not end the model; merged candidates.
+    /// GPU stages score at the same time.
     pub fn head_slices(&mut self, h: &[f32], mut dump: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
         let mut top = Vec::new();
-        for (stage, rows) in self.stages.iter_mut().zip(&self.heads) {
+        let mut started = vec![false; self.stages.len()];
+        for (stage, s) in self.stages.iter_mut().zip(started.iter_mut()) {
+            if let Stage::Gpu(g) = stage {
+                *s = g.head_submit(h, dump.is_some())?;
+            }
+        }
+        for ((stage, rows), started) in self.stages.iter_mut().zip(&self.heads).zip(started) {
             let mine = match stage {
-                Stage::Gpu(s) => s.head_slice(h, dump.as_deref_mut())?,
+                Stage::Gpu(g) if started => g.head_collect(dump.as_deref_mut())?,
+                Stage::Gpu(_) => None,
                 Stage::Cpu(s) => match rows {
                     Some((a, b)) if !s.head => {
                         let logits = CpuStage::head_logits(&self.gguf, h, *a, *b);

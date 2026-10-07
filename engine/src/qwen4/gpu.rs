@@ -768,14 +768,23 @@ impl GpuStage {
     /// Score a final hidden state (from the stage that ends the model) with this stage's head rows. `None` when the
     /// stage holds no rows or ends the model itself (its rows were scored in `forward`).
     pub fn head_slice(&mut self, h: &[f32], dump: Option<&mut Captures>) -> Result<Option<Vec<(f32, u32)>>> {
+        let dumping = dump.is_some();
+        if !self.head_submit(h, dumping)? {
+            return Ok(None);
+        }
+        self.head_collect(dump)
+    }
+
+    /// Start scoring `h` with this stage's head rows; false when the stage has none to score (see `head_slice`).
+    /// Stages on different GPUs can score at the same time; `head_collect` waits for the result.
+    pub fn head_submit(&mut self, h: &[f32], dump: bool) -> Result<bool> {
         let d = self.c.d;
         let Some(hd) = self.head.as_ref().filter(|hd| hd.mix.is_none()) else {
-            return Ok(None);
+            return Ok(false);
         };
         ensure!(h.len() == d, "hidden state length mismatch");
         hd.h.write(bytemuck::cast_slice(h))?;
-        let key = dump.is_some();
-        if !self.head_graphs.contains_key(&key) {
+        if !self.head_graphs.contains_key(&dump) {
             let cmd = self.gpu.begin()?;
             let mut graph = Graph {
                 gpu: self.gpu.clone(),
@@ -784,24 +793,28 @@ impl GpuStage {
                 marks: Vec::new(),
             };
             self.gpu.barrier(cmd);
-            self.score_head(&mut graph, cmd, hd, hd.h.address, key)?;
+            self.score_head(&mut graph, cmd, hd, hd.h.address, dump)?;
             self.gpu.finish(cmd)?;
-            self.head_graphs.insert(key, graph);
+            self.head_graphs.insert(dump, graph);
         }
-        let graph = &self.head_graphs[&key];
         unsafe {
             self.gpu.dev.reset_fences(&[self.fence])?;
         }
-        self.gpu.submit(graph.cmds[0], None, None, self.fence)?;
+        self.gpu.submit(self.head_graphs[&dump].cmds[0], None, None, self.fence)?;
+        Ok(true)
+    }
+
+    /// Wait for `head_submit` and return its candidates (with vocabulary ids).
+    pub fn head_collect(&mut self, dump: Option<&mut Captures>) -> Result<Option<Vec<(f32, u32)>>> {
         unsafe {
             self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
         }
         if let Some(m) = dump {
-            for (name, host, width) in &graph.captures {
+            for (name, host, width) in &self.head_graphs[&true].captures {
                 m.insert(name.clone(), bytemuck::cast_slice(&host.read(width * 4)?).to_vec());
             }
         }
-        Ok(Some(Self::read_top(self.head.as_ref().unwrap())?))
+        Ok(Some(Self::read_top(self.head.as_ref().context("no head rows")?)?))
     }
 
     pub fn device_mib(&self) -> f64 {

@@ -164,7 +164,8 @@ result travels back, and the candidates are merged. Two CPU processes with the h
 reference's logits exactly; incite's two GPUs and the Mac node with the head in three give the same tokens and
 logits within rel 3.4e-7 of the unsplit run. Scoring a slice on one D700 takes 1.12 ms for 1/12 of the vocabulary,
 2.03 ms for 1/3, 2.62 ms for 1/2 and 4.60 ms for all of it (1,024 rows: 0.79 ms, so about 0.75 ms is fixed per
-slice), so twelve slices scored one after another cost about 13 ms per token against 4.6 ms for one GPU.
+slice). A Mac's GPUs score at the same time (two twelfths: 1.12 ms together), so twelve slices over six Macs cost
+about 6.7 ms per token against 4.6 ms for one GPU holding the whole head.
 
 **Recommendation.** Six Macs: IQ4_XS gate/up and IQ4_NL down for routed and shared experts, Q8_0 dense matrices,
 Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of
@@ -254,23 +255,23 @@ A decode layer reads about 110 MB (61 MB of DeltaNet matrices, 14 MB of mixers, 
 
 No chain longer than incite plus the Mac CPU node has run, so these are projections from the per-layer
 measurements above: decode 1.24 ms per DeltaNet layer, 1.16 ms per QSA layer (2.20 ms at 32K), 0.43 ms for the
-n-gram module, 4.6 ms for the head on one GPU or 13.4 ms split over twelve (12 x 1.12 ms), 0.39 ms of host work
+n-gram module, 4.6 ms for the head on one GPU or 6.7 ms split over twelve (6 Macs x 1.12 ms), 0.39 ms of host work
 per GPU stage (two stages: 8.62 ms wall against 7.84 ms of GPU time), and per machine hop 40 KiB over Thunderbolt 2
 IP (8.8 Gb/s, 128 us round trip:
 [results/kernel/tb-loopback-20261006](../results/kernel/tb-loopback-20261006/README.md)), about 0.1 ms.
 
 | | six Macs, IQ4 experts in VRAM | four Macs, IQ4 experts in host RAM |
 |---|---|---|
-| decode, short context | 36 x 1.24 + 12 x 1.16 + 0.43 + 13.4 (head in 12 slices) + 12 stages x 0.39 + 5 hops = 78 ms: **12.8 tok/s** (69 ms, 14.5 tok/s with the head scored in 4.6 ms) | the same GPU work with 8 stages, 3 hops and the head on one GPU (67 ms) + 48 x 0.53 ms of expert uploads = 93 ms: **10.8 tok/s** |
-| decode at 32K | 90 ms: **11.1 tok/s** | 105 ms: **9.5 tok/s** |
+| decode, short context | 36 x 1.24 + 12 x 1.16 + 0.43 + 6.7 (head in 12 slices) + 12 stages x 0.39 + 5 hops = 71 ms: **14.1 tok/s** | the same GPU work with 8 stages, 3 hops and the head on one GPU (67 ms) + 48 x 0.53 ms of expert uploads = 93 ms: **10.8 tok/s** |
+| decode at 32K | 83 ms: **12.0 tok/s** | 105 ms: **9.5 tok/s** |
 | prefill (chunks pipelined across Macs, a Mac's two GPUs in turn) | 128-token chunks (the 32K configuration), 8 x 51-56 ms: 0.43 s per chunk per Mac, **~300 tok/s**; a 2K prompt in ~9 s; 256-token chunks: ~335 tok/s | 1.2-2.0 s per chunk per Mac (expert uploads overlapped or not): **125-210 tok/s** |
 | weight-bandwidth bound for decode | 6.0 GB per token at 263 GB/s: 23 ms, 44 tok/s | |
 
 ## What is left
 
-1. **A cheaper head split**: score a Mac's slices on both GPUs at once, cut the 0.7 ms fixed cost per slice, store
-   the head compactly (Q6_K is 6.6 bits, the repack 10), or keep the head on the last Mac in halves and free the
-   room by leaving that Mac's least-used ~10% of experts in host RAM (the other 90% cover 98% of activations).
+1. **A cheaper head split**: cut the 0.75 ms fixed cost per slice (single-workgroup top-k passes), store the head
+   compactly (Q6_K is 6.6 bits, the repack 10), or keep the head on the last Mac in halves and free the room by
+   leaving that Mac's least-used ~10% of experts in host RAM (the other 90% cover 98% of activations).
 2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks.
 3. **A real chain**: only one Mac Pro (incite) was available, so multi-Mac decode and prefill are projections.
 4. **Prefill**: an LDS-tiled grouped expert GEMM (58 ms of a 94 ms layer), chunked DeltaNet (19 ms), grouping
