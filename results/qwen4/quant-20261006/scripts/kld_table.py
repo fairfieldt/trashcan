@@ -19,6 +19,9 @@ RECIPES = {
     'A-attn': 'QSA projections Q4_0',
     'A-shexp': 'shared experts Q4_0',
     'G-iq4': 'routed and shared experts IQ4_XS gate/up, IQ4_NL down; head Q6_K (six-Mac recipe)',
+    'S-q2dn-r': 'G-iq4 with ISTA GSQ Q2_0 routed down projections on layers 1 5 8 12 16 20 24 30 33 36 40 45',
+    'S-q2dn-gsq': 'S-q2dn-r with the shared down projections of those layers at ggml Q2_0 (absmax) too',
+    'S-q2dn-absmax': 'S-q2dn-gsq with ggml Q2_0 (absmax) routed down projections instead of ISTA GSQ',
 }
 rows = []
 for name in sys.argv[2:]:
@@ -29,7 +32,7 @@ for name in sys.argv[2:]:
         return (m.group(1), m.group(2) or '') if m else ('', '')
 
     try:
-        q = open(f'{Q}/quant-{name}.log', errors='replace').read()
+        q = open(f'{Q}/quant-{name.replace("-gsq", "").replace("-absmax", "")}.log', errors='replace').read()
         size = re.search(r'quant size\s*=\s*([0-9.]+) MiB \(([0-9.]+) BPW\)', q)
     except FileNotFoundError:
         size = None

@@ -2,13 +2,15 @@
 
 Qwen3.8-Flash-Next is a 177B-parameter sparse MoE: 121B of routed experts (about 6B used per token), a 51B hashed
 n-gram embedding read at one layer, and 4.6B of dense weights. This document covers the reference, the n-gram
-table placement, quantization and VRAM for six and four Mac Pros, the GPU stages and projected chain speed. Code:
-`engine/src/qwen4/`, shaders `engine/shaders/qwen4_*.comp`. The dense Qwen models are in [qwen.md](qwen.md).
+table placement, quantization and VRAM for six and four Mac Pros, the GPU stages, projected chain speed and the
+changes for 200K context. Code: `engine/src/qwen4/`, shaders `engine/shaders/qwen4_*.comp`. The dense Qwen models
+are in [qwen.md](qwen.md).
 
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type run on incite's D700s and match the
 reference with the six-Mac recipe's formats; a full six-Mac GPU stage (4 layers, 32K context) loads and runs on one
-D700 together with its twelfth of the LM head, which can be split over stages. Not done yet: a chain of real Mac
-Pros, a faster head split, MTP and a chat command (see [What is left](#what-is-left)).
+D700 together with its twelfth of the LM head, which can be split over stages; with Q8 K/V caches and Q2_0 down
+projections on one layer per GPU the same stage runs at 204,800 positions. Not done yet: a chain of real Mac Pros,
+a faster head split, MTP and a chat command (see [What is left](#what-is-left)).
 
 | | |
 |---|---|
@@ -111,6 +113,7 @@ share of positions where both pick the same top token
 | E-iq4xs | experts IQ4_XS gate/up, IQ4_NL down | 0.0357 | 95.3% | 1.003 |
 | E-q4_0 | experts Q4_0 | 0.0402 | 94.9% | 1.003 |
 | E-mxfp4 | experts MXFP4 | 0.0656 | 93.7% | 0.999 |
+| E-iq3xxs | experts IQ3_XXS gate/up, IQ4_NL down | 0.0876 | 92.6% | 1.022 |
 | E-iq2xxs | experts IQ2_XXS gate/up, IQ4_NL down | 0.2134 | 88.6% | 1.077 |
 | N-q4_0 | every dense matrix Q4_0 (mixers, DeltaNet, attention, shared expert, n-gram projections) | 0.1961 | 88.7% | 1.065 |
 | A-hc | hyper-connection mixers Q4_0 | 0.1190 | 91.4% | 1.026 |
@@ -271,6 +274,70 @@ IP (8.8 Gb/s, 128 us round trip:
 | prefill (chunks pipelined across Macs, a Mac's two GPUs in turn) | 128-token chunks (the 32K configuration), 8 x 51-56 ms: 0.43 s per chunk per Mac, **~300 tok/s**; a 2K prompt in ~9 s; 256-token chunks: ~335 tok/s | 1.2-2.0 s per chunk per Mac (expert uploads overlapped or not): **125-210 tok/s** |
 | weight-bandwidth bound for decode | 6.0 GB per token at 263 GB/s: 23 ms, 44 tok/s | |
 
+## 200K context on six Macs
+
+At 204,800 positions one QSA layer's f16 K/V cache is 400 MiB, and every GPU of six Macs holds one QSA layer, so the
+recipe that fits at 32K is 302 MiB over at 200K (`qwen4_budget.py --grid --context 204800`). Implemented so far:
+
+| change | per GPU at 204,800 | quality |
+|---|---|---|
+| Q8 K/V cache (`--kv q8`: int8 with an f16 scale per 32, 272 bytes per head and position instead of 512) | −188 MiB | KLD 0.0136 against the f16 cache at positions 32K-64K, where merely running f16 attention through another kernel gives 0.0102 (llama.cpp); NEEDLE_SHORT |
+| raw indexer keys in a ring of the batch plus a block (only pooling reads them) | −100 MiB | exact: 111 tensors bit-identical |
+| Q2_0 down projections on one layer per GPU (1, 5, 8, 12, 16, 20, 24, 30, 33, 36, 40, 45): ISTA's GSQ codes for the routed experts, ggml's Q2_0 for the shared expert (the GPU stacks it with the routed ones) | −225 MiB | KLD 0.098 against Q8_0, against 0.039 without them |
+
+The Q2_0 layers are expensive in quality (results/qwen4/quant-20261006): on the 39K-token corpus the routed GSQ
+tensors alone take KLD from 0.039 to 0.078 (same top token 93.1% against 95.1%), the shared experts at ggml's Q2_0 add
+0.021, and ggml's own (absmax) Q2_0 codes for the routed experts would make it 0.179; GSQ's codes are worth having.
+
+Headroom on the fullest GPU (IQ4_XS/IQ4_NL experts, Q8_0 dense, head split over 12 GPUs). `--lean` and `--more` model
+six savings that are not implemented: prefill reusing the fused mixer matrix, Q8_0 router and indexer projections,
+the head kept at Q6_K size, f16 pooled indexer keys and block scores in tiles:
+
+| K/V cache | Q2_0 down | current, 128-token chunks | `--lean` | `--lean --more` | `--lean --more`, 64-token chunks |
+|---|---|---|---|---|---|
+| f16 | none | −302 | −256 | −199 | −161 |
+| f16 | 1 of 4 layers | −77 | −31 | +26 | +64 |
+| f16 K, Q8 V | 1 of 4 layers | +17 | +62 | +120 | +158 |
+| Q8 | none | −115 | −69 | −12 | **+26** |
+| Q8 | 1 of 4 layers | **+110** | +156 | +213 | +252 |
+
+Two routes to 200K follow:
+
+- **Q8 K/V and the Q2_0 layers** run today with 110 MiB to spare (up to 286,720 positions, past the model's
+  262,144), at KLD 0.098, or 0.078 once the shared expert gets its own format next to Q2_0 routed experts.
+- **Q8 K/V and the six savings with 64-token prefill chunks** keep the 32K recipe's quality (KLD 0.039 plus the Q8 K/V
+  effect) with 26 MiB to spare, but need all six changes and a slower prefill. With the current code, Q8 K/V alone
+  reaches 114,688 positions (147,456 with `--lean` or with 64-token chunks).
+
+**Measured on incite:** layers 0-3 of the Q2_0 build (Q2_0 down on layer 1), the first twelfth of the head, a Q8 K/V
+cache for 204,800 positions and 128-token chunks allocate 5780 of 5888 MiB (budget 5868, as modeled) and run at
+850/1370 MHz. Decode at position 204,672: 1.23-1.24 ms per DeltaNet layer, 3.65 ms for the QSA layer (projections
+0.26, block selection 1.92, attention 0.66), 1.0 ms for the head slice. A 128-token chunk takes 51-62 ms per layer at
+position 0 and 202 ms for the QSA layer at 204,544 (selection 101, attention 54). The Q2_0 down projections cost the
+same 0.29 ms per decode token as IQ4_NL and 6 ms more per chunk (38 against 32 ms), since 640-wide rows give the
+grouped kernel only 10 of its 16 lanes' blocks.
+
+Projected six-Mac decode at 200K: 36 x 1.24 + 12 x 3.65 + 0.43 + 6.7 + 12 x 0.39 + 0.5 = 101 ms, **9.9 tok/s**
+(14.1 at short context). Prefill of a 200K prompt averages about 0.57 s per 128-token chunk per Mac (6 DeltaNet
+layers at 52 ms, 2 QSA layers averaging 129 ms): **about 225 tok/s, 15 minutes** for the whole prompt.
+
+NEEDLE
+
+**Past 262K: K/V in host RAM (estimate).** Each decode token reads only the ~2,051 selected positions of a QSA layer:
+2.2 MB of Q8 K/V. Kept in host RAM and gathered over PCIe after block selection (scattered 4.3 KB block reads at an
+assumed 3-5 GB/s; 6.5 GB/s measured for bulk uploads) that is about 0.5-0.7 ms per QSA layer, **+6-8 ms per token**
+(8%). Prefill chunks select most blocks between them, so a chunk would stream the layer's whole K/V: 435 MB at 400K
+positions, 67 ms at 6.5 GB/s, overlappable with the chunk's 200-400 ms of QSA work. Only the pooled indexer keys (f32
+125 MiB per QSA layer at 1M positions, half as f16) and a staging buffer stay in VRAM, and host RAM needs about 1.1 KB
+per position per QSA layer (2.2 GB per Mac at 1M). Without Q2_0 this would also free the 212 MiB per GPU that the Q8
+K/V cache takes at 200K.
+
+**MTP at 200K (estimate).** The MTP layer is a full QSA layer with its own 512 experts: 1.4 GB at IQ4 plus 212 MiB of
+Q8 K/V at 200K, and no GPU has that room. With its experts in host RAM, a draft token reads 10 routed experts (27 MB)
+over PCIe, about 4 ms, plus about 1.5 ms of dense work and K/V; its dense matrices (about 0.1 GB) and K/V still need a
+home, so the K/V would go to host RAM too. About 6 ms per draft token against roughly 100 ms per decode token at 200K:
+worth it at the acceptance rates speculative decoding usually sees, but not built.
+
 ## What is left
 
 1. **A cheaper head split**: cut the 0.75 ms fixed cost per slice (single-workgroup top-k passes), store the head
@@ -281,9 +348,13 @@ IP (8.8 Gb/s, 128 us round trip:
 4. **Prefill**: an LDS-tiled grouped expert GEMM (58 ms of a 94 ms layer), chunked DeltaNet (19 ms), grouping
    the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K), the f32 router (3.8 ms),
    and the two GPUs of a Mac working on different chunks.
-5. **Decode**: fewer dispatches per layer (34% of bandwidth now) and a multi-workgroup radix select (0.6 ms at 32K).
-6. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
-7. **MTP** (a 49th layer with its own experts) and the rollback snapshots speculative decoding needs; a chat
+5. **Decode**: fewer dispatches per layer (34% of bandwidth now) and a multi-workgroup radix select (block selection
+   takes 0.6 ms of a QSA layer at 32K and 1.9 ms at 200K).
+6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K; the Q2_0
+   grouped kernel uses 10 of 16 lane groups on 640-wide rows.
+7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
+8. **Past 262K**: QSA K/V in host RAM (estimated above).
+9. **MTP** (a 49th layer with its own experts) and the rollback snapshots speculative decoding needs; a chat
    command and the Responses server for `qwen4exp` (today the CLI has `ref`, `validate`, `bench`, `node`).
 
 ## Commands
@@ -294,14 +365,21 @@ trashcan qwen4 ref MODEL OUT [--tokens-file IDS] [--emulate-ggml] [--greedy N]
 trashcan qwen4 layer-check MODEL LLAMA_DUMP [--emulate-ggml]
 # chain: every machine after the first, then the driver
 trashcan qwen4 node MODEL --listen 0.0.0.0:7071 [--cpu | --gpus 0,1]
-trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] --greedy 10
+trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] [--kv q8] --greedy 10
 trashcan qwen4 bench MODEL --gpus 0,1 --nodes ... --pp 256 --tg 32
-# six Macs at 32K context (not run yet: every other Mac runs `qwen4 node MODEL --listen 0.0.0.0:7071 --gpus 0,1`)
+# six Macs (not run yet: every other Mac runs `qwen4 node MODEL --listen 0.0.0.0:7071 --gpus 0,1`), 32K with G-iq4,
+# 200K with the Q2_0 build and Q8 K/V
 trashcan qwen4 bench G-iq4.gguf --gpus 0,1 --nodes MAC2:7071,MAC3:7071,MAC4:7071,MAC5:7071,MAC6:7071 \
     --head-split 12 --context 32768 --batch 128 --ngram disk --pp 2048 --tg 64
+trashcan qwen4 bench S-q2dn.gguf --gpus 0,1 --nodes MAC2:7071,MAC3:7071,MAC4:7071,MAC5:7071,MAC6:7071 \
+    --head-split 12 --context 204800 --batch 128 --kv q8 --ngram disk --pp 2048 --tg 64
 # GPU stages alone, and the n-gram table
 trashcan qwen4 stage-bench MODEL --ranges 0:4 --gpus 0 --context 32768 --start 32512 --decode 16 --prefill 1
+trashcan qwen4 stage-bench S-q2dn.gguf --ranges 0:4 --gpus 0 --context 204800 --kv q8 --batch 128 \
+    --head-rows 0:21504 --start 204672 --decode 16 --prefill 1
 trashcan qwen4 stage-bench MODEL --ranges 4:5 --gpus 0 --head-rows 0:20736 --decode 4 --prefill 0 --batch 16
 trashcan qwen4 ngram-bench META_SHARD TABLE_SHARD --mode ram-q4|direct|buffered-cold [--ids IDS]
-python3 tools/qwen4_budget.py [--context N] [--batch N] [--head-split N] [--lean] [--check]
+python3 tools/qwen4_budget.py [--context N] [--batch N] [--head-split N] [--lean] [--kv q8] [--q2-down rco]
+python3 tools/qwen4_budget.py --grid --context 204800   # six Macs, long-context options
+python3 tools/qwen4_budget.py --check
 ```

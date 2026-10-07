@@ -1,0 +1,11 @@
+0.08.151.438 I cmn          init: llama threadpool init, n_threads = 8
+0.08.215.285 I 
+0.08.215.313 I system_info: n_threads = 8 (n_threads_batch = 8) / 32 | MTL : EMBED_LIBRARY = 1 | CPU : NEON = 1 | ARM_FMA = 1 | FP16_VA = 1 | MATMUL_INT8 = 1 | DOTPROD = 1 | ACCELERATE = 1 | REPACK = 1 | 
+0.08.215.473 I perplexity: saving all logits to /Volumes/Green/Qwen/flash-next/longctx/base-f16-204800.kld
+0.08.215.480 I perplexity: tokenizing the input ..
+0.08.696.266 I perplexity: tokenization took 480.783 ms
+0.08.696.807 I perplexity: calculating perplexity over 1 chunks, n_ctx=204800, batch_size=2048, n_seq=1
+6.00.177.710 I perplexity: 342.97 seconds per pass - ETA 5.70 minutes
+[1]7.9941,
+8.39.074.418 I Final estimate: PPL = 7.9941 +/- 0.06476
+
