@@ -115,11 +115,13 @@ share of positions where both pick the same top token
 | A-hc | hyper-connection mixers Q4_0 | 0.1190 | 91.4% | 1.026 |
 | A-gdn | DeltaNet projections Q4_0 | 0.0613 | 94.0% | 1.012 |
 | A-attn | QSA projections Q4_0 | 0.0669 | 93.4% | 1.011 |
+| A-shexp | shared experts Q4_0 | 0.0191 | 96.3% | 1.003 |
 | T-q4_0 | n-gram table Q4_0 | 0.0229 | 96.3% | 1.002 |
 
 - **Dense matrices are the sensitive part.** 4.6B dense parameters at Q4_0 cost five times the divergence of
   121B expert parameters at Q4_0. Every group is sensitive on its own: the hyper-connection mixers 0.119, the QSA
-  projections 0.067, the DeltaNet projections 0.061. The recipe keeps dense matrices in Q8_0, which the GPU stages read with `qwen4_q8_mv`, `qwen4_q8_gemm` and fused Q8_0 mixers: about
+  projections 0.067, the DeltaNet projections 0.061, even the shared experts 0.019. The recipe keeps dense
+  matrices in Q8_0, which the GPU stages read with `qwen4_q8_mv`, `qwen4_q8_gemm` and fused Q8_0 mixers: about
   34 MB more per DeltaNet layer than Q4_0 and 0.25 ms more per decode step of a layer.
 - **IQ4_XS gate/up with IQ4_NL down is the best 4-bit expert format** and also the smallest (the down rows are
   640 wide, which rules out the 256-element formats there). MXFP4 is clearly worse on this model.

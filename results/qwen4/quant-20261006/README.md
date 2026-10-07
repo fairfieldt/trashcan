@@ -37,12 +37,14 @@ in every candidate but T-q4_0).
 | A-hc | `hc_{attn,ffn}_{down,up,inject}=q4_0 output_hc_{down,up}=q4_0` | 0.1190 | 91.36% |
 | A-gdn | `attn_qkv=q4_0 attn_gate=q4_0 ssm_out=q4_0` (DeltaNet projections) | 0.0613 | 93.95% |
 | A-attn | `attn_q.weight=q4_0 attn_k.weight=q4_0 attn_v.weight=q4_0 attn_output=q4_0` (QSA) | 0.0669 | 93.42% |
+| A-shexp | `ffn_gate_shexp=q4_0 ffn_up_shexp=q4_0 ffn_down_shexp=q4_0` | 0.0191 | 96.30% |
 | T-q4_0 | `per_layer_token_embd=q4_0` (the n-gram table) | 0.0229 | 96.26% |
 
-The dense matrices are the sensitive part: the hyper-connection mixers (about 14% of the dense parameters) cost
-the most, and the DeltaNet and QSA projections each cost more than all 121B expert parameters at 4 bits. Pending at
-the time of writing, from `scripts/queue2.sh` and `scripts/queue3.sh`: A-shexp (shared experts), G-iq4 (the six-Mac
-recipe), E-iq3xxs, E-iq4mx and E-iq2mx; `kld.tsv` and this table are updated as they finish.
+The dense matrices are the sensitive part: the hyper-connection mixers (about 14% of the dense parameters) cost the
+most, and the DeltaNet and QSA projections each cost more than all 121B expert parameters at 4 bits; the shared
+experts (about 5% of the dense parameters) cost half as much as all routed experts at IQ4. Pending at the time of
+writing, from `scripts/queue3.sh`: G-iq4 (the six-Mac recipe), E-iq3xxs, E-iq4mx and E-iq2mx; `kld.tsv` and this
+table are updated as they finish.
 
 The E-, N-, T- and A- candidates were deleted after measuring (each regenerates with the command above in 2-26
 minutes). Kept on the Mac's external disk (`/Volumes/Green/Qwen/flash-next/cand/`) and on incite
