@@ -107,13 +107,16 @@ step_system() {
     ip=$(ipconfig getifaddr en0)
     mac=$(ifconfig en0 | awk '/ether/{print $2}')
     ssh "$host" 'rm -rf ~/.cache/trashcan-node && mkdir -p ~/.cache/trashcan-node'
-    rsync -a "$here/root" "$repo/scripts/fancurve.sh" "$repo/scripts/fancurve.service" "$host":.cache/trashcan-node/
+    rsync -a "$here/root" "$repo/scripts/fancurve.sh" "$repo/scripts/fancurve.service" \
+        "$repo/scripts/system-crash-capture.py" "$repo/scripts/system-crash-capture.service" "$host":.cache/trashcan-node/
     as_root USER_NAME="$USER_NAME" CMDLINE="$CMDLINE" NETCONSOLE_TARGET="$ip/$mac" <<'EOF'
 set -e
 stage=/home/$USER_NAME/.cache/trashcan-node
 rsync -a --chown=root:root "$stage/root/" /
 install -m 0755 "$stage/fancurve.sh" /usr/local/sbin/fancurve.sh
 install -m 0644 "$stage/fancurve.service" /etc/systemd/system/fancurve.service
+install -m 0755 "$stage/system-crash-capture.py" /usr/local/sbin/system-crash-capture.py
+install -m 0644 "$stage/system-crash-capture.service" /etc/systemd/system/system-crash-capture.service
 echo "NETCONSOLE_TARGET=$NETCONSOLE_TARGET" > /etc/default/netconsole-target
 rm -rf "$stage"
 
@@ -123,8 +126,10 @@ touch "/home/$USER_NAME/trashcan-exp/.lock" && chown "$USER_NAME:" "/home/$USER_
 
 sysctl -q --system
 systemctl daemon-reload
-systemctl enable -q netconsole.service fancurve.service tblink.service
-systemctl restart netconsole.service fancurve.service tblink.service
+systemctl enable -q netconsole.service fancurve.service tblink.service system-crash-capture.service
+systemctl restart systemd-journald.service
+journalctl --flush
+systemctl restart netconsole.service fancurve.service tblink.service system-crash-capture.service
 systemctl reload ssh
 systemctl reload NetworkManager 2>/dev/null || true
 

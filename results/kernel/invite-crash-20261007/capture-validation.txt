@@ -1,0 +1,4 @@
+Synthetic device dump announcement, remote privileged file read, external persistence and SHA-256 comparison passed through the launchd receiver.
+/Users/fairfieldt/dev/claude-work/trashcan-kbuild/crash-dumps/invite-2adea731-ca6d-4058-980f-f2f21c0a12a4-devcd99999-1791391251758792000.dump
+Full synthetic dump polling, local persistence, announcement, external copy and SHA-256 verification passed. No GPU reset was induced.
+/Users/fairfieldt/dev/claude-work/trashcan-kbuild/crash-dumps/invite-2adea731-ca6d-4058-980f-f2f21c0a12a4-devcd99998-1791391514370382348.dump

@@ -39,7 +39,10 @@ links() {
         nhi=$(basename "$(dirname "$(readlink -f "$DEVS/domain$dom")")")
         ruuid=$(cat "$d/unique_id")
         vendor=$(cat "$d/vendor" 2>/dev/null)
-        iface=$(ls "$d/$xd.0/net" 2>/dev/null | head -1)
+        # Service numbers follow discovery order; stream can be .0 and net .1.
+        iface=$(for service in "$d/$xd".*; do
+            [ -d "$service/net" ] && ls "$service/net" 2>/dev/null
+        done | head -1)
         rest=$(lookup "$ruuid")
         echo "$xd $nhi $(bus_of_nhi "$nhi") ${rest:-0 ? ?} ${iface:--} $vendor"
     done
