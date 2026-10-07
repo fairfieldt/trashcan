@@ -197,11 +197,17 @@ fn check_prompt(t: &Tokenizer, tokens: usize) -> Result<Vec<u32>> {
 
 pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&mut Spec>) -> Result<Value> {
     let ids = check_prompt(t, pp)?;
-    let start = Instant::now();
-    let top = e.prefill(&ids)?;
-    let pp_s = start.elapsed().as_secs_f64();
     let tp_seconds = |e: &Chain| match e.local.stages.first() {
         Some(super::pipeline::Stage::Tp(t)) => Some(t.seconds),
+        _ => None,
+    };
+    let (start, tp_before) = (Instant::now(), tp_seconds(e));
+    let top = e.prefill(&ids)?;
+    let pp_s = start.elapsed().as_secs_f64();
+    // Milliseconds of the whole prefill in each phase of the tensor-parallel loop.
+    let pp_tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, 1.));
+    let profile = match e.local.stages.first() {
+        Some(super::pipeline::Stage::Tp(t)) if std::env::var_os("TRASHCAN_TP_PROFILE").is_some() => Some(t.profile()),
         _ => None,
     };
     let (start, tp_before) = (Instant::now(), tp_seconds(e));
@@ -211,10 +217,7 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
     let out = generate(e, top[0].1, tg, &mut sampler, &[], spec.as_deref_mut(), |_| Ok(()))?;
     let tg_s = start.elapsed().as_secs_f64();
     // Milliseconds per generated token in each phase of the tensor-parallel loop.
-    let tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| {
-        let per = |x: f64, y: f64| (y - x) * 1e3 / out.len().max(1) as f64;
-        json!({"submit": per(a.submit, b.submit), "wait": per(a.wait, b.wait), "add": per(a.add, b.add), "exchange": per(a.exchange, b.exchange)})
-    });
+    let tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| b.ms_since(&a, out.len().max(1) as f64));
     let mib: Vec<f64> = e
         .local
         .stages
@@ -226,7 +229,8 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
         })
         .collect();
     Ok(json!({"pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
-        "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"tg_tp_ms":tp_ms,
+        "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
+        "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
         "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"text":t.decode(&out, false)}))
 }
 

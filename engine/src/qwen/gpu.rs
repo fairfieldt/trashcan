@@ -8,9 +8,9 @@
 //! memory and back; attention KV needs no copy because it is addressed by position.
 //!
 //! Tensor parallelism (`GpuStage::shard`): the stage holds one rank's share of every layer (`Split`) and runs
-//! with the per-rank head counts, so the kernels are unchanged. Each mixer and FFN ends its submission with a
+//! with the per-rank head counts, so the kernels are unchanged. Each mixer and FFN ends its segment with a
 //! partial output projection in host memory; `tp::TpGroup` all-reduces the partials and writes the total
-//! that the next submission adds to the replicated residual.
+//! that the next segment adds to the replicated residual.
 use super::{cpu::Captures, vector, Config};
 use crate::{
     gguf::{GgmlType, Gguf},
@@ -22,35 +22,45 @@ use ash::vk;
 use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = 64;
-const GRAPH_CACHE_CAPACITY: usize = 16;
+const GRAPH_CACHE_CAPACITY: usize = 24;
 
 impl Tp {
-    /// Begin the `segments` of `cmds` (one command buffer per segment, or a single one when event-gated): both
-    /// timelines only grow, so their values start above everything signalled so far. Returns `segments`.
-    fn start(&mut self, cmds: Vec<vk::CommandBuffer>, segments: usize, head_rows: usize, gated: bool) -> usize {
-        self.base = self.done_value.max(self.released) + 1;
+    /// Begin the `segments` of `cmds`: one command buffer per segment, segment `j` belonging to micro-batch
+    /// `j % micro` (on two queues with `dual`), or a single command buffer when event-gated. The timelines only
+    /// grow, so their values start above everything signalled so far. Returns `segments`.
+    fn start(&mut self, cmds: Vec<vk::CommandBuffer>, segments: usize, head_rows: usize, micro: usize, dual: bool, gated: bool) -> usize {
+        for m in 0..MAX_MICRO {
+            self.base[m] = self.done_value[m].max(self.released[m]) + 1;
+        }
         self.head_rows = head_rows;
         self.cmds = cmds;
         self.segments = segments;
+        self.micro = micro;
+        self.dual = dual;
         self.gated = gated;
         segments
     }
+
+    /// Micro-batch and index within it of segment `j`.
+    fn at(&self, j: usize) -> (usize, u64) {
+        (j % self.micro, (j / self.micro) as u64)
+    }
 }
 
-/// Whether a tensor-parallel graph of `n` columns is event-gated: recorded as one submission whose segments wait
+/// Whether a tensor-parallel forward of `n` columns is event-gated: recorded as one submission whose segments wait
 /// for host-set events (a command-processor poll of host memory) instead of one submission per segment released
-/// by a timeline semaphore (`TRASHCAN_TP_EVENTS=0`). Only small batches: a gated submission lasts a whole
-/// forward, and amdgpu kills GPU jobs after about 10 s.
+/// by a timeline semaphore (`TRASHCAN_TP_EVENTS=0`). Only small batches (decode, verification, drafts), which run
+/// as one micro-batch: a gated submission lasts a whole forward, and amdgpu kills GPU jobs after about 10 s.
 pub fn gated(n: usize) -> bool {
     n <= 8 && std::env::var("TRASHCAN_TP_EVENTS").as_deref() != Ok("0")
 }
 
-/// Whether a tensor-parallel forward of `n` columns keeps its residual on the host: the host adds each
-/// all-reduced total to it and writes the next segment's normed rows, which the projections read from host
-/// memory (cached in L2 after the first read), so the GPUs run no residual norms. Gated forwards without
-/// captures (`TRASHCAN_TP_HOSTNORM=0`: the GPUs add and norm).
-pub fn hostnorm(n: usize, dump: bool) -> bool {
-    gated(n) && !dump && std::env::var("TRASHCAN_TP_HOSTNORM").as_deref() != Ok("0")
+/// Whether a tensor-parallel forward keeps its residual on the host: the host adds each all-reduced total to it
+/// and writes the next segment's normed rows, which the projections read from host memory (cached in L2 after
+/// the first read), so the GPUs run no residual norms. Event-gated forwards without captures
+/// (`TRASHCAN_TP_HOSTNORM=0`: the GPUs add and norm).
+pub fn hostnorm(gated: bool, dump: bool) -> bool {
+    gated && !dump && std::env::var("TRASHCAN_TP_HOSTNORM").as_deref() != Ok("0")
 }
 
 /// Stages after which gated graphs set and reset their events: all prior work.
@@ -310,10 +320,39 @@ pub enum Output {
     Top(Vec<Vec<(f32, u32)>>),
 }
 
-/// (batch, attention partitions, dump, verify)
-type Key = (usize, u32, bool, bool);
+/// One recorded graph: batch, attention partitions, dump, verify; for a micro-batch of a tensor-parallel batch its
+/// params slot, first row in the batch buffers and whether it ends with the LM head; and whether it is event-gated.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+struct Key {
+    n: usize,
+    parts: u32,
+    dump: bool,
+    verify: bool,
+    slot: usize,
+    row: usize,
+    head: bool,
+    gated: bool,
+}
 
-/// Tensor-parallel segments: the host buffers of the all-reduces and the timeline the host polls.
+impl Key {
+    fn whole(n: usize, parts: u32, dump: bool, verify: bool) -> Self {
+        Key { n, parts, dump, verify, slot: 0, row: 0, head: true, gated: false }
+    }
+}
+
+/// Micro-batches of a tensor-parallel batch have their own `pos, n` parameters, this many bytes apart.
+const PARAMS_STRIDE: usize = 256;
+/// Most micro-batches a tensor-parallel batch is split into.
+pub const MAX_MICRO: usize = 4;
+
+/// Split a batch of `n` columns into at most `count` micro-batches whose sizes are multiples of 64 (the GEMM tile)
+/// except the last: (first row, rows) of each.
+pub fn micro_batches(n: usize, count: usize) -> Vec<(usize, usize)> {
+    let size = n.div_ceil(count.clamp(1, MAX_MICRO)).next_multiple_of(64).min(n.max(1));
+    (0..n).step_by(size).map(|r| (r, size.min(n - r))).collect()
+}
+
+/// Tensor-parallel segments: the host buffers of the all-reduces and the timelines the host polls.
 struct Tp {
     /// This rank's partial output projection, written by the GPU at the end of each segment.
     part: Buffer,
@@ -322,25 +361,31 @@ struct Tp {
     /// The normed rows of the next segment when the host keeps the residual (`hostnorm`).
     hin: Buffer,
     hostnorm: bool,
-    /// Segment `i` of the forward in progress signals `done` = `base + i + 1` when it finishes and, when
-    /// submitted ahead, waits for the host to signal `release` = `base + i`.
-    done: vk::Semaphore,
-    release: vk::Semaphore,
-    base: u64,
+    /// Segment `i` of micro-batch `m` of the forward in progress signals `done[m]` = `base[m] + i + 1` when it
+    /// finishes and, when submitted ahead, waits for the host to signal `release[m]` = `base[m] + i`. An
+    /// event-gated forward signals `done[0]` once, when its submission ends.
+    done: [vk::Semaphore; MAX_MICRO],
+    release: [vk::Semaphore; MAX_MICRO],
+    base: [u64; MAX_MICRO],
     /// Highest value signalled on `done` and on `release` so far.
-    done_value: u64,
-    released: u64,
+    done_value: [u64; MAX_MICRO],
+    released: [u64; MAX_MICRO],
     /// Graph of the forward in progress (for its captures), and the segments of the forward or draft step in
-    /// progress with the vocabulary rows its head ranks.
+    /// progress (segment `j` is segment `j / micro` of micro-batch `j % micro`) with the vocabulary rows its head
+    /// ranks.
     current: Option<Key>,
     cmds: Vec<vk::CommandBuffer>,
+    micro: usize,
+    /// Two micro-batches on two queues: the second micro-batch's segment `i` also waits for the first's, and the
+    /// first micro-batch's next segment can run beside it.
+    dual: bool,
     head_rows: usize,
     /// First token id of the head rows ranked by the step in progress, and whether they are the balanced draft
     /// head's (`tp_draft_head`).
     head_start: usize,
     draft_top: bool,
-    /// Timestamps of the graph in progress, when profiling.
-    stamps: Option<(vk::QueryPool, Rc<Vec<String>>)>,
+    /// Timestamps of the graphs in progress (one per micro-batch), when profiling.
+    stamps: Vec<(vk::QueryPool, Rc<Vec<String>>)>,
     /// Release and done events of event-gated forwards (`gated`), shared by all segments: each segment after the
     /// first waits for the host to set release and resets it (ordered before its done), and sets done once its
     /// partial is in host memory; the host resets done when it sees it, before releasing the next segment. One
@@ -399,6 +444,22 @@ pub struct GpuStage {
     split: Split,
     /// A tensor-parallel rank's share of the draft vocabulary `(vocab, first id, rows)` (`tp_draft_head`).
     draft_head: Option<(usize, usize, Head)>,
+}
+
+/// Timing only (`TRASHCAN_TP_VRAM_IO`, wrong results): tensor-parallel segments write their partials to and read
+/// their totals from VRAM instead of host memory, to measure what the host-memory traffic costs the GPUs.
+fn vram_io() -> bool {
+    std::env::var_os("TRASHCAN_TP_VRAM_IO").is_some()
+}
+
+/// `TRASHCAN_QWEN_GEMM=gemm` records prefill projections with the original `gemm` kernel (for A/B timing).
+fn gemm_reference() -> bool {
+    std::env::var("TRASHCAN_QWEN_GEMM").is_ok_and(|v| v == "gemm")
+}
+
+/// Whether two tensor-parallel micro-batches run on two queues (`TRASHCAN_TP_QUEUES=1`: one queue).
+fn two_queues() -> bool {
+    std::env::var("TRASHCAN_TP_QUEUES").map_or(true, |v| v != "1")
 }
 
 /// Partition count of split decode attention, by visible tokens; large batches use the unsplit kernel.
@@ -493,12 +554,24 @@ struct Rec<'a> {
     out: u64,
     /// Event-gated tensor-parallel graph (`gated`).
     gated: bool,
-    /// The normed rows the mixers and FFNs project: `h`.
+    /// The normed rows the mixers and FFNs project: `h` (this micro-batch's half of it).
     h_in: u64,
+    /// Params slot, and first row in the batch buffers (`input`, `x`, the MTP embeddings, the partial and the
+    /// total), of a micro-batch; 0 for a whole batch.
+    slot: usize,
+    row: usize,
+    /// The second micro-batch of a tensor-parallel batch works in the second half of the work buffers.
+    alt: bool,
 }
 
 impl<'a> Rec<'a> {
     fn new(s: &'a GpuStage, n: usize, dump: bool) -> Result<Self> {
+        Self::at(s, n, dump, 0, 0, s.tp.is_some() && gated(n))
+    }
+
+    /// A micro-batch of `n` rows starting at `row`, with its params in `slot`; `gated` records an event-gated
+    /// tensor-parallel graph.
+    fn at(s: &'a GpuStage, n: usize, dump: bool, slot: usize, row: usize, gated: bool) -> Result<Self> {
         let cmd = s.gpu.begin()?;
         let level = if s.tp.is_some() { profile_level() } else { 0 };
         if level > 0 {
@@ -513,7 +586,9 @@ impl<'a> Rec<'a> {
         }
         s.gpu.barrier(cmd);
         s.gpu.stamp(cmd, false, || "begin".into());
-        s.gpu.copy(cmd, &s.params_host, 0, &s.params, 0, 16);
+        s.gpu.copy(cmd, &s.params_host, slot * PARAMS_STRIDE, &s.params, slot * PARAMS_STRIDE, 16);
+        let alt = s.tp.is_some() && slot % 2 == 1;
+        let h_half = if alt { s.h.size / 2 } else { 0 };
         Ok(Self {
             s,
             n,
@@ -526,10 +601,36 @@ impl<'a> Rec<'a> {
                 stamps: None,
                 segments: 1,
             },
-            out: s.tp.as_ref().map_or(s.y.address, |t| t.part.address),
-            gated: s.tp.is_some() && gated(n),
-            h_in: s.h.address,
+            out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address) + (row * s.c.d * 4) as u64,
+            gated,
+            h_in: s.h.address + h_half as u64,
+            slot,
+            row,
+            alt,
         })
+    }
+
+    /// Byte offset of this micro-batch's rows in the batch buffers.
+    fn rows(&self) -> usize {
+        self.row * self.s.c.d * 4
+    }
+
+    /// This micro-batch's rows of the residual.
+    fn x(&self) -> u64 {
+        self.s.x.address + self.rows() as u64
+    }
+
+    /// This micro-batch's half of a work buffer (`GpuStage::build`): its byte offset, and its address.
+    fn half(&self, b: &Buffer) -> usize {
+        if self.alt {
+            b.size / 2
+        } else {
+            0
+        }
+    }
+
+    fn sc(&self, b: &Buffer) -> u64 {
+        b.address + self.half(b) as u64
     }
 
     /// Make this segment's writes visible to the host and, when gated, set its done event.
@@ -567,7 +668,7 @@ impl<'a> Rec<'a> {
 
     fn push(&self, ptr: [u64; 6], u: [u32; 16]) -> Push {
         Push {
-            ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.s.params.address, 0],
+            ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.s.params.address + (self.slot * PARAMS_STRIDE) as u64, 0],
             u,
         }
     }
@@ -624,7 +725,8 @@ impl<'a> Rec<'a> {
             3 => ("qwen_q4c3", rows.div_ceil(16), 1),
             4 => ("qwen_q4c4", rows.div_ceil(16), 1),
             5..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
-            _ => ("gemm", rows.div_ceil(64), n.div_ceil(64)),
+            // gemm2 is gemm with conflict-free weight-tile reads and the next block loaded ahead: identical results.
+            _ => (if gemm_reference() { "gemm" } else { "gemm2" }, rows.div_ceil(64), n.div_ceil(64)),
         };
         self.s.gpu.dispatch_matrix(
             self.cmd,
@@ -664,13 +766,14 @@ impl<'a> Rec<'a> {
         let (s, c) = (self.s, &self.s.c);
         let (d, cd, vd) = (c.d, c.conv_dim(), c.value_dim());
         let eps = c.eps.to_bits();
+        let (h, big, z, ab, conv_out, o) = (self.h_in, self.sc(&s.big), self.sc(&s.z), self.sc(&s.ab), self.sc(&s.conv_out), self.sc(&s.o));
         // Independent projections share one barrier. The command processor starts a dispatch's workgroups only
         // once the previous dispatch's have all started, so tensor-parallel ranks issue the small f32 alpha/beta
         // projection first, where it runs beside the large ones instead of alone after them.
         let old = s.tp.is_none();
         if old {
-            self.matrix(&dl.qkv, self.h_in, s.big.address, d, cd, true)?;
-            self.matrix(&dl.z, self.h_in, s.z.address, d, vd, true)?;
+            self.matrix(&dl.qkv, h, big, d, cd, true)?;
+            self.matrix(&dl.z, h, z, d, vd, true)?;
         }
         let mut u = [0; 16];
         u[0] = (2 * c.v_heads) as u32;
@@ -678,14 +781,14 @@ impl<'a> Rec<'a> {
         s.gpu.dispatch_matrix(
             self.cmd,
             "qwen_matf32",
-            self.push([0, self.h_in, s.ab.address, 0, 0, 0], u).defer_barrier(!old),
+            self.push([0, h, ab, 0, 0, 0], u).defer_barrier(!old),
             (2 * c.v_heads).div_ceil(4) as u32,
             self.n.div_ceil(8) as u32,
             &dl.ab,
         )?;
         if !old {
-            self.matrix(&dl.z, self.h_in, s.z.address, d, vd, true)?;
-            self.matrix(&dl.qkv, self.h_in, s.big.address, d, cd, false)?;
+            self.matrix(&dl.z, h, z, d, vd, true)?;
+            self.matrix(&dl.qkv, h, big, d, cd, false)?;
         }
         self.capture(format!("linear_attn_qkv_mixed-{il}"), &s.big, cd)?;
         self.capture(format!("z-{il}"), &s.z, vd)?;
@@ -698,7 +801,7 @@ impl<'a> Rec<'a> {
         s.gpu.dispatch(
             self.cmd,
             "qwen_conv",
-            self.push([s.big.address, dl.conv_w.address, dl.conv.address, s.conv_out.address, snap_conv, 0], u),
+            self.push([big, dl.conv_w.address, dl.conv.address, conv_out, snap_conv, 0], u),
             cd.div_ceil(256) as u32,
             1,
         );
@@ -712,7 +815,7 @@ impl<'a> Rec<'a> {
         s.gpu.dispatch(
             self.cmd,
             "qwen_gdn",
-            self.push([s.conv_out.address, s.ab.address, dl.state.address, s.o.address, dl.dt_a.address, snap], u),
+            self.push([conv_out, ab, dl.state.address, o, dl.dt_a.address, snap], u),
             (c.v_heads * c.state / 16) as u32,
             1,
         );
@@ -724,12 +827,12 @@ impl<'a> Rec<'a> {
         s.gpu.dispatch(
             self.cmd,
             "qwen_gated_norm",
-            self.push([s.o.address, s.z.address, dl.norm.address, 0, 0, 0], u),
+            self.push([o, z, dl.norm.address, 0, 0, 0], u),
             c.v_heads as u32,
             self.n as u32,
         );
         self.capture(format!("final_output-{il}"), &s.o, vd)?;
-        self.matrix(&dl.out, s.o.address, self.out, vd, d, false)?;
+        self.matrix(&dl.out, o, self.out, vd, d, false)?;
         self.capture(format!("linear_attn_out-{il}"), &s.y, d)
     }
 
@@ -738,21 +841,23 @@ impl<'a> Rec<'a> {
         let (s, c) = (self.s, &self.s.c);
         let (d, hd, kvd) = (c.d, c.head_dim, c.kv_heads * c.head_dim);
         let qd = c.heads * hd;
+        let h = self.h_in;
+        let (big, kb, vb, rq, o, scratch) = (self.sc(&s.big), self.sc(&s.kb), self.sc(&s.vb), self.sc(&s.rq), self.sc(&s.o), self.sc(&s.scratch));
         // Tensor-parallel ranks issue the small K and V projections first (see `delta`).
         if s.tp.is_none() {
-            self.matrix(&a.q, self.h_in, s.big.address, d, 2 * qd, true)?;
-            self.matrix(&a.k, self.h_in, s.kb.address, d, kvd, true)?;
-            self.matrix(&a.v, self.h_in, s.vb.address, d, kvd, false)?;
+            self.matrix(&a.q, h, big, d, 2 * qd, true)?;
+            self.matrix(&a.k, h, kb, d, kvd, true)?;
+            self.matrix(&a.v, h, vb, d, kvd, false)?;
         } else {
-            self.matrix(&a.k, self.h_in, s.kb.address, d, kvd, true)?;
-            self.matrix(&a.v, self.h_in, s.vb.address, d, kvd, true)?;
-            self.matrix(&a.q, self.h_in, s.big.address, d, 2 * qd, false)?;
+            self.matrix(&a.k, h, kb, d, kvd, true)?;
+            self.matrix(&a.v, h, vb, d, kvd, true)?;
+            self.matrix(&a.q, h, big, d, 2 * qd, false)?;
         }
         // Q (normed, rotated, pre-scaled into rq), K (normed, rotated into the cache), V (cache).
         for (src, norm, out, cache, heads, stride, width, scale, defer) in [
-            (&s.big, Some(&a.q_norm), Some(&s.rq), None, c.heads, 2 * hd, 2 * qd, 1. / (hd as f32).sqrt(), true),
-            (&s.kb, Some(&a.k_norm), None, Some(&a.kc), c.kv_heads, hd, kvd, 1., true),
-            (&s.vb, None, None, Some(&a.vc), c.kv_heads, hd, kvd, 1f32, false),
+            (big, Some(&a.q_norm), rq, None, c.heads, 2 * hd, 2 * qd, 1. / (hd as f32).sqrt(), true),
+            (kb, Some(&a.k_norm), 0, Some(&a.kc), c.kv_heads, hd, kvd, 1., true),
+            (vb, None, 0, Some(&a.vc), c.kv_heads, hd, kvd, 1f32, false),
         ] {
             let mut u = [0; 16];
             u[1] = if norm.is_some() { c.rot as u32 } else { 0 };
@@ -769,9 +874,9 @@ impl<'a> Rec<'a> {
                 "qwen_qk",
                 self.push(
                     [
-                        src.address,
+                        src,
                         norm.map_or(0, |b| b.address),
-                        out.map_or(0, |b| b.address),
+                        out,
                         0,
                         0,
                         cache.map_or(0, |b| b.address),
@@ -793,7 +898,7 @@ impl<'a> Rec<'a> {
             s.gpu.dispatch(
                 self.cmd,
                 "attention",
-                self.push([s.rq.address, a.kc.address, a.vc.address, s.o.address, 0, 0], u),
+                self.push([rq, a.kc.address, a.vc.address, o, 0, 0], u),
                 c.heads as u32,
                 self.n as u32,
             );
@@ -802,14 +907,14 @@ impl<'a> Rec<'a> {
             s.gpu.dispatch(
                 self.cmd,
                 partial,
-                self.push([s.rq.address, a.kc.address, a.vc.address, s.o.address, s.scratch.address, 0], u),
+                self.push([rq, a.kc.address, a.vc.address, o, scratch, 0], u),
                 c.heads as u32 * parts,
                 self.n as u32,
             );
             s.gpu.dispatch(
                 self.cmd,
                 merge,
-                self.push([0, 0, 0, s.o.address, s.scratch.address, 0], u),
+                self.push([0, 0, 0, o, scratch, 0], u),
                 c.heads as u32,
                 self.n as u32,
             );
@@ -821,31 +926,32 @@ impl<'a> Rec<'a> {
         s.gpu.dispatch(
             self.cmd,
             "qwen_gate",
-            self.push([s.o.address, s.big.address, 0, 0, 0, 0], u),
+            self.push([o, big, 0, 0, 0, 0], u),
             qd.div_ceil(256) as u32,
             self.n as u32,
         );
         self.capture(format!("attn_gated-{il}"), &s.o, qd)?;
-        self.matrix(&a.out, s.o.address, self.out, qd, d, false)?;
+        self.matrix(&a.out, o, self.out, qd, d, false)?;
         self.capture(format!("attn_output-{il}"), &s.y, d)
     }
 
     /// SwiGLU FFN from `h` into `y`.
     fn ffn(&mut self, f: &Ffn, il: usize) -> Result<()> {
         let (s, c) = (self.s, &self.s.c);
-        self.matrix(&f.gate, self.h_in, s.gate.address, c.d, c.ff, true)?;
-        self.matrix(&f.up, self.h_in, s.up.address, c.d, c.ff, false)?;
+        let (h, gate, up, act) = (self.h_in, self.sc(&s.gate), self.sc(&s.up), self.sc(&s.act));
+        self.matrix(&f.gate, h, gate, c.d, c.ff, true)?;
+        self.matrix(&f.up, h, up, c.d, c.ff, false)?;
         let mut u = [0; 16];
         u[0] = c.ff as u32;
         s.gpu.dispatch(
             self.cmd,
             "qwen_swiglu",
-            self.push([s.gate.address, s.up.address, s.act.address, 0, 0, 0], u),
+            self.push([gate, up, act, 0, 0, 0], u),
             c.ff.div_ceil(256) as u32,
             self.n as u32,
         );
         self.capture(format!("ffn_swiglu-{il}"), &s.act, c.ff)?;
-        self.matrix(&f.down, s.act.address, self.out, c.ff, c.d, false)
+        self.matrix(&f.down, act, self.out, c.ff, c.d, false)
     }
 
     /// LM head and top candidates of the last `cols` normed rows of `input`, over the first `rows` tokens
@@ -861,11 +967,12 @@ impl<'a> Rec<'a> {
         u[9] = 1;
         let single = u32::from(cols == 1);
         u[15] = single;
+        let input = self.sc(input);
         let (shader, gy, x) = match cols {
-            1 => ("headvec", 1, input.address + ((n - 1) * d * 4) as u64),
-            2 => ("multivec4x2", 1, input.address),
-            3 => ("multivec4x3", 1, input.address),
-            _ => ("multivec4", cols.div_ceil(4), input.address),
+            1 => ("headvec", 1, input + ((n - 1) * d * 4) as u64),
+            2 => ("multivec4x2", 1, input),
+            3 => ("multivec4x3", 1, input),
+            _ => ("multivec4", cols.div_ceil(4), input),
         };
         ensure!(cols == 1 || cols == n, "the head ranks the last column or all of them");
         s.gpu.dispatch_matrix(
@@ -949,8 +1056,8 @@ impl<'a> Rec<'a> {
     fn mtp_inputs(&mut self, m: &Mtp, hidden: u64) {
         let s = self.s;
         let d = s.c.d;
-        self.copy(&m.emb, 0, &s.x, 0, self.n * d * 4);
-        self.add_norm(s.x.address, None, Some(m.cat.address), Some(&m.enorm), 2 * d);
+        self.copy(&m.emb, self.rows(), &s.x, self.rows(), self.n * d * 4);
+        self.add_norm(self.x(), None, Some(m.cat.address), Some(&m.enorm), 2 * d);
         self.add_norm(hidden, None, Some(m.cat.address + (d * 4) as u64), Some(&m.hnorm), 2 * d);
     }
 }
@@ -1087,6 +1194,10 @@ impl GpuStage {
             None => None,
         };
         let alloc = |w: usize| gpu.buffer(w * max_batch * 4, false, false, None);
+        // Under tensor parallelism the second micro-batch has its own half of every buffer a segment works in,
+        // so it can run beside the first one on a second queue (`Rec::sc`).
+        let halves = if tp { 2 } else { 1 };
+        let work = |w: usize| gpu.buffer(w * max_batch * 4 * halves, false, false, None);
         let fence = unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
         let qd = c.heads * c.head_dim;
         Ok(Self {
@@ -1099,24 +1210,24 @@ impl GpuStage {
             context,
             input: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
             output: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
-            params: gpu.buffer(16, false, false, None)?,
-            params_host: gpu.buffer(16, true, false, None)?,
+            params: gpu.buffer(PARAMS_STRIDE * MAX_MICRO, false, false, None)?,
+            params_host: gpu.buffer(PARAMS_STRIDE * MAX_MICRO, true, false, None)?,
             x: alloc(c.d)?,
-            h: alloc(c.d)?,
+            h: work(c.d)?,
             y: alloc(c.d)?,
-            big: alloc(c.conv_dim().max(2 * qd))?,
-            conv_out: alloc(c.conv_dim())?,
-            z: alloc(c.value_dim())?,
-            ab: alloc(2 * c.v_heads)?,
-            o: alloc(c.value_dim().max(qd))?,
-            kb: alloc(c.kv_heads * c.head_dim)?,
-            vb: alloc(c.kv_heads * c.head_dim)?,
-            rq: alloc(qd)?,
+            big: work(c.conv_dim().max(2 * qd))?,
+            conv_out: work(c.conv_dim())?,
+            z: work(c.value_dim())?,
+            ab: work(2 * c.v_heads)?,
+            o: work(c.value_dim().max(qd))?,
+            kb: work(c.kv_heads * c.head_dim)?,
+            vb: work(c.kv_heads * c.head_dim)?,
+            rq: work(qd)?,
             // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`).
-            scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8, false, false, None)?,
-            gate: alloc(c.ff)?,
-            up: alloc(c.ff)?,
-            act: alloc(c.ff)?,
+            scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8 * halves, false, false, None)?,
+            gate: work(c.ff)?,
+            up: work(c.ff)?,
+            act: work(c.ff)?,
             fence,
             graphs: HashMap::new(),
             drafts: HashMap::new(),
@@ -1132,17 +1243,19 @@ impl GpuStage {
                     total: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
                     hin: gpu.buffer(c.d * 8 * 4, true, false, None)?,
                     hostnorm: false,
-                    done: gpu.timeline(false)?,
-                    release: gpu.timeline(false)?,
-                    base: 0,
-                    done_value: 0,
-                    released: 0,
+                    done: [gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?],
+                    release: [gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?, gpu.timeline(false)?],
+                    base: [0; MAX_MICRO],
+                    done_value: [0; MAX_MICRO],
+                    released: [0; MAX_MICRO],
                     current: None,
                     cmds: Vec::new(),
+                    micro: 1,
+                    dual: false,
                     head_rows: 0,
                     head_start: 0,
                     draft_top: false,
-                    stamps: None,
+                    stamps: Vec::new(),
                     gate: unsafe {
                         let e = || gpu.dev.create_event(&vk::EventCreateInfo::default(), None);
                         (e()?, e()?)
@@ -1165,10 +1278,11 @@ impl GpuStage {
         self.gpu.device_bytes.get() as f64 / 1048576.
     }
 
-    fn record(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
+    fn record(&self, k: Key) -> Result<Graph> {
         if self.tp.is_some() {
-            return self.record_tp(n, parts, dump, verify);
+            return self.record_tp(k);
         }
+        let (n, parts, dump, verify) = (k.n, k.parts, k.dump, k.verify);
         let d = self.c.d;
         let mut r = Rec::new(self, n, dump)?;
         r.copy(&self.input, 0, &self.x, 0, n * d * 4);
@@ -1218,25 +1332,29 @@ impl GpuStage {
         r.finish()
     }
 
-    /// Tensor-parallel graph: every mixer and FFN ends a submission with its partial projection in host
-    /// memory, and the next submission adds the all-reduced total to the replicated residual. The last
-    /// submission ranks this rank's vocabulary rows. 2 * layers + 1 submissions.
-    fn record_tp(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
+    /// Tensor-parallel graph: every mixer and FFN ends a segment with its partial projection in host memory, and
+    /// the next segment adds the all-reduced total to the replicated residual. The last segment ranks this rank's
+    /// vocabulary rows (unless `k` is a micro-batch before the last). 2 * layers + 1 segments, each its own
+    /// submission unless event-gated. A micro-batch works on its own rows of the batch buffers and its own half
+    /// of the work buffers, so the segments of two micro-batches can alternate or run side by side (`tp_prepare`).
+    fn record_tp(&self, k: Key) -> Result<Graph> {
+        let (n, parts, dump, verify) = (k.n, k.parts, k.dump, k.verify);
         let d = self.c.d;
         let (hd, tp) = (self.head.as_ref().context("a tensor-parallel rank needs its head rows")?, self.tp.as_ref().unwrap());
-        let total = tp.total.address;
-        let host = hostnorm(n, dump);
-        let mut r = Rec::new(self, n, dump)?;
+        let host = hostnorm(k.gated, dump);
+        let mut r = Rec::at(self, n, dump, k.slot, k.row, k.gated)?;
+        let (rows, x, h) = (r.rows(), r.x(), r.sc(&self.h));
+        let total = (if vram_io() { self.y.address } else { tp.total.address }) + rows as u64;
         if host {
             r.h_in = tp.hin.address;
         } else {
-            r.copy(&self.input, 0, &self.x, 0, n * d * 4);
+            r.copy(&self.input, rows, &self.x, rows, n * d * 4);
         }
         let mut added = None;
         for l in &self.layers {
             let il = l.il;
             if !host {
-                r.add_norm(self.x.address, added, Some(self.h.address), Some(&l.attn_norm), 0);
+                r.add_norm(x, added, Some(h), Some(&l.attn_norm), 0);
             }
             if added.is_some() {
                 r.capture(format!("l_out-{}", il - 1), &self.x, d)?;
@@ -1248,7 +1366,7 @@ impl GpuStage {
             }
             r.end_segment()?;
             if !host {
-                r.add_norm(self.x.address, Some(total), Some(self.h.address), Some(&l.post_norm), 0);
+                r.add_norm(x, Some(total), Some(h), Some(&l.post_norm), 0);
             }
             r.capture(format!("attn_residual-{il}"), &self.x, d)?;
             r.capture(format!("attn_post_norm-{il}"), &self.h, d)?;
@@ -1257,20 +1375,23 @@ impl GpuStage {
             added = Some(total);
         }
         if !host {
-            r.add_norm(self.x.address, added, Some(self.h.address), Some(&hd.norm), 0);
+            r.add_norm(x, added, Some(h), Some(&hd.norm), 0);
         }
         r.capture(format!("l_out-{}", self.last - 1), &self.x, d)?;
         r.capture("result_norm".into(), &self.h, d)?;
         let normed = if host { &tp.hin } else { &self.h };
-        r.head(hd, normed, if verify { n } else { 1 }, self.c.vocab)?;
+        if k.head {
+            r.head(hd, normed, if verify { n } else { 1 }, self.c.vocab)?;
+        }
         if let Some(m) = &self.mtp {
-            // Extend the MTP layer's KV cache over this batch (token p pairs with the target's row p - 1). Only
-            // its K and V are kept, so the block stops after the attention and needs no all-reduce.
-            r.h_in = self.h.address;
-            r.copy(normed, 0, &m.hin, d * 4, n * d * 4);
+            // Extend the MTP layer's KV cache over this batch (token p pairs with the target's row p - 1, which for
+            // a later micro-batch the previous one left in row 0). Only its K and V are kept, so the block stops
+            // after the attention and needs no all-reduce.
+            r.h_in = h;
+            r.copy(normed, r.half(normed), &m.hin, d * 4, n * d * 4);
             r.mtp_inputs(m, m.hin.address);
-            r.matrix(&m.eh, m.cat.address, self.x.address, 2 * d, d, false)?;
-            r.add_norm(self.x.address, None, Some(self.h.address), Some(&m.attn_norm), 0);
+            r.matrix(&m.eh, m.cat.address, x, 2 * d, d, false)?;
+            r.add_norm(x, None, Some(h), Some(&m.attn_norm), 0);
             r.attention(&m.attn, parts, self.c.layers)?;
             r.copy(&m.hin, n * d * 4, &m.hin, 0, d * 4);
         }
@@ -1299,16 +1420,34 @@ impl GpuStage {
         r.finish()
     }
 
-    /// Start a tensor-parallel forward of `n` tokens at `pos` (see `forward`): write the input rows and find
-    /// or record the graph. Returns its number of submissions; the caller submits and waits for each in turn
-    /// and writes the all-reduced total between them.
-    pub fn tp_prepare(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: bool) -> Result<usize> {
+    /// Start a tensor-parallel forward of `n` tokens at `pos` (see `forward`) as the micro-batches `micro`
+    /// ((first row, rows) covering the batch in order; one for the whole batch): write the input rows and find
+    /// or record each micro-batch's graph. Their segments alternate: segment `j` is segment `j / m` of
+    /// micro-batch `j % m`, so the host can all-reduce one micro-batch while the GPU runs the next. A forward of
+    /// one micro-batch of at most 8 columns is event-gated (`gated`). Returns the number of segments; the caller
+    /// releases them in order, writing each all-reduced total before the segment of the same micro-batch that
+    /// reads it.
+    pub fn tp_prepare(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: bool, micro: &[(usize, usize)]) -> Result<usize> {
         let d = self.c.d;
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(pos + n <= self.context, "context exhausted");
         ensure!(x.len() == n * d, "hidden state length mismatch");
         let verify = verify && n > 1;
         ensure!(!verify || n <= self.verify, "verification batch exceeds the configured {} columns", self.verify);
+        ensure!(!micro.is_empty() && micro.len() <= MAX_MICRO, "1 to {MAX_MICRO} micro-batches");
+        ensure!(micro.len() == 1 || !(verify || dump), "verification and dumps run as one batch");
+        ensure!(
+            micro
+                .iter()
+                .scan(0, |next, &(row, rows)| {
+                    let ok = row == *next && rows > 0;
+                    *next = row + rows;
+                    Some(ok)
+                })
+                .all(|ok| ok)
+                && micro.last().is_some_and(|&(row, rows)| row + rows == n),
+            "micro-batches must cover the batch in order"
+        );
         self.input.write(bytemuck::cast_slice(x))?;
         if let Some(m) = &self.mtp {
             // The input rows are the batch's token embeddings, which the MTP block also reads.
@@ -1320,31 +1459,58 @@ impl GpuStage {
                 self.gpu.run(cmd)?;
             }
         }
-        self.params_host.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, tp_partitions(pos, n), dump, verify);
-        self.tick += 1;
-        if let Some(e) = self.graphs.get_mut(&key) {
-            e.1 = self.tick;
-        } else {
-            if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
-                let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
-                self.graphs.remove(&victim);
+        let gated = micro.len() == 1 && gated(n);
+        let mut keys = Vec::new();
+        for (slot, &(row, rows)) in micro.iter().enumerate() {
+            self.params_host.write_at(slot * PARAMS_STRIDE, bytemuck::cast_slice(&[(pos + row) as u32, rows as u32, 0, 0]))?;
+            let key = Key { n: rows, parts: tp_partitions(pos + row, rows), dump, verify, slot, row, head: slot + 1 == micro.len(), gated };
+            self.tick += 1;
+            if let Some(e) = self.graphs.get_mut(&key) {
+                e.1 = self.tick;
+            } else {
+                // The graphs of this forward were used last, so they are never the victim.
+                if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
+                    let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
+                    self.graphs.remove(&victim);
+                }
+                let graph = self.record(key)?;
+                self.graphs.insert(key, (graph, self.tick));
             }
-            let graph = self.record(n, key.1, key.2, key.3)?;
-            self.graphs.insert(key, (graph, self.tick));
+            keys.push(key);
         }
         self.last_n = n;
         self.verified = verify;
-        let (cmds, segments) = (self.graphs[&key].0.cmds.clone(), self.graphs[&key].0.segments);
-        let stamps = self.graphs[&key].0.stamps.clone();
+        let graphs: Vec<&Graph> = keys.iter().map(|k| &self.graphs[k].0).collect();
+        let segments = graphs[0].segments;
+        ensure!(graphs.iter().all(|g| g.segments == segments), "micro-batch graphs differ in segments");
+        let cmds: Vec<vk::CommandBuffer> =
+            if gated { graphs[0].cmds.clone() } else { (0..segments).flat_map(|i| graphs.iter().map(move |g| g.cmds[i])).collect() };
+        let stamps = graphs.iter().filter_map(|g| g.stamps.clone()).collect();
         let rows = self.c.vocab;
+        let dual = micro.len() == 2 && self.gpu.queue2 != self.gpu.queue && two_queues();
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
-        tp.current = Some(key);
+        tp.current = keys.last().copied();
         tp.stamps = stamps;
-        tp.hostnorm = hostnorm(n, dump);
+        tp.hostnorm = hostnorm(gated, dump);
         tp.head_start = self.vocab_start;
         tp.draft_top = false;
-        Ok(tp.start(cmds, segments, rows, gated(n)))
+        Ok(tp.start(cmds, segments * micro.len(), rows, micro.len(), dual, gated))
+    }
+
+    /// Record the graphs of a tensor-parallel prefill of `n` tokens as the micro-batches `micro` ahead of the first
+    /// prompt (they do not depend on the position).
+    pub fn tp_warm(&mut self, n: usize, micro: &[(usize, usize)]) -> Result<()> {
+        ensure!(n > 8, "only prefill batches are recorded ahead");
+        for (slot, &(row, rows)) in micro.iter().enumerate() {
+            let parts = tp_partitions(row, rows);
+            let key = Key { n: rows, parts, dump: false, verify: false, slot, row, head: slot + 1 == micro.len(), gated: false };
+            if !self.graphs.contains_key(&key) {
+                let graph = self.record(key)?;
+                self.tick += 1;
+                self.graphs.insert(key, (graph, self.tick));
+            }
+        }
+        Ok(())
     }
 
     /// Start a tensor-parallel MTP draft step at `pos` for the token with embedding `emb` (see `draft`), the
@@ -1368,13 +1534,13 @@ impl GpuStage {
             self.drafts.insert(key, graph);
         }
         let (cmds, segments) = (self.drafts[&key].cmds.clone(), self.drafts[&key].segments);
-        let stamps = self.drafts[&key].stamps.clone();
+        let stamps = self.drafts[&key].stamps.iter().cloned().collect();
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         tp.stamps = stamps;
         tp.hostnorm = false;
         tp.head_start = start;
         tp.draft_top = balanced.is_some();
-        Ok(tp.start(cmds, segments, local, gated(1)))
+        Ok(tp.start(cmds, segments, local, 1, false, gated(1)))
     }
 
     /// Give this rank an equal share of the first `vocab` token ids for MTP drafts (a copy of those head rows),
@@ -1410,11 +1576,31 @@ impl GpuStage {
         Ok(())
     }
 
-    /// Submit segment `i` of the forward in progress, to run as soon as the GPU is free.
-    pub fn tp_submit(&mut self, i: usize) -> Result<()> {
+    /// Submit segment `j` of the forward in progress on its queue; submitted `ahead`, it waits for the host's
+    /// release.
+    fn tp_send(&mut self, j: usize, ahead: bool) -> Result<()> {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
-        tp.done_value = tp.base + i as u64 + 1;
-        self.gpu.submit(tp.cmds[i], None, Some((tp.done, tp.done_value)), vk::Fence::null())
+        let (m, i) = tp.at(j);
+        let mut waits = [(vk::Semaphore::null(), 0); 2];
+        let mut count = 0;
+        if ahead {
+            waits[count] = (tp.release[m], tp.base[m] + i);
+            count += 1;
+        }
+        let second = tp.dual && m == 1;
+        if second {
+            // The second micro-batch continues the first one's recurrent state and attention cache.
+            waits[count] = (tp.done[0], tp.base[0] + i + 1);
+            count += 1;
+        }
+        let done = (tp.done[m], tp.base[m] + i + 1);
+        tp.done_value[m] = done.1;
+        self.gpu.submit_on(if second { self.gpu.queue2 } else { self.gpu.queue }, tp.cmds[j], &waits[..count], &[done])
+    }
+
+    /// Submit segment `j` of the forward in progress, to run as soon as the GPU is free.
+    pub fn tp_submit(&mut self, j: usize) -> Result<()> {
+        self.tp_send(j, false)
     }
 
     /// Whether the forward or draft step in progress is event-gated.
@@ -1422,42 +1608,40 @@ impl GpuStage {
         self.tp.as_ref().is_some_and(|t| t.gated)
     }
 
-    /// Submit every segment of the forward in progress ahead, each waiting for `tp_release`.
+    /// Submit every segment of the forward in progress ahead, each waiting for `tp_release`; an event-gated
+    /// forward is one submission.
     pub fn tp_submit_all(&mut self) -> Result<()> {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         if tp.gated {
             // The previous submission must have retired before its command buffers and events are reused.
-            let (sems, values) = ([tp.done], [tp.done_value]);
+            let (sems, values) = ([tp.done[0]], [tp.done_value[0]]);
             unsafe { self.gpu.dev.wait_semaphores(&vk::SemaphoreWaitInfo::default().semaphores(&sems).values(&values), 10_000_000_000)? };
             unsafe {
                 self.gpu.dev.reset_event(tp.gate.0)?;
                 self.gpu.dev.reset_event(tp.gate.1)?;
             }
-            tp.done_value = tp.base + tp.segments as u64;
-            return self.gpu.submit_all(&tp.cmds, (tp.done, tp.done_value));
+            tp.done_value[0] = tp.base[0] + tp.segments as u64;
+            return self.gpu.submit_all(&tp.cmds, (tp.done[0], tp.done_value[0]));
         }
-        for (i, &cmd) in tp.cmds.iter().enumerate() {
-            let at = tp.base + i as u64;
-            self.gpu.submit(cmd, Some((tp.release, at)), Some((tp.done, at + 1)), vk::Fence::null())?;
-        }
-        tp.done_value = tp.base + tp.cmds.len() as u64;
-        Ok(())
+        let count = tp.cmds.len();
+        (0..count).try_for_each(|j| self.tp_send(j, true))
     }
 
-    /// Let segment `i` (submitted ahead) and everything before it run.
-    pub fn tp_release(&mut self, i: usize) -> Result<()> {
+    /// Let segment `j` (submitted ahead) and the earlier segments of its micro-batch run.
+    pub fn tp_release(&mut self, j: usize) -> Result<()> {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         if tp.gated {
             // Segment 0 starts with the submission; the others wait for the release event.
-            if i > 0 {
+            if j > 0 {
                 unsafe { self.gpu.dev.set_event(tp.gate.0)? };
             }
             return Ok(());
         }
-        let value = tp.base + i as u64;
-        if value > tp.released {
-            tp.released = value;
-            unsafe { self.gpu.dev.signal_semaphore(&vk::SemaphoreSignalInfo::default().semaphore(tp.release).value(value))? };
+        let (m, i) = tp.at(j);
+        let value = tp.base[m] + i;
+        if value > tp.released[m] {
+            tp.released[m] = value;
+            unsafe { self.gpu.dev.signal_semaphore(&vk::SemaphoreSignalInfo::default().semaphore(tp.release[m]).value(value))? };
         }
         Ok(())
     }
@@ -1469,49 +1653,57 @@ impl GpuStage {
         let start = std::time::Instant::now();
         loop {
             unsafe { self.gpu.dev.set_event(tp.gate.0)? };
-            if unsafe { self.gpu.dev.get_semaphore_counter_value(tp.done)? } >= tp.done_value {
+            if unsafe { self.gpu.dev.get_semaphore_counter_value(tp.done[0])? } >= tp.done_value[0] {
                 return Ok(());
             }
             ensure!(start.elapsed().as_secs() < 10, "a gated submission did not drain");
         }
     }
 
-    /// Release every segment submitted ahead, e.g. after a failed exchange, so the queue drains.
+    /// Release every segment submitted ahead, e.g. after a failed exchange, so the queues drain.
     pub fn tp_release_all(&mut self) -> Result<()> {
-        let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         if tp.gated {
             return self.drain();
         }
-        let last = tp.done_value.saturating_sub(tp.base + 1) as usize;
-        self.tp_release(last)
+        for m in 0..tp.micro {
+            let value = tp.done_value[m].saturating_sub(1);
+            if value >= tp.base[m] && value > tp.released[m] {
+                tp.released[m] = value;
+                unsafe { self.gpu.dev.signal_semaphore(&vk::SemaphoreSignalInfo::default().semaphore(tp.release[m]).value(value))? };
+            }
+        }
+        Ok(())
     }
 
-    /// Spin until segment `i` of the forward in progress has finished.
-    pub fn tp_wait(&self, i: usize) -> Result<()> {
+    /// Spin until segment `j` of the forward in progress has finished.
+    pub fn tp_wait(&self, j: usize) -> Result<()> {
         let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        let start = std::time::Instant::now();
         if tp.gated {
-            let start = std::time::Instant::now();
             while !unsafe { self.gpu.dev.get_event_status(tp.gate.1)? } {
                 ensure!(start.elapsed().as_secs() < 60, "GPU segment did not finish");
                 std::hint::spin_loop();
             }
-            // Segment i + 1 can only set done again after the host releases it.
+            // Segment j + 1 can only set done again after the host releases it.
             unsafe { self.gpu.dev.reset_event(tp.gate.1)? };
             return Ok(());
         }
-        let value = tp.base + i as u64 + 1;
-        let start = std::time::Instant::now();
-        while unsafe { self.gpu.dev.get_semaphore_counter_value(tp.done)? } < value {
+        let (m, i) = tp.at(j);
+        let value = tp.base[m] + i + 1;
+        while unsafe { self.gpu.dev.get_semaphore_counter_value(tp.done[m])? } < value {
             ensure!(start.elapsed().as_secs() < 60, "GPU segment did not finish");
             std::hint::spin_loop();
         }
         Ok(())
     }
 
-    /// This rank's partial projection of the `n` tokens of the latest segment.
-    pub fn tp_part(&self, n: usize) -> &[f32] {
-        let part = &self.tp.as_ref().unwrap().part;
-        unsafe { std::slice::from_raw_parts(part.ptr as *const f32, n * self.c.d) }
+    /// This rank's partial projection of the `n` tokens from batch row `row` (a micro-batch's rows) of the
+    /// latest segment.
+    pub fn tp_part(&self, row: usize, n: usize) -> &[f32] {
+        let (part, d) = (&self.tp.as_ref().unwrap().part, self.c.d);
+        assert!((row + n) * d * 4 <= part.size);
+        unsafe { std::slice::from_raw_parts((part.ptr as *const f32).add(row * d), n * d) }
     }
 
     /// Whether the forward in progress reads its normed rows from the host (`hostnorm`).
@@ -1528,23 +1720,27 @@ impl GpuStage {
         unsafe { std::slice::from_raw_parts_mut(t.ptr as *mut f32, len) }
     }
 
-    /// The all-reduced total for the next segment.
-    pub fn tp_set_total(&self, total: &[f32]) {
-        let t = &self.tp.as_ref().unwrap().total;
-        assert!(total.len() * 4 <= t.size);
-        unsafe { std::ptr::copy_nonoverlapping(total.as_ptr(), t.ptr as *mut f32, total.len()) };
+    /// Where the host writes the all-reduced total of the `n` rows from `row` for the next segment.
+    pub fn tp_total(&self, row: usize, n: usize) -> *mut f32 {
+        let (t, d) = (&self.tp.as_ref().unwrap().total, self.c.d);
+        assert!((row + n) * d * 4 <= t.size);
+        unsafe { (t.ptr as *mut f32).add(row * d) }
     }
 
-    /// Timestamps of the latest forward or draft step when profiling.
-    pub fn tp_stamps(&self) -> Result<Option<StampRead>> {
-        let Some((pool, labels)) = self.tp.as_ref().and_then(|t| t.stamps.clone()) else { return Ok(None) };
-        let mut ticks = vec![0u64; labels.len()];
-        unsafe { self.gpu.dev.get_query_pool_results(pool, 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+    /// Timestamps of the latest forward or draft step when profiling, one read per graph (micro-batch).
+    pub fn tp_stamps(&self) -> Result<Vec<StampRead>> {
+        let Some(tp) = self.tp.as_ref() else { return Ok(Vec::new()) };
         let period = self.gpu.period as f64;
-        let first = ticks.first().copied().unwrap_or(0);
-        let host = self.gpu.calibrate().map(|(t, ns)| ns as f64 - (t as f64 - first as f64) * period);
-        let ns = ticks.iter().map(|&t| (t as f64 - first as f64) * period).collect();
-        Ok(Some((vk::Handle::as_raw(pool), labels, ns, host)))
+        let mut reads = Vec::new();
+        for (pool, labels) in &tp.stamps {
+            let mut ticks = vec![0u64; labels.len()];
+            unsafe { self.gpu.dev.get_query_pool_results(*pool, 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+            let first = ticks.first().copied().unwrap_or(0);
+            let host = self.gpu.calibrate().map(|(t, ns)| ns as f64 - (t as f64 - first as f64) * period);
+            let ns = ticks.iter().map(|&t| (t as f64 - first as f64) * period).collect();
+            reads.push((vk::Handle::as_raw(*pool), labels.clone(), ns, host));
+        }
+        Ok(reads)
     }
 
     /// Top candidates of this rank's vocabulary rows after the last segment, with model token ids.
@@ -1636,7 +1832,7 @@ impl GpuStage {
         self.input.write(bytemuck::cast_slice(x))?;
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump.is_some(), verify);
+        let key = Key::whole(n, partitions(pos, n), dump.is_some(), verify);
         self.tick += 1;
         if let Some(e) = self.graphs.get_mut(&key) {
             e.1 = self.tick;
@@ -1646,7 +1842,7 @@ impl GpuStage {
                 let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
                 self.graphs.remove(&victim);
             }
-            let graph = self.record(n, key.1, key.2, key.3)?;
+            let graph = self.record(key)?;
             self.graphs.insert(key, (graph, self.tick));
         }
         let graph = &self.graphs[&key].0;
@@ -1799,8 +1995,9 @@ impl Drop for GpuStage {
             }
             self.gpu.dev.destroy_fence(self.fence, None);
             if let Some(tp) = &self.tp {
-                self.gpu.dev.destroy_semaphore(tp.done, None);
-                self.gpu.dev.destroy_semaphore(tp.release, None);
+                for &s in tp.done.iter().chain(&tp.release) {
+                    self.gpu.dev.destroy_semaphore(s, None);
+                }
                 self.gpu.dev.destroy_event(tp.gate.0, None);
                 self.gpu.dev.destroy_event(tp.gate.1, None);
             }

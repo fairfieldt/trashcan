@@ -771,3 +771,86 @@ pub fn selection(iterations: u32, batch: usize) -> Result<()> {
     }
     Ok(())
 }
+
+/// Q4_0 GEMM kernels (`gemm` and its variants) at (rows, k) shapes for `n` tokens on GPU `gpu`, random weights
+/// and activations: milliseconds and TFLOP/s per call, and every variant's output checked bit for bit against
+/// `gemm`. One JSON line per shape and kernel.
+pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations: u32, gpu: usize, warmup_ms: u64) -> Result<()> {
+    ensure!(iterations > 0 && n > 0, "positive iterations and tokens");
+    let inst = Rc::new(Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("GPU not found")?;
+    let d = Device::new(inst.clone(), pd)?;
+    let mut state = 0x2545_f491u32;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        state
+    };
+    // Buffers stay alive until the device goes: its cached descriptors must never see a recycled handle.
+    let mut keep = Vec::new();
+    let q = unsafe { d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(2), None)? };
+    for &(rows, k) in shapes {
+        ensure!(rows.is_multiple_of(64) && k.is_multiple_of(32), "rows must be a multiple of 64 and k of 32");
+        let mut blocks = vec![0u8; rows * k / 32 * 18];
+        for b in blocks.chunks_exact_mut(18) {
+            let scale = half::f16::from_f32(0.001 + (next() % 1000) as f32 * 5e-5);
+            b[..2].copy_from_slice(&scale.to_le_bytes());
+            for byte in &mut b[2..] {
+                *byte = next() as u8;
+            }
+        }
+        let w = d.upload_matrix(&quant::repack_q4(&blocks, k, rows, 0, rows, 0, k))?;
+        let input: Vec<f32> = (0..n * k).map(|_| (next() as f64 / u32::MAX as f64 * 2. - 1.) as f32).collect();
+        let x = d.upload(bytemuck::cast_slice(&input))?;
+        let mut reference: Option<Vec<u8>> = None;
+        for kernel in kernels {
+            let y = d.buffer(n * rows * 4, false, false, None)?;
+            let mut p = Push::default();
+            p.ptr[1] = x.address;
+            p.ptr[2] = y.address;
+            p.u[0] = rows as u32;
+            p.u[1] = k as u32;
+            p.u[3] = (rows * k / 32) as u32;
+            p.u[15] = n as u32;
+            let cmd = d.begin()?;
+            unsafe {
+                d.dev.cmd_reset_query_pool(cmd, q, 0, 2);
+                d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
+            }
+            for _ in 0..iterations {
+                d.dispatch_matrix(cmd, kernel, p, rows.div_ceil(64) as u32, n.div_ceil(64) as u32, &w)?;
+            }
+            unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+            d.finish(cmd)?;
+            let warmup = Instant::now();
+            while warmup.elapsed() < Duration::from_millis(warmup_ms) {
+                d.run_reusable(cmd)?;
+            }
+            d.run(cmd)?;
+            let mut ts = [0u64; 2];
+            unsafe { d.dev.get_query_pool_results(q, 0, &mut ts, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+            let ms = (ts[1] - ts[0]) as f64 * d.period as f64 * 1e-6 / iterations as f64;
+            let out = y.download()?;
+            let (mismatches, max_diff) = match &reference {
+                None => (0, 0f32),
+                Some(r) => {
+                    let (a, b): (&[f32], &[f32]) = (bytemuck::cast_slice(r), bytemuck::cast_slice(&out));
+                    let m = a.iter().zip(b).filter(|(u, v)| u.to_bits() != v.to_bits()).count();
+                    (m, a.iter().zip(b).map(|(u, v)| (u - v).abs()).fold(0f32, f32::max))
+                }
+            };
+            if reference.is_none() {
+                reference = Some(out);
+            }
+            let tflops = 2. * (rows * k * n) as f64 / (ms * 1e-3) / 1e12;
+            println!("{}", serde_json::json!({"gpu": gpu, "rows": rows, "k": k, "n": n, "kernel": kernel, "ms": ms, "tflops": tflops, "mismatches": mismatches, "max_diff": max_diff}));
+            keep.push(y);
+        }
+        keep.push(w);
+        keep.push(x);
+    }
+    unsafe { d.dev.destroy_query_pool(q, None) };
+    drop(keep);
+    Ok(())
+}

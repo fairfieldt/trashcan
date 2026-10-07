@@ -13,6 +13,8 @@ pub struct Device {
     pub inst: Rc<Instance>,
     pub dev: ash::Device,
     pub queue: vk::Queue,
+    /// A second queue of the same family (the first one again if the family has only one).
+    pub queue2: vk::Queue,
     pub pool: vk::CommandPool,
     pub mem: vk::PhysicalDeviceMemoryProperties,
     pub layout: vk::PipelineLayout,
@@ -159,11 +161,13 @@ impl Device {
                     .contains(vk::SubgroupFeatureFlags::ARITHMETIC),
             "kernels require 64-lane compute subgroups with arithmetic"
         );
-        let (family, _) = inst.compute_family(pd)?;
-        let priority = [1.0];
+        let (family, available) = inst.compute_family(pd)?;
+        // A second queue of the family lets tensor-parallel micro-batches run concurrently.
+        let priority = [1.0, 1.0];
+        let queues = available.clamp(1, 2) as usize;
         let queue_info = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(family)
-            .queue_priorities(&priority)];
+            .queue_priorities(&priority[..queues])];
         let mut extensions = vec![
             ash::khr::external_memory_fd::NAME.as_ptr(),
             ash::ext::external_memory_dma_buf::NAME.as_ptr(),
@@ -194,6 +198,7 @@ impl Device {
         let dev = unsafe { inst.instance.create_device(pd, &ci, None)? };
         let calibrated = calibrate.then(|| ash::ext::calibrated_timestamps::Device::new(&inst.instance, &dev));
         let queue = unsafe { dev.get_device_queue(family, 0) };
+        let queue2 = if queues > 1 { unsafe { dev.get_device_queue(family, 1) } } else { queue };
         let pool = unsafe {
             dev.create_command_pool(
                 &vk::CommandPoolCreateInfo::default()
@@ -215,12 +220,12 @@ impl Device {
         };
         let pool_sizes = [vk::DescriptorPoolSize {
             ty: vk::DescriptorType::STORAGE_BUFFER,
-            descriptor_count: 32768,
+            descriptor_count: 65536,
         }];
         let descriptor_pool = unsafe {
             dev.create_descriptor_pool(
                 &vk::DescriptorPoolCreateInfo::default()
-                    .max_sets(4096)
+                    .max_sets(8192)
                     .pool_sizes(&pool_sizes),
                 None,
             )?
@@ -375,6 +380,7 @@ impl Device {
                 "gemm",
                 include_bytes!(concat!(env!("OUT_DIR"), "/gemm.spv")).as_slice(),
             ),
+            ("gemm2", include_bytes!(concat!(env!("OUT_DIR"), "/gemm2.spv")).as_slice()),
             (
                 "qwen_add_norm",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_add_norm.spv")).as_slice(),
@@ -601,6 +607,7 @@ impl Device {
             inst,
             dev,
             queue,
+            queue2,
             pool,
             mem,
             layout,
@@ -1012,10 +1019,15 @@ impl Device {
                 &[],
             );
         }
-        self.dispatch(cmd, shader, p, x, y);
+        // Profiling labels a matrix by its rows and row length.
+        self.dispatch_as(cmd, shader, p, x, y, || format!("{shader} {}x{}", p.u[0], p.u[1]));
         Ok(())
     }
     pub fn dispatch(&self, cmd: vk::CommandBuffer, shader: &str, p: Push, x: u32, y: u32) {
+        self.dispatch_as(cmd, shader, p, x, y, || format!("{shader} {x}x{y}"));
+    }
+    /// `dispatch` with `label` for its profiling timestamps (`Stamps`).
+    fn dispatch_as(&self, cmd: vk::CommandBuffer, shader: &str, p: Push, x: u32, y: u32, label: impl Fn() -> String) {
         let key = p.ptr;
         let cached = { self.bindings.borrow().get(&key).copied() };
         let set = if let Some(set) = cached {
@@ -1089,11 +1101,11 @@ impl Device {
         }
         let stamp = self.stamping_dispatches();
         if stamp {
-            self.stamp(cmd, false, || format!("{shader} {x}x{y}"));
+            self.stamp(cmd, false, &label);
         }
         unsafe { self.dev.cmd_dispatch(cmd, x, y, 1) };
         if stamp {
-            self.stamp(cmd, true, || format!("{shader} {x}x{y}"));
+            self.stamp(cmd, true, &label);
         }
         if p.u[14] == 0 {
             self.scoped_barrier(
@@ -1187,6 +1199,30 @@ impl Device {
         let mut ti = vk::TimelineSemaphoreSubmitInfo::default().signal_semaphore_values(&sv);
         let ci = [vk::SubmitInfo::default().command_buffers(cmds).signal_semaphores(&ss).push_next(&mut ti)];
         unsafe { self.dev.queue_submit(self.queue, &ci, vk::Fence::null())? };
+        Ok(())
+    }
+    /// Submit `cmd` to `queue`, waiting for every timeline value in `waits` and signalling those in `signals`
+    /// (at most four each, without allocating).
+    pub fn submit_on(&self, queue: vk::Queue, cmd: vk::CommandBuffer, waits: &[(vk::Semaphore, u64)], signals: &[(vk::Semaphore, u64)]) -> Result<()> {
+        ensure!(waits.len() <= 4 && signals.len() <= 4, "at most four waits and signals per submission");
+        let commands = [cmd];
+        let (mut ws, mut wv, mut ss, mut sv) = ([vk::Semaphore::null(); 4], [0u64; 4], [vk::Semaphore::null(); 4], [0u64; 4]);
+        for (i, &(s, v)) in waits.iter().enumerate() {
+            (ws[i], wv[i]) = (s, v);
+        }
+        for (i, &(s, v)) in signals.iter().enumerate() {
+            (ss[i], sv[i]) = (s, v);
+        }
+        let stages = [vk::PipelineStageFlags::ALL_COMMANDS; 4];
+        let (w, s) = (waits.len(), signals.len());
+        let mut ti = vk::TimelineSemaphoreSubmitInfo::default().wait_semaphore_values(&wv[..w]).signal_semaphore_values(&sv[..s]);
+        let ci = [vk::SubmitInfo::default()
+            .command_buffers(&commands)
+            .wait_semaphores(&ws[..w])
+            .wait_dst_stage_mask(&stages[..w])
+            .signal_semaphores(&ss[..s])
+            .push_next(&mut ti)];
+        unsafe { self.dev.queue_submit(queue, &ci, vk::Fence::null())? };
         Ok(())
     }
     /// Submit the full schedule in one API call per GPU. Each element still has
@@ -1327,6 +1363,16 @@ impl Buffer {
         );
         unsafe {
             std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr, bytes.len());
+        }
+        Ok(())
+    }
+    pub fn write_at(&self, offset: usize, bytes: &[u8]) -> Result<()> {
+        ensure!(
+            !self.ptr.is_null() && offset + bytes.len() <= self.size,
+            "invalid host write"
+        );
+        unsafe {
+            std::ptr::copy_nonoverlapping(bytes.as_ptr(), self.ptr.add(offset), bytes.len());
         }
         Ok(())
     }

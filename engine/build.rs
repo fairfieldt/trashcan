@@ -25,6 +25,7 @@ fn main() {
         "geglu",
         "topk",
         "gemm",
+        "gemm2",
         "visibility",
         "multivec",
         "multivec2",

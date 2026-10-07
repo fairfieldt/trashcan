@@ -183,10 +183,24 @@ two Macs and the 9B at 66 on one, 72% of drafts accepted; `qwen-check` passes on
 `TRASHCAN_TP_PROFILE=FILE` (with `TRASHCAN_TP_PROFILE_DISPATCH=1`) writes GPU timestamps per segment (and dispatch)
 aligned to host time, summarized by `tools/tp_profile.py` and `tools/tp_timeline.py`.
 
+Prefill hides its all-reduces behind GPU work ([results/qwen/tp-prefill-20261006](../results/qwen/tp-prefill-20261006/)).
+A batch of at least 128 tokens runs as two micro-batches, each with its own rows of the batch buffers and its own
+position parameters. Each GPU runs the second micro-batch on the second queue of the compute family, its segment i
+waiting for the first micro-batch's segment i (whose recurrent state and attention cache it continues). The host
+all-reduces one micro-batch while the GPUs run the other, and each queue fills the other's bubbles (`qwen_gdn`,
+host-memory traffic). The prefill's candidates are bit for bit those of one batch. The 27B prefills 512 tokens in
+3.4 s instead of 5.6. The prefill is now GPU-bound, mostly in Q4_0 GEMMs at about 2.1 TFLOP/s (60% of the D700's
+peak). Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead:
+3-6% faster, identical results (`TRASHCAN_QWEN_GEMM=gemm` restores the old kernel). Switches: `TRASHCAN_TP_MICRO`
+(default 2, 1 disables), `TRASHCAN_TP_QUEUES=1` (one queue), `TRASHCAN_TP_THREADS` (host threads for the sums; 6
+across Macs, 1 on one Mac), `TRASHCAN_TP_PROFILE=1` (GPU time per kernel in `qwen-bench`'s `pp_profile`),
+`TRASHCAN_TP_VRAM_IO=1` (timing only: partials and totals stay in VRAM). `trashcan qwen-gemm-bench --shapes
+ROWSxK,...` times Q4_0 GEMM kernels and checks variants against `gemm` bit for bit.
+
 The decision to use TP across Macs came from `trashcan allreduce-bench`
 ([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)): a cross-Mac all-reduce costs
-about 104 µs over USB4STREAM and 138 µs over TCP. Prefill all-reduces (10 MiB per 512-token chunk) still cost
-about 21.6 ms each and need SDMA copies, receives straight into GPU-visible memory and f16 partials.
+about 104 µs over USB4STREAM and 138 µs over TCP. A prefill all-reduce (10 MiB per 512-token chunk) costs about
+21.6 ms there; prefill now runs it beside the GPU work (above).
 
 ## Speculative decoding with the MTP layer
 

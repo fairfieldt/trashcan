@@ -396,7 +396,6 @@ impl Chain {
     /// Tensor parallelism instead of a chain: every layer split across this machine's `gpus` and, with
     /// `peer`, the other machine's (`tp`).
     #[allow(clippy::too_many_arguments)]
-    #[allow(clippy::too_many_arguments)]
     pub fn tensor_parallel(
         model: &Path,
         gpus: &[usize],

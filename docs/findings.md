@@ -25,6 +25,28 @@ now 28.5-28.6 and 46.0, with MTP 28.5 → 39.6 and 50.0 → 66.1. Generated text
 - `matvecq4` reaches 199 GB/s on a whole 17408×5120 matrix but 133-167 GB/s on the 27B's TP4 shards; neither eight
   rows per wave nor fusing projections into one dispatch helped.
 
+## 2026-10-06 (later): tensor-parallel prefill hides its all-reduces
+
+`results/qwen/tp-prefill-20261006/`. Qwen3.8-27B on TP4 across both Macs: pp512 149 tok/s (was 90-92), pp2048 141
+(87); over TCP 140 (82). Qwen3.5-9B TP2: 264 (208-210). Prefill candidates bit for bit unchanged.
+
+- Before, the GPUs and the host took turns: of a 27B chunk's 5.6 s, 3.65 s waited on the GPUs and 2.0 s went to
+  the host (sum 0.5, exchange 0.9, totals 0.5). Without all-reduces the GPUs needed 3.64 s.
+- Two micro-batches per chunk whose segments alternate on the queue hide the host work: 133 tok/s, with the GPUs 96%
+  busy. Three or four micro-batches are slower (126, 120): more segments cost more GPU time than they hide.
+- RADV's second compute queue runs concurrently with the first on GCN 1.0. Putting the second micro-batch on it
+  (waiting on the first micro-batch's segment by timeline semaphore) fills the first's bubbles: +5-7% on top
+  (27B 140.5 against 133, 9B 245-251 against 234), and the GPU floor drops from 3.63 to 3.37 s per 27B chunk.
+- With the GPUs busy, the host all-reduce of one micro-batch is on the path to its next segment: 6 host threads for
+  the sums add 4.5% across Macs, nothing on one Mac.
+- Shader stores into host memory still cost about 0.3 s of GPU time per 27B chunk (the mixer out-projections run
+  at 1.2 TFLOP/s because of their 10 MiB of partials), now partly hidden by the second queue.
+- The prefill GEMM runs at 1.9-2.2 TFLOP/s (55-63% of 3.48) at the 27B's per-rank shapes and is 88% of the GPU
+  time. An 8x8 register tile per lane (one wave per 64x64 tile) was bit-identical but half as fast: occupancy 1 and
+  uncoalesced tile loads, while `gemm` already gets most of its LDS reads by broadcast. Its weight-tile reads did
+  have 2-way bank conflicts (rows rr and rr + 8 at a 36-dword stride): an XOR swizzle of the vec4 index plus loading
+  the next block into registers ahead (`gemm2`) is 3-6% faster with identical results, +4-5% end to end.
+
 ## 2026-10-06: Qwen3.8-27B with tensor parallelism across incite and invite
 
 `--tp` splits every layer across GPUs, `--tp-stream`/`--tp-connect` across both Macs (`results/qwen/tp-20261006/`).
