@@ -1,0 +1,23 @@
+#version 460
+#include "common.glsl"
+// Store the batch's K and/or V rows in Q8 cache rows: per 32 values d = amax / 127, q = x / d rounded to nearest
+// even (ggml's Q8_0 SIMD rounding), scale kept as f16. A row (one head of one position) is dim/4 words of int8
+// values, then dim/32 f16 scales. One workgroup per token; thread i quantizes block i of [K heads | V heads].
+// a: K [t][kvheads][dim] (f32), b: V [t][kvheads][dim], c: K cache, d: V cache. p.kvheads, p.dim (multiple of 64),
+// p.cap, p.flags: bit 0 store K, bit 1 store V.
+layout(local_size_x=64) in;
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint per=p.dim/32u,heads_blocks=p.kvheads*per;if(l>=2u*heads_blocks)return;
+uint which=l/heads_blocks,i=l%heads_blocks,kh=i/per,blk=i%per;
+if(((p.flags>>which)&1u)==0u)return;
+uint src=(t*p.kvheads+kh)*p.dim+blk*32u,words=p.dim/4u+p.dim/64u;
+uint row=(((position()+t)%p.cap)*p.kvheads+kh)*words;
+float x[32];float amax=0.0;
+[[unroll]]for(uint j=0;j<32u;j++){x[j]=which==0u?a_f.v[src+j]:b_f.v[src+j];amax=max(amax,abs(x[j]));}
+float d=amax/127.0,id=d!=0.0?1.0/d:0.0;
+[[unroll]]for(uint w=0;w<8u;w++){uint packed=0u;
+    [[unroll]]for(uint k=0;k<4u;k++){int q=int(roundEven(x[w*4u+k]*id));packed|=(uint(q)&255u)<<(8u*k);}
+    if(which==0u)c_u.v[row+blk*8u+w]=packed;else d_u.v[row+blk*8u+w]=packed;}
+uint16_t s=uint16_t(packHalf2x16(vec2(d,0.0))&65535u);
+uint at=(row+p.dim/4u)*2u+blk;
+if(which==0u)c_h.v[at]=s;else d_h.v[at]=s;}

@@ -5,7 +5,7 @@
 use super::{
     cpu::Captures,
     embed,
-    gpu::{merge_top, Output},
+    gpu::{merge_top, KvCache, Output},
     ngram,
     pipeline::{assemble_logits, head_rows, plan, Local},
     Config,
@@ -186,6 +186,7 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             let heads = s["heads"].as_array().context("missing head rows")?;
             let context = s["context"].as_u64().context("context")? as usize;
             let batch = s["batch"].as_u64().context("batch")? as usize;
+            let kv = KvCache::parse(s["kv"].as_str().unwrap_or("f16"))?;
             let mine = ranges(&plans[0])?;
             let my_heads = heads_of(&heads[0])?;
             ensure!(
@@ -193,11 +194,11 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
                 "plan does not match the probed chain"
             );
             drop(local.take());
-            local = Some(Local::new(model, devices, &mine, &my_heads, context, batch)?);
+            local = Some(Local::new(model, devices, &mine, &my_heads, context, batch, kv)?);
             if let Some(d) = down.as_mut() {
                 d.send(
                     &json!({"setup": {"plans": &plans[1..], "heads": &heads[1..], "context": context,
-                        "batch": batch}}),
+                        "batch": batch, "kv": kv.name()}}),
                     &[],
                 )?;
                 d.recv()?;
@@ -267,6 +268,7 @@ impl Chain {
         head_split: usize,
         context: usize,
         max_batch: usize,
+        kv: KvCache,
         rows: Rows,
     ) -> Result<Self> {
         ensure!(context > 0 && max_batch > 0, "context and batch must be positive");
@@ -331,12 +333,12 @@ impl Chain {
                 .collect();
             conn.send(
                 &json!({"setup": {"plans": remote, "heads": heads_json(&heads[1..]), "context": context,
-                    "batch": max_batch}}),
+                    "batch": max_batch, "kv": kv.name()}}),
                 &[],
             )?;
             conn.recv()?;
         }
-        let local = Local::new(model, &devices, &plans[0], &heads[0], context, max_batch)?;
+        let local = Local::new(model, &devices, &plans[0], &heads[0], context, max_batch, kv)?;
         Ok(Self {
             local,
             next,

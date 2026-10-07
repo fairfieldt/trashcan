@@ -24,6 +24,9 @@ pub enum Cmd {
         /// Round like ggml's CPU backend (see `cpu::EMULATE_GGML`).
         #[arg(long)]
         emulate_ggml: bool,
+        /// Round the QSA K/V caches like this GPU cache format: f16 (as --emulate-ggml says), q8 or k16v8.
+        #[arg(long, default_value = "f16")]
+        kv: String,
     },
     /// Teacher-forced per-layer check: run each layer on the reference's input residual (every prompt token, from a
     /// dump made with DUMP_FULL=l_last,hc_init,ple_embd) and compare with the reference's output, so errors do not
@@ -78,6 +81,9 @@ pub enum Cmd {
         /// scoring a hidden state with them, alone and all at once.
         #[arg(long, value_delimiter = ',')]
         head_rows: Vec<String>,
+        /// QSA K/V cache: f16, q8 or k16v8.
+        #[arg(long, default_value = "f16")]
+        kv: String,
         #[arg(long, default_value_t = 2048)]
         context: usize,
         #[arg(long, default_value_t = 256)]
@@ -154,6 +160,9 @@ pub struct Run {
     /// Split the LM head by vocabulary rows over the last N stages; each scores its rows as the result returns.
     #[arg(long, default_value_t = 1)]
     head_split: usize,
+    /// QSA K/V cache: f16, q8 (Q8 K and V) or k16v8 (f16 K, Q8 V). CPU stages round to the same values.
+    #[arg(long, default_value = "f16")]
+    kv: String,
     /// N-gram rows: map (the GGUF mapping), ram-q4 or ram-q8 (a resident copy), disk (pread through the page
     /// cache) or direct (O_DIRECT page reads).
     #[arg(long, default_value = "map")]
@@ -185,6 +194,7 @@ impl Run {
             self.head_split,
             self.context,
             self.batch,
+            super::gpu::KvCache::parse(&self.kv)?,
             rows,
         )
     }
@@ -211,8 +221,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
             tokens_file,
             tokens,
             emulate_ggml,
+            kv,
         } => {
             super::cpu::EMULATE_GGML.store(emulate_ggml, std::sync::atomic::Ordering::Relaxed);
+            super::cpu::set_kv_cache(super::gpu::KvCache::parse(&kv)?);
             let ids = super::reference(&model, &out, greedy, &prompt(tokens_file.as_deref(), &tokens)?)?;
             println!("greedy: {ids:?}");
             Ok(())
@@ -247,6 +259,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             gpus,
             head,
             head_rows,
+            kv,
             context,
             batch,
             decode,
@@ -274,7 +287,8 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 let (a, b) = r.split_once(':').context("head rows look like 0:82944")?;
                 heads[ranges.len() - head_rows.len() + k] = Some((a.parse()?, b.parse()?));
             }
-            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, &heads, context, batch)?;
+            let kv = super::gpu::KvCache::parse(&kv)?;
+            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, &heads, context, batch, kv)?;
             if let (Some(tf), Some(out)) = (tokens_file, out) {
                 let tokens = prompt(Some(&tf), &[])?;
                 return super::bench::stage_dump(&mut local, &out, &tokens, batch);

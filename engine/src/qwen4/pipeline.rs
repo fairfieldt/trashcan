@@ -3,7 +3,7 @@
 //! driver's; the last stage of the last machine owns the final mixer and the LM head.
 use super::{
     cpu::{Captures, CpuStage},
-    gpu::{merge_top, GpuStage, Output},
+    gpu::{merge_top, GpuStage, KvCache, Output},
     Config,
 };
 use crate::{gguf::Gguf, gpu::Instance, qwen::pipeline::Devices, vulkan::Device};
@@ -107,8 +107,10 @@ impl Local {
         heads: &[Option<(usize, usize)>],
         context: usize,
         max_batch: usize,
+        kv: KvCache,
     ) -> Result<Self> {
         let gguf = Gguf::open(path)?;
+        super::cpu::set_kv_cache(kv);
         let c = Config::new(&gguf)?;
         ensure!(ranges.len() <= devices.count(), "more stages than devices");
         ensure!(heads.len() == ranges.len(), "one head entry per stage");
@@ -132,7 +134,7 @@ impl Local {
                         heads[i].map_or(String::new(), |(a, b)| format!(" + head rows {a}..{b}"))
                     );
                     let gpu = Device::new(inst.clone(), pd)?;
-                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, heads[i], context, max_batch)?;
+                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, heads[i], context, max_batch, kv)?;
                     let (size, budget, usage) = heap_mib(&inst, pd);
                     eprintln!(
                         "GPU{}: {:.1} MiB allocated; device-local heap {usage:.0} of {size:.0} MiB used, budget {budget:.0}",

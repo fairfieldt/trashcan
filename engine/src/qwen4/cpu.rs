@@ -20,6 +20,46 @@ fn emulate() -> bool {
     EMULATE_GGML.load(Ordering::Relaxed)
 }
 
+/// The QSA K/V cache rounding to reproduce: 0 as stored by `EMULATE_GGML` (f32, or f16), 1 Q8_0 K and V,
+/// 2 f16 K and Q8_0 V (the GPU's `KvCache` formats).
+static KV_CACHE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+pub fn set_kv_cache(kv: super::gpu::KvCache) {
+    use super::gpu::KvCache;
+    let mode = match kv {
+        KvCache::F16 => 0,
+        KvCache::Q8 => 1,
+        KvCache::K16V8 => 2,
+    };
+    KV_CACHE.store(mode, Ordering::Relaxed);
+}
+
+/// Round to Q8_0 per 32 values as ggml's SIMD quantizer does: d = amax / 127, q = x / d to nearest even, f16 d.
+fn round_q8(x: &mut [f32]) {
+    for b in x.chunks_mut(32) {
+        let amax = b.iter().fold(0f32, |m, v| m.max(v.abs()));
+        let d = amax / 127.;
+        let id = if d != 0. { 1. / d } else { 0. };
+        let dh = f16::from_f32(d).to_f32();
+        for v in b {
+            *v = (*v * id).round_ties_even() * dh;
+        }
+    }
+}
+
+/// Round a stored K or V row the way the cache being reproduced keeps it.
+fn round_kv(x: &mut [f32], is_v: bool) {
+    match (KV_CACHE.load(Ordering::Relaxed), is_v) {
+        (1, _) | (2, true) => round_q8(x),
+        (2, false) => {
+            for v in x {
+                *v = f16::from_f32(*v).to_f32();
+            }
+        }
+        _ => round_f16(x),
+    }
+}
+
 fn round_f16(x: &mut [f32]) {
     if emulate() {
         for v in x {
@@ -668,8 +708,8 @@ impl CpuStage {
                 let slot = ((pos + tok) * nkv + head) * hd;
                 kc[slot..slot + hd].copy_from_slice(&kk);
                 vc[slot..slot + hd].copy_from_slice(&v[at..at + hd]);
-                round_f16(&mut kc[slot..slot + hd]);
-                round_f16(&mut vc[slot..slot + hd]);
+                round_kv(&mut kc[slot..slot + hd], false);
+                round_kv(&mut vc[slot..slot + hd], true);
             }
         }
         record(format!("Qcur-{il}"), &q, nh * hd);

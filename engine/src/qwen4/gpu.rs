@@ -165,6 +165,48 @@ impl Drop for Graph {
     }
 }
 
+/// The format of the QSA K/V caches.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum KvCache {
+    F16,
+    /// Q8 K and V rows: int8 values with an f16 scale per 32 (`qwen4_kv_store`).
+    Q8,
+    /// f16 K, Q8 V.
+    K16V8,
+}
+
+impl KvCache {
+    pub fn parse(s: &str) -> Result<Self> {
+        Ok(match s {
+            "f16" => Self::F16,
+            "q8" => Self::Q8,
+            "k16v8" => Self::K16V8,
+            other => anyhow::bail!("unknown K/V cache format {other} (f16, q8, k16v8)"),
+        })
+    }
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::F16 => "f16",
+            Self::Q8 => "q8",
+            Self::K16V8 => "k16v8",
+        }
+    }
+    fn k_q8(self) -> bool {
+        self == Self::Q8
+    }
+    fn v_q8(self) -> bool {
+        self != Self::F16
+    }
+    /// Bytes of one cache row (one head at one position).
+    fn row_bytes(q8: bool, dim: usize) -> usize {
+        if q8 {
+            dim + dim / 16
+        } else {
+            dim * 2
+        }
+    }
+}
+
 pub enum Output {
     Hidden(Vec<f32>),
     /// The best candidates of this stage's head rows and the final hidden state of the last token.
@@ -189,6 +231,9 @@ pub struct GpuStage {
     head: Option<Head>,
     max_batch: usize,
     context: usize,
+    kv: KvCache,
+    /// Rows of the raw indexer-key ring: the batch and the incomplete block before it.
+    ring: usize,
     input: Buffer,
     ple_in: Buffer,
     output: Buffer,
@@ -210,6 +255,9 @@ pub struct GpuStage {
     o: Buffer,
     kb: Buffer,
     vb: Buffer,
+    /// Normed and rotated K, and V, of the batch before the Q8 cache store.
+    kq: Buffer,
+    vq: Buffer,
     rq: Buffer,
     scratch: Buffer,
     logits: Buffer,
@@ -302,6 +350,7 @@ impl GpuStage {
         head: Option<(usize, usize)>,
         context: usize,
         max_batch: usize,
+        kv: KvCache,
     ) -> Result<Self> {
         ensure!(
             c.state == 128 && c.head_dim % 64 == 0 && c.head_dim <= 512,
@@ -315,8 +364,10 @@ impl GpuStage {
             context % c.kpool == 0 && c.idx_dim <= 128 && c.idx_heads * c.idx_dim <= 512,
             "unsupported indexer"
         );
-        // Past this many visible tokens QSA attends to selected blocks; below it every block is selected.
-        let sparse = context > c.idx_budget + c.kpool - 1;
+        // Past this many visible tokens QSA attends to selected blocks; below it every block is selected. Q8 caches
+        // are read only by the sparse kernels, which select every block while there are few enough.
+        let sparse = kv != KvCache::F16 || context > c.idx_budget + c.kpool - 1;
+        let ring = (max_batch + c.kpool).next_multiple_of(c.kpool);
         let (d, w) = (c.d, c.width());
         let t = |il: usize, name: &str| c.layer_tensor(g, il, name);
         let q4 = |t: &TensorInfo| -> Result<Dense> {
@@ -388,7 +439,10 @@ impl GpuStage {
                     out: q4(t(il, "ssm_out.weight")?)?,
                 }
             } else {
-                let kv = context * c.kv_heads * c.head_dim * 2;
+                let (kbytes, vbytes) = (
+                    context * c.kv_heads * KvCache::row_bytes(kv.k_q8(), c.head_dim),
+                    context * c.kv_heads * KvCache::row_bytes(kv.v_q8(), c.head_dim),
+                );
                 Mixer::Attention {
                     q: q4(t(il, "attn_q.weight")?)?,
                     k: q4(t(il, "attn_k.weight")?)?,
@@ -396,15 +450,15 @@ impl GpuStage {
                     q_norm: vecb(t(il, "attn_q_norm.weight")?)?,
                     k_norm: vecb(t(il, "attn_k_norm.weight")?)?,
                     out: q4(t(il, "attn_output.weight")?)?,
-                    kc: gpu.buffer(kv, false, false, None)?,
-                    vc: gpu.buffer(kv, false, false, None)?,
+                    kc: gpu.buffer(kbytes, false, false, None)?,
+                    vc: gpu.buffer(vbytes, false, false, None)?,
                     index: if sparse {
                         Some(Index {
                             q: mat32(&rows_f32(g, t(il, "indexer.q_proj.weight")?)?)?,
                             k: mat32(&rows_f32(g, t(il, "indexer.k_proj.weight")?)?)?,
                             q_norm: vecb(t(il, "indexer.q_norm.weight")?)?,
                             k_norm: vecb(t(il, "indexer.k_norm.weight")?)?,
-                            raw: gpu.buffer(context * c.idx_dim * 4, false, false, None)?,
+                            raw: gpu.buffer(ring * c.idx_dim * 4, false, false, None)?,
                             pooled: gpu.buffer(context / c.kpool * c.idx_dim * 4, false, false, None)?,
                         })
                     } else {
@@ -532,6 +586,8 @@ impl GpuStage {
             head,
             max_batch,
             context,
+            kv,
+            ring,
             input: gpu.buffer(w * max_batch * 4, true, false, None)?,
             ple_in: gpu.buffer(d * max_batch * 4, true, false, None)?,
             output: gpu.buffer(w * max_batch * 4, true, false, None)?,
@@ -552,6 +608,16 @@ impl GpuStage {
             o: alloc(c.value_dim().max(qd))?,
             kb: alloc(c.kv_heads * c.head_dim)?,
             vb: alloc(c.kv_heads * c.head_dim)?,
+            kq: if kv.k_q8() {
+                alloc(c.kv_heads * c.head_dim)?
+            } else {
+                gpu.buffer(4, false, false, None)?
+            },
+            vq: if kv.v_q8() {
+                alloc(c.kv_heads * c.head_dim)?
+            } else {
+                gpu.buffer(4, false, false, None)?
+            },
             rq: alloc(qd)?,
             scratch: gpu.buffer(c.heads * 64 * (c.head_dim + 2) * 4 * 8, false, false, None)?,
             logits: alloc(c.experts + 1)?,
@@ -626,7 +692,7 @@ impl GpuStage {
         matf32(&ix.k, &self.ik, id)?;
         let mut u = [0; 16];
         u[6] = id as u32;
-        u[7] = self.context as u32;
+        u[10] = self.ring as u32;
         gpu.dispatch(
             current.get(),
             "qwen4_idx_store",
@@ -640,6 +706,7 @@ impl GpuStage {
         u[7] = self.context as u32;
         u[8] = c.eps.to_bits();
         u[9] = c.kpool as u32;
+        u[10] = self.ring as u32;
         u[12] = c.rope_base.to_bits();
         gpu.dispatch(
             current.get(),
@@ -1227,8 +1294,28 @@ impl GpuStage {
                             1. / (hd as f32).sqrt(),
                             true,
                         ),
-                        (&self.kb, Some(k_norm), None, Some(kc), c.kv_heads, hd, kvd, 1., true),
-                        (&self.vb, None, None, Some(vc), c.kv_heads, hd, kvd, 1f32, false),
+                        (
+                            &self.kb,
+                            Some(k_norm),
+                            self.kv.k_q8().then_some(&self.kq),
+                            (!self.kv.k_q8()).then_some(kc),
+                            c.kv_heads,
+                            hd,
+                            kvd,
+                            1.,
+                            true,
+                        ),
+                        (
+                            &self.vb,
+                            None,
+                            self.kv.v_q8().then_some(&self.vq),
+                            (!self.kv.v_q8()).then_some(vc),
+                            c.kv_heads,
+                            hd,
+                            kvd,
+                            1f32,
+                            false,
+                        ),
                     ] {
                         let mut u = [0; 16];
                         u[1] = if norm.is_some() { c.rot as u32 } else { 0 };
@@ -1256,6 +1343,20 @@ impl GpuStage {
                             )
                             .defer_barrier(defer),
                             heads as u32,
+                            n as u32,
+                        );
+                    }
+                    if self.kv != KvCache::F16 {
+                        let mut u = [0; 16];
+                        u[5] = c.kv_heads as u32;
+                        u[6] = hd as u32;
+                        u[7] = self.context as u32;
+                        u[11] = self.kv.k_q8() as u32 | (self.kv.v_q8() as u32) << 1;
+                        gpu.dispatch(
+                            current.get(),
+                            "qwen4_kv_store",
+                            push([self.kq.address, self.vq.address, kc.address, vc.address, 0, 0], u),
+                            1,
                             n as u32,
                         );
                     }
@@ -1289,18 +1390,30 @@ impl GpuStage {
                         if parts == 0 {
                             gpu.dispatch(
                                 current.get(),
-                                "qwen4_attention_sparse_full",
+                                match self.kv {
+                                    KvCache::F16 => "qwen4_attention_sparse_full",
+                                    KvCache::Q8 => "qwen4_attention_sparse_full_q8",
+                                    KvCache::K16V8 => "qwen4_attention_sparse_full_k16v8",
+                                },
                                 push(ptr, u),
                                 c.heads as u32,
                                 n as u32,
                             );
                         } else {
                             let (_, merge) = attention_shaders(parts)?;
-                            let partial = match parts {
-                                8 => "qwen4_attention_sparse8",
-                                16 => "qwen4_attention_sparse16",
-                                64 => "qwen4_attention_sparse64",
-                                _ => "qwen4_attention_sparse",
+                            let partial = match (self.kv, parts) {
+                                (KvCache::F16, 8) => "qwen4_attention_sparse8",
+                                (KvCache::F16, 16) => "qwen4_attention_sparse16",
+                                (KvCache::F16, 64) => "qwen4_attention_sparse64",
+                                (KvCache::F16, _) => "qwen4_attention_sparse",
+                                (KvCache::Q8, 8) => "qwen4_attention_sparse_q8_8",
+                                (KvCache::Q8, 16) => "qwen4_attention_sparse_q8_16",
+                                (KvCache::Q8, 64) => "qwen4_attention_sparse_q8_64",
+                                (KvCache::Q8, _) => "qwen4_attention_sparse_q8",
+                                (KvCache::K16V8, 8) => "qwen4_attention_sparse_k16v8_8",
+                                (KvCache::K16V8, 16) => "qwen4_attention_sparse_k16v8_16",
+                                (KvCache::K16V8, 64) => "qwen4_attention_sparse_k16v8_64",
+                                (KvCache::K16V8, _) => "qwen4_attention_sparse_k16v8",
                             };
                             gpu.dispatch(current.get(), partial, push(ptr, u), c.heads as u32 * parts, n as u32);
                             gpu.dispatch(
