@@ -283,7 +283,7 @@ impl Chain {
         }
         let stages: usize = counts.iter().sum();
         let all = if cuts.is_empty() {
-            plan(&g, &c, stages)
+            plan(&g, &c, stages, head_split)
         } else {
             ensure!(
                 cuts.len() + 1 == stages,

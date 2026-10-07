@@ -23,20 +23,28 @@ fn layer_bytes(g: &Gguf, il: usize) -> u64 {
         .sum()
 }
 
-/// Contiguous layer ranges for `devices` stages in order, balancing uploaded bytes; the last stage also holds
-/// the head. The first stage keeps at least the layers through the PLE layer.
-pub fn plan(g: &Gguf, c: &Config, devices: usize) -> Vec<(usize, usize)> {
+/// Contiguous layer ranges for `devices` stages in order, balancing uploaded bytes; the head is split over the last
+/// `head_split` stages. The first stage keeps at least the layers through the PLE layer.
+pub fn plan(g: &Gguf, c: &Config, devices: usize, head_split: usize) -> Vec<(usize, usize)> {
     let costs: Vec<f64> = (0..c.layers).map(|il| layer_bytes(g, il) as f64).collect();
-    let stages = devices.clamp(1, c.layers);
-    let head = (c.vocab * c.d) as f64 * 1.25;
+    let min_first = c.ngram.as_ref().map_or(1, |p| p.layer + 1);
+    split_layers(&costs, (c.vocab * c.d) as f64 * 1.25, devices, head_split, min_first)
+}
+
+/// `plan` on per-layer costs and the head's cost.
+fn split_layers(costs: &[f64], head: f64, devices: usize, head_split: usize, min_first: usize) -> Vec<(usize, usize)> {
+    let stages = devices.clamp(1, costs.len());
+    let split = head_split.clamp(1, stages);
     let target = (costs.iter().sum::<f64>() + head) / stages as f64;
+    // Layer bytes before the cut that starts stage k: each earlier stage's target minus its head share.
+    let share = |j: usize| if j + split >= stages { head / split as f64 } else { 0. };
+    let bound = |k: usize| (0..k).map(|j| target - share(j)).sum::<f64>();
     let mut cuts = vec![0];
     let mut acc = 0.;
-    let min_first = c.ngram.as_ref().map_or(1, |p| p.layer + 1);
     for (il, cost) in costs.iter().enumerate() {
         let next = cuts.len();
         if next < stages && il >= min_first && il > *cuts.last().unwrap() {
-            let boundary = next as f64 * target;
+            let boundary = bound(next);
             let closer = acc + cost > boundary && boundary - acc <= acc + cost - boundary;
             if closer || costs.len() - il == stages - next {
                 cuts.push(il);
@@ -258,5 +266,25 @@ pub fn assemble_logits(caps: &mut Captures, vocab: usize) {
     }
     if covered == vocab {
         caps.insert("result_output".into(), full);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_split_head_spreads_layers_evenly() {
+        let costs = vec![1.4e9; 48];
+        let head = 0.8e9;
+        let even: Vec<_> = (0..12).map(|i| (4 * i, 4 * i + 4)).collect();
+        assert_eq!(split_layers(&costs, head, 12, 12, 2), even);
+        // With the whole head on the last stage, that stage gets fewer layers.
+        let one = split_layers(&costs, head, 12, 1, 2);
+        assert!(one.last().map(|(a, b)| b - a).unwrap() < 4, "{one:?}");
+        let rows = head_rows(248320, 12, 12);
+        assert_eq!(rows[0], Some((0, 21504)));
+        assert_eq!(rows[11], Some((11 * 21504, 248320)));
+        assert!(head_rows(248320, 3, 1)[..2].iter().all(|r| r.is_none()));
     }
 }

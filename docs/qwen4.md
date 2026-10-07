@@ -292,6 +292,9 @@ trashcan qwen4 layer-check MODEL LLAMA_DUMP [--emulate-ggml]
 trashcan qwen4 node MODEL --listen 0.0.0.0:7071 [--cpu | --gpus 0,1]
 trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] --greedy 10
 trashcan qwen4 bench MODEL --gpus 0,1 --nodes ... --pp 256 --tg 32
+# six Macs at 32K context (not run yet: every other Mac runs `qwen4 node MODEL --listen 0.0.0.0:7071 --gpus 0,1`)
+trashcan qwen4 bench G-iq4.gguf --gpus 0,1 --nodes MAC2:7071,MAC3:7071,MAC4:7071,MAC5:7071,MAC6:7071 \
+    --head-split 12 --context 32768 --batch 128 --ngram disk --pp 2048 --tg 64
 # GPU stages alone, and the n-gram table
 trashcan qwen4 stage-bench MODEL --ranges 0:4 --gpus 0 --context 32768 --start 32512 --decode 16 --prefill 1
 trashcan qwen4 stage-bench MODEL --ranges 4:5 --gpus 0 --head-rows 0:20736 --decode 4 --prefill 0 --batch 16
