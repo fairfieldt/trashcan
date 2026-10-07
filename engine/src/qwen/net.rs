@@ -395,10 +395,11 @@ impl Chain {
 
     /// Tensor parallelism instead of a chain: every layer split across this machine's `gpus` and, with
     /// `peer`, the other machine's (`tp`).
-    pub fn tensor_parallel(model: &Path, gpus: &[usize], peer: Option<crate::link::Lanes>, context: usize, max_batch: usize, verify: usize) -> Result<Self> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn tensor_parallel(model: &Path, gpus: &[usize], peer: Option<crate::link::Lanes>, context: usize, max_batch: usize, verify: usize, mtp: Option<&Path>) -> Result<Self> {
         ensure!(context > 0 && max_batch > 0, "context and batch must be positive");
         ensure!(verify <= 8 && verify <= max_batch, "verification batches are limited to eight columns");
-        let local = Local::tensor_parallel(model, gpus, peer, context, max_batch, verify)?;
+        let local = Local::tensor_parallel(model, gpus, peer, context, max_batch, verify, mtp)?;
         let layers = local.c.layers;
         Ok(Self {
             local,
@@ -407,7 +408,7 @@ impl Chain {
             max_batch,
             context,
             verify,
-            mtp: false,
+            mtp: mtp.is_some(),
             plans: vec![vec![(0, layers)]],
             verified: 0,
             history: Vec::new(),

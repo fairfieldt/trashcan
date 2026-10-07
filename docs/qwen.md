@@ -151,8 +151,8 @@ merges its ranks' candidates and the machines exchange theirs. Rollback and chec
 
 ```sh
 trashcan qwen-bench MODEL --tp --pp 512 --tg 128                       # this machine's GPUs
-trashcan qwen-tp-node MODEL --stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2   # the other machine
-trashcan qwen-chat MODEL --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 "Hello"
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2   # the other machine
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 "Hello"
 trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP, one connection per link
 trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
 ```
@@ -162,7 +162,9 @@ matches the CPU reference to 4.1e-4 with the same greedy tokens, and runs at 91 
 decode over USB4STREAM (82 / 15.6 over TCP), against 38 / 9.6 for the four-stage pipeline. The 9B gets 208 / 32
 with TP2 on one Mac against 127 / 23. A decode token spends most of its time on the GPUs (about 102 GB/s per GPU
 against 123 for a pipeline stage: narrower matrices and a cache flush per submission); the 128 cross-Mac
-exchanges add 12 ms. MTP drafting and the server do not run on TP yet. Measurement switches:
+exchanges add 12 ms. With MTP drafting (the block split like a trunk layer) the 27B decodes at 26 tok/s on the two
+Macs, 72% of drafts accepted; `qwen-check` passes on TP with and without drafting. `trashcan serve` takes the same
+`--tp` options. Measurement switches:
 `TRASHCAN_TP_SUBMIT=1` submits each segment when it is due instead of ahead; `TRASHCAN_TP_FREE=1` runs the
 segments back to back without all-reduces (wrong results, the GPU floor).
 

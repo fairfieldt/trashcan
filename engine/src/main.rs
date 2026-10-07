@@ -267,6 +267,9 @@ enum Cmd {
     /// Serve the other machine's GPUs of a tensor-parallel group (`--tp-connect` or `--tp-stream` on the driver).
     QwenTpNode {
         model: PathBuf,
+        /// MTP layer GGUF, used when the driver drafts.
+        #[arg(long)]
+        mtp: Option<PathBuf>,
         /// Accept TCP lanes on this address, one connection per Thunderbolt link.
         #[arg(long)]
         listen: Option<String>,
@@ -358,19 +361,13 @@ impl QwenRun {
     fn chain(&self, model: &Path) -> Result<qwen::net::Chain> {
         if self.tp || !self.tp_connect.is_empty() || !self.tp_stream.is_empty() {
             anyhow::ensure!(
-                self.nodes.is_empty() && !self.cpu && self.cuts.is_empty() && self.mtp.is_none(),
-                "tensor parallelism runs without --nodes, --cpu, --cuts or --mtp"
+                self.nodes.is_empty() && !self.cpu && self.cuts.is_empty(),
+                "tensor parallelism runs without --nodes, --cpu or --cuts"
             );
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, self.gpus.clone())? else { unreachable!() };
-            let peer = if !self.tp_connect.is_empty() {
-                Some(link::Lanes::connect(&self.tp_connect)?)
-            } else if !self.tp_stream.is_empty() {
-                Some(link::Lanes::streams(&self.tp_stream, false)?)
-            } else {
-                None
-            };
-            let verify = self.verify.unwrap_or(0);
-            let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify)?;
+            let peer = qwen::tp::peer(&self.tp_connect, &self.tp_stream)?;
+            let verify = self.verify.unwrap_or(if self.mtp.is_some() { self.draft_tokens + 1 } else { 0 });
+            let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify, self.mtp.as_deref())?;
             chain.max_checkpoints = self.checkpoints;
             return Ok(chain);
         }
@@ -925,10 +922,10 @@ fn main() -> Result<()> {
             gpus,
             mtp,
         } => qwen::net::serve(&model, mtp, &listen, qwen::chat::devices(cpu, gpus)?),
-        Cmd::QwenTpNode { model, listen, stream, gpus } => {
+        Cmd::QwenTpNode { model, mtp, listen, stream, gpus } => {
             anyhow::ensure!(listen.is_some() == stream.is_empty(), "give --listen or --stream");
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, gpus)? else { unreachable!() };
-            qwen::tp::serve(&model, &gpus, listen.as_deref(), &stream)
+            qwen::tp::serve(&model, mtp.as_deref(), &gpus, listen.as_deref(), &stream)
         }
         Cmd::QwenRef {
             model,

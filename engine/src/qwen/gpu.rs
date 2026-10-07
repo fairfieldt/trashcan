@@ -24,6 +24,17 @@ use std::{collections::HashMap, rc::Rc};
 pub const TOP_K: usize = 64;
 const GRAPH_CACHE_CAPACITY: usize = 16;
 
+impl Tp {
+    /// Begin the segments `cmds`: both timelines only grow, so their values start above everything signalled
+    /// so far. Returns the number of segments.
+    fn start(&mut self, cmds: Vec<vk::CommandBuffer>, head_rows: usize) -> usize {
+        self.base = self.done_value.max(self.released) + 1;
+        self.head_rows = head_rows;
+        self.cmds = cmds;
+        self.cmds.len()
+    }
+}
+
 /// One rank's share of every layer under tensor parallelism: its key heads with the value heads that read
 /// them, its query heads with their KV heads, a slice of the FFN and of the vocabulary. The hidden state is
 /// replicated. Rank 0 of 1 is the whole layer.
@@ -227,8 +238,11 @@ struct Tp {
     /// Highest value signalled on `done` and on `release` so far.
     done_value: u64,
     released: u64,
-    /// Graph of the forward in progress.
+    /// Graph of the forward in progress (for its captures), and the segments of the forward or draft step in
+    /// progress with the vocabulary rows its head ranks.
     current: Option<Key>,
+    cmds: Vec<vk::CommandBuffer>,
+    head_rows: usize,
 }
 
 pub struct GpuStage {
@@ -738,10 +752,12 @@ impl GpuStage {
         Self::build(gpu, g, c, first, last, head, context, max_batch, verify, mtp, Split::WHOLE, false)
     }
 
-    /// One rank of a tensor-parallel group: its share of every layer and of the LM head. Forward passes go
-    /// through `tp_prepare`, `tp_submit` and `tp_wait` per segment (`tp::TpGroup`).
-    pub fn shard(gpu: Rc<Device>, g: &Gguf, c: &Config, context: usize, max_batch: usize, verify: usize, split: Split) -> Result<Self> {
-        Self::build(gpu, g, c, 0, c.layers, true, context, max_batch, verify, None, split, true)
+    /// One rank of a tensor-parallel group: its share of every layer, of the LM head and, with `mtp`, of the
+    /// MTP block. Forward passes and draft steps go through `tp_prepare` or `tp_draft_prepare`, then
+    /// `tp_submit_all`, `tp_release` and `tp_wait` per segment (`tp::TpGroup`).
+    #[allow(clippy::too_many_arguments)]
+    pub fn shard(gpu: Rc<Device>, g: &Gguf, c: &Config, context: usize, max_batch: usize, verify: usize, split: Split, mtp: Option<&Gguf>) -> Result<Self> {
+        Self::build(gpu, g, c, 0, c.layers, true, context, max_batch, verify, mtp, split, true)
     }
 
     /// `gc` is the whole model's configuration; the stage runs with `split`'s share of it.
@@ -766,7 +782,6 @@ impl GpuStage {
         ensure!(c.head_dim <= 512 && c.head_dim % 64 == 0, "unsupported head size");
         ensure!(verify <= 8, "verification batches are limited to eight columns");
         ensure!(mtp.is_none() || head, "the MTP block belongs on the head stage");
-        ensure!(mtp.is_none() || !tp, "the MTP block is not split for tensor parallelism yet");
         let snaps = verify.saturating_sub(1);
         let (channels, value_heads) = (split.channels(gc), split.sel(&split.value_heads(gc), 1));
         let value_dims = split.sel(&split.value_heads(gc), gc.state);
@@ -826,7 +841,7 @@ impl GpuStage {
         };
         let mtp = match mtp {
             Some(m) => {
-                let il = super::mtp_layer(m, c)?;
+                let il = super::mtp_layer(m, gc)?;
                 let v = |name: &str| upload_vector(&gpu, m, c, il, name);
                 Some(Mtp {
                     enorm: v("nextn.enorm.weight")?,
@@ -835,8 +850,8 @@ impl GpuStage {
                     attn_norm: v("attn_norm.weight")?,
                     post_norm: v("post_attention_norm.weight")?,
                     head_norm: v("nextn.shared_head_norm.weight")?,
-                    attn: load_attn(&gpu, m, c, il, context, split)?,
-                    ffn: load_ffn(&gpu, m, c, il, split)?,
+                    attn: load_attn(&gpu, m, gc, il, context, split)?,
+                    ffn: load_ffn(&gpu, m, gc, il, split)?,
                     emb: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
                     hin: gpu.buffer(c.d * (max_batch + 1) * 4, false, false, None)?,
                     cat: gpu.buffer(2 * c.d * max_batch * 4, false, false, None)?,
@@ -894,6 +909,8 @@ impl GpuStage {
                     done_value: 0,
                     released: 0,
                     current: None,
+                    cmds: Vec::new(),
+                    head_rows: 0,
                 })
             } else {
                 None
@@ -994,6 +1011,37 @@ impl GpuStage {
         r.capture(format!("l_out-{}", self.last - 1), &self.x, d)?;
         r.capture("result_norm".into(), &self.h, d)?;
         r.head(hd, &self.h, if verify { n } else { 1 }, self.c.vocab)?;
+        if let Some(m) = &self.mtp {
+            // Extend the MTP layer's KV cache over this batch (token p pairs with the target's row p - 1). Only
+            // its K and V are kept, so the block stops after the attention and needs no all-reduce.
+            r.copy(&self.h, 0, &m.hin, d * 4, n * d * 4);
+            r.mtp_inputs(m, m.hin.address);
+            r.matrix(&m.eh, m.cat.address, self.x.address, 2 * d, d, false)?;
+            r.add_norm(self.x.address, None, Some(self.h.address), Some(&m.attn_norm), 0);
+            r.attention(&m.attn, parts, self.c.layers)?;
+            r.copy(&m.hin, n * d * 4, &m.hin, 0, d * 4);
+        }
+        r.finish()
+    }
+
+    /// Tensor-parallel MTP draft step: the attention and the FFN each end a segment with their partials, then
+    /// the head ranks this rank's share of the first `rows` vocabulary ids (none when `rows` is 0).
+    fn record_draft_tp(&self, parts: u32, first: bool, rows: usize) -> Result<Graph> {
+        let (m, hd) = (self.mtp.as_ref().context("no MTP block")?, self.head.as_ref().context("no head")?);
+        let (d, total) = (self.c.d, self.tp.as_ref().unwrap().total.address);
+        let mut r = Rec::new(self, 1, false)?;
+        r.mtp_inputs(m, if first { m.hin.address } else { m.out.address });
+        r.matrix(&m.eh, m.cat.address, self.x.address, 2 * d, d, false)?;
+        r.add_norm(self.x.address, None, Some(self.h.address), Some(&m.attn_norm), 0);
+        r.attention(&m.attn, parts, self.c.layers)?;
+        r.end_segment()?;
+        r.add_norm(self.x.address, Some(total), Some(self.h.address), Some(&m.post_norm), 0);
+        r.ffn(&m.ffn, self.c.layers)?;
+        r.end_segment()?;
+        r.add_norm(self.x.address, Some(total), Some(m.out.address), Some(&m.head_norm), 0);
+        if rows > 0 {
+            r.head(hd, &m.out, 1, rows)?;
+        }
         r.finish()
     }
 
@@ -1008,6 +1056,16 @@ impl GpuStage {
         let verify = verify && n > 1;
         ensure!(!verify || n <= self.verify, "verification batch exceeds the configured {} columns", self.verify);
         self.input.write(bytemuck::cast_slice(x))?;
+        if let Some(m) = &self.mtp {
+            // The input rows are the batch's token embeddings, which the MTP block also reads.
+            m.emb.write(bytemuck::cast_slice(x))?;
+            if pos == 0 {
+                let cmd = self.gpu.begin()?;
+                unsafe { self.gpu.dev.cmd_fill_buffer(cmd, m.hin.buf, 0, (d * 4) as u64, 0) };
+                self.gpu.finish(cmd)?;
+                self.gpu.run(cmd)?;
+            }
+        }
         self.params_host.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
         let key = (n, partitions(pos, n), dump, verify);
         self.tick += 1;
@@ -1023,30 +1081,47 @@ impl GpuStage {
         }
         self.last_n = n;
         self.verified = verify;
+        let cmds = self.graphs[&key].0.cmds.clone();
+        let rows = self.c.vocab;
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         tp.current = Some(key);
-        // Both timelines only grow; this forward's segment values start above everything signalled so far.
-        tp.base = tp.done_value.max(tp.released) + 1;
-        Ok(self.graphs[&key].0.cmds.len())
+        Ok(tp.start(cmds, rows))
+    }
+
+    /// Start a tensor-parallel MTP draft step at `pos` for the token with embedding `emb` (see `draft`), the
+    /// head ranking the first `rows` vocabulary ids (0: all). Returns the number of segments.
+    pub fn tp_draft_prepare(&mut self, emb: &[f32], pos: usize, first: bool, rows: usize) -> Result<usize> {
+        let m = self.mtp.as_ref().context("this rank has no MTP block")?;
+        ensure!(pos < self.context, "context exhausted");
+        m.emb.write(bytemuck::cast_slice(emb))?;
+        self.params_host.write(bytemuck::cast_slice(&[pos as u32, 1, 0, 0]))?;
+        let rows = if rows == 0 { usize::MAX } else { rows };
+        let local = rows.saturating_sub(self.vocab_start).min(self.c.vocab);
+        let key = (partitions(pos, 1), first, local);
+        if !self.drafts.contains_key(&key) {
+            let graph = self.record_draft_tp(key.0, key.1, key.2)?;
+            self.drafts.insert(key, graph);
+        }
+        let cmds = self.drafts[&key].cmds.clone();
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
+        Ok(tp.start(cmds, local))
     }
 
     /// Submit segment `i` of the forward in progress, to run as soon as the GPU is free.
     pub fn tp_submit(&mut self, i: usize) -> Result<()> {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
-        let graph = &self.graphs[&tp.current.context("no forward in progress")?].0;
         tp.done_value = tp.base + i as u64 + 1;
-        self.gpu.submit(graph.cmds[i], None, Some((tp.done, tp.done_value)), vk::Fence::null())
+        self.gpu.submit(tp.cmds[i], None, Some((tp.done, tp.done_value)), vk::Fence::null())
     }
 
     /// Submit every segment of the forward in progress ahead, each waiting for `tp_release`.
     pub fn tp_submit_all(&mut self) -> Result<()> {
         let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
-        let graph = &self.graphs[&tp.current.context("no forward in progress")?].0;
-        for (i, &cmd) in graph.cmds.iter().enumerate() {
+        for (i, &cmd) in tp.cmds.iter().enumerate() {
             let at = tp.base + i as u64;
             self.gpu.submit(cmd, Some((tp.release, at)), Some((tp.done, at + 1)), vk::Fence::null())?;
         }
-        tp.done_value = tp.base + graph.cmds.len() as u64;
+        tp.done_value = tp.base + tp.cmds.len() as u64;
         Ok(())
     }
 
@@ -1095,6 +1170,9 @@ impl GpuStage {
 
     /// Top candidates of this rank's vocabulary rows after the last segment, with model token ids.
     pub fn tp_top(&self, cols: usize) -> Result<Vec<Vec<(f32, u32)>>> {
+        if self.tp.as_ref().is_some_and(|t| t.head_rows == 0) {
+            return Ok(vec![Vec::new(); cols]);
+        }
         let start = self.vocab_start as u32;
         Ok(self.read_top(cols)?.into_iter().map(|c| c.into_iter().map(|(s, id)| (s, id + start)).collect()).collect())
     }

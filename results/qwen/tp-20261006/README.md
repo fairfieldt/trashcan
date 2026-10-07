@@ -52,6 +52,21 @@ GPU, PP4 4,510 and 4,277 MiB on incite's.
 
 For Qwen3.8-27B on two Macs, TP4 decodes 1.73× and prefills 2.4× faster than the pipeline.
 
+### With MTP drafting (`--mtp`, two drafts from a 64K-token draft head)
+
+| Model, layout | pp512 tok/s | tg128 tok/s | drafts accepted | tokens per round | verify / draft ms per round |
+|---|---|---|---|---|---|
+| **27B, TP4 across both Macs, USB4STREAM × 3** | **89.5, 89.2** | **26.08, 25.93** | 72% | 2.44 | 86 / 7.8 |
+
+Against 16.6 tok/s without drafting and 9.6 for the pipeline without drafting: 2.7× the pipeline. The MTP block is
+split like a trunk layer (its eh projection replicated); a draft step is three segments with two all-reduces, and
+extending its KV cache inside a target batch needs no extra all-reduce because only its K and V are kept.
+
+`qwen-check --mtp` (600-token prompt, 256 steps; schedutil): 9B TP2 and 27B TP4 both pass: restore bit for bit, 170
+verification rounds with rollbacks and no column mismatch (score error 0), speculative output identical to greedy
+decoding (9B: 65% accepted, 40.4 against 24.5 tok/s; 27B: 68.5%, 21.4 against 13.4). Without `--mtp` (verify 3,
+128 steps): both pass with 85 rounds. `*-check.json`.
+
 ### Where a decode token goes (ms, `tg_tp_ms` in the JSON)
 
 | | submit | wait for GPUs | add partials | exchange | total |
@@ -70,8 +85,8 @@ For Qwen3.8-27B on two Macs, TP4 decodes 1.73× and prefills 2.4× faster than t
 - The 27B's 128 cross-Mac exchanges take 94 µs each in the model against 34 µs in the benchmark: the exchange
   includes waiting for the slower Mac.
 
-## Not yet on TP
+## Not yet
 
-MTP drafting (`--mtp`), so speculative decoding; `qwen-check` (restore, verification batches and rollback, which
-the TP group implements) has not run on TP yet; the server; prefill all-reduces are still the naive host path
-(about 21.6 ms per 512-token all-reduce in the benchmark).
+`scripts/test-server.py` against `serve --tp-stream` (the server takes `--tp`, `--tp-connect`, `--tp-stream`); prefill
+all-reduces are still the naive host path (about 21.6 ms per 512-token all-reduce in the benchmark); GPU efficiency
+at the per-rank shapes.

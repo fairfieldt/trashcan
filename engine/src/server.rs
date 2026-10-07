@@ -78,6 +78,15 @@ pub struct Options {
     /// Qwen: checkpoints kept for prefix reuse.
     #[arg(long, default_value_t = 8)]
     checkpoints: usize,
+    /// Qwen: tensor parallelism, every layer split across this machine's GPUs (see `qwen-chat --tp`).
+    #[arg(long)]
+    tp: bool,
+    /// Qwen: the other machine of the tensor-parallel group over TCP, one address per Thunderbolt link.
+    #[arg(long, value_delimiter = ',')]
+    tp_connect: Vec<String>,
+    /// Qwen: the other machine of the tensor-parallel group over USB4STREAM devices, one per cable.
+    #[arg(long, value_delimiter = ',')]
+    tp_stream: Vec<String>,
 }
 
 /// A resident model behind the HTTP layer.
@@ -290,17 +299,24 @@ pub fn serve(mut options: Options) -> Result<()> {
         let draft = options.mtp.is_some();
         let k = options.draft_tokens.unwrap_or(2);
         let verify = if draft { k + 1 } else { 0 };
-        let mut chain = qwen::net::Chain::new(
-            &options.model,
-            devices,
-            &options.nodes,
-            &options.cuts,
-            options.context,
-            options.batch,
-            verify,
-            options.mtp.as_deref(),
-            draft,
-        )?;
+        let mut chain = if options.tp || !options.tp_connect.is_empty() || !options.tp_stream.is_empty() {
+            anyhow::ensure!(options.nodes.is_empty() && !options.cpu && options.cuts.is_empty(), "tensor parallelism runs without --nodes, --cpu or --cuts");
+            let qwen::pipeline::Devices::Gpus(gpus) = devices else { unreachable!() };
+            let peer = qwen::tp::peer(&options.tp_connect, &options.tp_stream)?;
+            qwen::net::Chain::tensor_parallel(&options.model, &gpus, peer, options.context, options.batch, verify, options.mtp.as_deref())?
+        } else {
+            qwen::net::Chain::new(
+                &options.model,
+                devices,
+                &options.nodes,
+                &options.cuts,
+                options.context,
+                options.batch,
+                verify,
+                options.mtp.as_deref(),
+                draft,
+            )?
+        };
         chain.max_checkpoints = options.checkpoints;
         let mut spec = if draft { Some(qwen::spec::Spec::new(&chain, k)?) } else { None };
         if let Some(s) = spec.as_mut() {

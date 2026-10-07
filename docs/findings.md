@@ -16,6 +16,9 @@ Newest first. Numbers are from incite unless noted; raw outputs are under `resul
   stage), so kernel efficiency at the narrower per-rank shapes and the per-submission cache flushes are next.
 - Submitting all 2 × layers + 1 segments ahead and releasing each with a timeline semaphore saves 4.3 ms of
   `vkQueueSubmit` per 9B token but adds 3 ms of release latency: net +4%.
+- MTP drafting on TP: the 27B decodes at 26.0 tok/s on both Macs (72% of drafts accepted, 2.44 tokens per round),
+  2.7× the pipeline. `qwen-check` passes on TP with and without drafting (restore bit for bit, zero score error over
+  170 verification rounds, speculative output identical).
 
 ## 2026-10-06: tensor parallelism across incite and invite is viable for decode
 

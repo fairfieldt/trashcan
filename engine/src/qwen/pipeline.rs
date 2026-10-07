@@ -8,7 +8,7 @@ use super::{
     Config,
 };
 use crate::{generation::Sampler, gguf::Gguf, gpu::Instance, link::Lanes, vulkan::Device};
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, rc::Rc};
 
@@ -151,11 +151,12 @@ impl Local {
         Ok(Self { gguf, c, stages, mtp: has_mtp })
     }
 
-    /// Tensor parallelism over this machine's `gpus` and, with `peer`, the other machine's (`tp`).
-    pub fn tensor_parallel(path: &Path, gpus: &[usize], peer: Option<Lanes>, context: usize, max_batch: usize, verify: usize) -> Result<Self> {
-        let group = TpGroup::new(path, gpus, peer, context, max_batch, verify)?;
+    /// Tensor parallelism over this machine's `gpus` and, with `peer`, the other machine's (`tp`), with the
+    /// MTP block in `mtp` split the same way.
+    pub fn tensor_parallel(path: &Path, gpus: &[usize], peer: Option<Lanes>, context: usize, max_batch: usize, verify: usize, mtp: Option<&Path>) -> Result<Self> {
+        let group = TpGroup::new(path, gpus, peer, context, max_batch, verify, mtp)?;
         let (gguf, c) = (Gguf::open(path)?, group.c.clone());
-        Ok(Self { gguf, c, stages: vec![Stage::Tp(Box::new(group))], mtp: false })
+        Ok(Self { gguf, c, stages: vec![Stage::Tp(Box::new(group))], mtp: mtp.is_some() })
     }
 
     /// Run all local stages over the hidden rows of `tokens` (the token ids feed the MTP block). Returns the
@@ -170,7 +171,9 @@ impl Local {
         mut dump: Option<&mut Captures>,
     ) -> Result<Output> {
         let n = tokens.len();
-        let emb = if self.mtp { Some(embed(&self.gguf, &self.c, tokens)?) } else { None };
+        // A tensor-parallel group reads the MTP block's embeddings from its input rows.
+        let tp = matches!(self.stages.first(), Some(Stage::Tp(_)));
+        let emb = if self.mtp && !tp { Some(embed(&self.gguf, &self.c, tokens)?) } else { None };
         for stage in &mut self.stages {
             let out = match stage {
                 Stage::Tp(t) => Output::Top(t.forward(&x, pos, tokens, verify, dump.as_deref_mut())?),
@@ -239,6 +242,9 @@ impl Local {
     /// first `vocab` tokens (0: all). Stops after a token in `stop`.
     pub fn draft(&mut self, token: u32, pos: usize, k: usize, vocab: usize, sampler: &mut Sampler, stop: &[u32]) -> Result<Vec<Draft>> {
         ensure!(self.mtp, "this machine has no MTP block");
+        if let Some(Stage::Tp(t)) = self.stages.last_mut() {
+            return t.draft(token, pos, k, vocab, sampler, stop);
+        }
         let (g, c) = (&self.gguf, &self.c);
         let mut drafts = Vec::new();
         let mut token = token;
@@ -246,7 +252,7 @@ impl Local {
         for j in 0..k {
             let emb = embed(g, c, &[token])?;
             let top = match self.stages.last_mut().context("no stages")? {
-                Stage::Tp(_) => bail!("MTP drafting is not implemented with tensor parallelism yet"),
+                Stage::Tp(_) => unreachable!("tensor-parallel drafts return above"),
                 Stage::Gpu(s) => s.draft(&emb, pos + j, j == 0, vocab)?,
                 Stage::Cpu(s) => {
                     let m = s.mtp.as_mut().context("no MTP block")?;
