@@ -1,0 +1,5 @@
+# trashcan nodes for tblink: index, hostname, and the UUID of each Thunderbolt controller by Apple bus
+# (bus 0 = NHI 16:00.0, bottom row; bus 1 = 5d:00.0, left column; bus 2 = a4:00.0, right column).
+# Indexes never change; `nodes/macpro/provision.sh HOST tblink` adds or updates a node and pushes this file.
+1	incite	00000000-0000-0018-00bb-a7dca2027060	00000000-0000-0008-00bb-a7dc22827860	00000000-0000-0008-00ea-26dc5cd27960
+2	invite	00000000-0000-0008-8041-c5264ae46855	00000000-0000-0018-8041-c5260a046055	00000000-0000-0008-001b-c526e2e36055

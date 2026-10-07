@@ -1,0 +1,118 @@
+#!/bin/bash
+# Bring up Thunderbolt links between trashcan nodes and keep them healthy. See nodes/macpro/README.md.
+#
+# Every XDomain peer is looked up in /etc/tblink/nodes.tsv by the UUID of its Thunderbolt controller, so both ends
+# of a cable agree on a /30 without talking to each other: for nodes a < b using Apple buses da and db,
+#   10.99.(16*a + b).(4*(3*da + db) + 1) on node a and .. + 2 on node b,
+# with "<peer>.tb<local bus>" in /etc/hosts. A link that still shows the Mac firmware's peer (vendor 0xa27), or has
+# no working interface, for GRACE seconds is reported once in the log and by `tblink status`. It is not reset
+# automatically: unbinding one controller's driver triggered a thunderbolt bug (duplicate XDomain device) and
+# coincided with the peer Mac resetting (results/kernel/tb-nodes-20261006). `tblink reload` reloads the
+# Thunderbolt modules on this node; run it on the stuck node's neighbour first, then on the node.
+#
+# usage: tblink run      (tblink.service)
+#        tblink status
+#        tblink reload
+set -u
+NODES=/etc/tblink/nodes.tsv
+STATE=/run/tblink
+DEVS=/sys/bus/thunderbolt/devices
+INTERVAL=5 GRACE=90
+APPLE_FIRMWARE=0xa27
+
+bus_of_nhi() {
+    case $1 in 0000:16:00.0) echo 0 ;; 0000:5d:00.0) echo 1 ;; 0000:a4:00.0) echo 2 ;; esac
+}
+# UUID -> "index hostname bus"
+lookup() { awk -v u="$1" '!/^#/ && NF >= 5 { for (i = 3; i <= 5; i++) if ($i == u) { print $1, $2, i - 3; exit } }' "$NODES"; }
+log() { echo "$*"; }
+
+# Print one line per XDomain link: "xd nhi lbus rindex rhost rbus iface vendor"
+links() {
+    local d xd dom nhi ruuid iface vendor rest
+    for d in "$DEVS"/[0-9]*-[0-9]*; do
+        xd=$(basename "$d")
+        [[ $xd == *.* || $xd == *-0 ]] && continue
+        [ -r "$d/unique_id" ] || continue
+        dom=${xd%%-*}
+        nhi=$(basename "$(dirname "$(readlink -f "$DEVS/domain$dom")")")
+        ruuid=$(cat "$d/unique_id")
+        vendor=$(cat "$d/vendor" 2>/dev/null)
+        iface=$(ls "$d/$xd.0/net" 2>/dev/null | head -1)
+        rest=$(lookup "$ruuid")
+        echo "$xd $nhi $(bus_of_nhi "$nhi") ${rest:-0 ? ?} ${iface:--} $vendor"
+    done
+}
+
+# Addresses for a link: prints "local/30 peer"
+addresses() { # me lbus peer rbus
+    local a=$1 da=$2 b=$3 db=$4 net host lo hi
+    if (( a < b )); then lo=$a hi=$b host=$(( 4 * (3 * da + db) )); else lo=$b hi=$a host=$(( 4 * (3 * db + da) )); fi
+    net=10.99.$(( 16 * lo + hi ))
+    if (( a < b )); then echo "$net.$(( host + 1 ))/30 $net.$(( host + 2 ))"; else echo "$net.$(( host + 2 ))/30 $net.$(( host + 1 ))"; fi
+}
+
+update_hosts() { # block
+    local block=$1 cur
+    cur=$(sed -n '/^# BEGIN tblink$/,/^# END tblink$/p' /etc/hosts)
+    [ "$cur" = "$block" ] && return
+    { sed '/^# BEGIN tblink$/,/^# END tblink$/d' /etc/hosts; [ -n "$block" ] && echo "$block"; } > /etc/hosts.tblink
+    cat /etc/hosts.tblink > /etc/hosts && rm -f /etc/hosts.tblink
+}
+
+once() {
+    local me xd nhi lbus rindex rhost rbus iface vendor addr peer bad first now hosts=""
+    me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
+    [ -n "$me" ] || return
+    now=$(date +%s)
+    while read -r xd nhi lbus rindex rhost rbus iface vendor; do
+        bad=""
+        if [ "$vendor" = "$APPLE_FIRMWARE" ]; then
+            bad="peer is the Mac firmware"
+        elif [ "$rindex" = 0 ] || [ "$rindex" = "$me" ]; then
+            continue    # a host we don't know, or a cable looping this Mac's own controllers
+        elif [ "$iface" = - ]; then
+            bad="no network interface"
+        else
+            read -r addr peer < <(addresses "$me" "$lbus" "$rindex" "$rbus")
+            if ! ip -4 -o addr show dev "$iface" | grep -q " ${addr} "; then
+                ip addr flush dev "$iface"
+                ip addr add "$addr" dev "$iface" && log "$xd ($iface): $addr to $rhost bus $rbus"
+            fi
+            ip link set "$iface" up
+            hosts+="$peer $rhost.tb$lbus"$'\n'
+            [ "$(cat "/sys/class/net/$iface/carrier" 2>/dev/null)" = 1 ] || bad="no carrier"
+        fi
+        if [ -n "$bad" ]; then
+            first=$(cat "$STATE/bad-$xd" 2>/dev/null || { echo "$now" > "$STATE/bad-$xd"; echo "$now"; })
+            if (( now - first >= GRACE )) && [ ! -e "$STATE/reported-$xd" ]; then
+                touch "$STATE/reported-$xd"
+                log "$xd ($nhi): $bad for $(( now - first )) s; run 'tblink reload' on the peer, then here"
+            fi
+        else
+            rm -f "$STATE/bad-$xd" "$STATE/reported-$xd"
+        fi
+    done < <(links)
+    update_hosts "$( [ -n "$hosts" ] && printf '# BEGIN tblink\n%s# END tblink' "$hosts")"
+}
+
+case ${1:-} in
+    run)
+        mkdir -p "$STATE"
+        while :; do once; sleep "$INTERVAL"; done
+        ;;
+    status)
+        me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
+        echo "node $(hostname) index ${me:-unknown} ($NODES)"
+        links | while read -r xd nhi lbus rindex rhost rbus iface vendor; do
+            lanes=$(cat "$DEVS/$xd/rx_lanes" 2>/dev/null)
+            echo "$xd bus $lbus -> $rhost bus $rbus, ${lanes:-?} lane(s), $iface $(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}') carrier $(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo -)$( [ "$vendor" = "$APPLE_FIRMWARE" ] && echo ', Mac firmware')"
+        done
+        sed -n '/^# BEGIN tblink$/,/^# END tblink$/p' /etc/hosts | grep -v '^#'
+        ;;
+    reload)
+        modprobe -r thunderbolt_stream thunderbolt_net 2>/dev/null
+        modprobe -r thunderbolt && modprobe thunderbolt_net && echo "Thunderbolt modules reloaded"
+        ;;
+    *) echo "usage: tblink run|status|reload" >&2; exit 2 ;;
+esac

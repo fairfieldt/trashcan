@@ -43,7 +43,8 @@ models take about 70 s over the LAN.
 | `packages` | Build tools, AMD firmware, Mesa Vulkan, `glslc`, kernel build dependencies, `iperf3`, `sockperf` |
 | `tailscale` | Tailscale's apt repository and `tailscaled`, with `fairfieldt` as operator |
 | `rust` | rustup with the stable toolchain |
-| `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
+| `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, `tblink`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
+| `tblink` | Records the node's Thunderbolt controller UUIDs in `tblink/nodes.tsv` (commit it) and copies the table to every node |
 | `kernel` | Installs the `7.2.9-p2p` image and headers and pins `GRUB_DEFAULT` to that entry by id |
 | `workspace` | `HOST=NEW_HOST scripts/sync.sh push`, then `cargo build --release` and `make -C bench/xgpu` |
 | `reboot` | Reboots and waits for SSH (up to 5 minutes) |
@@ -77,6 +78,27 @@ sudo mount -o remount,noinit_itable /home              # pause the zeroing until
 
 It resumes after a reboot and only has to run once. incite's Intel NVMe drive supports write-zeroes and never
 showed this.
+
+## Thunderbolt links between nodes (`tblink`)
+
+`tblink.service` (`root/usr/local/sbin/tblink`) gives every cable between two nodes a fixed /30, whatever port or
+interface name it lands on. `tblink/nodes.tsv` lists each node's index, hostname and the UUID of each controller by
+Apple bus (bus 0 = bottom row, 1 = left column, 2 = right column); the `tblink` step adds a node and copies the table
+to every node. For nodes a < b on buses da and db, the link is 10.99.(16a+b).(4(3da+db)+1) on a and +2 on b, named
+`<peer>.tb<local bus>` in `/etc/hosts`:
+
+```bash
+ssh incite tblink status        # links, lanes, addresses, carrier; flags a link still showing the Mac firmware
+ping invite.tb1                 # from incite: the bus 1 cable
+```
+
+**After a node reboots, replug its neighbours' ends of the cables.** While a Mac reboots, its firmware answers on
+the link (`Apple, Inc. Macintosh`), and the neighbour keeps that stale peer after Linux takes over: no carrier, and
+`failed request link state change` on the rebooted node. Replugging just the neighbour's ends brought all three
+incite-invite links back on two lanes within seconds. `tblink reload` (reloading the Thunderbolt modules, neighbour
+first) recovered them once and only partly the second time. tblink reports a stuck link but doesn't reset
+controllers: unbinding one controller's driver hit a thunderbolt bug (duplicate XDomain sysfs device) and coincided
+with the peer Mac resetting.
 
 ## Not covered
 

@@ -9,8 +9,8 @@ default 128 us throttle. Three cables, each joining the same controller on both 
 | 1 | `1-3` (Bus 1, top left) | `1-3` | 10.99.1.0/30 | 2 (1 until replugged, see below) |
 | 2 | `2-1` (Bus 2, right column) | `2-1` | 10.99.2.0/30 | 2 |
 
-incite is `.1`, invite `.2` on each subnet. The addresses were set by hand (`ip addr add`); NetworkManager ignores
-`thunderbolt*`, so they don't survive a replug or reboot.
+incite is `.1`, invite `.2` on each subnet. These measurements used hand-set addresses; `tblink.service`
+(`nodes/macpro/README.md`) now assigns per-link addresses automatically (10.99.18.1/.2, .17/.18, .33/.34).
 
 ## Throughput and latency (iperf3 TCP, 8-10 s)
 
@@ -59,3 +59,13 @@ tar -C ~/models -cf - qwen3.5-9b | socat -b 1048576 -u STDIN TCP:10.99.1.2:5102
 - **One lane after the reloads.** Link 1 then came up with one lane (`error waiting for link width to become 14`);
   unplugging and replugging it on both ends gave two lanes. The other two links, plugged in with Linux running on
   both machines, bonded two lanes at once.
+
+## Peer reboot with tblink (19:13-19:21)
+
+invite was rebooted with all three cables attached. incite kept the firmware peer on every link. The first tblink
+version reset each of incite's controllers after 90 s (driver unbind/bind); on bus 1 the rebind failed with
+`sysfs: cannot create duplicate filename '/bus/thunderbolt/devices/1-3'` and `failed to add XDomain device`, and
+about a minute later invite reset abruptly (its journal stops at 93 s, nothing on netconsole). tblink no longer
+resets controllers. Reloading the modules on incite then invite brought back only link 1, on one lane (and another
+duplicate-device WARN for 0-3). Unplugging and replugging only incite's end of each cable restored all three links
+on two lanes, re-addressed by tblink within seconds, including one cable moved to bus 1's other port.

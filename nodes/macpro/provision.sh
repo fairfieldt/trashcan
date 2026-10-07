@@ -3,7 +3,7 @@
 # rerun, and running it against an already-provisioned node (incite) changes nothing. See nodes/macpro/README.md.
 #
 # usage: nodes/macpro/provision.sh HOST [STEP...]
-#   default steps: check packages tailscale rust system kernel workspace
+#   default steps: check packages tailscale rust system tblink kernel workspace
 #   other steps:   reboot (reboots into the new kernel and waits), models, verify
 #   first run:     provision.sh HOST && provision.sh HOST reboot models verify
 # env: KVER (7.2.9-p2p), DEBS (~/dev/claude-work/trashcan-kbuild, from kernel/cross-build-7.2.sh),
@@ -14,7 +14,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 host=${1:?usage: provision.sh HOST [STEP...]}
 shift
-steps=${*:-check packages tailscale rust system kernel workspace}
+steps=${*:-check packages tailscale rust system tblink kernel workspace}
 KVER=${KVER:-7.2.9-p2p}
 DEBS=${DEBS:-$HOME/dev/claude-work/trashcan-kbuild}
 MODELS=${MODELS:-gemma-4-12b-qat-gguf gemma-4-12b-assistant}
@@ -123,8 +123,8 @@ touch "/home/$USER_NAME/trashcan-exp/.lock" && chown "$USER_NAME:" "/home/$USER_
 
 sysctl -q --system
 systemctl daemon-reload
-systemctl enable -q netconsole.service fancurve.service
-systemctl restart netconsole.service fancurve.service
+systemctl enable -q netconsole.service fancurve.service tblink.service
+systemctl restart netconsole.service fancurve.service tblink.service
 systemctl reload ssh
 systemctl reload NetworkManager 2>/dev/null || true
 
@@ -148,6 +148,34 @@ sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"$CMDLINE\"
 update-grub 2>/dev/null
 echo "netconsole -> $NETCONSOLE_TARGET ($(systemctl is-active netconsole)), fancurve $(systemctl is-active fancurve)"
 EOF
+}
+
+step_tblink() {
+    say "tblink: record this node's Thunderbolt controllers and push the node table everywhere"
+    local table="$here/tblink/nodes.tsv" name uuids idx n
+    name=$(ssh "$host" hostname)
+    uuids=$(ssh "$host" 'for n in 0000:16:00.0 0000:5d:00.0 0000:a4:00.0; do
+            d=$(ls -d /sys/bus/pci/devices/$n/domain* 2>/dev/null | head -1)
+            cat /sys/bus/thunderbolt/devices/${d##*domain}-0/unique_id 2>/dev/null || echo -
+        done' | paste -sd '\t' -)
+    case $uuids in *-$'\t'*|*$'\t'-|-) echo "a Thunderbolt controller is missing on $name: $uuids" >&2; exit 1 ;; esac
+    idx=$(awk -v h="$name" '!/^#/ && $2 == h { print $1 }' "$table")
+    if [ -z "$idx" ]; then
+        idx=$(awk '!/^#/ && NF { if ($1 > m) m = $1 } END { print m + 1 }' "$table")
+        printf '%s\t%s\t%s\n' "$idx" "$name" "$uuids" >> "$table"
+    else
+        awk -v h="$name" -v line="$(printf '%s\t%s\t%s' "$idx" "$name" "$uuids")" \
+            'BEGIN { OFS = "\t" } !/^#/ && $2 == h { print line; next } { print }' "$table" > "$table.new" && mv "$table.new" "$table"
+    fi
+    echo "$name is node $idx (commit $table)"
+    for n in $(awk '!/^#/ && NF { print $2 }' "$table"); do
+        if ssh -o ConnectTimeout=8 "$n" 'sudo -n install -D -m 0644 /dev/stdin /etc/tblink/nodes.tsv' < "$table"; then
+            echo "table -> $n"
+        else
+            echo "table -> $n FAILED (unreachable?)"
+        fi
+    done
+    ssh "$host" 'sudo -n systemctl enable -q --now tblink.service; sleep 8; sudo -n tblink status'
 }
 
 step_kernel() {
@@ -248,7 +276,7 @@ step_verify() {
 
 for s in $steps; do
     case $s in
-        check|packages|tailscale|rust|system|kernel|reboot|workspace|models|verify) "step_$s" ;;
+        check|packages|tailscale|rust|system|tblink|kernel|reboot|workspace|models|verify) "step_$s" ;;
         *) echo "unknown step: $s" >&2; exit 2 ;;
     esac
 done

@@ -1,0 +1,11 @@
+[Unit]
+Description=Address Thunderbolt links to other trashcan nodes and reset stuck controllers (/usr/local/sbin/tblink)
+After=network.target
+
+[Service]
+ExecStart=/usr/local/sbin/tblink run
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
