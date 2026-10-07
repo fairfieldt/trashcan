@@ -334,7 +334,11 @@ impl TpGroup {
         }
         let mut peer_host = None;
         if let Some(l) = peer.as_mut() {
-            let reply: Value = serde_json::from_slice(&l.recv_message()?)?;
+            // Cold model reads can leave the peer loading well after our shards are ready. Only this
+            // readiness acknowledgement gets a longer first-byte wait; active protocol deadlines stay short.
+            let reply: Value = serde_json::from_slice(
+                &l.recv_message_first_within(Duration::from_secs(5 * 60)).context("waiting for the other machine to load its TP shards")?,
+            )?;
             ensure!(reply.get("ok").is_some(), "the other machine failed: {}", reply["error"]);
             peer_host = reply.get("host").cloned();
         }

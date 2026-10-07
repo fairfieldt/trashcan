@@ -281,12 +281,26 @@ impl Lanes {
     /// its cores alone; the rest must then arrive within `STALL`. The end of the lane (the other side closed it)
     /// or a reset is an error, as is a lane handshake (the other side started a new session).
     pub fn recv_message_idle(&mut self) -> Result<Vec<u8>> {
+        self.recv_message_waiting(None, BUSY)
+    }
+
+    /// Wait at most `first_byte` for a message to start, sleeping between polls. Used for model readiness,
+    /// whose cold disk reads may exceed the active protocol's `STALL`; once the first byte arrives, the
+    /// remaining header and body keep the ordinary progress deadline. EOF/reset still fails immediately.
+    pub fn recv_message_first_within(&mut self, first_byte: Duration) -> Result<Vec<u8>> {
+        self.recv_message_waiting(Some(first_byte), Duration::ZERO)
+    }
+
+    fn recv_message_waiting(&mut self, first_byte: Option<Duration>, busy: Duration) -> Result<Vec<u8>> {
         let lane = &mut self.lanes[0];
         let mut len = [0u8; 4];
         let start = Instant::now();
         let got = loop {
             match step(lane.read(&mut len)).context("the other machine closed the lanes")? {
-                0 if start.elapsed() < BUSY => std::hint::spin_loop(),
+                0 if first_byte.is_some_and(|limit| start.elapsed() >= limit) => {
+                    return Err(io::Error::from(ErrorKind::TimedOut)).context("waiting for the other machine's first message byte");
+                }
+                0 if start.elapsed() < busy => std::hint::spin_loop(),
                 0 => std::thread::sleep(NAP),
                 n => break n,
             }
@@ -378,6 +392,81 @@ mod tests {
 
     fn payload(len: usize, side: usize, iteration: usize) -> Vec<u8> {
         (0..len).map(|i| (i.wrapping_mul(13) + side * 97 + iteration * 31) as u8).collect()
+    }
+
+    #[test]
+    fn message_first_within_accepts_delayed_ready_and_preserves_framing() {
+        let (mut a, mut b) = pair(1, false);
+        let peer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(75));
+            b.send_message(br#"{"ok":true}"#).unwrap();
+            b.send_message(b"next").unwrap();
+        });
+        assert_eq!(a.recv_message_first_within(Duration::from_secs(2)).unwrap(), br#"{"ok":true}"#);
+        assert_eq!(a.recv_message().unwrap(), b"next");
+        peer.join().unwrap();
+    }
+
+    #[test]
+    fn message_first_within_times_out_without_consuming_a_later_message() {
+        let (mut a, mut b) = pair(1, false);
+        let limit = Duration::from_millis(20);
+        let start = Instant::now();
+        let error = a.recv_message_first_within(limit).unwrap_err();
+        assert_eq!(error.downcast_ref::<io::Error>().unwrap().kind(), ErrorKind::TimedOut);
+        assert!(start.elapsed() >= limit);
+        assert!(start.elapsed() < Duration::from_secs(2));
+        b.send_message(b"ready").unwrap();
+        assert_eq!(a.recv_message_first_within(Duration::from_secs(2)).unwrap(), b"ready");
+    }
+
+    #[test]
+    fn message_first_within_does_not_apply_start_deadline_to_header_or_body() {
+        let (mut a, mut b) = pair(1, false);
+        let header = 5u32.to_le_bytes();
+        send(&mut b.lanes[0], &header[..1]).unwrap();
+        let peer = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(50));
+            send(&mut b.lanes[0], &header[1..]).unwrap();
+            send(&mut b.lanes[0], b"re").unwrap();
+            thread::sleep(Duration::from_millis(50));
+            send(&mut b.lanes[0], b"ady").unwrap();
+        });
+        // The first byte is already buffered; both later pauses exceed this start deadline.
+        assert_eq!(a.recv_message_first_within(Duration::from_millis(10)).unwrap(), b"ready");
+        peer.join().unwrap();
+    }
+
+    #[test]
+    fn message_first_within_preserves_eof_at_each_framing_stage() {
+        let header = 5u32.to_le_bytes();
+        for prefix in [vec![], header[..1].to_vec(), [header.as_slice(), b"re"].concat()] {
+            let (mut a, mut b) = pair(1, false);
+            send(&mut b.lanes[0], &prefix).unwrap();
+            drop(b);
+            let start = Instant::now();
+            let error = a.recv_message_first_within(Duration::from_secs(300)).unwrap_err();
+            assert_eq!(error.downcast_ref::<io::Error>().unwrap().kind(), ErrorKind::UnexpectedEof);
+            assert!(start.elapsed() < Duration::from_secs(2));
+        }
+    }
+
+    #[test]
+    fn message_first_within_rejects_a_peer_restart() {
+        let (mut a, mut b) = pair(1, false);
+        send(&mut b.lanes[0], &record(HELLO, 0, 1)).unwrap();
+        assert!(a.recv_message_first_within(Duration::from_secs(2)).unwrap_err().to_string().contains("new session"));
+    }
+
+    #[test]
+    fn message_idle_still_accepts_delayed_requests() {
+        let (mut a, mut b) = pair(1, false);
+        let peer = thread::spawn(move || {
+            thread::sleep(BUSY + Duration::from_millis(25));
+            b.send_message(b"request").unwrap();
+        });
+        assert_eq!(a.recv_message_idle().unwrap(), b"request");
+        peer.join().unwrap();
     }
 
     // The previous allocation-based implementation, kept only as a protocol reference and benchmark

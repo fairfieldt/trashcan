@@ -221,6 +221,101 @@ mod tests {
     }
 
     #[test]
+    fn draft_budget_is_maximal_within_context_and_output_boundaries() {
+        for k in 1..=7 {
+            for context_left in 0..=10 {
+                for output_left in 0..=10 {
+                    let cap = draft_budget(k, context_left, output_left);
+                    // Independent oracle: enumerate widths that fit the pending target input and
+                    // leave a sampled lookahead in the output budget, rather than repeating min/sub.
+                    let feasible = (0..=k).filter(|drafts| *drafts < context_left && drafts + 2 <= output_left).max();
+                    assert_eq!(cap, feasible.unwrap_or(0), "k={k}, context={context_left}, output={output_left}");
+                    if context_left == 0 || output_left <= 1 {
+                        assert_eq!(cap, 0); // The caller must not enter Spec::step in these cases.
+                    } else {
+                        assert!(cap < context_left);
+                        assert!(cap + 1 < output_left);
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn budgeted_rounds_bound_verification_rollback_and_history_at_context_end() {
+        // Model a target that returns input+1, using the real prefix verifier for every possible
+        // rejection position. This checks token/state bookkeeping, not GPU snapshot contents.
+        const PROMPT: [u32; 3] = [101, 102, 103];
+        for k in 1..=7 {
+            for context_left in 0..=10 {
+                for output_left in 0..=10 {
+                    for clip_to_context in [false, true] {
+                        for reject_at in 0..=k {
+                            let context = PROMPT.len() + context_left;
+                            let budget = if clip_to_context { output_left.min(context_left) } else { output_left };
+                            let mut sampler = Sampler::new(0., 1, 1., 1).unwrap();
+                            let (mut history, mut emitted, mut pending) = (PROMPT.to_vec(), Vec::new(), 1u32);
+                            let mut pos = PROMPT.len();
+                            // chat::generate checks live position; the server additionally clips the
+                            // request's output budget to its initial available context.
+                            while emitted.len() < budget && pos < context {
+                                let remaining = budget - emitted.len();
+                                if remaining == 1 {
+                                    emitted.push(pending); // Final lookahead is emitted without a forward.
+                                    break;
+                                }
+                                let cap = draft_budget(k, context - pos, remaining);
+                                let mut tokens = vec![pending];
+                                for i in 0..cap {
+                                    tokens.push(if i == reject_at { 1000 } else { tokens.last().unwrap() + 1 });
+                                }
+                                let start = pos;
+                                pos += tokens.len(); // Target verification temporarily processes every proposal.
+                                history.extend_from_slice(&tokens);
+                                assert!(pos <= context, "verification exceeded context");
+                                assert_eq!(history.len(), pos);
+                                let (keep, next) = if cap == 0 {
+                                    (1, pending + 1) // Spec::step takes one ordinary target step.
+                                } else {
+                                    let columns: Vec<_> = tokens.iter().map(|id| vec![(1., id + 1)]).collect();
+                                    let q: Vec<_> = tokens[1..].iter().map(|id| vec![(1., *id)]).collect();
+                                    let (accepted, next) = verify_prefix(&tokens, &columns, &q, &mut sampler);
+                                    (accepted + 1, next)
+                                };
+                                assert!(keep > 0 && keep <= tokens.len());
+                                pos = start + keep;
+                                history.truncate(pos); // Chain::rollback discards the unaccepted suffix.
+                                emitted.extend_from_slice(&tokens[..keep]);
+                                pending = next;
+                                assert!(emitted.len() < budget, "a processed chunk consumed the final lookahead");
+                                assert_eq!(&history[..PROMPT.len()], &PROMPT);
+                                assert_eq!(&history[PROMPT.len()..], emitted);
+                                assert_eq!(pending, emitted.len() as u32 + 1);
+                            }
+                            let count = output_left.min(context_left);
+                            assert_eq!(emitted, (1..=count as u32).collect::<Vec<_>>());
+                            assert_eq!(history.len(), pos);
+                            assert!(pos <= context);
+                            if count == 0 {
+                                assert_eq!(history, PROMPT);
+                                assert_eq!(pending, 1);
+                            } else if clip_to_context || output_left <= context_left {
+                                assert_eq!(&history[PROMPT.len()..], &emitted[..count - 1]);
+                                assert_eq!(pending, *emitted.last().unwrap());
+                                assert!(pos < context); // The final emitted token has no KV/history entry.
+                            } else {
+                                assert_eq!(&history[PROMPT.len()..], emitted);
+                                assert_eq!(pos, context);
+                                assert_eq!(pending, count as u32 + 1); // Context-clipped lookahead is not emitted.
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
     fn budgeted_rounds_keep_greedy_tokens_and_only_committed_history() {
         // A tiny target whose next token is the input + 1. Reject each possible draft position,
         // including accepting all proposals, across every supported depth and short output budget.
