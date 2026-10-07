@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 2 ranks, 2 on this machine
+GPU0: rank 0 of 2, 2928.5 MiB allocated
+GPU1: rank 1 of 2, 2928.5 MiB allocated
+[clocks] 64 samples card0 (02:00.0) sclk/mclk: 850/1370 x51 300/150 x13  max 56C card1 (06:00.0) sclk/mclk: 850/1370 x30 450/1370 x6 300/150 x28  max 61C  log=results/tp-prefill/clocks/prof-9b-tp2-freevram-invite.txt
