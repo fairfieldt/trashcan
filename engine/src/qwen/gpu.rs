@@ -291,6 +291,12 @@ pub struct GpuStage {
     vocab_start: usize,
 }
 
+/// Timing only (`TRASHCAN_TP_VRAM_IO`, wrong results): tensor-parallel segments write their partials to and read
+/// their totals from VRAM instead of host memory, to measure what the host-memory traffic costs the GPUs.
+fn vram_io() -> bool {
+    std::env::var_os("TRASHCAN_TP_VRAM_IO").is_some()
+}
+
 /// Partition count of split decode attention, by visible tokens; large batches use the unsplit kernel.
 fn partitions(pos: usize, n: usize) -> u32 {
     if n > 8 {
@@ -386,7 +392,7 @@ impl<'a> Rec<'a> {
                 cmds: vec![cmd],
                 captures: Vec::new(),
             },
-            out: s.tp.as_ref().map_or(s.y.address, |t| t.part.address),
+            out: s.tp.as_ref().filter(|_| !vram_io()).map_or(s.y.address, |t| t.part.address),
         })
     }
 
@@ -984,7 +990,7 @@ impl GpuStage {
     fn record_tp(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
         let d = self.c.d;
         let (hd, tp) = (self.head.as_ref().context("a tensor-parallel rank needs its head rows")?, self.tp.as_ref().unwrap());
-        let total = tp.total.address;
+        let total = if vram_io() { self.y.address } else { tp.total.address };
         let mut r = Rec::new(self, n, dump)?;
         r.copy(&self.input, 0, &self.x, 0, n * d * 4);
         let mut added = None;

@@ -47,8 +47,24 @@ pub struct TpGroup {
 pub struct Phases {
     pub submit: f64,
     pub wait: f64,
+    /// Everything the host does to add partials: `sum` and `total`.
     pub add: f64,
     pub exchange: f64,
+    /// Adding this machine's partials.
+    pub sum: f64,
+    /// Adding the other machine's sum and writing the total for the local GPUs.
+    pub total: f64,
+    pub allreduces: u64,
+}
+
+impl Phases {
+    /// Milliseconds spent in each phase since `earlier`, divided by `per`.
+    pub fn ms_since(&self, earlier: &Phases, per: f64) -> Value {
+        let ms = |a: f64, b: f64| (a - b) * 1e3 / per;
+        json!({"submit": ms(self.submit, earlier.submit), "wait": ms(self.wait, earlier.wait), "add": ms(self.add, earlier.add),
+            "exchange": ms(self.exchange, earlier.exchange), "sum": ms(self.sum, earlier.sum), "total": ms(self.total, earlier.total),
+            "allreduces": self.allreduces - earlier.allreduces})
+    }
 }
 
 /// Load ranks `first..first + gpus.len()` of `ranks` onto the local `gpus`, with their share of the MTP layer
@@ -279,19 +295,24 @@ impl TpGroup {
             }
         }
         let added = Instant::now();
+        let mut exchanged = added;
         if let Some(l) = self.peer.as_mut() {
             let remote = &mut self.remote[..len];
             l.exchange(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(remote))?;
+            exchanged = Instant::now();
             for (a, b) in sum.iter_mut().zip(remote.iter()) {
                 *a += b;
             }
         }
-        let exchanged = Instant::now();
         for s in &self.shards {
             s.tp_set_total(sum);
         }
-        self.seconds.add += (added - start).as_secs_f64() + exchanged.elapsed().as_secs_f64();
+        let (summed, totalled) = ((added - start).as_secs_f64(), exchanged.elapsed().as_secs_f64());
+        self.seconds.add += summed + totalled;
+        self.seconds.sum += summed;
+        self.seconds.total += totalled;
         self.seconds.exchange += (exchanged - added).as_secs_f64();
+        self.seconds.allreduces += 1;
         Ok(())
     }
 
