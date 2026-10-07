@@ -7,6 +7,13 @@ Performance work targets `incite` (the dual-D700 Mac Pro). Record the tested sou
 correctness checks, sustained GPU clocks, and before/after results. Distinguish hardware upper bounds
 from measured throughput and practical targets; retain only improvements supported by measurements.
 
+Only add or retain an option when evidence shows a clear benefit for a supported use case. Experiments
+are welcome, but remove failed or inconclusive candidate code and its switches after evaluation.
+Keeping an experiment "off by default" is not a substitute for demonstrating a benefit. Performance
+options need a repeatable improvement in the relevant end-to-end workload; an isolated kernel or
+microbenchmark win is insufficient. Preserve measurements and reproduction snapshots under `results/`,
+outside the active runtime.
+
 # Shared GPU on inf
 
 The RTX PRO 6000 on inf (192.168.0.118, tailnet `inf`) is shared through gpuq. Before using CUDA or loading
