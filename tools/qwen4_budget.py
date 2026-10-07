@@ -73,8 +73,12 @@ def scratch_bytes(batch, context):
     return per_token * batch * 4 + HEADS * 64 * (HEAD_DIM + 2) * 4 * 8
 
 
-def head_bytes(r):
-    return VOCAB * D * HEAD_BITS / 8 + mixer_bytes(r['dense'], inject=False) + VOCAB * 4
+def head_bytes(r, rows=VOCAB, ends=True):
+    """Head rows (10-bit repack), their logits and candidate scratch; the stage that ends the model adds the final
+    mixer."""
+    chunks = -(-rows // 1024)
+    return (rows * D * HEAD_BITS / 8 + rows * 4 + chunks * 64 * 8
+            + (mixer_bytes(r['dense'], inject=False) if ends else 0))
 
 
 def stage_bytes(a, b, r, context, batch, head=0.0, lean=False):
@@ -90,7 +94,7 @@ def plan(machines, r, context, batch, split, lean):
         n = base + (1 if g < extra else 0)
         ranges.append((start, start + n))
         start += n
-    share = head_bytes(r) / min(split, gpus)
+    share = head_bytes(r) / min(split, gpus)  # the ending stage's final mixer is small
     return [(a, b, stage_bytes(a, b, r, context, batch, 0, lean), share if g >= gpus - split else 0)
             for g, (a, b) in enumerate(ranges)]
 
@@ -123,6 +127,7 @@ MEASURED = [  # name, recipe, first, last, context, batch, head, MiB
     ('G-iq4 0:4, ctx 32768, batch 256', G_IQ4, 0, 4, 32768, 256, False, 5843.0),
     ('G-iq4 46:48 + head, ctx 2048, batch 256', G_IQ4, 46, 48, 2048, 256, True, 3698.7),
     ('G-iq4 44:48 + head, ctx 2048, batch 256', G_IQ4, 44, 48, 2048, 256, True, 6479.9),
+    ('G-iq4 0:4 + rows 0..21504, ctx 32768, batch 128', G_IQ4, 0, 4, 32768, 128, 21504, 5830.4),
 ]
 
 if __name__ == '__main__':
@@ -135,7 +140,8 @@ if __name__ == '__main__':
     a = ap.parse_args()
     if a.check:
         for name, r, x, y, ctx, batch, head, mib in MEASURED:
-            p = stage_bytes(x, y, r, ctx, batch, head_bytes(r) if head else 0) / MIB
+            hb = head_bytes(r) if head is True else head_bytes(r, head, ends=False) if head else 0
+            p = stage_bytes(x, y, r, ctx, batch, hb) / MIB
             print(f'{name:40s} measured {mib:7.1f} MiB, model {p:7.1f} MiB ({p - mib:+.1f})')
         raise SystemExit
     print(f'MiB per D700 (device-local heap {HEAP / MIB:.0f}); dense Q8_0; context {a.context}, batch {a.batch}; '

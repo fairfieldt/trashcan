@@ -7,8 +7,8 @@ table placement, quantization and VRAM for six and four Mac Pros, the GPU stages
 
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type run on incite's D700s and match the
 reference with the six-Mac recipe's formats; a full six-Mac GPU stage (4 layers, 32K context) loads and runs on one
-D700, and the LM head can be split over stages. Not done yet: the remaining VRAM savings for six Macs, a chain of
-real Mac Pros, MTP and a chat command (see [What is left](#what-is-left)).
+D700 together with its twelfth of the LM head, which can be split over stages. Not done yet: a chain of real Mac
+Pros, a faster head split, MTP and a chat command (see [What is left](#what-is-left)).
 
 | | |
 |---|---|
@@ -112,11 +112,14 @@ share of positions where both pick the same top token
 | E-mxfp4 | experts MXFP4 | 0.0656 | 93.7% | 0.999 |
 | E-iq2xxs | experts IQ2_XXS gate/up, IQ4_NL down | 0.2134 | 88.6% | 1.077 |
 | N-q4_0 | every dense matrix Q4_0 (mixers, DeltaNet, attention, shared expert, n-gram projections) | 0.1961 | 88.7% | 1.065 |
+| A-hc | hyper-connection mixers Q4_0 | 0.1190 | 91.4% | 1.026 |
+| A-gdn | DeltaNet projections Q4_0 | 0.0613 | 94.0% | 1.012 |
+| A-attn | QSA projections Q4_0 | 0.0669 | 93.4% | 1.011 |
 | T-q4_0 | n-gram table Q4_0 | 0.0229 | 96.3% | 1.002 |
 
 - **Dense matrices are the sensitive part.** 4.6B dense parameters at Q4_0 cost five times the divergence of
-  121B expert parameters at Q4_0, and the hyper-connection mixers alone cost 0.119. The recipe keeps dense
-  matrices in Q8_0, which the GPU stages read with `qwen4_q8_mv`, `qwen4_q8_gemm` and fused Q8_0 mixers: about
+  121B expert parameters at Q4_0. Every group is sensitive on its own: the hyper-connection mixers 0.119, the QSA
+  projections 0.067, the DeltaNet projections 0.061. The recipe keeps dense matrices in Q8_0, which the GPU stages read with `qwen4_q8_mv`, `qwen4_q8_gemm` and fused Q8_0 mixers: about
   34 MB more per DeltaNet layer than Q4_0 and 0.25 ms more per decode step of a layer.
 - **IQ4_XS gate/up with IQ4_NL down is the best 4-bit expert format** and also the smallest (the down rows are
   640 wide, which rules out the 256-element formats there). MXFP4 is clearly worse on this model.
@@ -141,8 +144,9 @@ Q8_0 dense matrices:
 | layers 0-3 on one D700 (n-gram module, 3 DeltaNet, 1 sparse QSA), **measured** | 5843 of 5888 (budget 5869) |
 | the head (Q6_K repacked to 10 bits per weight, final mixer, logits) | 765 |
 | head split over all 12 GPUs (`--head-split 12`) | 64 per GPU, 5907 per GPU: 19 over |
-| with four savings not implemented yet (`--lean`: prefill reuses the fused mixer matrix, Q8_0 router and indexer projections, a raw indexer-key ring) | 5845 per GPU: fits by 43 |
-| the same with 128-token prefill chunks | 5766 per GPU: fits by 122 |
+| the same with 128-token prefill chunks (`--batch 128`) | 5828 per GPU: fits by 60 |
+| layers 0-3 and the first twelfth of the head (rows 0..21504), 128-token chunks, **measured** | 5830 of 5888 (budget 5869); decodes at 32K |
+| with four savings not implemented yet (`--lean`: prefill reuses the fused mixer matrix, Q8_0 router and indexer projections, a raw indexer-key ring) | 5766 per GPU at 128-token chunks: fits by 122 |
 
 Q4_0 experts do not fit six Macs (6043 MiB before any head share). Five Macs put 5 layers on most GPUs, where even
 IQ3_XXS gate/up with IQ4_NL down is 106 MiB over (`--lean`, 128-token chunks). Four Macs give 6 layers per GPU
@@ -164,7 +168,7 @@ one after another cost about 13 ms per token against 4.6 ms for one GPU.
 
 **Recommendation.** Six Macs: IQ4_XS gate/up and IQ4_NL down for routed and shared experts, Q8_0 dense matrices,
 Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of
-it the n-gram table). It needs the `--lean` savings (or 128-token prefill chunks) before it runs at 32K context.
+it the n-gram table). At 32K context it runs with `--head-split 12 --batch 128`; the `--lean` savings would add margin.
 Four Macs:
 the same weights, with each Mac's experts (15.3 GiB) in host RAM and a static VRAM cache of each layer's most used
 ~63%, which covers about 85% of routed activations by the imatrix counts (`expert_popularity.py` in the quant
@@ -259,7 +263,7 @@ IP (8.8 Gb/s, 128 us round trip:
 |---|---|---|
 | decode, short context | 36 x 1.24 + 12 x 1.16 + 0.43 + 13.4 (head in 12 slices) + 12 stages x 0.39 + 5 hops = 78 ms: **12.8 tok/s** (69 ms, 14.5 tok/s with the head scored in 4.6 ms) | the same GPU work with 8 stages, 3 hops and the head on one GPU (67 ms) + 48 x 0.53 ms of expert uploads = 93 ms: **10.8 tok/s** |
 | decode at 32K | 90 ms: **11.1 tok/s** | 105 ms: **9.5 tok/s** |
-| prefill (chunks pipelined across Macs, a Mac's two GPUs in turn) | 0.76 s per chunk per Mac: **~335 tok/s**; a 2K prompt in ~10 s | 1.2-2.0 s per chunk per Mac (expert uploads overlapped or not): **125-210 tok/s** |
+| prefill (chunks pipelined across Macs, a Mac's two GPUs in turn) | 128-token chunks (the 32K configuration), 8 x 51-56 ms: 0.43 s per chunk per Mac, **~300 tok/s**; a 2K prompt in ~9 s; 256-token chunks: ~335 tok/s | 1.2-2.0 s per chunk per Mac (expert uploads overlapped or not): **125-210 tok/s** |
 | weight-bandwidth bound for decode | 6.0 GB per token at 263 GB/s: 23 ms, 44 tok/s | |
 
 ## What is left
@@ -267,7 +271,7 @@ IP (8.8 Gb/s, 128 us round trip:
 1. **A cheaper head split**: score a Mac's slices on both GPUs at once, cut the 0.7 ms fixed cost per slice, store
    the head compactly (Q6_K is 6.6 bits, the repack 10), or keep the head on the last Mac in halves and free the
    room by leaving that Mac's least-used ~10% of experts in host RAM (the other 90% cover 98% of activations).
-2. **The `--lean` savings** (about 60 MiB per GPU) and a 128-token prefill chunk, for margin at 32K.
+2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks.
 3. **A real chain**: only one Mac Pro (incite) was available, so multi-Mac decode and prefill are projections.
 4. **Prefill**: an LDS-tiled grouped expert GEMM (58 ms of a 94 ms layer), chunked DeltaNet (19 ms), grouping
    the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K), the f32 router (3.8 ms),

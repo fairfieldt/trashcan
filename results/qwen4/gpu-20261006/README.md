@@ -47,6 +47,7 @@ after `--start` tokens, prefill chunks of `--batch` from position 0, and the las
 | `stagebench-gq8d-2-4-32k-before.json` | `--ranges 2:4 --gpus 0 --context 32768 --start 32512 --decode 16 --prefill 1`, scores in `qwen4_idx_select` | QSA layer 13.25 ms per decode step |
 | `stagebench-gq8d-2-4-32k.json` | same with `qwen4_idx_score` | 2.16 ms (selection 0.62, attention 0.56) |
 | `stagebench-giq4-0-4-32k.json` | `--ranges 0:4 --gpus 0 --context 32768 --start 32512 --decode 16 --prefill 1`, G-iq4 | the first GPU of six Macs: 5843 of 5888 MiB, runs |
+| `stagebench-giq4-0-4-32k-b128-head12.json` | `--ranges 0:4 --gpus 0 --context 32768 --batch 128 --head-rows 0:21504 --start 32640 --decode 16 --prefill 1` | the first GPU of six Macs with its twelfth of the head: 5830 MiB, decode 6.27 ms + 1.0 ms head slice at 32K |
 | `stagebench-giq4-46-48-head.json` | `--ranges 46:48 --head --gpus 1 --prefill 2`, G-iq4 | head 4.6 ms per token |
 | `stagebench-giq4-44-48-head.json` | `--ranges 44:48 --head --gpus 1 --prefill 2`, G-iq4 | 6480 MiB on a 5888 MiB heap: RADV put the excess in system memory and the head took 84 ms. Stages now refuse to load past the budget |
 
