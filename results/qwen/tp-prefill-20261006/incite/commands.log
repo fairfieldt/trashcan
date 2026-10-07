@@ -61,3 +61,5 @@
 2026-10-06T23:12:40-07:00 g2-check-27b-tp4:  ./trashcan qwen-check /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --verify 3 --tokens 600 --steps 128
 2026-10-06T23:13:27-07:00 g2-9b-tp2-pp2048:  ./trashcan qwen-bench /home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf --tp --pp 2048 --tg 32
 2026-10-06T23:14:01-07:00 g2-validate-9b-tp2:  ./trashcan qwen-validate /home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf results/tp-prefill/g2-validate-9b-tp2 --tp
+2026-10-06T23:24:38-07:00 mtp-27b-tp4-pp512-a:  ./trashcan qwen-bench /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --pp 512 --tg 128
+2026-10-06T23:25:06-07:00 mtp-27b-tp4-pp512-b:  ./trashcan qwen-bench /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --pp 512 --tg 128

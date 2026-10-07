@@ -8,12 +8,14 @@ itself. Every prefill candidate is bitwise the same as before.
 | Model, layout (incite + invite, USB4STREAM × 3 unless noted) | pp512 tok/s before | after | pp2048 before | after |
 |---|---|---|---|---|
 | **Qwen3.8-27B, TP4 across both Macs** | 89.8, 91.6 | **148.5, 148.7** | 87.3 | **140.5** |
+| Qwen3.8-27B, TP4, with MTP drafting (`--mtp`) | 89.5, 89.2 (`../tp-20261006`) | 146.3, 145.7 | | |
 | Qwen3.8-27B, TP4, TCP × 3 | 81.9 (`../tp-20261006`) | 140.0 (before the last two steps) | | |
 | **Qwen3.5-9B, TP2 on incite** | 209.9, 208.2 | **264.5, 263.2** | 203.0 | **248.6** |
 
 Decode is unchanged (single-token forwards take the old path): 27B tg 16.2-17.0 tok/s (before 16.6), 9B tg 32.0-32.2
 (before 32.2-32.3), with the same GPU wait per token (27B 45 ms, 9B 29.7 ms). The spread in 27B tg is the cross-Mac
-exchange (9.5-13.3 ms per token across all runs, versions alike).
+exchange (9.5-13.3 ms per token across all runs, versions alike). With MTP drafting the 27B decodes at 26.35 and
+26.15 tok/s (before 26.08, 25.93), 72% of drafts accepted and 2.44 tokens per round, as before.
 
 Hardware bound vs measured: with every all-reduce removed (`TRASHCAN_TP_FREE`, wrong results), the two-queue graphs
 of 662fa3b run at 145.2 tok/s for the 27B, the GPU floor of that version, whose full run reached 139.3 (96%).
@@ -33,7 +35,7 @@ trashcan-exp/prefill/trashcan` (kbuild VM). Each run name's prefix gives the com
 | `gemm-bench-` | 47773ad + the `gemm8` shaders below (not kept) | `qwen-gemm-bench` |
 | `dq-`, `final-`, `free-dq-`, `check-27b-*`, `validate-*` | 662fa3b | two compute queues; 6 host threads across Macs |
 | `warm-` | b4ee502 | full-chunk graphs recorded at load; no allocations per TP submission |
-| `gemm2-bench-`, `g2-` | b1dfa58 (the bench also ran a swizzle-only variant) | `gemm2`: conflict-free weight-tile reads, next block loaded ahead |
+| `gemm2-bench-`, `g2-`, `mtp-`, `odd-`, `serve-`, `test-server-` | b1dfa58 (the bench also ran a swizzle-only variant) | `gemm2`: conflict-free weight-tile reads, next block loaded ahead |
 
 ```sh
 # incite (driver), inside a gpuq lease, performance governor on both Macs (gov.sh)
@@ -165,6 +167,8 @@ prefill.
 | `qwen-check` 27B TP4, 600 tokens, verify 3, 128 steps (662fa3b, b4ee502, b1dfa58) | pass: restore exact, 85 rounds, 0 column mismatches, score error 0, text as before |
 | `qwen-check --mtp` 27B TP4, 256 steps (662fa3b) | pass: speculative identical, 148 of 216 drafts accepted (85 + 63), as before |
 | `qwen-check` 9B TP2 with and without `--mtp` (invite; 1f88548, 662fa3b, b4ee502) | pass; micro-batched and whole-batch prefills give identical reports apart from timings (144 of 222 drafts accepted) |
+| `qwen-check` 9B TP2, 700 tokens, with and without `--mtp` (invite, b1dfa58) | pass; the last chunk (188 tokens) splits into micro-batches of 128 and 60; the MTP check's report equals the one with micro-batches off (`TRASHCAN_TP_MICRO=1`) apart from timings (149 of 212 drafts accepted) |
+| `scripts/test-server.py` against `trashcan serve` 9B TP2 with MTP (invite, b1dfa58) | pass (`invite/test-server-9b-tp2-mtp.txt`): JSON, SSE, seeded sampling, tools and full-history tool continuations |
 | prefill candidates, every bench | `pp_top` bit for bit equal across all versions and settings for each prompt length |
 | long prompts | 27B pp2048 and pp4096, 9B pp2048 and pp4096 (invite) |
 
@@ -210,5 +214,5 @@ prefill attention (27B pp4096 126.5 against 140.5 at pp512 in the same version).
   `~/dev/claude-work/trashcan-20261006/prefill/validate/`).
 - `run.sh`, `node.sh`, `gov.sh`: the run wrappers.
 
-Clocks: 103 clock summaries, both cards at 850/1370 MHz in every run while computing (the low samples are model
-loading and idle time) except the two GEMM benches, which used one card; maximum 81 C.
+Clocks: 112 clock summaries, both cards at 850/1370 MHz in every run while computing (the low samples are model
+loading and idle time) except the GEMM benches, which used one card; maximum 83 C.
