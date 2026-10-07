@@ -1,10 +1,11 @@
 # N-gram table placement on incite (2026-10-06)
 
-`scripts/qwen4-ngram-bench.sh` (one `locked-run.sh` run per mode), binary from commit `b34d1ef`. The table is
-`per_layer_token_embd` of the Q8_0 GGUF: 320,001,536 rows of 160 values, 170 bytes per row, in its own
-54.4 GB shard on incite's SSD (Intel 660p 1 TB QLC NVMe, linked at PCIe 2.0 x4). Each token needs 16 rows.
-`corpus` hashes the first 8192 tokens of the quality corpus (real n-gram repetition), `random` uniformly random
-tokens. Decode gathers one token's 16 rows (4096 tokens timed); prefill gathers 512-token batches (16 readers).
+`scripts/qwen4-ngram-bench.sh` (one `locked-run.sh` run per mode), binary from the commit "Add qwen4exp GPU stages,
+the machine chain and an n-gram table benchmark" (`b34d1ef` before the rebase onto `a40bde3`). The table is
+`per_layer_token_embd` of the Q8_0 GGUF: 320,001,536 rows of 160 values, 170 bytes per row, in its own 54.4 GB shard
+on incite's SSD (Intel 660p 1 TB QLC NVMe, linked at PCIe 2.0 x4). Each token needs 16 rows. `corpus` hashes the
+first 8192 tokens of the quality corpus (real n-gram repetition), `random` uniformly random tokens. Decode gathers
+one token's 16 rows (4096 tokens timed); prefill gathers 512-token batches (16 readers).
 
 | storage | resident | decode, 1 reader, p50 | decode, 16 readers, p50 / p99 | prefill (16 readers) |
 |---|---|---|---|---|
