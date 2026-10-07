@@ -137,7 +137,15 @@ case ${1:-} in
         done
         ;;
     reload)
-        modprobe -r thunderbolt_stream thunderbolt_net 2>/dev/null
+        # Empty user-created port groups retain thunderbolt_stream references
+        # even after the peer disconnected. Active named streams remain intact.
+        for group in /sys/kernel/config/thunderbolt/stream/*; do
+            [ -d "$group" ] && rmdir "$group" 2>/dev/null
+        done
+        if ! modprobe -r thunderbolt_stream thunderbolt_net; then
+            echo "close and remove active Thunderbolt streams before reloading" >&2
+            exit 1
+        fi
         modprobe -r thunderbolt && modprobe thunderbolt_net && echo "Thunderbolt modules reloaded"
         ;;
     *) echo "usage: tblink run|status|links|reload" >&2; exit 2 ;;
