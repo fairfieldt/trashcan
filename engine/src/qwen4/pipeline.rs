@@ -115,6 +115,13 @@ impl Local {
                         indices[i],
                         stage.device_mib()
                     );
+                    // RADV silently places what does not fit in system memory, where the stage runs far slower.
+                    ensure!(
+                        usage <= budget,
+                        "GPU{}: layers {first}..{last} need {usage:.0} MiB of device-local memory but the budget is \
+                         {budget:.0} MiB (heap {size:.0}); give the GPU fewer layers or lower --batch or --context",
+                        indices[i]
+                    );
                     stages.push(Stage::Gpu(stage));
                 }
             }

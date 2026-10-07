@@ -107,14 +107,22 @@ RECIPES = {
 # Stages measured on incite (`GPUn: ... MiB allocated`), results/qwen4/gpu-20261006.
 G_Q4 = dict(gate_up=4.5, down=4.5, dense=5.0)
 G_Q8D = dict(gate_up=4.5, down=4.5, dense=Q8)
-MEASURED = [
-    ('G-q4_0 0:3, ctx 2048, batch 256', G_Q4, 0, 3, 2048, 256, 4405.5),
-    ('G-q4_0 3:6, ctx 2048, batch 256', G_Q4, 3, 6, 2048, 256, 4380.5),
-    ('G-q8d 0:3, ctx 64, batch 4', G_Q8D, 0, 3, 64, 4, 4369.9),
-    ('G-q8d 3:6, ctx 64, batch 4', G_Q8D, 3, 6, 64, 4, 4324.0),
-    ('G-q8d 0:3, ctx 2048, batch 256', G_Q8D, 0, 3, 2048, 256, 4516.1),
-    ('G-q8d 3:6, ctx 2048, batch 256', G_Q8D, 3, 6, 2048, 256, 4474.1),
-    ('G-q8d 2:4, ctx 32768, batch 256', G_Q8D, 2, 4, 32768, 256, 3128.1),
+G_IQ4 = RECIPES['IQ4_XS gate/up + IQ4_NL down']
+MEASURED = [  # name, recipe, first, last, context, batch, head, MiB
+    ('G-q4_0 0:3, ctx 2048, batch 256', G_Q4, 0, 3, 2048, 256, False, 4405.5),
+    ('G-q4_0 3:6, ctx 2048, batch 256', G_Q4, 3, 6, 2048, 256, False, 4380.5),
+    ('G-q8d 0:3, ctx 64, batch 4', G_Q8D, 0, 3, 64, 4, False, 4369.9),
+    ('G-q8d 3:6, ctx 64, batch 4', G_Q8D, 3, 6, 64, 4, False, 4324.0),
+    ('G-q8d 0:3, ctx 2048, batch 256', G_Q8D, 0, 3, 2048, 256, False, 4516.1),
+    ('G-q8d 3:6, ctx 2048, batch 256', G_Q8D, 3, 6, 2048, 256, False, 4474.1),
+    ('G-q8d 2:4, ctx 32768, batch 256', G_Q8D, 2, 4, 32768, 256, False, 3128.1),
+    ('G-iq4 0:3, ctx 64, batch 4', G_IQ4, 0, 3, 64, 4, False, 4219.6),
+    ('G-iq4 3:6, ctx 64, batch 4', G_IQ4, 3, 6, 64, 4, False, 4173.7),
+    ('G-iq4 0:3, ctx 2048, batch 256', G_IQ4, 0, 3, 2048, 256, False, 4365.8),
+    ('G-iq4 3:6, ctx 2048, batch 256', G_IQ4, 3, 6, 2048, 256, False, 4323.8),
+    ('G-iq4 0:4, ctx 32768, batch 256', G_IQ4, 0, 4, 32768, 256, False, 5843.0),
+    ('G-iq4 46:48 + head, ctx 2048, batch 256', G_IQ4, 46, 48, 2048, 256, True, 3698.7),
+    ('G-iq4 44:48 + head, ctx 2048, batch 256', G_IQ4, 44, 48, 2048, 256, True, 6479.9),
 ]
 
 if __name__ == '__main__':
@@ -126,9 +134,9 @@ if __name__ == '__main__':
     ap.add_argument('--check', action='store_true')
     a = ap.parse_args()
     if a.check:
-        for name, r, x, y, ctx, batch, mib in MEASURED:
-            p = stage_bytes(x, y, r, ctx, batch) / MIB
-            print(f'{name:34s} measured {mib:7.1f} MiB, model {p:7.1f} MiB ({p - mib:+.1f})')
+        for name, r, x, y, ctx, batch, head, mib in MEASURED:
+            p = stage_bytes(x, y, r, ctx, batch, head_bytes(r) if head else 0) / MIB
+            print(f'{name:40s} measured {mib:7.1f} MiB, model {p:7.1f} MiB ({p - mib:+.1f})')
         raise SystemExit
     print(f'MiB per D700 (device-local heap {HEAP / MIB:.0f}); dense Q8_0; context {a.context}, batch {a.batch}; '
           f'head {head_bytes(RECIPES["Q4_0 experts"]) / MIB:.0f} MiB over the last {a.head_split} GPU(s)'
