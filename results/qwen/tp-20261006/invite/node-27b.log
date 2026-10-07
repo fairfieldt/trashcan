@@ -1,0 +1,12 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on ["/dev/tbstream0", "/dev/tbstream1", "/dev/tbstream2"], GPUs [0, 1]
+tp-node: session over 3 stream lanes
+GPU0: rank 2 of 4, 4276.1 MiB allocated
+GPU1: rank 3 of 4, 4276.1 MiB allocated
+tp-node: session over 3 stream lanes
+GPU0: rank 2 of 4, 4276.1 MiB allocated
+GPU1: rank 3 of 4, 4276.1 MiB allocated
+tp-node: session over 3 stream lanes
+GPU0: rank 2 of 4, 4276.1 MiB allocated
+GPU1: rank 3 of 4, 4276.1 MiB allocated
+Terminated
+[clocks] 501 samples card0 (02:00.0) sclk/mclk: 850/1370 x229 300/1370 x1 450/1370 x12 300/150 x257 450/150 x2  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x199 650/1370 x2 450/1370 x27 300/150 x272 450/150 x1  max 61C  log=results/clocks/node-27b.txt

@@ -137,17 +137,39 @@ tokens and activations exactly, including streamed 4- and 5-token prompt chunks.
 Within a machine, the two GPUs hand off through host memory (one fence wait per stage per forward). P2P
 pushes with cross-device semaphores, as in the Gemma tensor-parallel path, are the obvious next step.
 
-### Tensor parallelism across Macs (TP4)
+### Tensor parallelism (`--tp`, `tp.rs`)
 
-With every GPU holding a quarter of every layer, all four GPUs stream their 4.33 GB per token at once instead
-of two Macs taking turns, and a token needs 128 all-reduces across the Thunderbolt link (two per layer).
-`trashcan allreduce-bench` measured one at about 104 µs over USB4STREAM and 138 µs over TCP, every value
-checked ([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)). A decode token with
-32 MiB streamed per GPU and segment took 37.3 ms, against about 52 ms projected for TP2 inside each Mac plus a
-two-stage pipeline at the same streaming rate. TP4 is the target layout for the 27B on two Macs. `link.rs`
-carries the all-reduces over 1-3 lanes per Mac pair (TCP connections or USB4STREAM devices); the cable count
-barely changes decode. Prefill all-reduces (10 MiB per 512-token chunk) still cost 21.6 ms each, about 2.8 s per
-chunk, and need SDMA copies, receives straight into GPU-visible memory and f16 partials.
+Instead of a range of layers per GPU, every GPU can hold one rank's share of every layer (`Split` in `gpu.rs`):
+its key heads with the value heads that read them, its query heads with their KV heads, a slice of the FFN and of
+the vocabulary. The hidden state is replicated. Each rank runs the unchanged kernels with the per-rank head counts;
+value head h reads key head h % k_heads, so taking each group of k_heads value heads' share in order keeps that
+mapping locally. Each mixer and FFN ends a submission with its partial output projection in host memory; the
+host adds the ranks' partials, exchanges the sum with the other machine over 1-3 lanes (`link.rs`, TCP or
+USB4STREAM) and writes the total that the next submission adds to the residual: two all-reduces per layer,
+2 × layers + 1 submissions per forward, all submitted ahead and released by a timeline semaphore. Each machine
+merges its ranks' candidates and the machines exchange theirs. Rollback and checkpoints apply to every rank.
+
+```sh
+trashcan qwen-bench MODEL --tp --pp 512 --tg 128                       # this machine's GPUs
+trashcan qwen-tp-node MODEL --stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2   # the other machine
+trashcan qwen-chat MODEL --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 "Hello"
+trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP, one connection per link
+trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
+```
+
+Qwen3.8-27B on incite and invite (four D700s, [results/qwen/tp-20261006](../results/qwen/tp-20261006/)): TP4
+matches the CPU reference to 4.1e-4 with the same greedy tokens, and runs at 91 tok/s prefill and 16.6 tok/s
+decode over USB4STREAM (82 / 15.6 over TCP), against 38 / 9.6 for the four-stage pipeline. The 9B gets 208 / 32
+with TP2 on one Mac against 127 / 23. A decode token spends most of its time on the GPUs (about 102 GB/s per GPU
+against 123 for a pipeline stage: narrower matrices and a cache flush per submission); the 128 cross-Mac
+exchanges add 12 ms. MTP drafting and the server do not run on TP yet. Measurement switches:
+`TRASHCAN_TP_SUBMIT=1` submits each segment when it is due instead of ahead; `TRASHCAN_TP_FREE=1` runs the
+segments back to back without all-reduces (wrong results, the GPU floor).
+
+The decision to use TP across Macs came from `trashcan allreduce-bench`
+([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)): a cross-Mac all-reduce costs
+about 104 µs over USB4STREAM and 138 µs over TCP. Prefill all-reduces (10 MiB per 512-token chunk) still cost
+about 21.6 ms each and need SDMA copies, receives straight into GPU-visible memory and f16 partials.
 
 ## Speculative decoding with the MTP layer
 

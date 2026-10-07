@@ -4,10 +4,11 @@ use super::{
     cpu::{Captures, CpuMtp, CpuStage},
     embed,
     gpu::{GpuStage, Output, TOP_K},
+    tp::TpGroup,
     Config,
 };
-use crate::{generation::Sampler, gguf::Gguf, gpu::Instance, vulkan::Device};
-use anyhow::{ensure, Context, Result};
+use crate::{generation::Sampler, gguf::Gguf, gpu::Instance, link::Lanes, vulkan::Device};
+use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{path::Path, rc::Rc};
 
@@ -75,6 +76,8 @@ fn split(costs: &[f64], stages: usize, target: f64) -> Vec<(usize, usize)> {
 pub enum Stage {
     Cpu(CpuStage),
     Gpu(GpuStage),
+    /// Every layer split across GPUs and machines; the only stage when present.
+    Tp(Box<TpGroup>),
 }
 
 /// A drafted token and the MTP's top candidates it was sampled from.
@@ -148,6 +151,13 @@ impl Local {
         Ok(Self { gguf, c, stages, mtp: has_mtp })
     }
 
+    /// Tensor parallelism over this machine's `gpus` and, with `peer`, the other machine's (`tp`).
+    pub fn tensor_parallel(path: &Path, gpus: &[usize], peer: Option<Lanes>, context: usize, max_batch: usize, verify: usize) -> Result<Self> {
+        let group = TpGroup::new(path, gpus, peer, context, max_batch, verify)?;
+        let (gguf, c) = (Gguf::open(path)?, group.c.clone());
+        Ok(Self { gguf, c, stages: vec![Stage::Tp(Box::new(group))], mtp: false })
+    }
+
     /// Run all local stages over the hidden rows of `tokens` (the token ids feed the MTP block). Returns the
     /// hidden state, or the top candidates when this machine ends the model: of the last column, or of every
     /// column with `verify`, which also keeps the per-column states for `rollback`.
@@ -163,6 +173,7 @@ impl Local {
         let emb = if self.mtp { Some(embed(&self.gguf, &self.c, tokens)?) } else { None };
         for stage in &mut self.stages {
             let out = match stage {
+                Stage::Tp(t) => Output::Top(t.forward(&x, pos, tokens, verify, dump.as_deref_mut())?),
                 Stage::Gpu(s) => s.forward(&x, pos, n, verify, emb.as_deref(), dump.as_deref_mut())?,
                 Stage::Cpu(s) => {
                     let mut cap = dump.as_deref_mut();
@@ -196,6 +207,7 @@ impl Local {
             match stage {
                 Stage::Gpu(s) => s.rollback(column)?,
                 Stage::Cpu(s) => s.rollback(column)?,
+                Stage::Tp(t) => t.rollback(column)?,
             }
         }
         Ok(())
@@ -206,6 +218,7 @@ impl Local {
             match stage {
                 Stage::Gpu(s) => s.save(slot)?,
                 Stage::Cpu(s) => s.save(slot),
+                Stage::Tp(t) => t.save(slot)?,
             }
         }
         Ok(())
@@ -216,6 +229,7 @@ impl Local {
             match stage {
                 Stage::Gpu(s) => s.restore(slot)?,
                 Stage::Cpu(s) => s.restore(slot)?,
+                Stage::Tp(t) => t.restore(slot)?,
             }
         }
         Ok(())
@@ -232,6 +246,7 @@ impl Local {
         for j in 0..k {
             let emb = embed(g, c, &[token])?;
             let top = match self.stages.last_mut().context("no stages")? {
+                Stage::Tp(_) => bail!("MTP drafting is not implemented with tensor parallelism yet"),
                 Stage::Gpu(s) => s.draft(&emb, pos + j, j == 0, vocab)?,
                 Stage::Cpu(s) => {
                     let m = s.mtp.as_mut().context("no MTP block")?;

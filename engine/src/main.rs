@@ -264,6 +264,18 @@ enum Cmd {
         #[arg(long)]
         mtp: Option<PathBuf>,
     },
+    /// Serve the other machine's GPUs of a tensor-parallel group (`--tp-connect` or `--tp-stream` on the driver).
+    QwenTpNode {
+        model: PathBuf,
+        /// Accept TCP lanes on this address, one connection per Thunderbolt link.
+        #[arg(long)]
+        listen: Option<String>,
+        /// USB4STREAM devices instead, one per cable, in the same cable order on both machines.
+        #[arg(long, value_delimiter = ',')]
+        stream: Vec<String>,
+        #[arg(long, value_delimiter = ',')]
+        gpus: Option<Vec<usize>>,
+    },
     /// Run a qwen35 model on the CPU reference path and dump activations in the reference format.
     QwenRef {
         model: PathBuf,
@@ -330,9 +342,38 @@ struct QwenRun {
     /// Checkpoints kept for prefix reuse across turns (0 disables reuse).
     #[arg(long, default_value_t = 8)]
     checkpoints: usize,
+    /// Tensor parallelism: split every layer across this machine's GPUs (and the other machine's, with
+    /// --tp-connect or --tp-stream) instead of giving each GPU a range of layers.
+    #[arg(long)]
+    tp: bool,
+    /// The other machine of the tensor-parallel group (`trashcan qwen-tp-node --listen`): one TCP address per
+    /// Thunderbolt link, e.g. invite.tb0:7072,invite.tb1:7072.
+    #[arg(long, value_delimiter = ',')]
+    tp_connect: Vec<String>,
+    /// The other machine over USB4STREAM devices, one per cable, in the same cable order on both machines.
+    #[arg(long, value_delimiter = ',')]
+    tp_stream: Vec<String>,
 }
 impl QwenRun {
     fn chain(&self, model: &Path) -> Result<qwen::net::Chain> {
+        if self.tp || !self.tp_connect.is_empty() || !self.tp_stream.is_empty() {
+            anyhow::ensure!(
+                self.nodes.is_empty() && !self.cpu && self.cuts.is_empty() && self.mtp.is_none(),
+                "tensor parallelism runs without --nodes, --cpu, --cuts or --mtp"
+            );
+            let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, self.gpus.clone())? else { unreachable!() };
+            let peer = if !self.tp_connect.is_empty() {
+                Some(link::Lanes::connect(&self.tp_connect)?)
+            } else if !self.tp_stream.is_empty() {
+                Some(link::Lanes::streams(&self.tp_stream, false)?)
+            } else {
+                None
+            };
+            let verify = self.verify.unwrap_or(0);
+            let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify)?;
+            chain.max_checkpoints = self.checkpoints;
+            return Ok(chain);
+        }
         let devices = qwen::chat::devices(self.cpu, self.gpus.clone())?;
         let draft = self.mtp.is_some();
         let verify = self.verify.unwrap_or(if draft { self.draft_tokens + 1 } else { 0 });
@@ -884,6 +925,11 @@ fn main() -> Result<()> {
             gpus,
             mtp,
         } => qwen::net::serve(&model, mtp, &listen, qwen::chat::devices(cpu, gpus)?),
+        Cmd::QwenTpNode { model, listen, stream, gpus } => {
+            anyhow::ensure!(listen.is_some() == stream.is_empty(), "give --listen or --stream");
+            let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, gpus)? else { unreachable!() };
+            qwen::tp::serve(&model, &gpus, listen.as_deref(), &stream)
+        }
         Cmd::QwenRef {
             model,
             out,

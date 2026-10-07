@@ -200,23 +200,33 @@ pub fn bench(e: &mut Chain, t: &Tokenizer, pp: usize, tg: usize, spec: Option<&m
     let start = Instant::now();
     let top = e.prefill(&ids)?;
     let pp_s = start.elapsed().as_secs_f64();
-    let start = Instant::now();
+    let tp_seconds = |e: &Chain| match e.local.stages.first() {
+        Some(super::pipeline::Stage::Tp(t)) => Some(t.seconds),
+        _ => None,
+    };
+    let (start, tp_before) = (Instant::now(), tp_seconds(e));
     let mut sampler = Sampler::new(0., 1, 1., 1)?;
     let speculative = spec.is_some();
     let mut spec = spec;
     let out = generate(e, top[0].1, tg, &mut sampler, &[], spec.as_deref_mut(), |_| Ok(()))?;
     let tg_s = start.elapsed().as_secs_f64();
+    // Milliseconds per generated token in each phase of the tensor-parallel loop.
+    let tp_ms = tp_before.zip(tp_seconds(e)).map(|(a, b)| {
+        let per = |x: f64, y: f64| (y - x) * 1e3 / out.len().max(1) as f64;
+        json!({"submit": per(a.submit, b.submit), "wait": per(a.wait, b.wait), "add": per(a.add, b.add), "exchange": per(a.exchange, b.exchange)})
+    });
     let mib: Vec<f64> = e
         .local
         .stages
         .iter()
-        .filter_map(|s| match s {
-            super::pipeline::Stage::Gpu(g) => Some(g.device_mib()),
-            _ => None,
+        .flat_map(|s| match s {
+            super::pipeline::Stage::Gpu(g) => vec![g.device_mib()],
+            super::pipeline::Stage::Tp(t) => t.device_mib(),
+            _ => Vec::new(),
         })
         .collect();
     Ok(json!({"pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
-        "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,
+        "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"tg_tp_ms":tp_ms,
         "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"text":t.decode(&out, false)}))
 }
 

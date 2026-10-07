@@ -2,6 +2,21 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-06: Qwen3.8-27B with tensor parallelism across incite and invite
+
+`--tp` splits every layer across GPUs, `--tp-stream`/`--tp-connect` across both Macs (`results/qwen/tp-20261006/`).
+
+- Correct: the 27B on TP4 matches our CPU reference to 4.1e-4 over 946 tensors and llama.cpp to 3.3e-2 (the
+  pipeline's figure), with the same 10 greedy tokens; the 9B on TP2 and TP4 likewise (3.7e-4).
+- Qwen3.8-27B on both Macs: 91 tok/s prefill and 16.6 tok/s decode over three USB4STREAM links, 82 and 15.6 over
+  TCP, against 38 and 9.6 for the four-stage pipeline (1.73× decode, 2.4× prefill).
+- Qwen3.5-9B on one Mac: 208 and 32.0 tok/s with TP2 against 127 and 22.8 for the two-stage pipeline.
+- A 27B decode token: 45.9 ms waiting on the GPUs, 12.0 ms in 128 cross-Mac exchanges, about 2 ms on the host.
+  Without all-reduces a 9B TP2 token still needs 27.3 ms of GPU time (102 GB/s per GPU, against 123 for a pipeline
+  stage), so kernel efficiency at the narrower per-rank shapes and the per-submission cache flushes are next.
+- Submitting all 2 × layers + 1 segments ahead and releasing each with a timeline semaphore saves 4.3 ms of
+  `vkQueueSubmit` per 9B token but adds 3 ms of release latency: net +4%.
+
 ## 2026-10-06: tensor parallelism across incite and invite is viable for decode
 
 `trashcan allreduce-bench` runs 128 all-reduces per token on all four GPUs of both Macs, as a 4-way

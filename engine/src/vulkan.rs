@@ -717,6 +717,28 @@ impl Device {
             );
         }
     }
+    /// Order host access around a submission boundary: `to_host` makes shader writes visible to the host
+    /// once the submission completes; otherwise host writes made before the submission become visible to
+    /// shaders and copies.
+    pub fn host_barrier(&self, cmd: vk::CommandBuffer, to_host: bool) {
+        if to_host {
+            self.scoped_barrier(
+                cmd,
+                vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER,
+                vk::PipelineStageFlags::HOST,
+                vk::AccessFlags::SHADER_WRITE | vk::AccessFlags::TRANSFER_WRITE,
+                vk::AccessFlags::HOST_READ,
+            );
+        } else {
+            self.scoped_barrier(
+                cmd,
+                vk::PipelineStageFlags::HOST,
+                vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER,
+                vk::AccessFlags::HOST_WRITE,
+                vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ,
+            );
+        }
+    }
     fn scoped_barrier(
         &self,
         cmd: vk::CommandBuffer,

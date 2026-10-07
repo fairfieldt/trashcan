@@ -11,6 +11,7 @@ pub mod native;
 pub mod net;
 pub mod pipeline;
 pub mod spec;
+pub mod tp;
 
 use crate::gguf::{GgmlType, Gguf, TensorInfo};
 use anyhow::{ensure, Context, Result};

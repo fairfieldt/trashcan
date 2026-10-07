@@ -393,6 +393,30 @@ impl Chain {
         })
     }
 
+    /// Tensor parallelism instead of a chain: every layer split across this machine's `gpus` and, with
+    /// `peer`, the other machine's (`tp`).
+    pub fn tensor_parallel(model: &Path, gpus: &[usize], peer: Option<crate::link::Lanes>, context: usize, max_batch: usize, verify: usize) -> Result<Self> {
+        ensure!(context > 0 && max_batch > 0, "context and batch must be positive");
+        ensure!(verify <= 8 && verify <= max_batch, "verification batches are limited to eight columns");
+        let local = Local::tensor_parallel(model, gpus, peer, context, max_batch, verify)?;
+        let layers = local.c.layers;
+        Ok(Self {
+            local,
+            next: None,
+            pos: 0,
+            max_batch,
+            context,
+            verify,
+            mtp: false,
+            plans: vec![vec![(0, layers)]],
+            verified: 0,
+            history: Vec::new(),
+            checkpoints: Vec::new(),
+            max_checkpoints: 0,
+            clock: 0,
+        })
+    }
+
     fn run(&mut self, tokens: &[u32], verify: bool, reply: bool, mut dump: Option<&mut Captures>) -> Result<Option<Vec<Candidates>>> {
         let n = tokens.len();
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");

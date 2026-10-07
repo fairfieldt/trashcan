@@ -6,6 +6,11 @@
 //! kernels also store the state after every column but the last, so `rollback` to an accepted prefix is a
 //! device copy. Checkpoint slots copy the whole recurrent state (and the MTP's pending hidden row) to host
 //! memory and back; attention KV needs no copy because it is addressed by position.
+//!
+//! Tensor parallelism (`GpuStage::shard`): the stage holds one rank's share of every layer (`Split`) and runs
+//! with the per-rank head counts, so the kernels are unchanged. Each mixer and FFN ends its submission with a
+//! partial output projection in host memory; `tp::TpGroup` all-reduces the partials and writes the total
+//! that the next submission adds to the replicated residual.
 use super::{cpu::Captures, vector, Config};
 use crate::{
     gguf::{GgmlType, Gguf},
@@ -18,6 +23,98 @@ use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = 64;
 const GRAPH_CACHE_CAPACITY: usize = 16;
+
+/// One rank's share of every layer under tensor parallelism: its key heads with the value heads that read
+/// them, its query heads with their KV heads, a slice of the FFN and of the vocabulary. The hidden state is
+/// replicated. Rank 0 of 1 is the whole layer.
+#[derive(Clone, Copy, Debug)]
+pub struct Split {
+    pub rank: usize,
+    pub ranks: usize,
+}
+
+/// (first, count) ranges of rows or columns; empty means all of them.
+type Ranges = Vec<(usize, usize)>;
+
+impl Split {
+    pub const WHOLE: Split = Split { rank: 0, ranks: 1 };
+
+    /// The configuration a rank's kernels see: head counts, FFN width and vocabulary divided by the ranks.
+    pub fn local(&self, c: &Config) -> Result<Config> {
+        let r = self.ranks;
+        ensure!(
+            c.k_heads.is_multiple_of(r) && c.kv_heads.is_multiple_of(r) && c.ff.is_multiple_of(32 * r) && c.vocab.is_multiple_of(r),
+            "{} ranks do not divide this model's heads, FFN or vocabulary",
+            r
+        );
+        let mut l = c.clone();
+        l.k_heads /= r;
+        l.v_heads /= r;
+        l.heads /= r;
+        l.kv_heads /= r;
+        l.ff /= r;
+        l.vocab /= r;
+        Ok(l)
+    }
+
+    /// This rank's (first, count) of `total` items split evenly.
+    pub fn part(&self, total: usize) -> (usize, usize) {
+        (self.rank * total / self.ranks, total / self.ranks)
+    }
+
+    /// `ranges` scaled by `unit`, or empty (everything) for the whole layer.
+    fn sel(&self, ranges: &[(usize, usize)], unit: usize) -> Ranges {
+        if self.ranks == 1 {
+            return Vec::new();
+        }
+        ranges.iter().map(|&(a, n)| (a * unit, n * unit)).collect()
+    }
+
+    /// Value heads of this rank as ranges, in the order its DeltaNet kernels see them. Value head h reads key
+    /// head h % k_heads, so every group of k_heads value heads contributes this rank's key-head range, and
+    /// local value head j then reads local key head j % (local key heads).
+    fn value_heads(&self, c: &Config) -> Ranges {
+        let (first, count) = self.part(c.k_heads);
+        (0..c.v_heads / c.k_heads).map(|b| (b * c.k_heads + first, count)).collect()
+    }
+
+    /// DeltaNet input channels [q | k | v] of this rank.
+    fn channels(&self, c: &Config) -> Ranges {
+        let (first, count) = self.part(c.k_heads);
+        let mut r = vec![(first, count), (c.k_heads + first, count)];
+        r.extend(self.value_heads(c).into_iter().map(|(h, n)| (2 * c.k_heads + h, n)));
+        self.sel(&r, c.state)
+    }
+}
+
+/// Rows and columns (multiples of 32) of a Q4_0 matrix in GGUF layout: the bytes, then (k, n).
+fn cut_q4(data: &[u8], k: usize, n: usize, rows: &[(usize, usize)], cols: &[(usize, usize)]) -> (Vec<u8>, usize, usize) {
+    let all_rows = [(0, n)];
+    let all_cols = [(0, k)];
+    let rows = if rows.is_empty() { &all_rows[..] } else { rows };
+    let cols = if cols.is_empty() { &all_cols[..] } else { cols };
+    let row_bytes = k / 32 * 18;
+    let (kl, nl) = (cols.iter().map(|c| c.1).sum::<usize>(), rows.iter().map(|r| r.1).sum::<usize>());
+    let mut out = Vec::with_capacity(nl * kl / 32 * 18);
+    for &(r0, rn) in rows {
+        for r in r0..r0 + rn {
+            let row = &data[r * row_bytes..(r + 1) * row_bytes];
+            for &(c0, cn) in cols {
+                assert!(c0.is_multiple_of(32) && cn.is_multiple_of(32), "Q4_0 columns split on 32-weight blocks");
+                out.extend_from_slice(&row[c0 / 32 * 18..(c0 + cn) / 32 * 18]);
+            }
+        }
+    }
+    (out, kl, nl)
+}
+
+/// Elements of a vector, or of every `width`-wide row, in the given ranges (empty: all).
+fn pick(v: Vec<f32>, width: usize, ranges: &[(usize, usize)]) -> Vec<f32> {
+    if ranges.is_empty() {
+        return v;
+    }
+    ranges.iter().flat_map(|&(a, n)| v[a * width..(a + n) * width].iter().copied()).collect()
+}
 
 /// Gated attention: the trunk's attention layers and the MTP block.
 struct Attn {
@@ -116,6 +213,24 @@ pub enum Output {
 /// (batch, attention partitions, dump, verify)
 type Key = (usize, u32, bool, bool);
 
+/// Tensor-parallel segments: the host buffers of the all-reduces and the timeline the host polls.
+struct Tp {
+    /// This rank's partial output projection, written by the GPU at the end of each segment.
+    part: Buffer,
+    /// The all-reduced total, written by the host before the next segment.
+    total: Buffer,
+    /// Segment `i` of the forward in progress signals `done` = `base + i + 1` when it finishes and, when
+    /// submitted ahead, waits for the host to signal `release` = `base + i`.
+    done: vk::Semaphore,
+    release: vk::Semaphore,
+    base: u64,
+    /// Highest value signalled on `done` and on `release` so far.
+    done_value: u64,
+    released: u64,
+    /// Graph of the forward in progress.
+    current: Option<Key>,
+}
+
 pub struct GpuStage {
     c: Config,
     last: usize,
@@ -157,6 +272,9 @@ pub struct GpuStage {
     slots: HashMap<usize, Buffer>,
     /// Seconds spent in submissions and their fence waits.
     pub busy: std::cell::Cell<f64>,
+    tp: Option<Tp>,
+    /// First vocabulary id of this rank's head rows.
+    vocab_start: usize,
 }
 
 /// Partition count of split decode attention, by visible tokens; large batches use the unsplit kernel.
@@ -173,6 +291,11 @@ fn partitions(pos: usize, n: usize) -> u32 {
 }
 
 fn upload_q4(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, name: &str) -> Result<Buffer> {
+    upload_q4_cut(gpu, g, c, il, name, &[], &[])
+}
+
+/// A Q4_0 matrix, cut to the given rows and columns (empty: all).
+fn upload_q4_cut(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, name: &str, rows: &[(usize, usize)], cols: &[(usize, usize)]) -> Result<Buffer> {
     let t = c.layer_tensor(g, il, name)?;
     ensure!(
         t.ty == GgmlType::Q4_0,
@@ -181,7 +304,11 @@ fn upload_q4(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, name: &str) -> R
         t.ty
     );
     let (k, n) = (t.dims[0] as usize, t.dims[1] as usize);
-    gpu.upload_matrix(&quant::repack_q4(g.data(t), k, n, 0, n, 0, k))
+    if rows.is_empty() && cols.is_empty() {
+        return gpu.upload_matrix(&quant::repack_q4(g.data(t), k, n, 0, n, 0, k));
+    }
+    let (data, k, n) = cut_q4(g.data(t), k, n, rows, cols);
+    gpu.upload_matrix(&quant::repack_q4(&data, k, n, 0, n, 0, k))
 }
 
 fn upload_f32(gpu: &Rc<Device>, v: &[f32]) -> Result<Buffer> {
@@ -192,25 +319,30 @@ fn upload_vector(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, name: &str) 
     upload_f32(gpu, &vector(g, c.layer_tensor(g, il, name)?)?)
 }
 
-fn load_attn(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, context: usize) -> Result<Attn> {
-    let kv = context * c.kv_heads * c.head_dim * 2;
+/// A gated-attention block: this rank's query heads (`[q | gate]` rows) and KV heads, and the matching
+/// columns of the output projection. `c` is the whole model's configuration.
+fn load_attn(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, context: usize, split: Split) -> Result<Attn> {
+    let (heads, kv_heads) = (split.part(c.heads), split.part(c.kv_heads));
+    let kv = context * kv_heads.1 * c.head_dim * 2;
+    let kv_rows = split.sel(&[kv_heads], c.head_dim);
     Ok(Attn {
-        q: upload_q4(gpu, g, c, il, "attn_q.weight")?,
-        k: upload_q4(gpu, g, c, il, "attn_k.weight")?,
-        v: upload_q4(gpu, g, c, il, "attn_v.weight")?,
+        q: upload_q4_cut(gpu, g, c, il, "attn_q.weight", &split.sel(&[heads], 2 * c.head_dim), &[])?,
+        k: upload_q4_cut(gpu, g, c, il, "attn_k.weight", &kv_rows, &[])?,
+        v: upload_q4_cut(gpu, g, c, il, "attn_v.weight", &kv_rows, &[])?,
         q_norm: upload_vector(gpu, g, c, il, "attn_q_norm.weight")?,
         k_norm: upload_vector(gpu, g, c, il, "attn_k_norm.weight")?,
-        out: upload_q4(gpu, g, c, il, "attn_output.weight")?,
+        out: upload_q4_cut(gpu, g, c, il, "attn_output.weight", &[], &split.sel(&[heads], c.head_dim))?,
         kc: gpu.buffer(kv, false, false, None)?,
         vc: gpu.buffer(kv, false, false, None)?,
     })
 }
 
-fn load_ffn(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize) -> Result<Ffn> {
+fn load_ffn(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, split: Split) -> Result<Ffn> {
+    let ff = split.sel(&[split.part(c.ff)], 1);
     Ok(Ffn {
-        gate: upload_q4(gpu, g, c, il, "ffn_gate.weight")?,
-        up: upload_q4(gpu, g, c, il, "ffn_up.weight")?,
-        down: upload_q4(gpu, g, c, il, "ffn_down.weight")?,
+        gate: upload_q4_cut(gpu, g, c, il, "ffn_gate.weight", &ff, &[])?,
+        up: upload_q4_cut(gpu, g, c, il, "ffn_up.weight", &ff, &[])?,
+        down: upload_q4_cut(gpu, g, c, il, "ffn_down.weight", &[], &ff)?,
     })
 }
 
@@ -221,6 +353,8 @@ struct Rec<'a> {
     dump: bool,
     cmd: vk::CommandBuffer,
     graph: Graph,
+    /// Where the mixers' and FFNs' output projections go: `y`, or the host partial under tensor parallelism.
+    out: u64,
 }
 
 impl<'a> Rec<'a> {
@@ -238,7 +372,17 @@ impl<'a> Rec<'a> {
                 cmds: vec![cmd],
                 captures: Vec::new(),
             },
+            out: s.tp.as_ref().map_or(s.y.address, |t| t.part.address),
         })
+    }
+
+    /// End a tensor-parallel segment: the host reads the partial projection after this submission, then
+    /// writes the all-reduced total before submitting the next one.
+    fn end_segment(&mut self) -> Result<()> {
+        self.s.gpu.host_barrier(self.cmd, true);
+        self.split()?;
+        self.s.gpu.host_barrier(self.cmd, false);
+        Ok(())
     }
 
     fn push(&self, ptr: [u64; 6], u: [u32; 16]) -> Push {
@@ -266,8 +410,10 @@ impl<'a> Rec<'a> {
         self.s.gpu.copy(self.cmd, a, ao, b, bo, size);
     }
 
+    /// Under tensor parallelism only the replicated residual `x` and norm output `h` are whole tensors.
     fn capture(&mut self, name: String, b: &Buffer, width: usize) -> Result<()> {
-        if self.dump {
+        let whole = self.s.tp.is_none() || b.buf == self.s.x.buf || b.buf == self.s.h.buf;
+        if self.dump && whole {
             let host = self.s.gpu.buffer(width * 4, true, false, None)?;
             self.s.gpu.copy(self.cmd, b, (self.n - 1) * width * 4, &host, 0, width * 4);
             self.graph.captures.push((name, host, width));
@@ -379,7 +525,7 @@ impl<'a> Rec<'a> {
             self.n as u32,
         );
         self.capture(format!("final_output-{il}"), &s.o, vd)?;
-        self.matrix(&dl.out, s.o.address, s.y.address, vd, d, false)?;
+        self.matrix(&dl.out, s.o.address, self.out, vd, d, false)?;
         self.capture(format!("linear_attn_out-{il}"), &s.y, d)
     }
 
@@ -469,7 +615,7 @@ impl<'a> Rec<'a> {
             self.n as u32,
         );
         self.capture(format!("attn_gated-{il}"), &s.o, qd)?;
-        self.matrix(&a.out, s.o.address, s.y.address, qd, d, false)?;
+        self.matrix(&a.out, s.o.address, self.out, qd, d, false)?;
         self.capture(format!("attn_output-{il}"), &s.y, d)
     }
 
@@ -488,7 +634,7 @@ impl<'a> Rec<'a> {
             self.n as u32,
         );
         self.capture(format!("ffn_swiglu-{il}"), &s.act, c.ff)?;
-        self.matrix(&f.down, s.act.address, s.y.address, c.ff, c.d, false)
+        self.matrix(&f.down, s.act.address, self.out, c.ff, c.d, false)
     }
 
     /// LM head and top candidates of the last `cols` normed rows of `input`, over the first `rows` tokens
@@ -520,9 +666,11 @@ impl<'a> Rec<'a> {
             &hd.w,
         )?;
         if self.dump {
+            // A tensor-parallel rank holds a slice of the vocabulary; tp::TpGroup joins the slices.
+            let name = if s.tp.is_some() { "result_output_part" } else { "result_output" };
             let host = s.gpu.buffer(rows * 4, true, false, None)?;
             s.gpu.copy(self.cmd, &hd.logits, (cols - 1) * rows * 4, &host, 0, rows * 4);
-            self.graph.captures.push(("result_output".into(), host, rows));
+            self.graph.captures.push((name.into(), host, rows));
         }
         let mut u = [0; 16];
         u[0] = rows as u32;
@@ -587,29 +735,60 @@ impl GpuStage {
         verify: usize,
         mtp: Option<&Gguf>,
     ) -> Result<Self> {
+        Self::build(gpu, g, c, first, last, head, context, max_batch, verify, mtp, Split::WHOLE, false)
+    }
+
+    /// One rank of a tensor-parallel group: its share of every layer and of the LM head. Forward passes go
+    /// through `tp_prepare`, `tp_submit` and `tp_wait` per segment (`tp::TpGroup`).
+    pub fn shard(gpu: Rc<Device>, g: &Gguf, c: &Config, context: usize, max_batch: usize, verify: usize, split: Split) -> Result<Self> {
+        Self::build(gpu, g, c, 0, c.layers, true, context, max_batch, verify, None, split, true)
+    }
+
+    /// `gc` is the whole model's configuration; the stage runs with `split`'s share of it.
+    #[allow(clippy::too_many_arguments)]
+    fn build(
+        gpu: Rc<Device>,
+        g: &Gguf,
+        gc: &Config,
+        first: usize,
+        last: usize,
+        head: bool,
+        context: usize,
+        max_batch: usize,
+        verify: usize,
+        mtp: Option<&Gguf>,
+        split: Split,
+        tp: bool,
+    ) -> Result<Self> {
+        let local = split.local(gc)?;
+        let c = &local;
         ensure!(c.state == 128, "DeltaNet kernels need 128-wide heads");
         ensure!(c.head_dim <= 512 && c.head_dim % 64 == 0, "unsupported head size");
         ensure!(verify <= 8, "verification batches are limited to eight columns");
         ensure!(mtp.is_none() || head, "the MTP block belongs on the head stage");
+        ensure!(mtp.is_none() || !tp, "the MTP block is not split for tensor parallelism yet");
         let snaps = verify.saturating_sub(1);
+        let (channels, value_heads) = (split.channels(gc), split.sel(&split.value_heads(gc), 1));
+        let value_dims = split.sel(&split.value_heads(gc), gc.state);
         let mut layers = Vec::new();
         for il in first..last {
             let mixer = if c.recurrent(il) {
-                let mut ab = vector(g, c.layer_tensor(g, il, "ssm_alpha.weight")?)?;
-                ab.extend(vector(g, c.layer_tensor(g, il, "ssm_beta.weight")?)?);
-                let mut dt_a = vector(g, c.layer_tensor(g, il, "ssm_dt.bias")?)?;
-                dt_a.extend(vector(g, c.layer_tensor(g, il, "ssm_a")?)?);
+                let mut ab = pick(vector(g, c.layer_tensor(g, il, "ssm_alpha.weight")?)?, gc.d, &value_heads);
+                ab.extend(pick(vector(g, c.layer_tensor(g, il, "ssm_beta.weight")?)?, gc.d, &value_heads));
+                let mut dt_a = pick(vector(g, c.layer_tensor(g, il, "ssm_dt.bias")?)?, 1, &value_heads);
+                dt_a.extend(pick(vector(g, c.layer_tensor(g, il, "ssm_a")?)?, 1, &value_heads));
+                let conv_w = pick(vector(g, c.layer_tensor(g, il, "ssm_conv1d.weight")?)?, gc.conv, &channels);
                 let (state, conv) = (c.v_heads * c.state * c.state * 4, (c.conv - 1) * c.conv_dim() * 4);
                 Mixer::Delta(Delta {
-                    qkv: upload_q4(&gpu, g, c, il, "attn_qkv.weight")?,
-                    z: upload_q4(&gpu, g, c, il, "attn_gate.weight")?,
+                    qkv: upload_q4_cut(&gpu, g, c, il, "attn_qkv.weight", &channels, &[])?,
+                    z: upload_q4_cut(&gpu, g, c, il, "attn_gate.weight", &value_dims, &[])?,
                     ab: gpu.upload_matrix(bytemuck::cast_slice(&ab))?,
                     dt_a: upload_f32(&gpu, &dt_a)?,
-                    conv_w: upload_vector(&gpu, g, c, il, "ssm_conv1d.weight")?,
+                    conv_w: upload_f32(&gpu, &conv_w)?,
                     conv: gpu.buffer(conv, false, false, None)?,
                     state: gpu.buffer(state, false, false, None)?,
                     norm: upload_vector(&gpu, g, c, il, "ssm_norm.weight")?,
-                    out: upload_q4(&gpu, g, c, il, "ssm_out.weight")?,
+                    out: upload_q4_cut(&gpu, g, c, il, "ssm_out.weight", &[], &value_dims)?,
                     snaps: if snaps > 0 {
                         Some((gpu.buffer(snaps * state, false, false, None)?, gpu.buffer(snaps * conv, false, false, None)?))
                     } else {
@@ -617,25 +796,27 @@ impl GpuStage {
                     },
                 })
             } else {
-                Mixer::Attention(load_attn(&gpu, g, c, il, context)?)
+                Mixer::Attention(load_attn(&gpu, g, gc, il, context, split)?)
             };
             layers.push(Layer {
                 il,
                 attn_norm: upload_vector(&gpu, g, c, il, "attn_norm.weight")?,
                 post_norm: upload_vector(&gpu, g, c, il, "post_attention_norm.weight")?,
-                ffn: load_ffn(&gpu, g, c, il)?,
+                ffn: load_ffn(&gpu, g, gc, il, split)?,
                 mixer,
             });
         }
         let cols = verify.max(1);
+        let (vocab_start, vocab_rows) = split.part(gc.vocab);
         let head = if head {
             let t = g.tensor("output.weight").context("missing output.weight")?;
             ensure!(t.ty == GgmlType::Q6K, "output.weight must be Q6_K, found {}", t.ty);
             let chunks = c.vocab.div_ceil(1024);
             ensure!(chunks <= 256, "vocabulary too large for one candidate merge");
+            let row = gc.d / 256 * 210;
             Some(Head {
                 norm: upload_f32(&gpu, &vector(g, g.tensor("output_norm.weight").context("missing output norm")?)?)?,
-                w: gpu.upload_matrix(&quant::repack_q6(g.data(t)))?,
+                w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[vocab_start * row..(vocab_start + vocab_rows) * row]))?,
                 logits: gpu.buffer(cols * c.vocab * 4, false, false, None)?,
                 scratch: gpu.buffer(cols * chunks * TOP_K * 8, false, false, None)?,
                 top: gpu.buffer(cols * TOP_K * 8, true, false, None)?,
@@ -654,8 +835,8 @@ impl GpuStage {
                     attn_norm: v("attn_norm.weight")?,
                     post_norm: v("post_attention_norm.weight")?,
                     head_norm: v("nextn.shared_head_norm.weight")?,
-                    attn: load_attn(&gpu, m, c, il, context)?,
-                    ffn: load_ffn(&gpu, m, c, il)?,
+                    attn: load_attn(&gpu, m, c, il, context, split)?,
+                    ffn: load_ffn(&gpu, m, c, il, split)?,
                     emb: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
                     hin: gpu.buffer(c.d * (max_batch + 1) * 4, false, false, None)?,
                     cat: gpu.buffer(2 * c.d * max_batch * 4, false, false, None)?,
@@ -703,6 +884,21 @@ impl GpuStage {
             rollbacks: HashMap::new(),
             slots: HashMap::new(),
             busy: std::cell::Cell::new(0.),
+            tp: if tp {
+                Some(Tp {
+                    part: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
+                    total: gpu.buffer(c.d * max_batch * 4, true, false, None)?,
+                    done: gpu.timeline(false)?,
+                    release: gpu.timeline(false)?,
+                    base: 0,
+                    done_value: 0,
+                    released: 0,
+                    current: None,
+                })
+            } else {
+                None
+            },
+            vocab_start,
             c: c.clone(),
             gpu,
         })
@@ -713,6 +909,9 @@ impl GpuStage {
     }
 
     fn record(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
+        if self.tp.is_some() {
+            return self.record_tp(n, parts, dump, verify);
+        }
         let d = self.c.d;
         let mut r = Rec::new(self, n, dump)?;
         r.copy(&self.input, 0, &self.x, 0, n * d * 4);
@@ -760,6 +959,154 @@ impl GpuStage {
             r.copy(&self.x, 0, &self.output, 0, n * d * 4);
         }
         r.finish()
+    }
+
+    /// Tensor-parallel graph: every mixer and FFN ends a submission with its partial projection in host
+    /// memory, and the next submission adds the all-reduced total to the replicated residual. The last
+    /// submission ranks this rank's vocabulary rows. 2 * layers + 1 submissions.
+    fn record_tp(&self, n: usize, parts: u32, dump: bool, verify: bool) -> Result<Graph> {
+        let d = self.c.d;
+        let (hd, tp) = (self.head.as_ref().context("a tensor-parallel rank needs its head rows")?, self.tp.as_ref().unwrap());
+        let total = tp.total.address;
+        let mut r = Rec::new(self, n, dump)?;
+        r.copy(&self.input, 0, &self.x, 0, n * d * 4);
+        let mut added = None;
+        for l in &self.layers {
+            let il = l.il;
+            r.add_norm(self.x.address, added, Some(self.h.address), Some(&l.attn_norm), 0);
+            if added.is_some() {
+                r.capture(format!("l_out-{}", il - 1), &self.x, d)?;
+            }
+            r.capture(format!("attn_norm-{il}"), &self.h, d)?;
+            match &l.mixer {
+                Mixer::Delta(dl) => r.delta(dl, il, verify)?,
+                Mixer::Attention(a) => r.attention(a, parts, il)?,
+            }
+            r.end_segment()?;
+            r.add_norm(self.x.address, Some(total), Some(self.h.address), Some(&l.post_norm), 0);
+            r.capture(format!("attn_residual-{il}"), &self.x, d)?;
+            r.capture(format!("attn_post_norm-{il}"), &self.h, d)?;
+            r.ffn(&l.ffn, il)?;
+            r.end_segment()?;
+            added = Some(total);
+        }
+        r.add_norm(self.x.address, added, Some(self.h.address), Some(&hd.norm), 0);
+        r.capture(format!("l_out-{}", self.last - 1), &self.x, d)?;
+        r.capture("result_norm".into(), &self.h, d)?;
+        r.head(hd, &self.h, if verify { n } else { 1 }, self.c.vocab)?;
+        r.finish()
+    }
+
+    /// Start a tensor-parallel forward of `n` tokens at `pos` (see `forward`): write the input rows and find
+    /// or record the graph. Returns its number of submissions; the caller submits and waits for each in turn
+    /// and writes the all-reduced total between them.
+    pub fn tp_prepare(&mut self, x: &[f32], pos: usize, n: usize, verify: bool, dump: bool) -> Result<usize> {
+        let d = self.c.d;
+        ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
+        ensure!(pos + n <= self.context, "context exhausted");
+        ensure!(x.len() == n * d, "hidden state length mismatch");
+        let verify = verify && n > 1;
+        ensure!(!verify || n <= self.verify, "verification batch exceeds the configured {} columns", self.verify);
+        self.input.write(bytemuck::cast_slice(x))?;
+        self.params_host.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
+        let key = (n, partitions(pos, n), dump, verify);
+        self.tick += 1;
+        if let Some(e) = self.graphs.get_mut(&key) {
+            e.1 = self.tick;
+        } else {
+            if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
+                let victim = *self.graphs.iter().min_by_key(|e| e.1 .1).unwrap().0;
+                self.graphs.remove(&victim);
+            }
+            let graph = self.record(n, key.1, key.2, key.3)?;
+            self.graphs.insert(key, (graph, self.tick));
+        }
+        self.last_n = n;
+        self.verified = verify;
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
+        tp.current = Some(key);
+        // Both timelines only grow; this forward's segment values start above everything signalled so far.
+        tp.base = tp.done_value.max(tp.released) + 1;
+        Ok(self.graphs[&key].0.cmds.len())
+    }
+
+    /// Submit segment `i` of the forward in progress, to run as soon as the GPU is free.
+    pub fn tp_submit(&mut self, i: usize) -> Result<()> {
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
+        let graph = &self.graphs[&tp.current.context("no forward in progress")?].0;
+        tp.done_value = tp.base + i as u64 + 1;
+        self.gpu.submit(graph.cmds[i], None, Some((tp.done, tp.done_value)), vk::Fence::null())
+    }
+
+    /// Submit every segment of the forward in progress ahead, each waiting for `tp_release`.
+    pub fn tp_submit_all(&mut self) -> Result<()> {
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
+        let graph = &self.graphs[&tp.current.context("no forward in progress")?].0;
+        for (i, &cmd) in graph.cmds.iter().enumerate() {
+            let at = tp.base + i as u64;
+            self.gpu.submit(cmd, Some((tp.release, at)), Some((tp.done, at + 1)), vk::Fence::null())?;
+        }
+        tp.done_value = tp.base + graph.cmds.len() as u64;
+        Ok(())
+    }
+
+    /// Let segment `i` (submitted ahead) and everything before it run.
+    pub fn tp_release(&mut self, i: usize) -> Result<()> {
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
+        let value = tp.base + i as u64;
+        if value > tp.released {
+            tp.released = value;
+            unsafe { self.gpu.dev.signal_semaphore(&vk::SemaphoreSignalInfo::default().semaphore(tp.release).value(value))? };
+        }
+        Ok(())
+    }
+
+    /// Release every segment submitted ahead, e.g. after a failed exchange, so the queue drains.
+    pub fn tp_release_all(&mut self) -> Result<()> {
+        let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        let last = tp.done_value.saturating_sub(tp.base + 1) as usize;
+        self.tp_release(last)
+    }
+
+    /// Spin until segment `i` of the forward in progress has finished.
+    pub fn tp_wait(&self, i: usize) -> Result<()> {
+        let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        let value = tp.base + i as u64 + 1;
+        let start = std::time::Instant::now();
+        while unsafe { self.gpu.dev.get_semaphore_counter_value(tp.done)? } < value {
+            ensure!(start.elapsed().as_secs() < 60, "GPU segment did not finish");
+            std::hint::spin_loop();
+        }
+        Ok(())
+    }
+
+    /// This rank's partial projection of the `n` tokens of the latest segment.
+    pub fn tp_part(&self, n: usize) -> &[f32] {
+        let part = &self.tp.as_ref().unwrap().part;
+        unsafe { std::slice::from_raw_parts(part.ptr as *const f32, n * self.c.d) }
+    }
+
+    /// The all-reduced total for the next segment.
+    pub fn tp_set_total(&self, total: &[f32]) {
+        let t = &self.tp.as_ref().unwrap().total;
+        assert!(total.len() * 4 <= t.size);
+        unsafe { std::ptr::copy_nonoverlapping(total.as_ptr(), t.ptr as *mut f32, total.len()) };
+    }
+
+    /// Top candidates of this rank's vocabulary rows after the last segment, with model token ids.
+    pub fn tp_top(&self, cols: usize) -> Result<Vec<Vec<(f32, u32)>>> {
+        let start = self.vocab_start as u32;
+        Ok(self.read_top(cols)?.into_iter().map(|c| c.into_iter().map(|(s, id)| (s, id + start)).collect()).collect())
+    }
+
+    /// The captures of the latest forward (whole tensors only).
+    pub fn tp_captures(&self, m: &mut Captures) -> Result<()> {
+        let tp = self.tp.as_ref().context("not a tensor-parallel rank")?;
+        let graph = &self.graphs[&tp.current.context("no forward in progress")?].0;
+        for (name, host, width) in &graph.captures {
+            m.insert(name.clone(), bytemuck::cast_slice(&host.read(width * 4)?).to_vec());
+        }
+        Ok(())
     }
 
     /// One chained MTP draft step; the first takes the target's pending row, later ones the last output.
@@ -827,6 +1174,7 @@ impl GpuStage {
         dump: Option<&mut Captures>,
     ) -> Result<Output> {
         let d = self.c.d;
+        ensure!(self.tp.is_none(), "tensor-parallel ranks run through tp::TpGroup");
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(pos + n <= self.context, "context exhausted");
         ensure!(x.len() == n * d, "hidden state length mismatch");
@@ -984,7 +1332,11 @@ impl Drop for GpuStage {
             if !cmds.is_empty() {
                 self.gpu.dev.free_command_buffers(self.gpu.pool, &cmds);
             }
-            self.gpu.dev.destroy_fence(self.fence, None)
+            self.gpu.dev.destroy_fence(self.fence, None);
+            if let Some(tp) = &self.tp {
+                self.gpu.dev.destroy_semaphore(tp.done, None);
+                self.gpu.dev.destroy_semaphore(tp.release, None);
+            }
         };
     }
 }
