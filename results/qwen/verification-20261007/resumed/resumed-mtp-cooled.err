@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4 + MTP, 4485.9 MiB allocated
+GPU1: rank 1 of 4 + MTP, 4485.9 MiB allocated
+[clocks] 281 samples card0 (02:00.0) sclk/mclk: 850/1370 x230 450/1370 x11 300/150 x40  max 67C card1 (06:00.0) sclk/mclk: 850/1370 x217 300/1370 x1 450/1370 x9 300/150 x54  max 66C  log=results/clocks/resumed-mtp-cooled.txt

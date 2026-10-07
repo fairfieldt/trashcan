@@ -1,0 +1,1 @@
+{"name": "sustained", "max_tokens": 2048, "messages": [{"role": "user", "content": "Write a detailed Python tutorial covering iterators, generators, context managers, exceptions, type hints, and async programming. Give examples for each and discuss common mistakes."}]}

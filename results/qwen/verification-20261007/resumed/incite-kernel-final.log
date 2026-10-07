@@ -1,0 +1,11 @@
+2026-10-07T09:39:35-07:00 incite systemd-journald[497]: Received SIGTERM from PID 1 (systemd).
+2026-10-07T09:39:35-07:00 incite systemd[1]: Stopping systemd-journald.service - Journal Service...
+2026-10-07T09:39:35-07:00 incite systemd[1]: systemd-journald.service: Deactivated successfully.
+2026-10-07T09:39:35-07:00 incite systemd[1]: Stopped systemd-journald.service - Journal Service.
+2026-10-07T09:39:35-07:00 incite systemd[1]: systemd-journald.service: Consumed 22.191s CPU time, 82.6M memory peak, 548K memory swap peak.
+2026-10-07T09:39:35-07:00 incite systemd[1]: Starting systemd-journald.service - Journal Service...
+2026-10-07T09:39:35-07:00 incite systemd-journald[2518230]: Collecting audit messages is disabled.
+2026-10-07T09:39:35-07:00 incite systemd[1]: Started systemd-journald.service - Journal Service.
+2026-10-07T09:39:36-07:00 incite unknown: CRASHCAPTURE_TEST_incite
+active
+38f2ea0a-69e7-4c43-98ce-df86d1f225ec
