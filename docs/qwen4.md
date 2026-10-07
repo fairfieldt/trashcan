@@ -134,7 +134,7 @@ share of positions where both pick the same top token
 
 `tools/qwen4_budget.py` models what `gpu.rs` allocates per stage (the mixers' matrices, including the fused copy
 used for decode, the f32 router, DeltaNet or QSA matrices and state, the stacked experts, K/V and indexer caches,
-batch scratch, the head) and matches all 14 stages measured on incite within 0.2 MiB (`--check`). Stages print
+batch scratch, the head) and matches all 15 stages measured on incite within 0.2 MiB (`--check`). Stages print
 their device-local heap usage and refuse to run past the driver's budget, because RADV silently places the excess
 in system memory (a 6480 MiB stage ran its head 18x slower that way).
 
@@ -158,7 +158,7 @@ IQ3_XXS gate/up with IQ4_NL down is 106 MiB over (`--lean`, 128-token chunks). F
 |---|---|---|
 | IQ4_XS/IQ4_NL experts | 8583 MiB: does not fit | KLD 0.036 |
 | IQ2_XXS gate/up, MXFP4 down | 5802 MiB: fits by 86 | KLD 0.21 or worse; no GPU kernels for either format yet |
-| IQ4 experts in host RAM, ~63% of each layer's experts cached in VRAM | fits by construction | KLD 0.036 |
+| IQ4 experts in host RAM, ~63% of each layer's experts cached in VRAM (not implemented) | fits by construction | KLD 0.036 |
 
 `--head-split N` splits the head by vocabulary rows over the last N stages. The stage that ends the model scores its
 rows and returns the final hidden state with its candidates; every other stage scores its rows on that state as the
@@ -170,13 +170,13 @@ slice). A Mac's GPUs score at the same time (two twelfths: 1.12 ms together), so
 about 6.7 ms per token against 4.6 ms for one GPU holding the whole head.
 
 **Recommendation.** Six Macs: IQ4_XS gate/up and IQ4_NL down for routed and shared experts, Q8_0 dense matrices,
-Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of
-it the n-gram table). At 32K context it runs with `--head-split 12 --batch 128`; the `--lean` savings would add margin.
-Four Macs:
-the same weights, with each Mac's experts (15.3 GiB) in host RAM and a static VRAM cache of each layer's most used
-~63%, which covers about 85% of routed activations by the imatrix counts (`expert_popularity.py` in the quant
-results); misses (about 3.5 MB per layer per token) are uploaded at the measured 6.5 GB/s. The 2-bit in-VRAM
-alternative fits only with the same savings and loses much more quality.
+Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of it
+the n-gram table). At 32K context every GPU fits with `--head-split 12 --batch 128` (the first GPU's stage was
+loaded and run on incite); the `--lean` savings would add margin. Four Macs (not implemented): the same weights,
+with each Mac's experts (15.3 GiB) in host RAM and a static VRAM cache of each layer's most used ~63%, which covers
+about 85% of routed activations by the imatrix counts (`expert_popularity.py` in the quant results); misses (about
+3.5 MB per layer per token) are uploaded at the measured 6.5 GB/s. The 2-bit in-VRAM alternative fits only with the
+same savings and loses much more quality.
 
 ## GPU stages (`engine/src/qwen4/gpu.rs`)
 
