@@ -386,7 +386,10 @@ pub fn bench(
             "multivec4x3",
             "multivec4_reference",
             "headvec",
-            "gemm"
+            "gemm",
+            "qwen_q4c2",
+            "qwen_q4c3",
+            "qwen_q4c4"
         ]
         .contains(&shader),
         "unsupported kernel"
@@ -442,12 +445,15 @@ pub fn bench(
             | "multivec4x2"
             | "multivec4x3"
             | "multivec4_reference"
-    ) {
+    ) || shader.starts_with("qwen_q4c")
+    {
         16
     } else {
         4
     };
-    let group_cols = if shader == "gemm" {
+    let group_cols = if let Some(c) = shader.strip_prefix("qwen_q4c") {
+        c[..1].parse::<usize>()?
+    } else if shader == "gemm" {
         64
     } else if matches!(shader, "multivec4" | "multivec4_reference") {
         4
@@ -556,7 +562,20 @@ pub fn bench(
         // its cached weight descriptors must never see a recycled VkBuffer handle.
         let reference = d.buffer(n * batch * 4, false, false, None)?;
         let compare_bits = (2..=8).contains(&batch) && shader != "gemm";
-        if compare_bits {
+        if shader.starts_with("qwen_q4c") {
+            // Each column must match the one-column decode kernel for this shape bit for bit.
+            let single = crate::vulkan::q4_decode_shader(n, k);
+            let cmd = d.begin()?;
+            for col in 0..batch {
+                let mut rp = p;
+                rp.ptr[1] = x.address + (col * k * 4) as u64;
+                rp.ptr[2] = reference.address + (col * n * 4) as u64;
+                d.dispatch_matrix(cmd, single, rp, n.div_ceil(16) as u32, 1, &w)?;
+            }
+            d.finish(cmd)?;
+            d.run(cmd)?;
+            ensure!(result == reference.download()?, "matrix output bits differ from {single} per column: GPU {gpu}, {tensor}, batch {batch}, {shader}");
+        } else if compare_bits {
             let mut rp = p;
             rp.ptr[2] = reference.address;
             let cmd = d.begin()?;

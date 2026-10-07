@@ -365,6 +365,18 @@ impl Device {
                 "qwen_swiglu",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_swiglu.spv")).as_slice(),
             ),
+            (
+                "qwen_q4c2",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_q4c2.spv")).as_slice(),
+            ),
+            (
+                "qwen_q4c3",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_q4c3.spv")).as_slice(),
+            ),
+            (
+                "qwen_q4c4",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_q4c4.spv")).as_slice(),
+            ),
         ] {
             ensure!(
                 !bytes.is_empty(),

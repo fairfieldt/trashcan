@@ -20,7 +20,7 @@ Write a Python function that reads a CSV file and returns rows where the age col
 for d in "${depths[@]}"; do
     args=(qwen-chat "$model" --temperature "${TEMP:-0}" --max-tokens 128 --checkpoints 0 "$@")
     [ "$d" -gt 0 ] && args+=(--mtp "$mtp" --draft-tokens "$d")
-    printf '%s\n' "$prompts" | sudo -n python3 "$HOME/trashcan/scripts/latency-run.py" bin/trashcan "${args[@]}" \
+    printf '%s\n' "$prompts" | sudo -n python3 "$HOME/trashcan/scripts/latency-run.py" "${BIN:-bin/trashcan}" "${args[@]}" \
         > "$out/d$d.out" 2> "$out/d$d.log"
     grep -E "decode|MTP" "$out/d$d.log" | sed "s/^/d$d /"
 done

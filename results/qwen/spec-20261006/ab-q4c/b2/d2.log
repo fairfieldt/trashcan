@@ -1,0 +1,12 @@
+CPU latency request: 0 us, scoped to this command
+plan: [[(0, 21), (21, 32)]]
+GPU0: layers 0..21
+GPU0: 3148.4 MiB allocated
+GPU1: layers 21..32 + head + MTP
+GPU1: 3151.6 MiB allocated
+prefill: 26 tokens (0 reused), 40.80 tok/s; decode: 128 tokens, 34.51 tok/s
+MTP: {"acceptance":0.6727272727272727,"accepted":74,"accepted_at":[42,32],"draft_ms_per_round":7.8718097999999985,"offered_at":[55,55],"proposed":110,"rollback_ms_per_round":0.4188908909090909,"rounds":55,"tokens_per_round":2.3454545454545452,"verify_ms_per_round":59.119944636363634}
+prefill: 26 tokens (0 reused), 43.91 tok/s; decode: 128 tokens, 30.60 tok/s
+MTP: {"acceptance":0.6025641025641025,"accepted":141,"accepted_at":[82,59],"draft_ms_per_round":7.891878555555556,"offered_at":[117,117],"proposed":234,"rollback_ms_per_round":0.5011142820512821,"rounds":117,"tokens_per_round":2.2051282051282053,"verify_ms_per_round":59.0339131025641}
+prefill: 40 tokens (0 reused), 61.97 tok/s; decode: 128 tokens, 41.60 tok/s
+MTP: {"acceptance":0.6840490797546013,"accepted":223,"accepted_at":[125,98],"draft_ms_per_round":7.875994061349695,"offered_at":[163,163],"proposed":326,"rollback_ms_per_round":0.401448809815951,"rounds":163,"tokens_per_round":2.3680981595092025,"verify_ms_per_round":58.9927591840491}

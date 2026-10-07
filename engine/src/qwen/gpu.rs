@@ -282,11 +282,14 @@ impl<'a> Rec<'a> {
         u[1] = k as u32;
         u[3] = (rows * k / 32) as u32;
         let n = self.n;
+        // Two to four columns use the decode kernels' formulation (qwen_q4c*): each column matches a
+        // one-column decode bit for bit, as fast as multivec or slightly faster on Qwen shapes.
         let (shader, gx, gy) = match n {
             1 => (q4_decode_shader(rows, k), rows.div_ceil(16), 1),
-            2 => ("multivec4x2", rows.div_ceil(16), 1),
-            3 => ("multivec4x3", rows.div_ceil(16), 1),
-            4..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
+            2 => ("qwen_q4c2", rows.div_ceil(16), 1),
+            3 => ("qwen_q4c3", rows.div_ceil(16), 1),
+            4 => ("qwen_q4c4", rows.div_ceil(16), 1),
+            5..=8 => ("multivec4", rows.div_ceil(16), n.div_ceil(4)),
             _ => ("gemm", rows.div_ceil(64), n.div_ceil(64)),
         };
         self.s.gpu.dispatch_matrix(

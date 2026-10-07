@@ -61,8 +61,9 @@ uses the same recipe without an importance matrix, from `unsloth/Qwen3.5-9B-GGUF
 
 ## GPU stages (`engine/src/qwen/gpu.rs`)
 
-One command buffer per batch size, replayed with a new position. Q4_0 projections reuse the Gemma kernels
-(`gemm` above 8 columns, `multivec4*` for 2-8, `matvecq4*` for decode); the head uses `headvec`, `topk` and
+One command buffer per batch shape, replayed with a new position. Q4_0 projections reuse the Gemma kernels
+(`gemm` above 8 columns, `multivec4` for 5-8, `matvecq4*` for decode); verification widths 2-4 use
+`qwen_q4c2/3/4`. The head uses `headvec` (or the multi-column kernels for verification), `topk` and
 `merge` over 243 vocabulary chunks. New kernels:
 
 | kernel | work |
@@ -75,6 +76,7 @@ One command buffer per batch size, replayed with a new position. Q4_0 projection
 | `qwen_qk` | per-head RMS norm, partial NeoX rotation, scale, f16 cache store |
 | `qwen_gate` | `sigmoid(gate)` on the attention output |
 | `qwen_swiglu` | SwiGLU |
+| `qwen_q4c2/3/4` | 2-4 columns of a Q4_0 projection in the decode kernels' formulation: each row's nibbles are converted once and shared, and every column keeps `matvecq4`'s bias, FMA chain and reduction, so it equals a one-column decode bit for bit |
 
 Attention uses the existing scalar kernels: split-K decode (`attention_partial*` + merge) for up to 8
 columns and the unsplit `attention` for prefill. The tiled prefill kernels assume a power-of-two query
@@ -103,7 +105,8 @@ The chain protocol carries both (`net.rs`): `forward` has a `verify` flag and th
 `trashcan qwen-check MODEL [--mtp FILE]` checks all of this against ordinary greedy decoding after a long
 prompt: the continuation after restoring a checkpoint must be bitwise identical; verification batches of
 2..=verify tokens of that continuation, each followed by a rollback to a varying prefix, must rank the
-same top token in every column; speculative decoding must be token-identical.
+same top token in every column; speculative decoding must be token-identical. With the `qwen_q4c` kernels
+every column's top score also equals serial decoding's bit for bit in these checks.
 
 ## Machines
 

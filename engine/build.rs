@@ -43,6 +43,9 @@ fn main() {
         "qwen_qk",
         "qwen_gate",
         "qwen_swiglu",
+        "qwen_q4c2",
+        "qwen_q4c3",
+        "qwen_q4c4",
     ] {
         let dest = out.join(format!("{name}.spv"));
         if available {
