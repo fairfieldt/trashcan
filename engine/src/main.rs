@@ -220,6 +220,24 @@ enum Cmd {
         #[arg(long, default_value_t = 128)]
         tg: usize,
     },
+    /// Time Q4_0 GEMM kernels at ROWSxK shapes (random weights) and check each against `gemm` bit for bit.
+    QwenGemmBench {
+        /// Shapes as ROWSxK, e.g. 4352x5120,5120x4352.
+        #[arg(long, value_delimiter = ',', default_value = "4352x5120,5120x4352,5120x1536,2560x5120,1536x5120,3072x5120")]
+        shapes: Vec<String>,
+        /// Token columns.
+        #[arg(long, default_value_t = 256)]
+        n: usize,
+        /// Kernels to compare; the first is the reference.
+        #[arg(long, value_delimiter = ',', default_value = "gemm")]
+        kernels: Vec<String>,
+        #[arg(long, default_value_t = 20)]
+        iterations: u32,
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 500)]
+        warmup_ms: u64,
+    },
     /// Time decode, verification batches, rollback and MTP drafts.
     QwenSpecBench {
         model: PathBuf,
@@ -883,6 +901,16 @@ fn main() -> Result<()> {
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;
             println!("{}", qwen::chat::bench(&mut chain, &t, pp, tg, spec.as_mut())?);
             Ok(())
+        }
+        Cmd::QwenGemmBench { shapes, n, kernels, iterations, gpu, warmup_ms } => {
+            let shapes = shapes
+                .iter()
+                .map(|s| {
+                    let (r, k) = s.split_once('x').ok_or_else(|| anyhow::anyhow!("shape {s} is not ROWSxK"))?;
+                    Ok((r.parse()?, k.parse()?))
+                })
+                .collect::<Result<Vec<(usize, usize)>>>()?;
+            micro::gemm(&shapes, n, &kernels, iterations, gpu, warmup_ms)
         }
         Cmd::QwenSpecBench { model, run, tokens, reps } => {
             let mut chain = run.chain(&model)?;
