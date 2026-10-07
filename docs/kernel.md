@@ -109,6 +109,12 @@ shuts down cleanly either way.
 
   `index` in each directory gives the `/dev/tbstreamX` number. Measured: 25 us round trip for 64 B, 9.6-9.7 Gb/s one
   way per cable, 15.9 Gb/s with one stream on each of three cables at once (`results/kernel/tb-loopback-20261006/`).
+- USB4STREAM between two Macs (`results/qwen/tp4-viability-20261006/`, whose `tbstream-up.sh` creates one stream per
+  cable): a 64 B exchange takes 13.5 us and a 20 KiB one 21.8 us over three streams, against 38 and 71-116 us over
+  TCP. Without Tx flow control (patch 0005) a sender can overrun the other end's 256-frame receive ring, which drops
+  data and logs `tbstream: RX CRC error`, so keep less than the ring in flight (the engine's lanes move at most
+  256 KiB per stream per round). Frames sent before the other end opens its stream pile up and arrive as a burst
+  later. Closing a stream sends a CLOSE frame; the other end then reads end of file until it reopens.
 - Known upstream bug: removing a stream directory after a failed start warns in `ida_free` from
   `tbstream_dev_release` (fix drafted in `kernel/upstream/usb4stream-falcon-ridge/`, not applied locally).
 

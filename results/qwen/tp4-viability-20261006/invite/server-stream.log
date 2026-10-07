@@ -1,0 +1,20 @@
+gpuq: waiting for /home/fairfieldt/trashcan-exp/.lock, held by a job outside gpuq
+CPU latency request: 0 us, scoped to this command
+allreduce: configuration done, token_ms {"max":5.12,"mean":2.29,"p50":1.85,"p90":3.09,"p99":5.12}
+allreduce: configuration done, token_ms {"max":5.37,"mean":4.13,"p50":4.05,"p90":4.3,"p99":5.37}
+allreduce: configuration done, token_ms {"max":7.62,"mean":7.48,"p50":7.48,"p90":7.55,"p99":7.62}
+allreduce: configuration done, token_ms {"max":13.97,"mean":13.64,"p50":13.63,"p90":13.8,"p99":13.97}
+allreduce: configuration done, token_ms {"max":747.06,"mean":739.19,"p50":740.52,"p90":747.06,"p99":747.06}
+allreduce: configuration done, token_ms {"max":6.12,"mean":5.88,"p50":5.88,"p90":5.9,"p99":6.12}
+allreduce: configuration done, token_ms {"max":46.13,"mean":46.04,"p50":46.04,"p90":46.09,"p99":46.13}
+allreduce: configuration done, token_ms {"max":45.46,"mean":21.81,"p50":16.34,"p90":38.53,"p99":45.46}
+allreduce: configuration done, token_ms {"max":15.54,"mean":15.08,"p50":15.05,"p90":15.36,"p99":15.54}
+allreduce: configuration done, token_ms {"max":17.16,"mean":13.84,"p50":13.57,"p90":14.45,"p99":17.16}
+allreduce: configuration done, token_ms {"max":13.67,"mean":12.56,"p50":12.5,"p90":12.59,"p99":13.67}
+allreduce: configuration done, token_ms {"max":53.96,"mean":43.99,"p50":43.23,"p90":51.07,"p99":53.96}
+allreduce: configuration done, token_ms {"max":39.55,"mean":38.87,"p50":38.77,"p90":39.31,"p99":39.55}
+allreduce: configuration done, token_ms {"max":40.11,"mean":37.63,"p50":37.32,"p90":38.46,"p99":40.11}
+allreduce: configuration done, token_ms {"max":50.06,"mean":40.12,"p50":39.39,"p90":42.03,"p99":50.06}
+allreduce: configuration done, token_ms {"max":1093.79,"mean":1093.76,"p50":1093.79,"p90":1093.79,"p99":1093.79}
+allreduce: configuration done, token_ms {"max":2817.36,"mean":2816.87,"p50":2817.36,"p90":2817.36,"p99":2817.36}
+[clocks] 420 samples card0 (02:00.0) sclk/mclk: 850/1370 x120 300/150 x300  max 61C card1 (06:00.0) sclk/mclk: 850/1370 x120 300/150 x300  max 65C  log=/home/fairfieldt/trashcan-exp/xmac/results/clocks/20261006T201159-126931.txt

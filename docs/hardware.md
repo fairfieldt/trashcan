@@ -7,7 +7,7 @@ models are listed in `../homelab/modelstore/manifest.yaml` and copied to `~/mode
 
 | | |
 |---|---|
-| CPU | Xeon E5-2697 v2 (Ivy Bridge-EP), 12C/24T, 2.7 GHz, AVX only (no AVX2/FMA/F16C) |
+| CPU | Xeon E5-2697 v2 (Ivy Bridge-EP), 12C/24T, 2.7 GHz, AVX and F16C (no AVX2/FMA) |
 | RAM | 64 GB DDR3 (62 GiB usable), 78 GB swap |
 | OS | Debian 13, kernel `7.2.9-p2p` (default since 2026-10-06, see [kernel.md](kernel.md)); `6.12.111-p2p` and stock `6.12.111+deb13-amd64` remain installed |
 | GPU driver | amdgpu with `radeon.si_support=0 amdgpu.si_support=1`; the D700 fixes are built into the `-p2p` kernels |

@@ -1,0 +1,13 @@
+CPU latency request: 0 us, scoped to this command
+allreduce: serving on 0.0.0.0:7071
+allreduce: configuration done, token_ms {"max":5.7,"mean":5.39,"p50":5.35,"p90":5.55,"p99":5.7}
+allreduce: configuration done, token_ms {"max":45.89,"mean":45.74,"p50":45.75,"p90":45.83,"p99":45.89}
+allreduce: configuration done, token_ms {"max":25.59,"mean":25.25,"p50":25.42,"p90":25.49,"p99":25.59}
+allreduce: configuration done, token_ms {"max":24.47,"mean":24.2,"p50":24.2,"p90":24.42,"p99":24.47}
+allreduce: configuration done, token_ms {"max":21.91,"mean":19.51,"p50":18.9,"p90":21.83,"p99":21.91}
+allreduce: configuration done, token_ms {"max":18.38,"mean":18.05,"p50":18.06,"p90":18.19,"p99":18.38}
+allreduce: configuration done, token_ms {"max":49.79,"mean":49.33,"p50":49.37,"p90":49.52,"p99":49.79}
+allreduce: configuration done, token_ms {"max":50.52,"mean":48.36,"p50":48.36,"p90":48.42,"p99":50.52}
+allreduce: configuration done, token_ms {"max":45.94,"mean":43.77,"p50":43.05,"p90":45.69,"p99":45.94}
+allreduce: configuration done, token_ms {"max":42.53,"mean":41.7,"p50":41.58,"p90":41.97,"p99":42.53}
+[clocks] 215 samples card0 (02:00.0) sclk/mclk: 850/1370 x66 300/150 x149  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x66 300/150 x149  max 67C  log=/home/fairfieldt/trashcan-exp/xmac/results/clocks/20261006T201349-133754.txt

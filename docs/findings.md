@@ -2,6 +2,26 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-06: tensor parallelism across incite and invite is viable for decode
+
+`trashcan allreduce-bench` runs 128 all-reduces per token on all four GPUs of both Macs, as a 4-way
+tensor-parallel Qwen3.8-27B decode would, and checks every element of every total on every GPU
+(`results/qwen/tp4-viability-20261006/`). 0 mismatches in every run; 850/1370 MHz throughout.
+
+- With 32 MiB of VRAM streamed per GPU and segment (188 µs), a token takes 37.3 ms over three USB4STREAM links,
+  41.6 ms over three TCP links and 32.1 ms with two GPUs on one Mac: about 104, 138 and 62 µs per all-reduce on top
+  of the GPU work. One, two or three cables give 37.1-37.5 ms; skew between the GPUs dominates the exchange.
+- That beats TP2 inside each Mac plus a two-stage pipeline (about 52 ms projected at the same streaming rate) and
+  PP4 (97 ms). At today's Qwen decode rate the projections are 47, 72 and 136 ms.
+- A 20 KiB exchange between the Macs takes 21.8 µs over three USB4STREAM links and 71-116 µs over TCP
+  (`thunderbolt_net` at a 32 µs throttle; more TCP links do not help).
+- USB4STREAM has no Tx flow control here (patch 0005), so a sender can overrun the receiver's 256-frame ring: the
+  first 10 MiB exchange lost data with `tbstream: RX CRC error` on invite. Bounding in-flight data to 256 KiB per
+  stream fixed it. Frames sent before the other end opens pile up and burst later, which broke a symmetric
+  handshake; only the starting side repeats its hello now.
+- Prefill all-reduces (10 MiB) cost 21.6 ms each: 7.1 ms GPU writes to host memory (about 1.5 GB/s), 7.4 ms
+  exchange, 4.0 ms CPU sum, 3.2 ms copy back. Not yet competitive with a pipelined prefill.
+
 ## 2026-10-06: second node (invite) and Thunderbolt between Macs
 
 invite, a second Mac Pro 6,1 with the same CPU, memory and D700s, was set up with `nodes/macpro/provision.sh` and

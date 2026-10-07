@@ -1,0 +1,2 @@
+CPU latency request: 0 us, scoped to this command
+[clocks] 25 samples card0 (02:00.0) sclk/mclk: 300/150 x25  max 44C card1 (06:00.0) sclk/mclk: 300/150 x25  max 44C  log=/home/fairfieldt/trashcan-exp/xmac/results/clocks/20261006T201200-735109.txt

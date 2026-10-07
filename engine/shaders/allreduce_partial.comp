@@ -1,0 +1,7 @@
+#version 460
+#include "common.glsl"
+// All-reduce benchmark: rank p.m's partial for step p.k, written to a (host memory). The values are small
+// integers, so every sum over ranks is exact in f32.
+layout(local_size_x=256) in;
+float pattern(uint rank,uint step,uint i){return float(int((i*7u+step*13u+rank*29u)%61u)-30);}
+void main(){uint i=gl_GlobalInvocationID.x;if(i<p.n)a_f.v[i]=pattern(p.m,p.k,i);}

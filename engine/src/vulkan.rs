@@ -409,6 +409,10 @@ impl Device {
             ("qwen4_q8_gemm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_gemm.spv")).as_slice()),
             ("qwen4_mix_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down.spv")).as_slice()),
             ("qwen4_mix_up", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_up.spv")).as_slice()),
+            // Cross-machine all-reduce benchmark
+            ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
+            ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
+            ("allreduce_work", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_work.spv")).as_slice()),
         ] {
             ensure!(
                 !bytes.is_empty(),

@@ -1,0 +1,10 @@
+#version 460
+#include "common.glsl"
+// All-reduce benchmark: check the total b (host memory) of step p.k against the sum of ranks 0..p.m. Mismatches
+// count in c_u[0] and the lowest mismatching index goes to c_u[1]; a accumulates the total like a residual.
+layout(local_size_x=256) in;
+float pattern(uint rank,uint step,uint i){return float(int((i*7u+step*13u+rank*29u)%61u)-30);}
+void main(){uint i=gl_GlobalInvocationID.x;if(i>=p.n)return;
+float e=0.0;for(uint r=0u;r<p.m;r++)e+=pattern(r,p.k,i);
+float v=b_f.v[i];if(v!=e){atomicAdd(c_u.v[0],1u);atomicMin(c_u.v[1],i);}
+a_f.v[i]+=v;}

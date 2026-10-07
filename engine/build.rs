@@ -75,6 +75,10 @@ fn main() {
         "qwen4_q8_gemm",
         "qwen4_mix_down",
         "qwen4_mix_up",
+        // Cross-machine all-reduce benchmark
+        "allreduce_partial",
+        "allreduce_check",
+        "allreduce_work",
     ] {
         let dest = out.join(format!("{name}.spv"));
         if available {

@@ -137,6 +137,18 @@ tokens and activations exactly, including streamed 4- and 5-token prompt chunks.
 Within a machine, the two GPUs hand off through host memory (one fence wait per stage per forward). P2P
 pushes with cross-device semaphores, as in the Gemma tensor-parallel path, are the obvious next step.
 
+### Tensor parallelism across Macs (TP4)
+
+With every GPU holding a quarter of every layer, all four GPUs stream their 4.33 GB per token at once instead
+of two Macs taking turns, and a token needs 128 all-reduces across the Thunderbolt link (two per layer).
+`trashcan allreduce-bench` measured one at about 104 µs over USB4STREAM and 138 µs over TCP, every value
+checked ([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)). A decode token with
+32 MiB streamed per GPU and segment took 37.3 ms, against about 52 ms projected for TP2 inside each Mac plus a
+two-stage pipeline at the same streaming rate. TP4 is the target layout for the 27B on two Macs. `link.rs`
+carries the all-reduces over 1-3 lanes per Mac pair (TCP connections or USB4STREAM devices); the cable count
+barely changes decode. Prefill all-reduces (10 MiB per 512-token chunk) still cost 21.6 ms each, about 2.8 s per
+chunk, and need SDMA copies, receives straight into GPU-visible memory and f16 partials.
+
 ## Speculative decoding with the MTP layer
 
 Qwen3.5 and Qwen3.8 ship one MTP (nextn) layer: `eh_proj` over `[RMS(embed(token)) * enorm |

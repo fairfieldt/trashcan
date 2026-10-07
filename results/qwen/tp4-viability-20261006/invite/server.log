@@ -1,0 +1,22 @@
+[lock acquired after 0s]
+CPU latency request: 0 us, scoped to this command
+allreduce: serving on 0.0.0.0:7071
+allreduce: session done, token_ms {"max":31.59,"mean":26.42,"p50":25.59,"p90":31.49,"p99":31.59}
+allreduce: session done, token_ms {"max":34.02,"mean":25.21,"p50":23.61,"p90":33.66,"p99":34.02}
+allreduce: session done, token_ms {"max":25.59,"mean":24.93,"p50":25.18,"p90":25.36,"p99":25.59}
+allreduce: session done, token_ms {"max":34.55,"mean":26.77,"p50":25.36,"p90":34.2,"p99":34.55}
+allreduce: session done, token_ms {"max":23.78,"mean":22.34,"p50":22.14,"p90":23.33,"p99":23.78}
+allreduce: session done, token_ms {"max":27.12,"mean":25.52,"p50":25.93,"p90":26.66,"p99":27.12}
+allreduce: session done, token_ms {"max":6.25,"mean":5.53,"p50":5.63,"p90":5.88,"p99":6.25}
+allreduce: session done, token_ms {"max":10.77,"mean":8.53,"p50":8.19,"p90":9.71,"p99":10.77}
+allreduce: session done, token_ms {"max":15.33,"mean":12.31,"p50":11.62,"p90":14.87,"p99":15.33}
+allreduce: session done, token_ms {"max":17.49,"mean":14.38,"p50":12.84,"p90":17.32,"p99":17.49}
+allreduce: session done, token_ms {"max":29.66,"mean":27.78,"p50":28.05,"p90":28.94,"p99":29.66}
+allreduce: session done, token_ms {"max":5.12,"mean":4.68,"p50":4.76,"p90":5.03,"p99":5.12}
+allreduce: session done, token_ms {"max":6.37,"mean":5.55,"p50":5.82,"p90":6.23,"p99":6.37}
+allreduce: session done, token_ms {"max":8.53,"mean":8.21,"p50":8.19,"p90":8.22,"p99":8.53}
+allreduce: session done, token_ms {"max":10.97,"mean":10.48,"p50":10.65,"p90":10.88,"p99":10.97}
+allreduce: session done, token_ms {"max":21.17,"mean":20.95,"p50":20.94,"p90":21.02,"p99":21.17}
+allreduce: session done, token_ms {"max":21.49,"mean":21.28,"p50":21.28,"p90":21.43,"p99":21.49}
+allreduce: session done, token_ms {"max":10.59,"mean":9.81,"p50":10.5,"p90":10.51,"p99":10.59}
+allreduce: session done, token_ms {"max":22.55,"mean":22.15,"p50":22.14,"p90":22.44,"p99":22.55}

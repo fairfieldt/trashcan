@@ -1,7 +1,9 @@
+mod allreduce;
 mod assistant;
 mod generation;
 mod gguf;
 mod gpu;
+mod link;
 mod micro;
 mod model;
 mod prefill_micro;
@@ -31,6 +33,8 @@ enum Cmd {
     /// Serve the loaded model through the OpenAI Responses API.
     #[command(alias = "server")]
     Serve(server::Options),
+    /// Time cross-machine all-reduces for tensor parallelism over Thunderbolt, checking every value.
+    AllreduceBench(allreduce::Options),
     /// Show both GPUs and check every Vulkan feature and extension the engine depends on.
     Devices,
     /// Measure a repacked matrix kernel; check small batches against the original GPU kernel and CPU rows.
@@ -479,6 +483,7 @@ fn validate_draft(path: Option<&std::path::PathBuf>, k: usize, batch: usize) -> 
 fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Serve(options) => server::serve(options),
+        Cmd::AllreduceBench(options) => allreduce::run(&options),
         Cmd::Devices => gpu::report(),
         Cmd::MatvecBench {
             model,
