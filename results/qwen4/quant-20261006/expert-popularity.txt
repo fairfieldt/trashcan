@@ -1,0 +1,8 @@
+48 layers, 512 experts, 405949440 activations counted
+top 25% of experts per layer: mean coverage 51.9%, worst layer 45.8%
+top 40% of experts per layer: mean coverage 68.2%, worst layer 62.6%
+top 50% of experts per layer: mean coverage 76.7%, worst layer 71.9%
+top 60% of experts per layer: mean coverage 83.9%, worst layer 79.9%
+top 65% of experts per layer: mean coverage 87.0%, worst layer 83.5%
+top 75% of experts per layer: mean coverage 92.4%, worst layer 89.5%
+top 90% of experts per layer: mean coverage 98.2%, worst layer 96.9%
