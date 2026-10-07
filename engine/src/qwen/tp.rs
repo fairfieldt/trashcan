@@ -76,6 +76,7 @@ impl Phases {
 /// in `mtp` (a GGUF holding it) when given.
 #[allow(clippy::too_many_arguments)]
 fn shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usize, max_batch: usize, verify: usize, mtp: Option<&Path>) -> Result<(Gguf, Config, Vec<GpuStage>)> {
+    ensure!(!gpus.is_empty() && gpus.len() <= LOCAL, "1 to {LOCAL} local GPUs");
     let g = Gguf::open(model)?;
     let c = Config::new(&g)?;
     let m = mtp.map(|p| Gguf::open(p).with_context(|| format!("opening {}", p.display()))).transpose()?;
@@ -85,8 +86,12 @@ fn shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usi
     for (i, &index) in gpus.iter().enumerate() {
         let pd = *all.get(index).with_context(|| format!("GPU {index} not found"))?;
         let split = Split { rank: first + i, ranks };
-        let stage = GpuStage::shard(Device::new(inst.clone(), pd)?, &g, &c, context, max_batch, verify, split, m.as_ref())?;
+        let mut stage = GpuStage::shard(Device::new(inst.clone(), pd)?, &g, &c, context, max_batch, verify, split, m.as_ref())?;
         eprintln!("GPU{index}: rank {} of {ranks}{}, {:.1} MiB allocated", first + i, if m.is_some() { " + MTP" } else { "" }, stage.device_mib());
+        if max_batch > 8 {
+            // A full prompt chunk's graphs, so the first prompt does not wait for them.
+            stage.tp_warm(max_batch, &micro_batches(max_batch, micro_count(max_batch)))?;
+        }
         shards.push(stage);
     }
     Ok((g, c, shards))
@@ -111,6 +116,8 @@ fn host_threads(peer: bool) -> usize {
     std::env::var("TRASHCAN_TP_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(default).clamp(1, 16)
 }
 const PARALLEL_MIN: usize = 1 << 16;
+/// Most local GPUs of a group.
+const LOCAL: usize = 8;
 
 /// A host buffer that several threads write in disjoint ranges.
 #[derive(Clone, Copy)]
@@ -363,7 +370,12 @@ impl TpGroup {
         let threads = if len >= PARALLEL_MIN { self.threads } else { 1 };
         let start = Instant::now();
         let sum = &mut self.sum[..len];
-        let parts: Vec<&[f32]> = self.shards.iter().map(|s| s.tp_part(row, n)).collect();
+        // Fixed arrays rather than vectors: decode runs 128 all-reduces per token.
+        let mut parts: [&[f32]; LOCAL] = [&[]; LOCAL];
+        for (p, s) in parts.iter_mut().zip(&self.shards) {
+            *p = s.tp_part(row, n);
+        }
+        let parts = &parts[..self.shards.len()];
         parallel(sum, threads, |at, out| {
             out.copy_from_slice(&parts[0][at..at + out.len()]);
             for p in &parts[1..] {
@@ -381,14 +393,18 @@ impl TpGroup {
             remote = Some(&self.remote[..len]);
         }
         // Add the other machine's sum and write the total for every local GPU in the same pass.
-        let totals: Vec<Ptr> = self.shards.iter().map(|s| Ptr(s.tp_total(row, n))).collect();
+        let mut totals = [Ptr(std::ptr::null_mut()); LOCAL];
+        for (t, s) in totals.iter_mut().zip(&self.shards) {
+            *t = Ptr(s.tp_total(row, n));
+        }
+        let totals = &totals[..self.shards.len()];
         parallel(sum, threads, |at, out| {
             if let Some(r) = remote {
                 for (a, b) in out.iter_mut().zip(&r[at..]) {
                     *a += b;
                 }
             }
-            for t in &totals {
+            for t in totals {
                 unsafe { std::ptr::copy_nonoverlapping(out.as_ptr(), t.0.add(at), out.len()) };
             }
         });

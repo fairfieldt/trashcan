@@ -1044,18 +1044,26 @@ impl Device {
         }
         Ok(())
     }
-    /// Submit `cmd` to `queue`, waiting for every timeline value in `waits` and signalling those in `signals`.
+    /// Submit `cmd` to `queue`, waiting for every timeline value in `waits` and signalling those in `signals`
+    /// (at most four each; no allocation, as decode submits about a hundred times per token).
     pub fn submit_on(&self, queue: vk::Queue, cmd: vk::CommandBuffer, waits: &[(vk::Semaphore, u64)], signals: &[(vk::Semaphore, u64)]) -> Result<()> {
+        ensure!(waits.len() <= 4 && signals.len() <= 4, "at most four waits and signals per submission");
         let commands = [cmd];
-        let (ws, wv): (Vec<_>, Vec<_>) = waits.iter().copied().unzip();
-        let (ss, sv): (Vec<_>, Vec<_>) = signals.iter().copied().unzip();
-        let stages = vec![vk::PipelineStageFlags::ALL_COMMANDS; waits.len()];
-        let mut ti = vk::TimelineSemaphoreSubmitInfo::default().wait_semaphore_values(&wv).signal_semaphore_values(&sv);
+        let (mut ws, mut wv, mut ss, mut sv) = ([vk::Semaphore::null(); 4], [0u64; 4], [vk::Semaphore::null(); 4], [0u64; 4]);
+        for (i, &(s, v)) in waits.iter().enumerate() {
+            (ws[i], wv[i]) = (s, v);
+        }
+        for (i, &(s, v)) in signals.iter().enumerate() {
+            (ss[i], sv[i]) = (s, v);
+        }
+        let stages = [vk::PipelineStageFlags::ALL_COMMANDS; 4];
+        let (w, s) = (waits.len(), signals.len());
+        let mut ti = vk::TimelineSemaphoreSubmitInfo::default().wait_semaphore_values(&wv[..w]).signal_semaphore_values(&sv[..s]);
         let ci = [vk::SubmitInfo::default()
             .command_buffers(&commands)
-            .wait_semaphores(&ws)
-            .wait_dst_stage_mask(&stages)
-            .signal_semaphores(&ss)
+            .wait_semaphores(&ws[..w])
+            .wait_dst_stage_mask(&stages[..w])
+            .signal_semaphores(&ss[..s])
             .push_next(&mut ti)];
         unsafe { self.dev.queue_submit(queue, &ci, vk::Fence::null())? };
         Ok(())

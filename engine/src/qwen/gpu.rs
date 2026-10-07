@@ -1284,6 +1284,21 @@ impl GpuStage {
         Ok(tp.start(cmds, rows, micro.len(), dual))
     }
 
+    /// Record the graphs of a tensor-parallel prefill of `n` tokens as the micro-batches `micro` ahead of the first
+    /// prompt (they do not depend on the position).
+    pub fn tp_warm(&mut self, n: usize, micro: &[(usize, usize)]) -> Result<()> {
+        ensure!(n > 8, "only prefill batches are recorded ahead");
+        for (slot, &(row, rows)) in micro.iter().enumerate() {
+            let key = Key { n: rows, parts: partitions(0, rows), dump: false, verify: false, slot, row, head: slot + 1 == micro.len() };
+            if !self.graphs.contains_key(&key) {
+                let graph = self.record(key)?;
+                self.tick += 1;
+                self.graphs.insert(key, (graph, self.tick));
+            }
+        }
+        Ok(())
+    }
+
     /// Start a tensor-parallel MTP draft step at `pos` for the token with embedding `emb` (see `draft`), the
     /// head ranking the first `rows` vocabulary ids (0: all). Returns the number of segments.
     pub fn tp_draft_prepare(&mut self, emb: &[f32], pos: usize, first: bool, rows: usize) -> Result<usize> {
@@ -1305,39 +1320,37 @@ impl GpuStage {
 
     /// Queue, waits and completion signal of segment `j` of the forward in progress; submitted `ahead`, it also
     /// waits for the host's release.
-    fn tp_plan(&self, j: usize, ahead: bool) -> (vk::Queue, Vec<(vk::Semaphore, u64)>, (vk::Semaphore, u64)) {
-        let tp = self.tp.as_ref().unwrap();
+    /// Submit segment `j` of the forward in progress on its queue; submitted `ahead`, it waits for the host's
+    /// release.
+    fn tp_send(&mut self, j: usize, ahead: bool) -> Result<()> {
+        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
         let (m, i) = tp.at(j);
-        let mut waits = Vec::new();
+        let mut waits = [(vk::Semaphore::null(), 0); 2];
+        let mut count = 0;
         if ahead {
-            waits.push((tp.release[m], tp.base[m] + i));
+            waits[count] = (tp.release[m], tp.base[m] + i);
+            count += 1;
         }
         let second = tp.dual && m == 1;
         if second {
             // The second micro-batch continues the first one's recurrent state and attention cache.
-            waits.push((tp.done[0], tp.base[0] + i + 1));
+            waits[count] = (tp.done[0], tp.base[0] + i + 1);
+            count += 1;
         }
-        (if second { self.gpu.queue2 } else { self.gpu.queue }, waits, (tp.done[m], tp.base[m] + i + 1))
+        let done = (tp.done[m], tp.base[m] + i + 1);
+        tp.done_value[m] = done.1;
+        self.gpu.submit_on(if second { self.gpu.queue2 } else { self.gpu.queue }, tp.cmds[j], &waits[..count], &[done])
     }
 
     /// Submit segment `j` of the forward in progress, to run as soon as the GPU is free.
     pub fn tp_submit(&mut self, j: usize) -> Result<()> {
-        let (queue, waits, done) = self.tp_plan(j, false);
-        let tp = self.tp.as_mut().context("not a tensor-parallel rank")?;
-        tp.done_value[tp.at(j).0] = done.1;
-        self.gpu.submit_on(queue, tp.cmds[j], &waits, &[done])
+        self.tp_send(j, false)
     }
 
     /// Submit every segment of the forward in progress ahead, each waiting for `tp_release`.
     pub fn tp_submit_all(&mut self) -> Result<()> {
         let count = self.tp.as_ref().context("not a tensor-parallel rank")?.cmds.len();
-        for j in 0..count {
-            let (queue, waits, done) = self.tp_plan(j, true);
-            let tp = self.tp.as_mut().unwrap();
-            tp.done_value[tp.at(j).0] = done.1;
-            self.gpu.submit_on(queue, tp.cmds[j], &waits, &[done])?;
-        }
-        Ok(())
+        (0..count).try_for_each(|j| self.tp_send(j, true))
     }
 
     /// Let segment `j` (submitted ahead) and the earlier segments of its micro-batch run.
