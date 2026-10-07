@@ -54,16 +54,20 @@ now 28.5-28.6 and 46.0, with MTP 28.5 → 39.6 and 50.0 → 66.1. Generated text
 - Correct: the 27B on TP4 matches our CPU reference to 4.1e-4 over 946 tensors and llama.cpp to 3.3e-2 (the
   pipeline's figure), with the same 10 greedy tokens; the 9B on TP2 and TP4 likewise (3.7e-4).
 - Qwen3.8-27B on both Macs: 91 tok/s prefill and 16.6 tok/s decode over three USB4STREAM links, 82 and 15.6 over
-  TCP, against 38 and 9.6 for the four-stage pipeline (1.73× decode, 2.4× prefill).
+  TCP, against 38 and 9.6 for the four-stage pipeline (1.73× decode, 2.4× prefill). Correction: the node on invite
+  ran without the 0 µs CPU latency request, which made each cross-Mac exchange cost about 94 µs instead of 40; with
+  the request on both Macs the same binary decodes at 18.7 tok/s (`results/qwen/tp-decode-20261006/`).
 - Qwen3.5-9B on one Mac: 208 and 32.0 tok/s with TP2 against 127 and 22.8 for the two-stage pipeline.
-- A 27B decode token: 45.9 ms waiting on the GPUs, 12.0 ms in 128 cross-Mac exchanges, about 2 ms on the host.
+- A 27B decode token: 45.9 ms waiting on the GPUs, 12.0 ms in 128 cross-Mac exchanges (4.7-5.7 ms with the
+  latency request on the node), about 2 ms on the host.
   Without all-reduces a 9B TP2 token still needs 27.3 ms of GPU time (102 GB/s per GPU, against 123 for a pipeline
   stage), so kernel efficiency at the narrower per-rank shapes and the per-submission cache flushes are next.
 - Submitting all 2 × layers + 1 segments ahead and releasing each with a timeline semaphore saves 4.3 ms of
   `vkQueueSubmit` per 9B token but adds 3 ms of release latency: net +4%.
 - MTP drafting on TP: the 27B decodes at 26.0 tok/s on both Macs (72% of drafts accepted, 2.44 tokens per round),
-  2.7× the pipeline. `qwen-check` passes on TP with and without drafting (restore bit for bit, zero score error over
-  170 verification rounds, speculative output identical).
+  2.7× the pipeline (28.6 with the latency request on both Macs, as above). `qwen-check` passes on TP with and
+  without drafting (restore bit for bit, zero score error over 170 verification rounds, speculative output
+  identical).
 
 ## 2026-10-06: tensor parallelism across incite and invite is viable for decode
 

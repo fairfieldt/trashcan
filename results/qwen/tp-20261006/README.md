@@ -50,6 +50,12 @@ GPU clocks 850/1370 MHz while computing (`incite/clocks`, `invite/clocks`; the l
 idle time). PP4 is the existing chain (`--nodes`, plan `[(0,18),(18,35)] [(35,53),(53,64)]`); TP4 uses 4,276 MiB per
 GPU, PP4 4,510 and 4,277 MiB on incite's.
 
+**Correction (2026-10-07).** The TP4 decode numbers here, 16.58 and 16.57 tok/s and 26.08 and 25.93 with MTP, were
+measured with the node on invite started without the 0 µs CPU latency request: the `qwen-tp-node` command above
+runs without `scripts/latency-run.py`, so only incite held it. That made each cross-Mac exchange cost about 94 µs
+instead of about 40. The same binary with the request on both Macs decodes at 18.7 tok/s (18.96, 18.46) and 28.6 with
+MTP (28.62, 28.52) ([../tp-decode-20261006](../tp-decode-20261006/)). The original numbers are kept as measured.
+
 For Qwen3.8-27B on two Macs, TP4 decodes 1.73× and prefills 2.4× faster than the pipeline.
 
 ### With MTP drafting (`--mtp`, two drafts from a 64K-token draft head)
@@ -83,7 +89,8 @@ decoding (9B: 65% accepted, 40.4 against 24.5 tok/s; 27B: 68.5%, 21.4 against 13
 - Submitting segments ahead and releasing them with a host-signalled timeline semaphore saves 4.3 ms of
   `vkQueueSubmit` per 9B token but adds 3 ms of release latency (RADV's submission thread): +4%.
 - The 27B's 128 cross-Mac exchanges take 94 µs each in the model against 34 µs in the benchmark: the exchange
-  includes waiting for the slower Mac.
+  includes waiting for the slower Mac. (Without the latency request on the node, see the correction above: with it,
+  36-44 µs.)
 
 `scripts/test-server.py` passes against `trashcan serve 27B --tp-stream ... --mtp ...` with `qwen-tp-node --mtp` on
 invite (`test-server-27b-tp4-mtp.txt`, server log `incite/serve-27b.log`).
