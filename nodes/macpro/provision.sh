@@ -60,7 +60,7 @@ apt-get install -y -q --no-install-recommends \
     firmware-amd-graphics firmware-misc-nonfree intel-microcode \
     mesa-vulkan-drivers vulkan-tools libvulkan-dev glslc spirv-headers \
     libssl-dev libcurl4-openssl-dev libelf-dev libdw-dev bc bison flex cpio debhelper cmake \
-    iperf3 sockperf netcat-openbsd python3 smartmontools
+    iperf3 sockperf netcat-openbsd socat python3 smartmontools
 EOF
 }
 

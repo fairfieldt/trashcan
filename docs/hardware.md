@@ -103,6 +103,11 @@ round trips over USB4STREAM and 40 us over `thunderbolt_net` with `throttling=32
 With three cables looping the three controllers into a triangle, a reboot hangs in firmware before the startup chime;
 unplug them first ([kernel.md](kernel.md#installing-and-booting)).
 
+Between two Mac Pros (incite and invite, one cable per controller pair): 8.6-9.3 Gb/s per link each way, 25.9 Gb/s
+over all three at once, 0.18 ms ping; a model copy with `tar | socat` runs at 505 MB/s, limited by the receiving
+Apple SSD ([results](../results/kernel/tb-nodes-20261006/README.md)). After one Mac reboots, the other can keep a
+stale peer from its firmware; reload `thunderbolt` on both, and replug a link that comes back with one lane.
+
 ## Fan curve
 
 One SMC fan (`applesmc`, 790-1900 rpm) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing. Since

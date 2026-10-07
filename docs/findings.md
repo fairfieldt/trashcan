@@ -2,6 +2,18 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-06: second node (invite) and Thunderbolt between Macs
+
+invite, a second Mac Pro 6,1 with the same CPU, memory and D700s, was set up with `nodes/macpro/provision.sh` and
+passes the same checks as incite (own VBIOS per card, 850/1370, p2p-verify, 6/6 validations).
+
+- Its original Apple SSD (SM1024F) is healthy (1.4 GB/s reads, 870 MB/s writes, SMART clean) but lacks write-zeroes,
+  so ext4's background inode-table zeroing after install pushed writes to 400-700 ms and made the installer crawl.
+- Three cables between the Macs (one per controller pair): 8.6-9.3 Gb/s per link, 25.9 Gb/s over all three at once,
+  0.18 ms ping (`results/kernel/tb-nodes-20261006/`). Copying a model with `tar | socat` runs at 505 MB/s, 4.5x the
+  gigabit LAN; `nc` caps near 440 MB/s.
+- From the Mac, the LAN carries 940 Mb/s to a node and Tailscale 450-500 Mb/s.
+
 ## 2026-10-06: Linux 7.2.9 kernel and Thunderbolt 2 links
 
 incite moved to Linux 7.2.9 (`7.2.9-p2p`, [kernel.md](kernel.md)) to get USB4STREAM. Thunderbolt was measured
