@@ -41,6 +41,8 @@ fn main() {
         "qwen_matf32",
         "qwen_conv",
         "qwen_gdn",
+        "qwen_gdn_prepare",
+        "qwen_gdn_prepared",
         "qwen_gated_norm",
         "qwen_qk",
         "qwen_gate",

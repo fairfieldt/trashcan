@@ -259,6 +259,19 @@ enum Cmd {
         #[arg(long, default_value_t = 10)]
         iterations: usize,
     },
+    /// Compare prefill DeltaNet preparation with the original recurrence on deterministic inputs.
+    QwenGdnBench {
+        #[arg(long, default_value_t = 256)]
+        n: usize,
+        #[arg(long, default_value_t = 4)]
+        k_heads: usize,
+        #[arg(long, default_value_t = 12)]
+        v_heads: usize,
+        #[arg(long, default_value_t = 0)]
+        position: usize,
+        #[arg(long, default_value_t = 10)]
+        iterations: u32,
+    },
     /// Time decode, verification batches, rollback and MTP drafts.
     QwenSpecBench {
         model: PathBuf,
@@ -948,6 +961,8 @@ fn main() -> Result<()> {
             micro::gemm(&shapes, n, &kernels, iterations, gpu, warmup_ms)
         }
         Cmd::QwenAttentionBench { tokens, n, heads, iterations } => micro::qwen_attention(tokens, n, heads, iterations),
+        Cmd::QwenGdnBench { n, k_heads, v_heads, position, iterations } =>
+            qwen::gdn::bench(n, k_heads, v_heads, position, iterations),
         Cmd::QwenSpecBench { model, run, tokens, reps } => {
             let mut chain = run.chain(&model)?;
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;

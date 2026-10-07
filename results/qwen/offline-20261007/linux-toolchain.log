@@ -1,0 +1,7 @@
+Linux lima-kbuild 6.12.111+deb13-cloud-arm64 #1 SMP Debian 6.12.111-1 (2026-09-28) aarch64 GNU/Linux
+rustc 1.99.0 (b940084d7 2026-09-28)
+shaderc 2025.2-1
+spirv-tools 2025.1~rc1-1
+glslang 15.1.0+1.4.309.0-1
+
+Target: SPIR-V 1.0

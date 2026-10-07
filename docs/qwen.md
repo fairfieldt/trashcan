@@ -216,6 +216,15 @@ forward):
   micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
   prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
 
+Offline candidates (Mac validation pending): `TRASHCAN_QWEN_GDN=prepared` prepares DeltaNet Q/K normalization and
+gates once per head/token for batches above eight columns; `TRASHCAN_TP_SUM_DIRECT=1` writes the two local ranks'
+sum in one pass. Set either on both nodes. `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
+costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded
+sampled output when timings change. All three are off by default. Speculative decoding now caps drafts near
+the output limit, leaving the final sampled token unprocessed; this can also change sampled RNG sequences.
+`qwen-gdn-bench --n 256 --k-heads 4 --v-heads 12 --position 0` compares original/prepared output and full state,
+timing preparation and recurrence together. See [local checks and the hardware validation plan](../results/qwen/offline-20261007/README.md).
+
 Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead: 3-6%
 faster, identical results. `qwen_matf32` (the DeltaNet alpha/beta projection) has two variants with the same sums:
 16 loads per lane for decode and verification, and the plain loop for larger batches (with the 16-load path compiled

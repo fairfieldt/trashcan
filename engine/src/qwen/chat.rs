@@ -48,9 +48,10 @@ pub fn generate(
     mut emit: impl FnMut(u32) -> Result<()>,
 ) -> Result<Vec<u32>> {
     let mut generated = Vec::new();
+    if let Some(s) = spec.as_deref_mut() { s.begin_generation(); }
     while generated.len() < max_tokens && !stop.contains(&pending) && e.pos < e.context {
         let (chunk, next) = match spec.as_deref_mut() {
-            Some(s) if max_tokens - generated.len() > 1 => s.step(e, pending, sampler, stop)?,
+            Some(s) if max_tokens - generated.len() > 1 => s.step(e, pending, sampler, stop, max_tokens - generated.len())?,
             _ => {
                 generated.push(pending);
                 emit(pending)?;
@@ -248,7 +249,12 @@ fn bench_ids(e: &mut Chain, t: &Tokenizer, ids: &[u32], tg: usize, sampler: &mut
     };
     Ok(json!({"pp_window_unix": [pp_start, pp_end], "tg_window_unix": [tg_start, tg_end],
         "host": super::tp::host_settings(), "peer_host":peer_host,
-        "experimental": {"attention_slab":super::gpu::attention_slab(),"tiled_attention":std::env::var("TRASHCAN_QWEN_ATTN").as_deref()==Ok("tiled"),"mtp_kv_only":std::env::var("TRASHCAN_TP_KV_ONLY").as_deref()==Ok("1")}, "pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
+        "experimental": {"attention_slab":super::gpu::attention_slab(),
+            "tiled_attention":std::env::var("TRASHCAN_QWEN_ATTN").as_deref()==Ok("tiled"),
+            "mtp_kv_only":std::env::var("TRASHCAN_TP_KV_ONLY").as_deref()==Ok("1"),
+            "prepared_gdn":std::env::var("TRASHCAN_QWEN_GDN").as_deref()==Ok("prepared"),
+            "direct_sum":std::env::var("TRASHCAN_TP_SUM_DIRECT").as_deref()==Ok("1"),
+            "adaptive_mtp":std::env::var("TRASHCAN_QWEN_ADAPTIVE_MTP").as_deref()==Ok("1")}, "pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
         "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
         "mtp":spec.filter(|_| speculative).map(|s| s.stats.json()),"token_ids":out,"text":t.decode(&out, false)}))

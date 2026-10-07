@@ -830,9 +830,22 @@ impl<'a> Rec<'a> {
         u[5] = c.k_heads as u32;
         u[6] = c.state as u32;
         u[12] = eps;
+        // Each state-row wave normally repeats the same normalization and gate transforms.
+        // Preparing them once adds a dispatch and memory round trip, so keep this prefill candidate
+        // opt-in until measured on the D700s. Decode and verification retain their exact path.
+        let prepared = self.n > 8 && std::env::var("TRASHCAN_QWEN_GDN").as_deref() == Ok("prepared");
+        if prepared {
+            s.gpu.dispatch(
+                self.cmd,
+                "qwen_gdn_prepare",
+                self.push([conv_out, dl.dt_a.address, ab, 0, 0, 0], u),
+                c.k_heads.max(c.v_heads).div_ceil(4) as u32,
+                self.n as u32,
+            );
+        }
         s.gpu.dispatch(
             self.cmd,
-            "qwen_gdn",
+            if prepared { "qwen_gdn_prepared" } else { "qwen_gdn" },
             self.push([conv_out, ab, dl.state.address, o, dl.dt_a.address, snap], u),
             (c.v_heads * c.state / 16) as u32,
             1,

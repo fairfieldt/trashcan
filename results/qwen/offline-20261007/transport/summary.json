@@ -1,0 +1,312 @@
+{
+  "progress": {
+    "unit": "ns",
+    "groups": [
+      {
+        "lanes": 1,
+        "bytes": 20480,
+        "reference": {
+          "median": 95.511334,
+          "min": 94.33125,
+          "max": 100.533334,
+          "samples": 7
+        },
+        "reused": {
+          "median": 3.209334,
+          "min": 3.175834,
+          "max": 3.411916,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "bytes": 61440,
+        "reference": {
+          "median": 97.2715,
+          "min": 95.7535,
+          "max": 100.786334,
+          "samples": 7
+        },
+        "reused": {
+          "median": 3.269666,
+          "min": 3.084584,
+          "max": 3.535332,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "bytes": 5242880,
+        "reference": {
+          "median": 1260.047082,
+          "min": 1244.66425,
+          "max": 1281.4125,
+          "samples": 7
+        },
+        "reused": {
+          "median": 57.68325,
+          "min": 56.433918,
+          "max": 60.606416,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "bytes": 20480,
+        "reference": {
+          "median": 108.74175,
+          "min": 106.032918,
+          "max": 110.670084,
+          "samples": 7
+        },
+        "reused": {
+          "median": 8.498084,
+          "min": 8.31525,
+          "max": 8.921666,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "bytes": 61440,
+        "reference": {
+          "median": 110.177082,
+          "min": 107.151834,
+          "max": 111.649,
+          "samples": 7
+        },
+        "reused": {
+          "median": 8.685416,
+          "min": 8.353166,
+          "max": 9.31275,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "bytes": 5242880,
+        "reference": {
+          "median": 536.003166,
+          "min": 517.695,
+          "max": 541.633668,
+          "samples": 7
+        },
+        "reused": {
+          "median": 45.454584,
+          "min": 44.81825,
+          "max": 46.139668,
+          "samples": 7
+        }
+      }
+    ]
+  },
+  "loopback-final": {
+    "unit": "us",
+    "groups": [
+      {
+        "lanes": 1,
+        "stream_rounds": false,
+        "bytes": 20480,
+        "reference": {
+          "median": 14.4106875,
+          "min": 12.31775,
+          "max": 15.967270499999998,
+          "samples": 7
+        },
+        "reused": {
+          "median": 14.5796045,
+          "min": 10.937396000000001,
+          "max": 17.1095,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "stream_rounds": false,
+        "bytes": 61440,
+        "reference": {
+          "median": 20.442479,
+          "min": 16.49475,
+          "max": 24.434625,
+          "samples": 7
+        },
+        "reused": {
+          "median": 17.295917000000003,
+          "min": 16.418875,
+          "max": 22.7752085,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "stream_rounds": false,
+        "bytes": 5242880,
+        "reference": {
+          "median": 784.7791749999999,
+          "min": 750.192725,
+          "max": 1119.1,
+          "samples": 7
+        },
+        "reused": {
+          "median": 829.1760250000001,
+          "min": 753.8427250000001,
+          "max": 1025.321875,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "stream_rounds": true,
+        "bytes": 20480,
+        "reference": {
+          "median": 12.0745,
+          "min": 11.222875,
+          "max": 14.3221875,
+          "samples": 7
+        },
+        "reused": {
+          "median": 11.116125,
+          "min": 10.8503125,
+          "max": 13.801625,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "stream_rounds": true,
+        "bytes": 61440,
+        "reference": {
+          "median": 18.102979,
+          "min": 17.9000205,
+          "max": 19.593083000000004,
+          "samples": 7
+        },
+        "reused": {
+          "median": 17.741146,
+          "min": 17.534979,
+          "max": 19.874229,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 1,
+        "stream_rounds": true,
+        "bytes": 5242880,
+        "reference": {
+          "median": 1142.245825,
+          "min": 948.078125,
+          "max": 1386.209375,
+          "samples": 7
+        },
+        "reused": {
+          "median": 961.82605,
+          "min": 926.76875,
+          "max": 1177.6948,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "stream_rounds": false,
+        "bytes": 20480,
+        "reference": {
+          "median": 28.758416500000003,
+          "min": 26.414146000000002,
+          "max": 35.131896,
+          "samples": 7
+        },
+        "reused": {
+          "median": 30.299396,
+          "min": 26.319229,
+          "max": 34.099479,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "stream_rounds": false,
+        "bytes": 61440,
+        "reference": {
+          "median": 35.242229,
+          "min": 31.6601875,
+          "max": 45.964646,
+          "samples": 7
+        },
+        "reused": {
+          "median": 34.2151665,
+          "min": 30.0934375,
+          "max": 38.480021,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "stream_rounds": false,
+        "bytes": 5242880,
+        "reference": {
+          "median": 877.20105,
+          "min": 788.9552249999999,
+          "max": 963.5677250000001,
+          "samples": 7
+        },
+        "reused": {
+          "median": 839.6427,
+          "min": 752.4729249999999,
+          "max": 940.511475,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "stream_rounds": true,
+        "bytes": 20480,
+        "reference": {
+          "median": 32.744562499999994,
+          "min": 27.1703125,
+          "max": 33.8835,
+          "samples": 7
+        },
+        "reused": {
+          "median": 28.433396000000002,
+          "min": 26.4673125,
+          "max": 34.393792000000005,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "stream_rounds": true,
+        "bytes": 61440,
+        "reference": {
+          "median": 32.4523955,
+          "min": 31.538458499999997,
+          "max": 35.821271,
+          "samples": 7
+        },
+        "reused": {
+          "median": 33.379396,
+          "min": 30.315583,
+          "max": 40.828708,
+          "samples": 7
+        }
+      },
+      {
+        "lanes": 3,
+        "stream_rounds": true,
+        "bytes": 5242880,
+        "reference": {
+          "median": 961.3927,
+          "min": 894.0302000000001,
+          "max": 984.673975,
+          "samples": 7
+        },
+        "reused": {
+          "median": 912.459375,
+          "min": 900.33645,
+          "max": 1030.771875,
+          "samples": 7
+        }
+      }
+    ]
+  }
+}

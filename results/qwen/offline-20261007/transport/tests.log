@@ -1,0 +1,11 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+     Running unittests src/main.rs (target/release/deps/trashcan-9ec54b64f59fe4fe)
+
+running 4 tests
+test link::tests::exchange_benchmark ... ignored, local transport microbenchmark
+test link::tests::progress_benchmark ... ignored, local transport bookkeeping microbenchmark
+test link::tests::exchange_errors_and_retry ... ok
+test link::tests::exchanges_match_unchanged_peer ... ok
+
+test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 44 filtered out; finished in 0.05s
+

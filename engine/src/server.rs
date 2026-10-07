@@ -170,6 +170,7 @@ impl Backend for Qwen {
         let budget = p.max_tokens.min(e.context - e.pos);
         let mut pending = sampler.sample(&top);
         let (mut generated, mut stopped) = (0, false);
+        if let Some(s) = self.spec.as_mut() { s.begin_generation(); }
         'decode: while generated < budget {
             if self.stop.contains(&pending) {
                 generated += 1;
@@ -177,7 +178,7 @@ impl Backend for Qwen {
                 break;
             }
             let (chunk, next) = match self.spec.as_mut() {
-                Some(s) if budget - generated > 1 => s.step(e, pending, &mut sampler, &self.stop)?,
+                Some(s) if budget - generated > 1 => s.step(e, pending, &mut sampler, &self.stop, budget - generated)?,
                 _ if generated + 1 < budget => {
                     let top = e.forward(&[pending], true, None)?.context("missing candidates")?;
                     (vec![pending], sampler.sample(&top))

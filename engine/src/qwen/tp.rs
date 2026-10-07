@@ -43,7 +43,9 @@ use std::{
 pub fn host_settings() -> Value {
     let governor = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").ok().map(|s| s.trim().to_owned());
     let affinity = std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("Cpus_allowed_list:").map(|x| x.trim().to_owned())));
-    json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok())})
+    let experiments: BTreeMap<_, _> = ["TRASHCAN_QWEN_ATTN", "TRASHCAN_QWEN_ATTN_SLAB", "TRASHCAN_TP_KV_ONLY", "TRASHCAN_QWEN_GDN", "TRASHCAN_TP_SUM_DIRECT"]
+        .into_iter().map(|name| (name, std::env::var(name).ok())).collect();
+    json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok()),"experiments":experiments})
 }
 
 pub type Candidates = Vec<(f32, u32)>;
@@ -62,6 +64,8 @@ pub struct TpGroup {
     remote: Vec<f32>,
     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
     threads: usize,
+    /// Locally tested one-pass two-rank sum; opt-in until measured on the Mac Pros.
+    direct_sum: bool,
     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
     /// other machine, since the group was created.
     pub seconds: Phases,
@@ -355,6 +359,7 @@ impl TpGroup {
             sum: vec![0.; len],
             remote: vec![0.; len],
             threads,
+            direct_sum: std::env::var("TRASHCAN_TP_SUM_DIRECT").as_deref() == Ok("1"),
             seconds: Phases::default(),
             first,
             profile,
@@ -600,7 +605,12 @@ impl TpGroup {
             *p = s.tp_part(row, n);
         }
         let parts = &parts[..self.shards.len()];
+        let direct = self.direct_sum;
         parallel(sum, threads, |at, out| {
+            if direct {
+                super::host::sum_partials(out, parts, at);
+                return;
+            }
             out.copy_from_slice(&parts[0][at..at + out.len()]);
             for p in &parts[1..] {
                 for (a, b) in out.iter_mut().zip(&p[at..]) {
