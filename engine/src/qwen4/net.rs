@@ -5,9 +5,9 @@
 use super::{
     cpu::Captures,
     embed,
-    gpu::Output,
+    gpu::{merge_top, Output},
     ngram,
-    pipeline::{plan, Local},
+    pipeline::{assemble_logits, head_rows, plan, Local},
     Config,
 };
 use crate::{gguf::Gguf, qwen::pipeline::Devices};
@@ -80,19 +80,44 @@ fn ranges(v: &Value) -> Result<Vec<(usize, usize)>> {
         .collect()
 }
 
-fn result(top: &[(f32, u32)], caps: &Captures) -> (Value, Vec<u8>) {
+/// A forward reply: the candidates so far, the final hidden state (blob first) and any captures.
+fn result(top: &[(f32, u32)], h: &[f32], caps: &Captures) -> (Value, Vec<u8>) {
     let names: Vec<Value> = caps.iter().map(|(n, v)| json!([n, v.len()])).collect();
-    let blob: Vec<u8> = caps
-        .values()
-        .flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec())
-        .collect();
+    let mut blob: Vec<u8> = bytemuck::cast_slice::<f32, u8>(h).to_vec();
+    blob.extend(caps.values().flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec()));
     (
-        json!({"top": top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>(), "captures": names}),
+        json!({"top": top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>(), "h": h.len(),
+            "captures": names}),
         blob,
     )
 }
 
-fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
+/// Head rows per stage for each machine, as sent in a setup request.
+fn heads_json(heads: &[Vec<Option<(usize, usize)>>]) -> Value {
+    json!(heads
+        .iter()
+        .map(|m| m.iter().map(|r| r.map(|(a, b)| json!([a, b]))).collect::<Vec<_>>())
+        .collect::<Vec<_>>())
+}
+
+fn heads_of(v: &Value) -> Result<Vec<Option<(usize, usize)>>> {
+    v.as_array()
+        .context("invalid head rows")?
+        .iter()
+        .map(|r| {
+            Ok(if r.is_null() {
+                None
+            } else {
+                Some((
+                    r[0].as_u64().context("head rows")? as usize,
+                    r[1].as_u64().context("head rows")? as usize,
+                ))
+            })
+        })
+        .collect()
+}
+
+fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<(Vec<(f32, u32)>, Vec<f32>)> {
     let top = header["top"]
         .as_array()
         .context("missing top candidates")?
@@ -104,8 +129,10 @@ fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Re
             ))
         })
         .collect::<Result<Vec<_>>>()?;
+    let hn = header["h"].as_u64().context("missing hidden state")? as usize;
+    let h = floats(&blob[..hn * 4]);
     if let Some(m) = caps {
-        let mut at = 0;
+        let mut at = hn * 4;
         for c in header["captures"].as_array().into_iter().flatten() {
             let len = c[1].as_u64().context("capture length")? as usize;
             m.insert(
@@ -115,7 +142,7 @@ fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Re
             at += len * 4;
         }
     }
-    Ok(top)
+    Ok((top, h))
 }
 
 /// Serve layers to an upstream machine, one session at a time.
@@ -156,18 +183,21 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             up.send(&json!({"devices": counts}), &[])?;
         } else if let Some(s) = header.get("setup") {
             let plans = s["plans"].as_array().context("missing plans")?;
+            let heads = s["heads"].as_array().context("missing head rows")?;
             let context = s["context"].as_u64().context("context")? as usize;
             let batch = s["batch"].as_u64().context("batch")? as usize;
             let mine = ranges(&plans[0])?;
+            let my_heads = heads_of(&heads[0])?;
             ensure!(
                 (plans.len() > 1) == down.is_some(),
                 "plan does not match the probed chain"
             );
             drop(local.take());
-            local = Some(Local::new(model, devices, &mine, plans.len() == 1, context, batch)?);
+            local = Some(Local::new(model, devices, &mine, &my_heads, context, batch)?);
             if let Some(d) = down.as_mut() {
                 d.send(
-                    &json!({"setup": {"plans": &plans[1..], "context": context, "batch": batch}}),
+                    &json!({"setup": {"plans": &plans[1..], "heads": &heads[1..], "context": context,
+                        "batch": batch}}),
                     &[],
                 )?;
                 d.recv()?;
@@ -182,19 +212,21 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             let mut caps = Captures::new();
             let out = l.forward(floats(&blob), None, pos, n, dump.then_some(&mut caps))?;
             match (out, down.as_mut()) {
-                (Output::Top(top), _) => {
+                (Output::Top(top, h), _) => {
                     if reply {
-                        let (h, b) = result(&top, &caps);
-                        up.send(&h, &b)?;
+                        let (hd, b) = result(&top, &h, &caps);
+                        up.send(&hd, &b)?;
                     }
                 }
                 (Output::Hidden(x), Some(d)) => {
                     d.send(&json!({"forward": f}), bytemuck::cast_slice(&x))?;
                     if reply {
-                        let (h, b) = d.recv()?;
-                        let top = decode_result(&h, &b, Some(&mut caps))?;
-                        let (h, b) = result(&top, &caps);
-                        up.send(&h, &b)?;
+                        let (hd, b) = d.recv()?;
+                        let (top, h) = decode_result(&hd, &b, Some(&mut caps))?;
+                        // On the way back, this machine's stages score their head rows.
+                        let mine = l.head_slices(&h, dump.then_some(&mut caps))?;
+                        let (hd, b) = result(&merge_top(top, mine), &h, &caps);
+                        up.send(&hd, &b)?;
                     }
                 }
                 (Output::Hidden(_), None) => bail!("the last machine has no LM head"),
@@ -232,6 +264,7 @@ impl Chain {
         devices: Devices,
         nodes: &[String],
         cuts: &[usize],
+        head_split: usize,
         context: usize,
         max_batch: usize,
         rows: Rows,
@@ -280,6 +313,16 @@ impl Chain {
             );
         }
         eprintln!("plan: {plans:?}");
+        let mut all_heads = head_rows(c.vocab, stages, head_split).into_iter();
+        let heads: Vec<Vec<Option<(usize, usize)>>> =
+            counts.iter().map(|count| all_heads.by_ref().take(*count).collect()).collect();
+        ensure!(
+            heads.last().and_then(|m| m.last()).is_some_and(|r| r.is_some()),
+            "the last stage needs head rows"
+        );
+        if head_split > 1 {
+            eprintln!("head rows: {heads:?}");
+        }
         drop(g);
         if let Some(conn) = next.as_mut() {
             let remote: Vec<Value> = plans[1..]
@@ -287,12 +330,13 @@ impl Chain {
                 .map(|p| json!(p.iter().map(|(a, b)| json!([a, b])).collect::<Vec<_>>()))
                 .collect();
             conn.send(
-                &json!({"setup": {"plans": remote, "context": context, "batch": max_batch}}),
+                &json!({"setup": {"plans": remote, "heads": heads_json(&heads[1..]), "context": context,
+                    "batch": max_batch}}),
                 &[],
             )?;
             conn.recv()?;
         }
-        let local = Local::new(model, &devices, &plans[0], next.is_none(), context, max_batch)?;
+        let local = Local::new(model, &devices, &plans[0], &heads[0], context, max_batch)?;
         Ok(Self {
             local,
             next,
@@ -339,8 +383,14 @@ impl Chain {
         let pos = self.pos;
         let out = self.local.forward(x, ple.as_deref(), pos, n, dump.as_deref_mut())?;
         self.pos += n;
+        let vocab = self.local.c.vocab;
         match (out, self.next.as_mut()) {
-            (Output::Top(top), _) => Ok(Some(top)),
+            (Output::Top(top, _), _) => {
+                if let Some(m) = dump {
+                    assemble_logits(m, vocab);
+                }
+                Ok(Some(top))
+            }
             (Output::Hidden(x), Some(conn)) => {
                 conn.send(
                     &json!({"forward": {"pos": pos, "n": n, "reply": reply, "dump": dump.is_some()}}),
@@ -349,8 +399,13 @@ impl Chain {
                 if !reply {
                     return Ok(None);
                 }
-                let (h, b) = conn.recv()?;
-                Ok(Some(decode_result(&h, &b, dump)?))
+                let (hd, b) = conn.recv()?;
+                let (top, h) = decode_result(&hd, &b, dump.as_deref_mut())?;
+                let mine = self.local.head_slices(&h, dump.as_deref_mut())?;
+                if let Some(m) = dump {
+                    assemble_logits(m, vocab);
+                }
+                Ok(Some(merge_top(top, mine)))
             }
             (Output::Hidden(_), None) => bail!("no machine holds the LM head"),
         }

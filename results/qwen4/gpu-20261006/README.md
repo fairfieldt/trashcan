@@ -27,6 +27,7 @@ python3 tools/compare_activations.py val ref --all
 | `validate-gpu-layers-0-6-fused.txt` | G-q4_0, fused mixers | same tokens |
 | `validate-gq8d-layers-0-6.txt` | G-q8d | same tokens, logits rel 2.5e-5; the rebased build reproduced it exactly |
 | `validate-giq4-layers-0-6.txt` | G-iq4 | same tokens, logits rel 1.7e-5, MoE outputs rel 5e-7 to 1.1e-6 |
+| `validate-giq4-headsplit3.txt` | G-iq4, `--head-split 3` (head rows on GPU0, GPU1 and the Mac node) | same tokens, logits rel 1.7e-5 (3.4e-7 from the unsplit run); two CPU processes with `--head-split 2` match the reference exactly |
 | `validate-long-sparse-score.txt` | G-q4_0, 3061-token prompt in 256-token chunks (`stage-bench --tokens-file --out`, context 4096) | QSA output rel 6.6e-4; `qwen4_idx_score` bit-identical to the previous kernels |
 
 `Qcur-3` shows rel 0.94 with cos 1.000000: the GPU captures the query after the 1/16 attention scale.
@@ -48,6 +49,9 @@ after `--start` tokens, prefill chunks of `--batch` from position 0, and the las
 | `stagebench-giq4-0-4-32k.json` | `--ranges 0:4 --gpus 0 --context 32768 --start 32512 --decode 16 --prefill 1`, G-iq4 | the first GPU of six Macs: 5843 of 5888 MiB, runs |
 | `stagebench-giq4-46-48-head.json` | `--ranges 46:48 --head --gpus 1 --prefill 2`, G-iq4 | head 4.6 ms per token |
 | `stagebench-giq4-44-48-head.json` | `--ranges 44:48 --head --gpus 1 --prefill 2`, G-iq4 | 6480 MiB on a 5888 MiB heap: RADV put the excess in system memory and the head took 84 ms. Stages now refuse to load past the budget |
+
+`head-slice-bench.log` (`head-slice-bench.sh`): wall time to score one hidden state with 20,736, 82,944, 124,160
+and 248,320 head rows on one D700 (`--head-rows`): 1.12, 2.03, 2.62 and 4.60 ms.
 
 ## VRAM
 

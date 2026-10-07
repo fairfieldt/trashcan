@@ -7,8 +7,8 @@ table placement, quantization and VRAM for six and four Mac Pros, the GPU stages
 
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type run on incite's D700s and match the
 reference with the six-Mac recipe's formats; a full six-Mac GPU stage (4 layers, 32K context) loads and runs on one
-D700. Not done yet: spreading the head over GPUs (required for six Macs), a chain of real Mac Pros, MTP and a
-chat command (see [What is left](#what-is-left)).
+D700, and the LM head can be split over stages. Not done yet: the remaining VRAM savings for six Macs, a chain of
+real Mac Pros, MTP and a chat command (see [What is left](#what-is-left)).
 
 | | |
 |---|---|
@@ -140,7 +140,7 @@ Q8_0 dense matrices:
 |---|---|
 | layers 0-3 on one D700 (n-gram module, 3 DeltaNet, 1 sparse QSA), **measured** | 5843 of 5888 (budget 5869) |
 | the head (Q6_K repacked to 10 bits per weight, final mixer, logits) | 765 |
-| head spread over all 12 GPUs | 64 per GPU, 5907 per GPU: 19 over |
+| head split over all 12 GPUs (`--head-split 12`) | 64 per GPU, 5907 per GPU: 19 over |
 | with four savings not implemented yet (`--lean`: prefill reuses the fused mixer matrix, Q8_0 router and indexer projections, a raw indexer-key ring) | 5845 per GPU: fits by 43 |
 | the same with 128-token prefill chunks | 5766 per GPU: fits by 122 |
 
@@ -154,9 +154,18 @@ IQ3_XXS gate/up with IQ4_NL down is 106 MiB over (`--lean`, 128-token chunks). F
 | IQ2_XXS gate/up, MXFP4 down | 5802 MiB: fits by 86 | KLD 0.21 or worse; no GPU kernels for either format yet |
 | IQ4 experts in host RAM, ~63% of each layer's experts cached in VRAM | fits by construction | KLD 0.036 |
 
+`--head-split N` splits the head by vocabulary rows over the last N stages. The stage that ends the model scores its
+rows and returns the final hidden state with its candidates; every other stage scores its rows on that state as the
+result travels back, and the candidates are merged. Two CPU processes with the head in two halves reproduce the
+reference's logits exactly; incite's two GPUs and the Mac node with the head in three give the same tokens and
+logits within rel 3.4e-7 of the unsplit run. Scoring a slice on one D700 takes 1.12 ms for 1/12 of the vocabulary,
+2.03 ms for 1/3, 2.62 ms for 1/2 and 4.60 ms for all of it (about 0.7 ms fixed per slice), so twelve slices scored
+one after another cost about 13 ms per token against 4.6 ms for one GPU.
+
 **Recommendation.** Six Macs: IQ4_XS gate/up and IQ4_NL down for routed and shared experts, Q8_0 dense matrices,
-Q6_K head spread over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of
-it the n-gram table). It needs the head spread and the `--lean` savings before it runs at 32K context. Four Macs:
+Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of
+it the n-gram table). It needs the `--lean` savings (or 128-token prefill chunks) before it runs at 32K context.
+Four Macs:
 the same weights, with each Mac's experts (15.3 GiB) in host RAM and a static VRAM cache of each layer's most used
 ~63%, which covers about 85% of routed activations by the imatrix counts (`expert_popularity.py` in the quant
 results); misses (about 3.5 MB per layer per token) are uploaded at the measured 6.5 GB/s. The 2-bit in-VRAM
@@ -181,7 +190,7 @@ that the next mixer, the head or the stage output resolves.
 | QSA, longer contexts | `qwen4_idx_store`/`qwen4_idx_pool` (raw and pooled block keys), `qwen_qk` on the indexer queries, `qwen4_idx_score` (block scores, one wave per block for 8 tokens), `qwen4_idx_select` (exact radix top-512, ties to the earlier block), `qwen4_attention_sparse[_full]` |
 | MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; decode: `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot); prefill (16+ tokens): `qwen4_moe_route` groups slots by expert, `qwen4_moe_{gu,down}_grouped` decode each expert's rows once per 4 slots, `qwen4_moe_sum` |
 | experts | IQ4_XS (4.25 bpw), IQ4_NL or Q4_0 (f16 scale per 32, 4.5 bpw), at their GGUF size; the shared expert is stacked as expert 512 and must share the routed format |
-| head | final mixer, qwen35's Q6 `headvec` (int8 with f32 scales per 16), top-64 |
+| head | final mixer, qwen35's Q6 `headvec` (int8 with f32 scales per 16), top-64; any range of vocabulary rows (`--head-split`) |
 
 `qwen4 stage-bench` times stages alone (prefill chunks, then decode steps, back to back so the clocks stay up) with
 GPU timestamps around every layer and phase; `--start` prefills that many tokens first and also reports the last
@@ -241,21 +250,23 @@ A decode layer reads about 110 MB (61 MB of DeltaNet matrices, 14 MB of mixers, 
 
 No chain longer than incite plus the Mac CPU node has run, so these are projections from the per-layer
 measurements above: decode 1.24 ms per DeltaNet layer, 1.16 ms per QSA layer (2.20 ms at 32K), 0.43 ms for the
-n-gram module, 4.6 ms for the head, 0.39 ms of host work per GPU stage (two stages: 8.62 ms wall against 7.84 ms of
-GPU time), and per machine hop 40 KiB over Thunderbolt 2 IP (8.8 Gb/s, 128 us round trip:
+n-gram module, 4.6 ms for the head on one GPU or 13.4 ms split over twelve (12 x 1.12 ms), 0.39 ms of host work
+per GPU stage (two stages: 8.62 ms wall against 7.84 ms of GPU time), and per machine hop 40 KiB over Thunderbolt 2
+IP (8.8 Gb/s, 128 us round trip:
 [results/kernel/tb-loopback-20261006](../results/kernel/tb-loopback-20261006/README.md)), about 0.1 ms.
 
 | | six Macs, IQ4 experts in VRAM | four Macs, IQ4 experts in host RAM |
 |---|---|---|
-| decode, short context | 36 x 1.24 + 12 x 1.16 + 0.43 + 4.6 + 12 stages x 0.39 + 5 hops = 69 ms: **14.5 tok/s** | the same GPU work with 8 stages and 3 hops (67 ms) + 48 x 0.53 ms of expert uploads = 93 ms: **10.8 tok/s** |
-| decode at 32K | 81 ms: **12.3 tok/s** | 105 ms: **9.5 tok/s** |
+| decode, short context | 36 x 1.24 + 12 x 1.16 + 0.43 + 13.4 (head in 12 slices) + 12 stages x 0.39 + 5 hops = 78 ms: **12.8 tok/s** (69 ms, 14.5 tok/s with the head scored in 4.6 ms) | the same GPU work with 8 stages, 3 hops and the head on one GPU (67 ms) + 48 x 0.53 ms of expert uploads = 93 ms: **10.8 tok/s** |
+| decode at 32K | 90 ms: **11.1 tok/s** | 105 ms: **9.5 tok/s** |
 | prefill (chunks pipelined across Macs, a Mac's two GPUs in turn) | 0.76 s per chunk per Mac: **~335 tok/s**; a 2K prompt in ~10 s | 1.2-2.0 s per chunk per Mac (expert uploads overlapped or not): **125-210 tok/s** |
 | weight-bandwidth bound for decode | 6.0 GB per token at 263 GB/s: 23 ms, 44 tok/s | |
 
 ## What is left
 
-1. **Spread the head over GPUs** by vocabulary rows (each machine on the return path, or the last machine's two
-   GPUs), and store it compactly (Q6_K is 6.6 bits, the current repack 10). Six Macs need this.
+1. **A cheaper head split**: score a Mac's slices on both GPUs at once, cut the 0.7 ms fixed cost per slice, store
+   the head compactly (Q6_K is 6.6 bits, the repack 10), or keep the head on the last Mac in halves and free the
+   room by leaving that Mac's least-used ~10% of experts in host RAM (the other 90% cover 98% of activations).
 2. **The `--lean` savings** (about 60 MiB per GPU) and a 128-token prefill chunk, for margin at 32K.
 3. **A real chain**: only one Mac Pro (incite) was available, so multi-Mac decode and prefill are projections.
 4. **Prefill**: an LDS-tiled grouped expert GEMM (58 ms of a 94 ms layer), chunked DeltaNet (19 ms), grouping
@@ -274,10 +285,11 @@ trashcan qwen4 ref MODEL OUT [--tokens-file IDS] [--emulate-ggml] [--greedy N]
 trashcan qwen4 layer-check MODEL LLAMA_DUMP [--emulate-ggml]
 # chain: every machine after the first, then the driver
 trashcan qwen4 node MODEL --listen 0.0.0.0:7071 [--cpu | --gpus 0,1]
-trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 --greedy 10
+trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] --greedy 10
 trashcan qwen4 bench MODEL --gpus 0,1 --nodes ... --pp 256 --tg 32
 # GPU stages alone, and the n-gram table
 trashcan qwen4 stage-bench MODEL --ranges 0:4 --gpus 0 --context 32768 --start 32512 --decode 16 --prefill 1
+trashcan qwen4 stage-bench MODEL --ranges 4:5 --gpus 0 --head-rows 0:20736 --decode 4 --prefill 0 --batch 16
 trashcan qwen4 ngram-bench META_SHARD TABLE_SHARD --mode ram-q4|direct|buffered-cold [--ids IDS]
 python3 tools/qwen4_budget.py [--context N] [--batch N] [--head-split N] [--lean] [--check]
 ```

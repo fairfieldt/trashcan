@@ -110,6 +110,20 @@ pub fn stage_bench(
         add(&mut dec, collect(local), decode as f64);
     }
     let dec_wall = t0.elapsed().as_secs_f64() / decode.max(1) as f64;
+    // Stages holding head rows without ending the model: wall time to score one hidden state.
+    let h = vec![0.01f32; local.c.d];
+    let mut slices = Vec::new();
+    for s in &mut local.stages {
+        if let Stage::Gpu(g) = s {
+            if g.head_slice(&h, None)?.is_some() {
+                let t0 = std::time::Instant::now();
+                for _ in 0..16 {
+                    g.head_slice(&h, None)?;
+                }
+                slices.push(t0.elapsed().as_secs_f64() / 16. * 1e3);
+            }
+        }
+    }
     let mib: Vec<f64> = local
         .stages
         .iter()
@@ -121,6 +135,7 @@ pub fn stage_bench(
     Ok(
         serde_json::json!({"batch": batch, "prefill_chunks": prefill, "prefill_wall_ms": pre_wall * 1e3,
         "prefill": json(&pre), "decode_steps": decode, "decode_start": start, "decode_wall_ms": dec_wall * 1e3,
-        "decode": json(&dec), "device_mib": mib, "late_chunk_pos": late_pos, "late_chunk": json(&late)}),
+        "decode": json(&dec), "device_mib": mib, "late_chunk_pos": late_pos, "late_chunk": json(&late),
+        "head_slice_wall_ms": slices}),
     )
 }

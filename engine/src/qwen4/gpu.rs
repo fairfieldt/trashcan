@@ -137,13 +137,19 @@ struct Ple {
     hist: Buffer,
 }
 
+/// Rows `row0..row0 + rows` of the LM head. The stage that ends the model also runs the final mixer (`mix`); other
+/// stages score the final hidden state they are given (`head_slice`).
 struct Head {
-    mix: Mix,
+    mix: Option<Mix>,
     w: Buffer,
     logits: Buffer,
     scratch: Buffer,
     top: Buffer,
     chunks: usize,
+    row0: usize,
+    rows: usize,
+    /// The final hidden state of the last token (written by the ending stage, read by the others).
+    h: Buffer,
 }
 
 struct Graph {
@@ -161,7 +167,16 @@ impl Drop for Graph {
 
 pub enum Output {
     Hidden(Vec<f32>),
-    Top(Vec<(f32, u32)>),
+    /// The best candidates of this stage's head rows and the final hidden state of the last token.
+    Top(Vec<(f32, u32)>, Vec<f32>),
+}
+
+/// Merge candidate lists from head slices: best first, ties to the lower id, at most `TOP_K`.
+pub fn merge_top(mut a: Vec<(f32, u32)>, b: Vec<(f32, u32)>) -> Vec<(f32, u32)> {
+    a.extend(b);
+    a.sort_unstable_by(|x, y| y.0.total_cmp(&x.0).then(x.1.cmp(&y.1)));
+    a.truncate(TOP_K);
+    a
 }
 
 pub struct GpuStage {
@@ -217,6 +232,8 @@ pub struct GpuStage {
     pn: Buffer,
     fence: vk::Fence,
     graphs: HashMap<(usize, u32, bool), Graph>,
+    /// Command buffers scoring a given hidden state with this stage's head rows (by dump).
+    head_graphs: HashMap<bool, Graph>,
     queries: vk::QueryPool,
     /// GPU milliseconds of each layer's submission in the last forward (the last includes the head or output).
     pub profile: Vec<f64>,
@@ -282,7 +299,7 @@ impl GpuStage {
         c: &Config,
         first: usize,
         last: usize,
-        head: bool,
+        head: Option<(usize, usize)>,
         context: usize,
         max_batch: usize,
     ) -> Result<Self> {
@@ -470,21 +487,30 @@ impl GpuStage {
             }
             _ => None,
         };
-        let head = if head {
-            let t = g.tensor("output.weight").context("missing output.weight")?;
-            ensure!(t.ty == GgmlType::Q6K, "output.weight must be Q6_K, found {}", t.ty);
-            let chunks = c.vocab.div_ceil(1024);
-            ensure!(chunks <= 256, "vocabulary too large for one candidate merge");
-            Some(Head {
-                mix: mix("output_hc", false)?,
-                w: gpu.upload_matrix(&quant::repack_q6(g.data(t)))?,
-                logits: gpu.buffer(c.vocab * 4, false, false, None)?,
-                scratch: gpu.buffer(chunks * TOP_K * 8, false, false, None)?,
-                top: gpu.buffer(TOP_K * 8, true, false, None)?,
-                chunks,
-            })
-        } else {
-            None
+        let ends = last == c.layers;
+        ensure!(head.is_some() || !ends, "the stage that ends the model needs head rows");
+        let head = match head {
+            Some((row0, row1)) => {
+                let t = g.tensor("output.weight").context("missing output.weight")?;
+                ensure!(t.ty == GgmlType::Q6K, "output.weight must be Q6_K, found {}", t.ty);
+                ensure!(row0 < row1 && row1 <= c.vocab, "head rows {row0}..{row1} outside the vocabulary");
+                let rows = row1 - row0;
+                let chunks = rows.div_ceil(1024);
+                ensure!(chunks <= 256, "vocabulary too large for one candidate merge");
+                let rb = d / 256 * 210;
+                Some(Head {
+                    mix: if ends { Some(mix("output_hc", false)?) } else { None },
+                    w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[row0 * rb..row1 * rb]))?,
+                    logits: gpu.buffer(rows * 4, false, false, None)?,
+                    scratch: gpu.buffer(chunks * TOP_K * 8, false, false, None)?,
+                    top: gpu.buffer(TOP_K * 8, true, false, None)?,
+                    chunks,
+                    row0,
+                    rows,
+                    h: gpu.buffer(d * 4, true, false, None)?,
+                })
+            }
+            None => None,
         };
         let alloc = |n: usize| gpu.buffer(n * max_batch * 4, false, false, None);
         let qd = c.heads * c.head_dim;
@@ -559,6 +585,7 @@ impl GpuStage {
             pn: alloc(w)?,
             fence,
             graphs: HashMap::new(),
+            head_graphs: HashMap::new(),
             queries,
             profile: Vec::new(),
             phases: Vec::new(),
@@ -662,6 +689,119 @@ impl GpuStage {
             n as u32,
         );
         Ok(())
+    }
+
+    /// Score the hidden state at `input` with this stage's head rows: logits, chunk top-k, merged top-k in `hd.top`.
+    fn score_head(&self, graph: &mut Graph, cmd: vk::CommandBuffer, hd: &Head, input: u64, dump: bool) -> Result<()> {
+        let gpu = &self.gpu;
+        let d = self.c.d;
+        let push = |ptr: [u64; 6], u: [u32; 16]| Push {
+            ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, 0],
+            u,
+        };
+        let mut u = [0; 16];
+        u[0] = hd.rows as u32;
+        u[1] = d as u32;
+        u[3] = (hd.rows * d / 16) as u32;
+        u[9] = 1;
+        u[15] = 1;
+        gpu.dispatch_matrix(
+            cmd,
+            "headvec",
+            push([0, input, hd.logits.address, 0, 0, 0], u),
+            hd.rows.div_ceil(16) as u32,
+            1,
+            &hd.w,
+        )?;
+        if dump {
+            let host = gpu.buffer(hd.rows * 4, true, false, None)?;
+            gpu.copy(cmd, &hd.logits, 0, &host, 0, hd.rows * 4);
+            let name = if hd.rows == self.c.vocab {
+                "result_output".to_string()
+            } else {
+                format!("result_output@{}", hd.row0)
+            };
+            graph.captures.push((name, host, hd.rows));
+        }
+        let mut u = [0; 16];
+        u[0] = hd.rows as u32;
+        u[1] = TOP_K as u32;
+        u[2] = (hd.chunks * TOP_K) as u32;
+        u[15] = 1;
+        gpu.dispatch(
+            cmd,
+            "topk",
+            push([hd.logits.address, 0, hd.scratch.address, 0, 0, 0], u),
+            hd.chunks as u32,
+            1,
+        );
+        let mut u = [0; 16];
+        u[0] = (hd.chunks * TOP_K) as u32;
+        u[1] = TOP_K as u32;
+        u[15] = 1;
+        gpu.dispatch(
+            cmd,
+            "merge",
+            push([hd.scratch.address, 0, hd.top.address, 0, 0, 0], u),
+            1,
+            1,
+        );
+        Ok(())
+    }
+
+    /// The merged candidates of a head (ids offset to the vocabulary).
+    fn read_top(hd: &Head) -> Result<Vec<(f32, u32)>> {
+        let bytes = hd.top.read(TOP_K * 8)?;
+        let mut top: Vec<(f32, u32)> = bytes
+            .chunks_exact(8)
+            .map(|s| {
+                (
+                    f32::from_le_bytes(s[..4].try_into().unwrap()),
+                    u32::from_le_bytes(s[4..].try_into().unwrap()) + hd.row0 as u32,
+                )
+            })
+            .collect();
+        top.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+        Ok(top)
+    }
+
+    /// Score a final hidden state (from the stage that ends the model) with this stage's head rows. `None` when the
+    /// stage holds no rows or ends the model itself (its rows were scored in `forward`).
+    pub fn head_slice(&mut self, h: &[f32], dump: Option<&mut Captures>) -> Result<Option<Vec<(f32, u32)>>> {
+        let d = self.c.d;
+        let Some(hd) = self.head.as_ref().filter(|hd| hd.mix.is_none()) else {
+            return Ok(None);
+        };
+        ensure!(h.len() == d, "hidden state length mismatch");
+        hd.h.write(bytemuck::cast_slice(h))?;
+        let key = dump.is_some();
+        if !self.head_graphs.contains_key(&key) {
+            let cmd = self.gpu.begin()?;
+            let mut graph = Graph {
+                gpu: self.gpu.clone(),
+                cmds: vec![cmd],
+                captures: Vec::new(),
+                marks: Vec::new(),
+            };
+            self.gpu.barrier(cmd);
+            self.score_head(&mut graph, cmd, hd, hd.h.address, key)?;
+            self.gpu.finish(cmd)?;
+            self.head_graphs.insert(key, graph);
+        }
+        let graph = &self.head_graphs[&key];
+        unsafe {
+            self.gpu.dev.reset_fences(&[self.fence])?;
+        }
+        self.gpu.submit(graph.cmds[0], None, None, self.fence)?;
+        unsafe {
+            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+        }
+        if let Some(m) = dump {
+            for (name, host, width) in &graph.captures {
+                m.insert(name.clone(), bytemuck::cast_slice(&host.read(width * 4)?).to_vec());
+            }
+        }
+        Ok(Some(Self::read_top(self.head.as_ref().unwrap())?))
     }
 
     pub fn device_mib(&self) -> f64 {
@@ -1356,55 +1496,12 @@ impl GpuStage {
             }
         }
         let last = self.last - 1;
-        if let Some(hd) = &self.head {
-            mixer(&mut graph, &hd.mix, pending, "")?;
+        if let Some((hd, m)) = self.head.as_ref().and_then(|hd| Some((hd, hd.mix.as_ref()?))) {
+            mixer(&mut graph, m, pending, "")?;
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
             capture(&mut graph, "result_norm".into(), &self.u, d)?;
-            let mut u = [0; 16];
-            u[0] = c.vocab as u32;
-            u[1] = d as u32;
-            u[3] = (c.vocab * d / 16) as u32;
-            u[9] = 1;
-            u[15] = 1;
-            gpu.dispatch_matrix(
-                current.get(),
-                "headvec",
-                push(
-                    [0, self.u.address + ((n - 1) * d * 4) as u64, hd.logits.address, 0, 0, 0],
-                    u,
-                ),
-                c.vocab.div_ceil(16) as u32,
-                1,
-                &hd.w,
-            )?;
-            if dump {
-                let host = gpu.buffer(c.vocab * 4, true, false, None)?;
-                gpu.copy(current.get(), &hd.logits, 0, &host, 0, c.vocab * 4);
-                graph.captures.push(("result_output".into(), host, c.vocab));
-            }
-            let mut u = [0; 16];
-            u[0] = c.vocab as u32;
-            u[1] = TOP_K as u32;
-            u[2] = (hd.chunks * TOP_K) as u32;
-            u[15] = 1;
-            gpu.dispatch(
-                current.get(),
-                "topk",
-                push([hd.logits.address, 0, hd.scratch.address, 0, 0, 0], u),
-                hd.chunks as u32,
-                1,
-            );
-            let mut u = [0; 16];
-            u[0] = (hd.chunks * TOP_K) as u32;
-            u[1] = TOP_K as u32;
-            u[15] = 1;
-            gpu.dispatch(
-                current.get(),
-                "merge",
-                push([hd.scratch.address, 0, hd.top.address, 0, 0, 0], u),
-                1,
-                1,
-            );
+            gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
+            self.score_head(&mut graph, current.get(), hd, self.u.address + ((n - 1) * d * 4) as u64, dump)?;
         } else {
             if pending {
                 hc_norm(true, None);
@@ -1500,21 +1597,8 @@ impl GpuStage {
                 m.insert(name.clone(), v);
             }
         }
-        Ok(match &self.head {
-            Some(hd) => {
-                let bytes = hd.top.read(TOP_K * 8)?;
-                let mut top: Vec<(f32, u32)> = bytes
-                    .chunks_exact(8)
-                    .map(|s| {
-                        (
-                            f32::from_le_bytes(s[..4].try_into().unwrap()),
-                            u32::from_le_bytes(s[4..].try_into().unwrap()),
-                        )
-                    })
-                    .collect();
-                top.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
-                Output::Top(top)
-            }
+        Ok(match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
+            Some(hd) => Output::Top(Self::read_top(hd)?, bytemuck::cast_slice(&hd.h.read(d * 4)?).to_vec()),
             None => Output::Hidden(bytemuck::cast_slice(&self.output.read(n * w * 4)?).to_vec()),
         })
     }
@@ -1526,6 +1610,7 @@ impl Drop for GpuStage {
             let _ = self.gpu.dev.device_wait_idle();
         }
         self.graphs.clear();
+        self.head_graphs.clear();
         unsafe {
             self.gpu.dev.destroy_fence(self.fence, None);
             self.gpu.dev.destroy_query_pool(self.queries, None);

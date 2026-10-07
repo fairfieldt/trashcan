@@ -74,6 +74,10 @@ pub enum Cmd {
         /// Give the last stage the final mixer and the LM head.
         #[arg(long)]
         head: bool,
+        /// Give the last stage these LM head rows instead (a:b); unless it ends the model, the bench times scoring
+        /// a hidden state with them.
+        #[arg(long)]
+        head_rows: Option<String>,
         #[arg(long, default_value_t = 2048)]
         context: usize,
         #[arg(long, default_value_t = 256)]
@@ -147,6 +151,9 @@ pub struct Run {
     context: usize,
     #[arg(long, default_value_t = 256)]
     batch: usize,
+    /// Split the LM head by vocabulary rows over the last N stages; each scores its rows as the result returns.
+    #[arg(long, default_value_t = 1)]
+    head_split: usize,
     /// N-gram rows: map (the GGUF mapping), ram-q4 or ram-q8 (a resident copy), disk (pread through the page
     /// cache) or direct (O_DIRECT page reads).
     #[arg(long, default_value = "map")]
@@ -170,7 +177,16 @@ impl Run {
                 })
             }
         };
-        super::net::Chain::new(model, devices, &self.nodes, &self.cuts, self.context, self.batch, rows)
+        super::net::Chain::new(
+            model,
+            devices,
+            &self.nodes,
+            &self.cuts,
+            self.head_split,
+            self.context,
+            self.batch,
+            rows,
+        )
     }
 }
 
@@ -230,6 +246,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             ranges,
             gpus,
             head,
+            head_rows,
             context,
             batch,
             decode,
@@ -247,7 +264,16 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 .collect::<Result<_>>()?;
             let gpus = gpus.unwrap_or_else(|| (0..ranges.len()).collect());
             let devices = crate::qwen::pipeline::Devices::Gpus(gpus);
-            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, head, context, batch)?;
+            let mut heads = vec![None; ranges.len()];
+            if head {
+                let g = crate::gguf::Gguf::open(&model)?;
+                heads[ranges.len() - 1] = Some((0, super::Config::new(&g)?.vocab));
+            }
+            if let Some(r) = head_rows {
+                let (a, b) = r.split_once(':').context("head rows look like 0:82944")?;
+                heads[ranges.len() - 1] = Some((a.parse()?, b.parse()?));
+            }
+            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, &heads, context, batch)?;
             if let (Some(tf), Some(out)) = (tokens_file, out) {
                 let tokens = prompt(Some(&tf), &[])?;
                 return super::bench::stage_dump(&mut local, &out, &tokens, batch);

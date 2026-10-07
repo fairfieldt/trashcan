@@ -895,6 +895,24 @@ impl CpuStage {
         record("result_norm".into(), &m.input, self.c.d);
         Ok(matmul(g, g.tensor("output.weight").unwrap(), &m.input, 1))
     }
+
+    /// The final hidden state of the last token (the final mixer's output), which the head reads.
+    pub fn final_hidden(&self, g: &Gguf, x: &[f32], cap: &mut Option<&mut Captures>) -> Result<Vec<f32>> {
+        let w = self.c.width();
+        let mut record = |name: String, rows: &[f32], width: usize| {
+            if let Some(m) = cap.as_mut() {
+                m.insert(name, rows[rows.len() - width..].to_vec());
+            }
+        };
+        let m = Self::hc_mix(g, &self.c, "output_hc", &x[x.len() - w..], 1, "", &mut record)?;
+        record("result_norm".into(), &m.input, self.c.d);
+        Ok(m.input)
+    }
+
+    /// Logits of the head rows `row0..row1` for a final hidden state.
+    pub fn head_logits(g: &Gguf, h: &[f32], row0: usize, row1: usize) -> Vec<f32> {
+        matmul(g, g.tensor("output.weight").unwrap(), h, 1)[row0..row1].to_vec()
+    }
 }
 
 #[cfg(test)]

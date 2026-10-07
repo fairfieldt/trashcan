@@ -3,11 +3,11 @@
 //! driver's; the last stage of the last machine owns the final mixer and the LM head.
 use super::{
     cpu::{Captures, CpuStage},
-    gpu::{GpuStage, Output},
+    gpu::{merge_top, GpuStage, Output},
     Config,
 };
 use crate::{gguf::Gguf, gpu::Instance, qwen::pipeline::Devices, vulkan::Device};
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use std::{path::Path, rc::Rc};
 
 /// Bytes a layer occupies on a GPU: Q4_0 repacks 18-byte blocks into 20 bytes, the f32 matrices stay f32.
@@ -64,6 +64,20 @@ pub fn heap_mib(inst: &Instance, pd: ash::vk::PhysicalDevice) -> (f64, f64, f64)
     (mib(mem.memory_heaps[h].size), mib(b.heap_budget[h]), mib(b.heap_usage[h]))
 }
 
+/// Head rows of each of `stages` stages (in chain order) when the LM head is split by vocabulary rows over the
+/// last `split` of them: equal parts in multiples of 1024 rows, the last stage (which ends the model) taking the rest.
+pub fn head_rows(vocab: usize, stages: usize, split: usize) -> Vec<Option<(usize, usize)>> {
+    let split = split.clamp(1, stages);
+    let per = vocab.div_ceil(split).next_multiple_of(1024);
+    (0..stages)
+        .map(|i| {
+            let k = (i + split).checked_sub(stages)?;
+            let (a, b) = ((k * per).min(vocab), if k + 1 == split { vocab } else { ((k + 1) * per).min(vocab) });
+            (a < b).then_some((a, b))
+        })
+        .collect()
+}
+
 pub enum Stage {
     Cpu(CpuStage),
     Gpu(GpuStage),
@@ -73,6 +87,8 @@ pub struct Local {
     pub gguf: Gguf,
     pub c: Config,
     pub stages: Vec<Stage>,
+    /// The LM head rows each stage scores (the stage that ends the model always has some).
+    pub heads: Vec<Option<(usize, usize)>>,
 }
 
 impl Local {
@@ -80,19 +96,20 @@ impl Local {
         path: &Path,
         devices: &Devices,
         ranges: &[(usize, usize)],
-        head: bool,
+        heads: &[Option<(usize, usize)>],
         context: usize,
         max_batch: usize,
     ) -> Result<Self> {
         let gguf = Gguf::open(path)?;
         let c = Config::new(&gguf)?;
         ensure!(ranges.len() <= devices.count(), "more stages than devices");
+        ensure!(heads.len() == ranges.len(), "one head entry per stage");
         let mut stages = Vec::new();
         match devices {
             Devices::Cpu => {
                 ensure!(ranges.len() == 1, "the CPU runs a single stage");
                 let (first, last) = ranges[0];
-                stages.push(Stage::Cpu(CpuStage::new(&c, first, last, context, head)));
+                stages.push(Stage::Cpu(CpuStage::new(&c, first, last, context, last == c.layers)));
             }
             Devices::Gpus(indices) => {
                 let inst = Rc::new(Instance::new()?);
@@ -101,14 +118,13 @@ impl Local {
                     let pd = *all
                         .get(indices[i])
                         .ok_or_else(|| anyhow::anyhow!("GPU {} not found", indices[i]))?;
-                    let is_head = head && i + 1 == ranges.len();
                     eprintln!(
                         "GPU{}: layers {first}..{last}{}",
                         indices[i],
-                        if is_head { " + head" } else { "" }
+                        heads[i].map_or(String::new(), |(a, b)| format!(" + head rows {a}..{b}"))
                     );
                     let gpu = Device::new(inst.clone(), pd)?;
-                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, is_head, context, max_batch)?;
+                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, heads[i], context, max_batch)?;
                     let (size, budget, usage) = heap_mib(&inst, pd);
                     eprintln!(
                         "GPU{}: {:.1} MiB allocated; device-local heap {usage:.0} of {size:.0} MiB used, budget {budget:.0}",
@@ -126,7 +142,36 @@ impl Local {
                 }
             }
         }
-        Ok(Self { gguf, c, stages })
+        Ok(Self {
+            gguf,
+            c,
+            stages,
+            heads: heads.to_vec(),
+        })
+    }
+
+    /// Score a final hidden state with the head rows of the stages that do not end the model; merged candidates.
+    pub fn head_slices(&mut self, h: &[f32], mut dump: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
+        let mut top = Vec::new();
+        for (stage, rows) in self.stages.iter_mut().zip(&self.heads) {
+            let mine = match stage {
+                Stage::Gpu(s) => s.head_slice(h, dump.as_deref_mut())?,
+                Stage::Cpu(s) => match rows {
+                    Some((a, b)) if !s.head => {
+                        let logits = CpuStage::head_logits(&self.gguf, h, *a, *b);
+                        if let Some(m) = dump.as_deref_mut() {
+                            m.insert(format!("result_output@{a}"), logits.clone());
+                        }
+                        Some(offset(crate::qwen::pipeline::top_k(&logits), *a))
+                    }
+                    _ => None,
+                },
+            };
+            if let Some(m) = mine {
+                top = merge_top(top, m);
+            }
+        }
+        Ok(top)
     }
 
     /// Run all local stages. Returns the residual, or the top candidates when this machine ends the model.
@@ -138,18 +183,26 @@ impl Local {
         n: usize,
         mut dump: Option<&mut Captures>,
     ) -> Result<Output> {
-        for stage in &mut self.stages {
+        let mut end = None;
+        for (stage, rows) in self.stages.iter_mut().zip(&self.heads) {
             let out = match stage {
                 Stage::Gpu(s) => s.forward(&x, ple, pos, n, dump.as_deref_mut())?,
                 Stage::Cpu(s) => {
                     let mut cap = dump.as_deref_mut();
                     s.forward(&self.gguf, &mut x, ple, pos, n, &mut cap)?;
                     if s.head {
-                        let logits = s.logits(&self.gguf, &x, &mut cap)?;
+                        let (a, b) = rows.context("the stage that ends the model needs head rows")?;
+                        let h = s.final_hidden(&self.gguf, &x, &mut cap)?;
+                        let logits = CpuStage::head_logits(&self.gguf, &h, a, b);
                         if let Some(m) = cap {
-                            m.insert("result_output".into(), logits.clone());
+                            let name = if b - a == self.c.vocab {
+                                "result_output".to_string()
+                            } else {
+                                format!("result_output@{a}")
+                            };
+                            m.insert(name, logits.clone());
                         }
-                        Output::Top(crate::qwen::pipeline::top_k(&logits))
+                        Output::Top(offset(crate::qwen::pipeline::top_k(&logits), a), h)
                     } else {
                         Output::Hidden(std::mem::take(&mut x))
                     }
@@ -157,9 +210,45 @@ impl Local {
             };
             match out {
                 Output::Hidden(h) => x = h,
-                top => return Ok(top),
+                top => {
+                    end = Some(top);
+                    break;
+                }
             }
         }
-        Ok(Output::Hidden(x))
+        // This machine ends the model: its other stages score their head rows on the final hidden state.
+        match end {
+            Some(Output::Top(top, h)) => {
+                let mine = self.head_slices(&h, dump)?;
+                Ok(Output::Top(merge_top(top, mine), h))
+            }
+            _ => Ok(Output::Hidden(x)),
+        }
+    }
+}
+
+/// Candidates of a head slice with vocabulary ids.
+fn offset(top: Vec<(f32, u32)>, row0: usize) -> Vec<(f32, u32)> {
+    top.into_iter().map(|(s, id)| (s, id + row0 as u32)).collect()
+}
+
+/// Assemble the full logits from head-slice captures (`result_output@ROW0`), when every row is present.
+pub fn assemble_logits(caps: &mut Captures, vocab: usize) {
+    let parts: Vec<String> = caps.keys().filter(|k| k.starts_with("result_output@")).cloned().collect();
+    if parts.is_empty() {
+        return;
+    }
+    let mut full = vec![f32::NAN; vocab];
+    let mut covered = 0;
+    for k in &parts {
+        let row0: usize = k["result_output@".len()..].parse().unwrap_or(usize::MAX);
+        let v = caps.remove(k).unwrap();
+        if row0 + v.len() <= vocab {
+            full[row0..row0 + v.len()].copy_from_slice(&v);
+            covered += v.len();
+        }
+    }
+    if covered == vocab {
+        caps.insert("result_output".into(), full);
     }
 }
