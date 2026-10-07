@@ -16,10 +16,18 @@ use super::{
     pipeline::Draft,
     Config,
 };
-use crate::{generation::Sampler, gguf::Gguf, gpu::Instance, link::Lanes, vulkan::Device};
+use crate::{
+    generation::Sampler,
+    gguf::Gguf,
+    gpu::Instance,
+    link::Lanes,
+    vulkan::{host_ns, Device},
+};
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
+    collections::HashSet,
+    io::Write,
     net::TcpListener,
     path::Path,
     rc::Rc,
@@ -41,6 +49,30 @@ pub struct TpGroup {
     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
     /// other machine, since the group was created.
     pub seconds: Phases,
+    /// Rank of the first local GPU.
+    first: usize,
+    profile: Option<Profile>,
+}
+
+/// Every forward and draft step of a profiling run (`TRASHCAN_TP_PROFILE=FILE`), one JSON line per local rank:
+/// the GPU timestamps (`gpu::profile_level`) in ns from the first, that first one in host CLOCK_MONOTONIC ns,
+/// and the host times at which each segment was released, seen finished on this rank, and exchanged.
+struct Profile {
+    out: std::io::BufWriter<std::fs::File>,
+    release: Vec<u64>,
+    done: Vec<Vec<u64>>,
+    exchanged: Vec<u64>,
+    labelled: HashSet<(usize, u64)>,
+    count: usize,
+}
+
+impl Profile {
+    fn open(ranks: usize) -> Result<Option<Self>> {
+        let Some(path) = std::env::var_os("TRASHCAN_TP_PROFILE") else { return Ok(None) };
+        let file = std::fs::File::create(&path).with_context(|| format!("creating {path:?}"))?;
+        let done = vec![Vec::new(); ranks];
+        Ok(Some(Self { out: std::io::BufWriter::new(file), release: Vec::new(), done, exchanged: Vec::new(), labelled: HashSet::new(), count: 0 }))
+    }
 }
 
 #[derive(Clone, Copy, Default, Debug, serde::Serialize)]
@@ -64,7 +96,11 @@ fn shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usi
     for (i, &index) in gpus.iter().enumerate() {
         let pd = *all.get(index).with_context(|| format!("GPU {index} not found"))?;
         let split = Split { rank: first + i, ranks };
-        let stage = GpuStage::shard(Device::new(inst.clone(), pd)?, &g, &c, context, max_batch, verify, split, m.as_ref())?;
+        let gpu = Device::new(inst.clone(), pd)?;
+        if std::env::var("TRASHCAN_TP_ARENA").as_deref() != Ok("0") {
+            gpu.use_arena();
+        }
+        let stage = GpuStage::shard(gpu, &g, &c, context, max_batch, verify, split, m.as_ref())?;
         eprintln!("GPU{index}: rank {} of {ranks}{}, {:.1} MiB allocated", first + i, if m.is_some() { " + MTP" } else { "" }, stage.device_mib());
         shards.push(stage);
     }
@@ -118,7 +154,8 @@ impl TpGroup {
             ensure!(reply.get("ok").is_some(), "the other machine failed: {}", reply["error"]);
         }
         let len = c.d * max_batch;
-        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], seconds: Phases::default() })
+        let profile = Profile::open(shards.len())?;
+        Ok(Self { gguf, c, shards, peer, driver: true, sum: vec![0.; len], remote: vec![0.; len], seconds: Phases::default(), first: 0, profile })
     }
 
     /// Forward `tokens` (embedded as `x`) at `pos`: candidates of the last column, or of every column of a
@@ -213,8 +250,9 @@ impl TpGroup {
     /// Run the segments prepared on every rank, all-reducing `n` columns between them.
     fn launch(&mut self, segments: usize, n: usize) -> Result<()> {
         // By default every segment is submitted ahead and released by a semaphore signal, which costs the host
-        // far less than a vkQueueSubmit per segment (TRASHCAN_TP_SUBMIT=1 submits each segment instead).
-        let ahead = std::env::var_os("TRASHCAN_TP_SUBMIT").is_none();
+        // far less than a vkQueueSubmit per segment (TRASHCAN_TP_SUBMIT=1 submits each segment instead). An
+        // event-gated forward is always one submission.
+        let ahead = self.shards[0].tp_gated() || std::env::var_os("TRASHCAN_TP_SUBMIT").is_none();
         if ahead {
             let start = Instant::now();
             for s in self.shards.iter_mut() {
@@ -228,25 +266,61 @@ impl TpGroup {
                 let _ = s.tp_release_all();
             }
         }
-        result
+        result?;
+        self.write_profile(n)
+    }
+
+    /// One profile line per local rank for the forward or draft step just finished.
+    fn write_profile(&mut self, n: usize) -> Result<()> {
+        let Some(p) = self.profile.as_mut() else { return Ok(()) };
+        for (r, s) in self.shards.iter().enumerate() {
+            let Some((pool, labels, ns, host)) = s.tp_stamps()? else { continue };
+            let mut line = json!({"step": p.count, "rank": self.first + r, "n": n, "graph": pool, "ns": ns, "host0": host,
+                "release": p.release, "done": p.done[r], "exchanged": p.exchanged});
+            if p.labelled.insert((r, pool)) {
+                line["labels"] = json!(*labels);
+            }
+            writeln!(p.out, "{line}")?;
+        }
+        p.out.flush()?;
+        p.count += 1;
+        p.release.clear();
+        p.exchanged.clear();
+        p.done.iter_mut().for_each(Vec::clear);
+        Ok(())
     }
 
     /// Run the segments of the forward prepared on every rank, all-reducing between them.
     fn segments(&mut self, segments: usize, n: usize, ahead: bool) -> Result<()> {
         if ahead && std::env::var_os("TRASHCAN_TP_FREE").is_some() {
-            // Timing only: every segment back to back without all-reduces (wrong results), the GPU floor.
+            // Timing only: the segments without all-reduces (wrong results), the GPU floor: back to back when
+            // released by semaphore, each released as soon as all ranks finished the previous one when gated.
             let start = Instant::now();
-            for s in self.shards.iter_mut() {
-                s.tp_release(segments - 1)?;
-            }
-            for s in &self.shards {
-                s.tp_wait(segments - 1)?;
+            if self.shards[0].tp_gated() {
+                for i in 0..segments {
+                    for s in self.shards.iter_mut() {
+                        s.tp_release(i)?;
+                    }
+                    for s in &self.shards {
+                        s.tp_wait(i)?;
+                    }
+                }
+            } else {
+                for s in self.shards.iter_mut() {
+                    s.tp_release_all()?;
+                }
+                for s in &self.shards {
+                    s.tp_wait(segments - 1)?;
+                }
             }
             self.seconds.wait += start.elapsed().as_secs_f64();
             return Ok(());
         }
         for i in 0..segments {
             let start = Instant::now();
+            if let Some(p) = self.profile.as_mut() {
+                p.release.push(host_ns());
+            }
             for s in self.shards.iter_mut() {
                 if ahead {
                     s.tp_release(i)?;
@@ -255,13 +329,19 @@ impl TpGroup {
                 }
             }
             let submitted = Instant::now();
-            for s in &self.shards {
+            for (r, s) in self.shards.iter().enumerate() {
                 s.tp_wait(i)?;
+                if let Some(p) = self.profile.as_mut() {
+                    p.done[r].push(host_ns());
+                }
             }
             self.seconds.submit += (submitted - start).as_secs_f64();
             self.seconds.wait += submitted.elapsed().as_secs_f64();
             if i + 1 < segments {
                 self.allreduce(n)?;
+                if let Some(p) = self.profile.as_mut() {
+                    p.exchanged.push(host_ns());
+                }
             }
         }
         Ok(())
@@ -281,7 +361,10 @@ impl TpGroup {
         let added = Instant::now();
         if let Some(l) = self.peer.as_mut() {
             let remote = &mut self.remote[..len];
-            l.exchange(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(remote))?;
+            // While a gated submission waits on the GPUs, a stalled exchange must fail (and drain them) well
+            // before amdgpu's job timeout.
+            let stall = if self.shards[0].tp_gated() { Duration::from_secs(2) } else { crate::link::STALL };
+            l.exchange_within(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(remote), stall)?;
             for (a, b) in sum.iter_mut().zip(remote.iter()) {
                 *a += b;
             }
@@ -420,7 +503,19 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut lanes: Lanes) -
         };
         lanes.send_message(&message(json!({"ok": true}))?)?;
         let len = c.d * num("batch")?;
-        let mut group = TpGroup { gguf, c, shards, peer: Some(lanes), driver: false, sum: vec![0.; len], remote: vec![0.; len], seconds: Phases::default() };
+        let profile = Profile::open(shards.len())?;
+        let mut group = TpGroup {
+            gguf,
+            c,
+            shards,
+            peer: Some(lanes),
+            driver: false,
+            sum: vec![0.; len],
+            remote: vec![0.; len],
+            seconds: Phases::default(),
+            first: num("first")?,
+            profile,
+        };
         return group.follow();
     }
 }

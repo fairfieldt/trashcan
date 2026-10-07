@@ -2,10 +2,22 @@
 #include "common.glsl"
 // Small f32 projection (DeltaNet alpha/beta): y[t][row] = W[row] . x[t]. One wave per row and eight tokens,
 // so each weight is read once per eight columns. W in set 0, x in b, y in c. p.n rows, p.k row length.
+// Up to four columns (decode, verification) with p.k a multiple of 64 * U take U loads per lane at a time
+// instead of one; every column's sum keeps the same order either way.
+#define U 16
 layout(local_size_x=256) in;
 void main(){uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x*4+gl_SubgroupID,t0=gl_WorkGroupID.y*8,nb=batch();
 if(row>=p.n||t0>=nb)return;uint cols=min(8u,nb-t0);float sums[8];
 [[unroll]]for(uint z=0;z<8;z++)sums[z]=0;
-for(uint i=lane;i<p.k;i+=64){float w=uintBitsToFloat(ww.words[row*p.k+i]);
-[[unroll]]for(uint z=0;z<8;z++)if(z<cols)sums[z]=fma(w,b_f.v[(t0+z)*p.k+i],sums[z]);}
+if(cols<=4&&p.k%(64*U)==0){
+    for(uint i0=lane;i0<p.k;i0+=64*U){
+        float w[U],x[4][U];
+        [[unroll]]for(uint u=0;u<U;u++)w[u]=uintBitsToFloat(ww.words[row*p.k+i0+64*u]);
+        [[unroll]]for(uint z=0;z<4;z++)if(z<cols)[[unroll]]for(uint u=0;u<U;u++)x[z][u]=b_f.v[(t0+z)*p.k+i0+64*u];
+        [[unroll]]for(uint u=0;u<U;u++)[[unroll]]for(uint z=0;z<4;z++)if(z<cols)sums[z]=fma(w[u],x[z][u],sums[z]);
+    }
+}else{
+    for(uint i=lane;i<p.k;i+=64){float w=uintBitsToFloat(ww.words[row*p.k+i]);
+    [[unroll]]for(uint z=0;z<8;z++)if(z<cols)sums[z]=fma(w,b_f.v[(t0+z)*p.k+i],sums[z]);}
+}
 [[unroll]]for(uint z=0;z<8;z++){float v=subgroupAdd(sums[z]);if(lane==0&&z<cols)c_f.v[(t0+z)*p.n+row]=v;}}

@@ -30,6 +30,39 @@ pub struct Device {
     pub device_bytes: Cell<u64>,
     dummy: vk::Buffer,
     dummy_memory: vk::DeviceMemory,
+    /// Timestamp recorder of the graph being recorded, when profiling (`Stamps`).
+    pub stamps: RefCell<Option<Stamps>>,
+    calibrated: Option<ash::ext::calibrated_timestamps::Device>,
+    /// Device-local memory shared by many buffers, once `use_arena` is called.
+    arena: RefCell<Option<Vec<Chunk>>>,
+}
+
+/// One allocation of the arena: memory type, size, bytes handed out.
+struct Chunk {
+    memory: vk::DeviceMemory,
+    ty: u32,
+    size: u64,
+    used: u64,
+}
+
+/// Arena allocations; buffers larger than half of this get their own.
+const CHUNK: u64 = 256 << 20;
+
+/// GPU timestamps written into a graph's command buffers for profiling (`TRASHCAN_TP_PROFILE`): segment
+/// boundaries, and with `dispatches` the start (top of pipe, after the preceding barrier's flushes) and end
+/// (bottom of pipe) of every dispatch and copy.
+pub struct Stamps {
+    pub pool: vk::QueryPool,
+    pub labels: Vec<String>,
+    pub dispatches: bool,
+}
+pub const STAMP_CAPACITY: u32 = 16384;
+
+/// CLOCK_MONOTONIC in nanoseconds, the host time domain of `Device::calibrate`.
+pub fn host_ns() -> u64 {
+    let mut t = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut t) };
+    t.tv_sec as u64 * 1_000_000_000 + t.tv_nsec as u64
 }
 #[repr(C)]
 #[derive(Clone, Copy, Default)]
@@ -131,11 +164,19 @@ impl Device {
         let queue_info = [vk::DeviceQueueCreateInfo::default()
             .queue_family_index(family)
             .queue_priorities(&priority)];
-        let extensions = [
+        let mut extensions = vec![
             ash::khr::external_memory_fd::NAME.as_ptr(),
             ash::ext::external_memory_dma_buf::NAME.as_ptr(),
             ash::khr::external_semaphore_fd::NAME.as_ptr(),
         ];
+        // Profiling aligns GPU timestamps with host time.
+        let calibrate = std::env::var_os("TRASHCAN_TP_PROFILE").is_some()
+            && unsafe { inst.instance.enumerate_device_extension_properties(pd)? }
+                .iter()
+                .any(|e| e.extension_name_as_c_str() == Ok(ash::ext::calibrated_timestamps::NAME));
+        if calibrate {
+            extensions.push(ash::ext::calibrated_timestamps::NAME.as_ptr());
+        }
         let mut f11 =
             vk::PhysicalDeviceVulkan11Features::default().storage_buffer16_bit_access(true);
         let mut f12 = vk::PhysicalDeviceVulkan12Features::default()
@@ -151,6 +192,7 @@ impl Device {
             .push_next(&mut f11)
             .push_next(&mut f12);
         let dev = unsafe { inst.instance.create_device(pd, &ci, None)? };
+        let calibrated = calibrate.then(|| ash::ext::calibrated_timestamps::Device::new(&inst.instance, &dev));
         let queue = unsafe { dev.get_device_queue(family, 0) };
         let pool = unsafe {
             dev.create_command_pool(
@@ -338,6 +380,10 @@ impl Device {
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_add_norm.spv")).as_slice(),
             ),
             (
+                "qwen_add_norm_wide",
+                include_bytes!(concat!(env!("OUT_DIR"), "/qwen_add_norm_wide.spv")).as_slice(),
+            ),
+            (
                 "qwen_matf32",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_matf32.spv")).as_slice(),
             ),
@@ -430,6 +476,7 @@ impl Device {
                     ("attention_partial64", Some(64)),
                     ("attention_partial128", Some(128)),
                 ],
+                "qwen_add_norm_wide" => &[("qwen_add_norm_j16", Some(16)), ("qwen_add_norm_j20", Some(20))],
                 "attention_partial_heads2" => &[
                     ("attention_partial_heads2", None),
                     ("attention_partial_heads2_16", Some(16)),
@@ -567,7 +614,61 @@ impl Device {
             device_bytes: Cell::new(0),
             dummy,
             dummy_memory,
+            stamps: RefCell::new(None),
+            calibrated,
+            arena: RefCell::new(None),
         }))
+    }
+    /// Place later device-local buffers (not host-visible, not external) in shared allocations of `CHUNK`
+    /// bytes. A submission names every memory object its command buffers use and the kernel validates each
+    /// of them, so a forward over hundreds of per-buffer allocations waits about a millisecond before it
+    /// starts. Arena memory is only returned when the device is destroyed.
+    pub fn use_arena(&self) {
+        self.arena.borrow_mut().get_or_insert_with(Vec::new);
+    }
+    /// Memory and offset for `buf` in the arena, if the arena is on and the buffer fits a chunk.
+    fn arena_place(&self, buf: vk::Buffer, ty: u32, req: &vk::MemoryRequirements) -> Result<Option<(vk::DeviceMemory, u64)>> {
+        let mut arena = self.arena.borrow_mut();
+        let Some(chunks) = arena.as_mut() else { return Ok(None) };
+        if req.size > CHUNK / 2 {
+            return Ok(None);
+        }
+        let fits = |c: &Chunk| c.ty == ty && c.used.next_multiple_of(req.alignment) + req.size <= c.size;
+        if !chunks.iter().any(fits) {
+            let ai = vk::MemoryAllocateInfo::default().allocation_size(CHUNK).memory_type_index(ty);
+            let memory = unsafe { self.dev.allocate_memory(&ai, None)? };
+            chunks.push(Chunk { memory, ty, size: CHUNK, used: 0 });
+        }
+        let c = chunks.iter_mut().find(|c| fits(c)).unwrap();
+        let offset = c.used.next_multiple_of(req.alignment);
+        c.used = offset + req.size;
+        unsafe { self.dev.bind_buffer_memory(buf, c.memory, offset)? };
+        Ok(Some((c.memory, offset)))
+    }
+    /// Write a timestamp into the active recorder, if any: at the top of the pipe (when the command processor
+    /// gets there, after pending barrier flushes) or the bottom (when all preceding work has finished).
+    pub fn stamp(&self, cmd: vk::CommandBuffer, bottom: bool, label: impl FnOnce() -> String) {
+        if let Some(s) = self.stamps.borrow_mut().as_mut() {
+            let i = s.labels.len() as u32;
+            if i < STAMP_CAPACITY {
+                s.labels.push(label());
+                let stage = if bottom { vk::PipelineStageFlags::BOTTOM_OF_PIPE } else { vk::PipelineStageFlags::TOP_OF_PIPE };
+                unsafe { self.dev.cmd_write_timestamp(cmd, stage, s.pool, i) };
+            }
+        }
+    }
+    fn stamping_dispatches(&self) -> bool {
+        self.stamps.borrow().as_ref().is_some_and(|s| s.dispatches)
+    }
+    /// (device ticks, CLOCK_MONOTONIC ns) sampled together, on a device created for profiling.
+    pub fn calibrate(&self) -> Option<(u64, u64)> {
+        let c = self.calibrated.as_ref()?;
+        let info = [
+            vk::CalibratedTimestampInfoEXT::default().time_domain(vk::TimeDomainEXT::DEVICE),
+            vk::CalibratedTimestampInfoEXT::default().time_domain(vk::TimeDomainEXT::CLOCK_MONOTONIC),
+        ];
+        let (t, _) = unsafe { c.get_calibrated_timestamps(&info) }.ok()?;
+        Some((t[0], t[1]))
     }
     fn memory_type(&self, bits: u32, flags: vk::MemoryPropertyFlags) -> Result<u32> {
         (0..self.mem.memory_type_count)
@@ -651,10 +752,15 @@ impl Device {
                 ai.push_next(&mut exp)
             };
         }
-        let memory = unsafe { self.dev.allocate_memory(&ai, None)? };
-        unsafe {
-            self.dev.bind_buffer_memory(buf, memory, 0)?;
-        }
+        let placed = if host || external || import.is_some() { None } else { self.arena_place(buf, ty, &req)? };
+        let (memory, owned) = match placed {
+            Some((memory, _)) => (memory, false),
+            None => {
+                let memory = unsafe { self.dev.allocate_memory(&ai, None)? };
+                unsafe { self.dev.bind_buffer_memory(buf, memory, 0)? };
+                (memory, true)
+            }
+        };
         let ptr = if host {
             unsafe {
                 self.dev
@@ -684,6 +790,7 @@ impl Device {
             size,
             ptr,
             device_bytes,
+            owned,
         })
     }
     pub fn begin(&self) -> Result<vk::CommandBuffer> {
@@ -738,6 +845,24 @@ impl Device {
                 vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ,
             );
         }
+    }
+    /// Make the command processor wait until the host sets `event` (RADV: a WAIT_REG_MEM on the event's host
+    /// memory, no kernel involvement), then make host writes made before the set visible to shaders and copies.
+    pub fn wait_host_event(&self, cmd: vk::CommandBuffer, event: vk::Event) {
+        let b = [vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::HOST_WRITE)
+            .dst_access_mask(vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ)];
+        unsafe {
+            self.dev.cmd_wait_events(
+                cmd,
+                &[event],
+                vk::PipelineStageFlags::HOST,
+                vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER,
+                &b,
+                &[],
+                &[],
+            )
+        };
     }
     fn scoped_barrier(
         &self,
@@ -957,7 +1082,14 @@ impl Device {
                 0,
                 bytemuck::bytes_of(&p),
             );
-            self.dev.cmd_dispatch(cmd, x, y, 1);
+        }
+        let stamp = self.stamping_dispatches();
+        if stamp {
+            self.stamp(cmd, false, || format!("{shader} {x}x{y}"));
+        }
+        unsafe { self.dev.cmd_dispatch(cmd, x, y, 1) };
+        if stamp {
+            self.stamp(cmd, true, || format!("{shader} {x}x{y}"));
         }
         if p.u[14] == 0 {
             self.scoped_barrier(
@@ -985,6 +1117,10 @@ impl Device {
             vk::AccessFlags::SHADER_WRITE,
             vk::AccessFlags::TRANSFER_READ,
         );
+        let stamp = self.stamping_dispatches();
+        if stamp {
+            self.stamp(cmd, false, || format!("copy {size}"));
+        }
         unsafe {
             self.dev.cmd_copy_buffer(
                 cmd,
@@ -996,6 +1132,9 @@ impl Device {
                     size: size as u64,
                 }],
             );
+        }
+        if stamp {
+            self.stamp(cmd, true, || format!("copy {size}"));
         }
         self.scoped_barrier(
             cmd,
@@ -1036,6 +1175,14 @@ impl Device {
         unsafe {
             self.dev.queue_submit(self.queue, &ci, fence)?;
         }
+        Ok(())
+    }
+    /// Submit `cmds` as one submission, signalling `signal` when all have finished.
+    pub fn submit_all(&self, cmds: &[vk::CommandBuffer], signal: (vk::Semaphore, u64)) -> Result<()> {
+        let (ss, sv) = ([signal.0], [signal.1]);
+        let mut ti = vk::TimelineSemaphoreSubmitInfo::default().signal_semaphore_values(&sv);
+        let ci = [vk::SubmitInfo::default().command_buffers(cmds).signal_semaphores(&ss).push_next(&mut ti)];
+        unsafe { self.dev.queue_submit(self.queue, &ci, vk::Fence::null())? };
         Ok(())
     }
     /// Submit the full schedule in one API call per GPU. Each element still has
@@ -1140,6 +1287,9 @@ impl Drop for Device {
                 .destroy_descriptor_set_layout(self.binding_layout, None);
             self.dev.destroy_buffer(self.dummy, None);
             self.dev.free_memory(self.dummy_memory, None);
+            for c in self.arena.borrow().iter().flatten() {
+                self.dev.free_memory(c.memory, None);
+            }
             self.dev.destroy_device(None);
         }
     }
@@ -1152,6 +1302,8 @@ pub struct Buffer {
     pub size: usize,
     pub ptr: *mut u8,
     device_bytes: u64,
+    /// The memory is this buffer's own (not an arena chunk).
+    owned: bool,
 }
 impl Buffer {
     pub fn copy_host(&self, other: &Buffer, size: usize) -> Result<()> {
@@ -1220,7 +1372,9 @@ impl Drop for Buffer {
                 self.gpu.dev.unmap_memory(self.memory);
             }
             self.gpu.dev.destroy_buffer(self.buf, None);
-            self.gpu.dev.free_memory(self.memory, None);
+            if self.owned {
+                self.gpu.dev.free_memory(self.memory, None);
+            }
         }
     }
 }

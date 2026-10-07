@@ -1,0 +1,23 @@
+#version 460
+#include "common.glsl"
+// qwen_add_norm for p.n == 256 * J: thread l owns elements l, l + 256, ..., and every load of a token is issued
+// before any store (a store to x could otherwise alias the next y load), so the loads overlap instead of costing
+// a memory round trip each (y is the tensor-parallel total, in host memory). Same sums in the same order.
+layout(local_size_x=256) in;
+layout(constant_id=0) const uint J=16;
+shared float ss[4];
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint base=t*p.n;bool add=(p.flags&1)!=0,norm=p.c!=0;
+float x[J],y[J],w[J];
+[[unroll]]for(uint j=0;j<J;j++)x[j]=a_f.v[base+l+256*j];
+if(add){[[unroll]]for(uint j=0;j<J;j++)y[j]=b_f.v[base+l+256*j];}
+if(norm){[[unroll]]for(uint j=0;j<J;j++)w[j]=d_f.v[l+256*j];}
+if(add){[[unroll]]for(uint j=0;j<J;j++)x[j]+=y[j];}
+float sum=0;
+[[unroll]]for(uint j=0;j<J;j++)sum=fma(x[j],x[j],sum);
+if(add){[[unroll]]for(uint j=0;j<J;j++)a_f.v[base+l+256*j]=x[j];}
+if(!norm)return;
+float s=subgroupAdd(sum);if(gl_SubgroupInvocationID==0)ss[gl_SubgroupID]=s;barrier();
+float inv=inversesqrt((ss[0]+ss[1]+ss[2]+ss[3])/float(p.n)+uintBitsToFloat(p.r0));
+uint ob=t*(p.stride!=0?p.stride:p.n);
+[[unroll]]for(uint j=0;j<J;j++)c_f.v[ob+l+256*j]=x[j]*inv*w[j];}

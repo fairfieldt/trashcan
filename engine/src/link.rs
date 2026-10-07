@@ -17,7 +17,7 @@ use std::{
 /// O_NONBLOCK on x86-64 Linux.
 const O_NONBLOCK: i32 = 0o4000;
 /// A lane that makes no progress for this long has failed (the peer died or the link dropped).
-const STALL: Duration = Duration::from_secs(30);
+pub const STALL: Duration = Duration::from_secs(30);
 const MAGIC: u32 = 0x454e_414c;
 const HELLO: u32 = 1;
 const READY: u32 = 2;
@@ -245,6 +245,11 @@ impl Lanes {
     /// holds (256 frames of 4 KiB), so stream lanes move at most ROUND bytes each way per round, and a round
     /// ends only when its bytes have arrived from the other machine.
     pub fn exchange(&mut self, out: &[u8], inp: &mut [u8]) -> Result<()> {
+        self.exchange_within(out, inp, STALL)
+    }
+
+    /// `exchange`, failing when the lanes make no progress for `stall`.
+    pub fn exchange_within(&mut self, out: &[u8], inp: &mut [u8], stall: Duration) -> Result<()> {
         ensure!(out.len() == inp.len() && out.len().is_multiple_of(4), "exchange sizes must match and align to 4 bytes");
         const ROUND: usize = 256 << 10;
         let n = self.lanes.len();
@@ -253,14 +258,14 @@ impl Lanes {
         let mut begin: Vec<usize> = cuts[..n].to_vec();
         while begin != cuts[1..] {
             let ends: Vec<usize> = (0..n).map(|i| cuts[i + 1].min(begin[i].saturating_add(round))).collect();
-            self.exchange_round(out, inp, &begin, &ends)?;
+            self.exchange_round(out, inp, &begin, &ends, stall)?;
             begin = ends;
         }
         Ok(())
     }
 
     /// Move `out[begin[i]..end[i]]` out and into `inp` at the same offsets on every lane `i`.
-    fn exchange_round(&mut self, out: &[u8], inp: &mut [u8], begin: &[usize], end: &[usize]) -> Result<()> {
+    fn exchange_round(&mut self, out: &[u8], inp: &mut [u8], begin: &[usize], end: &[usize], stall: Duration) -> Result<()> {
         let mut sent = begin.to_vec();
         let mut read = begin.to_vec();
         let mut last = Instant::now();
@@ -283,8 +288,8 @@ impl Lanes {
             }
             if busy {
                 last = Instant::now();
-            } else if last.elapsed() > STALL {
-                bail!("lanes stalled for {STALL:?}");
+            } else if last.elapsed() > stall {
+                bail!("lanes stalled for {stall:?}");
             } else {
                 std::hint::spin_loop();
             }

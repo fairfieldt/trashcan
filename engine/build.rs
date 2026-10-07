@@ -36,6 +36,7 @@ fn main() {
         "matvecq4narrow",
         "merge",
         "qwen_add_norm",
+        "qwen_add_norm_wide",
         "qwen_matf32",
         "qwen_conv",
         "qwen_gdn",
