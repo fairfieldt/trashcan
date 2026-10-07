@@ -1,0 +1,18 @@
+#version 460
+#include "common.glsl"
+// N-gram (PLE) convolution: depthwise and causal, kernel 4 dilated by 3 (taps t-9, t-6, t-3, t) over the normed
+// gated value, then SiLU; the residual gains the gated value and the convolution. One thread per channel walks
+// the batch with the last 9 inputs in registers, then stores them as the history for the next call.
+// a: x [t][w] (read/write), b: gv [t][w], c: pn [t][w], d: weights [w][4], e: history [9][w] (read/write).
+// p.n = channels (hc * d). Position 0 starts from a zero history.
+layout(local_size_x=256) in;
+void main(){uint ch=gl_GlobalInvocationID.x;if(ch>=p.n)return;
+bool fresh=position()==0;float h[9];
+[[unroll]]for(uint j=0;j<9;j++)h[j]=fresh?0.0:e_f.v[j*p.n+ch];
+vec4 w=vec4(d_f.v[ch*4],d_f.v[ch*4+1],d_f.v[ch*4+2],d_f.v[ch*4+3]);
+uint nb=batch();
+for(uint t=0;t<nb;t++){float x=c_f.v[t*p.n+ch];
+    float s=w.x*h[0];s=fma(w.y,h[3],s);s=fma(w.z,h[6],s);s=fma(w.w,x,s);
+    a_f.v[t*p.n+ch]+=b_f.v[t*p.n+ch]+s/(1.0+exp(-s));
+    [[unroll]]for(uint j=0;j<8;j++)h[j]=h[j+1];h[8]=x;}
+[[unroll]]for(uint j=0;j<9;j++)e_f.v[j*p.n+ch]=h[j];}

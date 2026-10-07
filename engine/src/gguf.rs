@@ -118,6 +118,13 @@ pub enum GgmlType {
     Q5K,
     Q6K,
     BF16,
+    Q2K,
+    Q3K,
+    IQ2XXS,
+    IQ4NL,
+    IQ4XS,
+    MXFP4,
+    Q2_0,
     Other(u32),
 }
 
@@ -131,6 +138,13 @@ impl GgmlType {
             6 => GgmlType::Q5_0,
             7 => GgmlType::Q5_1,
             8 => GgmlType::Q8_0,
+            10 => GgmlType::Q2K,
+            11 => GgmlType::Q3K,
+            16 => GgmlType::IQ2XXS,
+            20 => GgmlType::IQ4NL,
+            23 => GgmlType::IQ4XS,
+            39 => GgmlType::MXFP4,
+            42 => GgmlType::Q2_0,
             12 => GgmlType::Q4K,
             13 => GgmlType::Q5K,
             14 => GgmlType::Q6K,
@@ -150,6 +164,13 @@ impl GgmlType {
             GgmlType::Q5_1 => (32, 24),
             GgmlType::Q8_0 => (32, 34),
             GgmlType::Q4K => (256, 144),
+            GgmlType::Q2K => (256, 84),
+            GgmlType::Q3K => (256, 110),
+            GgmlType::IQ2XXS => (256, 66),
+            GgmlType::IQ4NL => (32, 18),
+            GgmlType::IQ4XS => (256, 136),
+            GgmlType::MXFP4 => (32, 17),
+            GgmlType::Q2_0 => (64, 18),
             GgmlType::Q5K => (256, 176),
             GgmlType::Q6K => (256, 210),
             GgmlType::Other(_) => return None,
@@ -161,6 +182,12 @@ impl fmt::Display for GgmlType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             GgmlType::Q4K => write!(f, "Q4_K"),
+            GgmlType::Q2K => write!(f, "Q2_K"),
+            GgmlType::Q3K => write!(f, "Q3_K"),
+            GgmlType::IQ2XXS => write!(f, "IQ2_XXS"),
+            GgmlType::IQ4NL => write!(f, "IQ4_NL"),
+            GgmlType::IQ4XS => write!(f, "IQ4_XS"),
+            GgmlType::Q2_0 => write!(f, "Q2_0"),
             GgmlType::Q5K => write!(f, "Q5_K"),
             GgmlType::Q6K => write!(f, "Q6_K"),
             GgmlType::Other(t) => write!(f, "type{t}"),
@@ -178,6 +205,8 @@ pub struct TensorInfo {
     /// Byte offset relative to the data section.
     pub offset: u64,
     pub size: u64,
+    /// Shard of a split GGUF holding the data (0 for a single file).
+    pub file: usize,
 }
 
 pub struct Gguf {
@@ -186,6 +215,10 @@ pub struct Gguf {
     pub tensors: Vec<TensorInfo>,
     pub data_offset: u64,
     mmap: Mmap,
+    /// Further shards of a split GGUF (`NAME-0000k-of-0000n.gguf`): (data section offset, map).
+    shards: Vec<(u64, Mmap)>,
+    /// Shard paths in order, the opened file first.
+    pub paths: Vec<std::path::PathBuf>,
 }
 
 struct Cursor<'a> {
@@ -260,7 +293,42 @@ impl<'a> Cursor<'a> {
 }
 
 impl Gguf {
+    /// Open a GGUF file. The first shard of a split model (`NAME-00001-of-0000n.gguf`) opens every shard; the
+    /// metadata comes from the first one and the tensors from all of them.
     pub fn open(path: &Path) -> Result<Self> {
+        let mut g = Self::open_one(path)?;
+        let count = g.meta.get("split.count").and_then(Value::as_u64).unwrap_or(1) as usize;
+        if count <= 1 {
+            return Ok(g);
+        }
+        let name = path.to_string_lossy().into_owned();
+        let suffix = format!("-00001-of-{count:05}.gguf");
+        let prefix = name
+            .strip_suffix(&suffix)
+            .with_context(|| format!("{name}: a split GGUF must be opened through its first shard"))?;
+        for k in 2..=count {
+            let shard = std::path::PathBuf::from(format!("{prefix}-{k:05}-of-{count:05}.gguf"));
+            // A machine of a chain may hold only the shards with its own layers.
+            if !shard.exists() {
+                eprintln!("gguf: {} is absent; its tensors are unavailable", shard.display());
+                continue;
+            }
+            let s = Self::open_one(&shard)?;
+            ensure!(
+                s.meta.get("split.no").and_then(Value::as_u64) == Some(k as u64 - 1),
+                "{} is not shard {k}",
+                shard.display()
+            );
+            let file = g.shards.len() + 1;
+            g.tensors.extend(s.tensors.into_iter().map(|t| TensorInfo { file, ..t }));
+            g.shards.push((s.data_offset, s.mmap));
+            g.paths.push(shard);
+        }
+        Ok(g)
+    }
+
+    /// Open one file of a split GGUF on its own (its metadata and its own tensors).
+    pub fn open_one(path: &Path) -> Result<Self> {
         let file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
         let mmap = unsafe { Mmap::map(&file)? };
         let mut c = Cursor { b: &mmap, pos: 0 };
@@ -324,6 +392,7 @@ impl Gguf {
                 size: (n / blk)
                     .checked_mul(bytes)
                     .context("tensor byte size overflow")?,
+                file: 0,
             });
         }
 
@@ -352,6 +421,8 @@ impl Gguf {
             tensors,
             data_offset,
             mmap,
+            shards: Vec::new(),
+            paths: vec![path.to_path_buf()],
         })
     }
 
@@ -360,8 +431,23 @@ impl Gguf {
     }
 
     pub fn data(&self, t: &TensorInfo) -> &[u8] {
-        let start = (self.data_offset + t.offset) as usize;
-        &self.mmap[start..start + t.size as usize]
+        let (offset, map) = match t.file {
+            0 => (self.data_offset, &self.mmap),
+            f => {
+                let (o, m) = &self.shards[f - 1];
+                (*o, m)
+            }
+        };
+        let start = (offset + t.offset) as usize;
+        &map[start..start + t.size as usize]
+    }
+
+    /// Absolute byte offset of a tensor's data in its shard file (`paths[t.file]`), for direct reads.
+    pub fn file_offset(&self, t: &TensorInfo) -> u64 {
+        match t.file {
+            0 => self.data_offset + t.offset,
+            f => self.shards[f - 1].0 + t.offset,
+        }
     }
 
     pub fn get(&self, key: &str) -> Result<&Value> {
@@ -389,6 +475,6 @@ impl Gguf {
     }
 
     pub fn file_size(&self) -> u64 {
-        self.mmap.len() as u64
+        self.mmap.len() as u64 + self.shards.iter().map(|(_, m)| m.len() as u64).sum::<u64>()
     }
 }

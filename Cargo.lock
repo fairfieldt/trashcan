@@ -411,6 +411,7 @@ dependencies = [
  "clap",
  "fancy-regex",
  "half",
+ "libc",
  "memmap2",
  "minijinja",
  "minijinja-contrib",

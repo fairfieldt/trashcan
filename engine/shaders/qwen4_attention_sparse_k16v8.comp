@@ -1,0 +1,5 @@
+#version 460
+#define PARTIAL
+#define KVQ 2
+#include "common.glsl"
+#include "qwen4_attention_sparse.glsl"

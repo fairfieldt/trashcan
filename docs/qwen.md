@@ -3,7 +3,7 @@
 The engine runs `qwen35` GGUFs: Qwen3.8-27B and the same-architecture Qwen3.5-9B, which fits on one Mac
 and is the single-machine test model. The forward pass is a pipeline of **stages**, each owning a
 contiguous range of layers on one device. Stages chain across the two local GPUs and across machines;
-only the hidden state crosses a boundary. Qwen3.8-Flash-Next (`qwen4exp`) is the next target; see the end.
+only the hidden state crosses a boundary. Qwen3.8-Flash-Next (`qwen4exp`) has its own document, [qwen4.md](qwen4.md).
 
 | | Qwen3.5-9B | Qwen3.8-27B |
 |---|---|---|
@@ -296,6 +296,9 @@ which holds `~/trashcan-exp/.lock` and records clocks.
 
 ## Next: Qwen3.8-Flash-Next (`qwen4exp`)
 
+This was the plan; the implementation (`engine/src/qwen4/`), measurements and recipes are in
+[qwen4.md](qwen4.md).
+
 Shared with what exists: tokenizer, Gated DeltaNet (with a sigmoid output gate instead of SiLU and 48
 value heads), the gated attention projections, partial RoPE, the Q6 head and the machine chain. New:
 
@@ -325,3 +328,7 @@ state. Six Macs therefore need experts near 4 bits per weight with little slack,
 2.5-3 bits, or experts left in host RAM with a GPU cache of hot experts. The M3 Ultra (512 GB) holds
 the whole model in llama.cpp, so the first step is the same as for Qwen3.8-27B: a CPU reference checked
 against llama.cpp, then GPU stages checked layer by layer against it.
+
+Measured since: the dense matrices need Q8_0 (all of them at Q4_0 cost KLD 0.20 against 0.04 for Q4_0 experts),
+IQ4_XS/IQ4_NL experts fit six Macs once the head is spread over the GPUs, and 2-bit experts cost KLD 0.21, so four
+Macs are better served by experts in host RAM with a VRAM cache.

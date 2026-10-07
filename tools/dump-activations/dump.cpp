@@ -5,16 +5,25 @@
 // Then decodes greedily for N tokens and writes OUT_DIR/greedy.txt (the generated token ids, one per line), and the
 // last prompt token's full logits to OUT_DIR/logits.f32.
 //
-// usage: dump MODEL OUT_DIR cpu|vulkan N_GREEDY TOKEN_ID...
+// usage: dump MODEL OUT_DIR cpu|vulkan N_GREEDY TOKEN_ID... (or @FILE with whitespace-separated ids)
+//
+// Environment: DUMP_DETAIL=0,3 (detail layers, default 0,5; "all" for every layer), DUMP_ALWAYS=base,... (bases
+// dumped at every layer, default attn_out,l_out), DUMP_NAMES=name,... (extra exact names), DUMP_CTX (context size,
+// default 1024; the prompt runs as one ubatch), DUMP_THREADS, DUMP_FULL=base,... (names or bases written with every
+// token's row instead of the last one). A name the graph uses more than once per decode (qwen4exp's two
+// hyper-connection mixers per layer) gets "#2", "#3" ... from its second use on. A tensor without a dimension equal
+// to the prompt length holds a single token (rows gathered for the output), and is written whole.
 
 #include "llama.h"
 #include "ggml.h"
 #include "ggml-backend.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -23,9 +32,33 @@ struct dump_ctx {
     std::string dir;
     std::set<std::string> wanted;  // exact names
     std::set<int> detail_layers;   // layers whose intermediates are all dumped
+    bool all_layers = false;
+    std::set<std::string> always = { "attn_out", "l_out" };
+    std::map<std::string, int> seen; // uses of each name in this decode
+    std::set<std::string> full;      // bases written with every token's row
+    int64_t n_prompt = 0;
     std::ofstream index;
     bool active = true;            // only dump during the prompt decode
 };
+
+static std::set<std::string> split_names(const char * s) {
+    std::set<std::string> out;
+    std::string cur;
+    for (; *s; s++) {
+        if (*s == ',') {
+            if (!cur.empty()) {
+                out.insert(cur);
+            }
+            cur.clear();
+        } else {
+            cur += *s;
+        }
+    }
+    if (!cur.empty()) {
+        out.insert(cur);
+    }
+    return out;
+}
 
 static bool want(const dump_ctx & d, const std::string & name) {
     if (d.wanted.count(name)) {
@@ -37,10 +70,10 @@ static bool want(const dump_ctx & d, const std::string & name) {
     }
     const std::string base = name.substr(0, dash);
     const int layer = atoi(name.c_str() + dash + 1);
-    if (base == "attn_out" || base == "l_out") {
+    if (d.always.count(base)) {
         return true;
     }
-    return d.detail_layers.count(layer) > 0;
+    return d.all_layers || d.detail_layers.count(layer) > 0;
 }
 
 static bool cb_eval(struct ggml_tensor * t, bool ask, void * user_data) {
@@ -56,20 +89,25 @@ static bool cb_eval(struct ggml_tensor * t, bool ask, void * user_data) {
         return true;
     }
     // The token dimension is the highest non-singleton dimension above 0: [n_embd, n_tokens] or
-    // [head_dim, n_head, n_tokens]. With one token everything is one row.
+    // [head_dim, n_head, n_tokens]. With one token everything is one row. When the prompt length is known,
+    // only a dimension of that length counts, so [n_embd, hc, 1] rows gathered for the output stay whole.
     int64_t n_tok = 1;
     for (int dim = GGML_MAX_DIMS - 1; dim >= 1; dim--) {
-        if (t->ne[dim] > 1) {
+        if (d->n_prompt > 1 ? t->ne[dim] == d->n_prompt : t->ne[dim] > 1) {
             n_tok = t->ne[dim];
             break;
         }
     }
-    const int64_t per_tok = ggml_nelements(t) / n_tok;
+    const int uses = ++d->seen[name];
+    const std::string file = uses == 1 ? name : name + "#" + std::to_string(uses);
+    const size_t dash = name.rfind('-');
+    const bool all_rows = d->full.count(name) || (dash != std::string::npos && d->full.count(name.substr(0, dash)));
+    const int64_t per_tok = all_rows ? ggml_nelements(t) : ggml_nelements(t) / n_tok;
     std::vector<float> buf(per_tok);
-    ggml_backend_tensor_get(t, buf.data(), (n_tok - 1) * per_tok * sizeof(float), per_tok * sizeof(float));
-    std::ofstream f(d->dir + "/" + name + ".f32", std::ios::binary);
+    ggml_backend_tensor_get(t, buf.data(), all_rows ? 0 : (n_tok - 1) * per_tok * sizeof(float), per_tok * sizeof(float));
+    std::ofstream f(d->dir + "/" + file + ".f32", std::ios::binary);
     f.write((const char *) buf.data(), buf.size() * sizeof(float));
-    d->index << name << "\t" << t->ne[0] << "," << t->ne[1] << "," << t->ne[2] << "," << t->ne[3] << "\t" << per_tok << "\n";
+    d->index << file << "\t" << t->ne[0] << "," << t->ne[1] << "," << t->ne[2] << "," << t->ne[3] << "\t" << per_tok << "\n";
     return true;
 }
 
@@ -85,19 +123,43 @@ int main(int argc, char ** argv) {
     const int n_greedy = atoi(argv[4]);
     std::vector<llama_token> prompt;
     for (int i = 5; i < argc; i++) {
+        if (argv[i][0] == '@') {
+            // @FILE: whitespace-separated token ids
+            std::ifstream f(argv[i] + 1);
+            for (llama_token t; f >> t; ) {
+                prompt.push_back(t);
+            }
+            continue;
+        }
         prompt.push_back(atoi(argv[i]));
     }
     d.wanted = { "inp_scaled", "result_norm", "result_output" };
     d.detail_layers = { 0, 5 };
+    d.n_prompt = (int64_t) prompt.size();
     // DUMP_DETAIL=0,3 selects other detail layers (Gemma's defaults are 0 and 5).
     if (const char * detail = getenv("DUMP_DETAIL")) {
         d.detail_layers.clear();
-        for (const char * s = detail; *s; ) {
+        if (strcmp(detail, "all") == 0) {
+            d.all_layers = true;
+        }
+        for (const char * s = detail; *s && !d.all_layers; ) {
             d.detail_layers.insert(atoi(s));
             const char * comma = strchr(s, ',');
             s = comma ? comma + 1 : s + strlen(s);
         }
     }
+    if (const char * always = getenv("DUMP_ALWAYS")) {
+        d.always = split_names(always);
+    }
+    if (const char * names = getenv("DUMP_NAMES")) {
+        for (const auto & n : split_names(names)) {
+            d.wanted.insert(n);
+        }
+    }
+    if (const char * full = getenv("DUMP_FULL")) {
+        d.full = split_names(full);
+    }
+    const int n_ctx = getenv("DUMP_CTX") ? atoi(getenv("DUMP_CTX")) : 1024;
     d.index.open(d.dir + "/index.tsv");
 
     llama_backend_init();
@@ -112,6 +174,10 @@ int main(int argc, char ** argv) {
         mp.n_gpu_layers = 0;
         mp.devices = no_devices;
     }
+    // DUMP_NO_REPACK=1 keeps the weights in the file map instead of repacked copies (much less resident memory).
+    if (getenv("DUMP_NO_REPACK")) {
+        mp.use_extra_bufts = false;
+    }
     llama_model * model = llama_model_load_from_file(model_path, mp);
     if (!model) {
         fprintf(stderr, "failed to load model\n");
@@ -119,9 +185,12 @@ int main(int argc, char ** argv) {
     }
 
     llama_context_params cp = llama_context_default_params();
-    cp.n_ctx = 1024;
-    cp.n_batch = 512;
-    cp.n_ubatch = 512;
+    cp.n_ctx = n_ctx;
+    cp.n_batch = std::max<uint32_t>(512, prompt.size());
+    cp.n_ubatch = cp.n_batch;
+    if (const char * threads = getenv("DUMP_THREADS")) {
+        cp.n_threads = cp.n_threads_batch = atoi(threads);
+    }
     cp.cb_eval = cb_eval;
     cp.cb_eval_user_data = &d;
     cp.flash_attn_type = LLAMA_FLASH_ATTN_TYPE_DISABLED;

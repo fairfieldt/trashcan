@@ -1,0 +1,13 @@
+[lock acquired after 21s]
+gguf: /home/fairfieldt/models/qwen3.8-flash-next/G-q8d/G-q8d-00005-of-00006.gguf is absent; its tensors are unavailable
+gguf: /home/fairfieldt/models/qwen3.8-flash-next/G-q8d/G-q8d-00006-of-00006.gguf is absent; its tensors are unavailable
+plan: [[(0, 3), (3, 6)], [(6, 48)]]
+gguf: /home/fairfieldt/models/qwen3.8-flash-next/G-q8d/G-q8d-00005-of-00006.gguf is absent; its tensors are unavailable
+gguf: /home/fairfieldt/models/qwen3.8-flash-next/G-q8d/G-q8d-00006-of-00006.gguf is absent; its tensors are unavailable
+GPU0: layers 0..3
+GPU0: 4369.9 MiB allocated; device-local heap 4370 of 5888 MiB used, budget 5871
+GPU1: layers 3..6
+GPU1: 4324.0 MiB allocated; device-local heap 4324 of 5888 MiB used, budget 5759
+greedy: [9419, 0, 2500, 628, 353, 1438, 488, 3242, 30, 248046]
+[clocks] 224 samples card0 (02:00.0) sclk/mclk: 850/1370 x79 650/1370 x3 450/1370 x3 300/150 x139  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x59 650/1370 x1 450/1370 x2 300/150 x162  max 54C  log=/home/fairfieldt/trashcan-exp/qwen-flash/results/clocks/20261006T170846-536124.txt
+exit 0

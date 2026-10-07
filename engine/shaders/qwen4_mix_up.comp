@@ -1,0 +1,35 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_mix.glsl"
+// Fused second half of a hyper-connection mixer for small batches: the read gates of 4 elements in every stream
+// (16 rows of the up projection, K = the bottleneck) and the sublayer input u_i = mean_s sigmoid(g_s,i) * xn_s,i
+// with xn = x * inv_s * gamma. Each wave owns 4 elements of every stream, so it also stores their pending combine
+// x += w_prev * y (flags & 1) in place.
+// a: x [t][hc][n], b: mixer out [t][m + 8] (bottleneck at 0, inv norms at m + 4), c: u [t][n], d: previous mixer
+// out (write weights at m), e: gamma [hc][n], f: y [t][n]. p.n = stream width, p.m = bottleneck (K),
+// p.stride = word offset of the blocks.
+layout(local_size_x=256) in;
+void main(){
+uint t=gl_WorkGroupID.y,lane=gl_SubgroupInvocationID,blocks=p.m/32;
+if(t>=batch())return;
+uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4,o=t*(p.m+8);
+float acc[16];[[unroll]]for(uint j=0;j<16;j++)acc[j]=0;
+uint per=FMT==0?4:8,tasks=blocks*per;
+for(uint task=lane;task<tasks;task+=64){
+    uint b=task/per,part=task%per;
+    if(FMT==0){vec4 x0=b_v4.v[(o+b*32)/4+part],x1=b_v4.v[(o+b*32)/4+part+4];
+        [[unroll]]for(uint j=0;j<16;j++){uint row=(j/4)*p.n+min(first+j%4,p.n-1),blk=row*blocks+b;
+            uint q=ww.words[p.stride+blk*4+part];acc[j]=fma(dot(q4_lo(q),x0)+dot(q4_hi(q),x1),wscale(blk),acc[j]);}
+    }else{vec4 x0=b_v4.v[(o+b*32)/4+part];
+        [[unroll]]for(uint j=0;j<16;j++){uint row=(j/4)*p.n+min(first+j%4,p.n-1),blk=row*blocks+b;
+            uint w=ww.words[p.stride+blk*8+part];acc[j]=fma(dot(vec4(ivec4(w<<24,w<<16,w<<8,w)>>24),x0),wscale(blk),acc[j]);}
+    }
+}
+[[unroll]]for(uint j=0;j<16;j++)acc[j]=subgroupAdd(acc[j]);
+if(lane<4&&first+lane<p.n){uint i=first+lane;float u=0;
+    [[unroll]]for(uint s=0;s<4;s++){float g=0;[[unroll]]for(uint j=0;j<16;j++)if(j==s*4+lane)g=acc[j];
+        uint at=(t*4+s)*p.n+i;float x=a_f.v[at];
+        if((p.flags&1)!=0){x=fma(d_f.v[o+p.m+s],f_f.v[t*p.n+i],x);a_f.v[at]=x;}
+        u=fma(x*b_f.v[o+p.m+4+s]*e_f.v[s*p.n+i],1.0/(1.0+exp(-g)),u);}
+    c_f.v[t*p.n+i]=u*0.25;}
+}

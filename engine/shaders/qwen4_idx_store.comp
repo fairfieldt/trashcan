@@ -1,0 +1,8 @@
+#version 460
+#include "common.glsl"
+// QSA indexer: store the batch's raw indexer keys at their positions (ring of p.offset rows: the batch and the
+// incomplete block before it). a: raw keys [t][dim], c: ring [offset][dim]. p.dim, p.offset.
+layout(local_size_x=64) in;
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint slot=(position()+t)%p.offset;
+for(uint j=l;j<p.dim;j+=64)c_f.v[slot*p.dim+j]=a_f.v[t*p.dim+j];}
