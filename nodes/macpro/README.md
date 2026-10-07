@@ -70,7 +70,7 @@ slow:
 
 ```bash
 cat /proc/pressure/io                                  # "some avg60" near 90 means the disk is saturated
-sudo dumpe2fs /dev/sdXN | grep -c ITABLE_ZEROED       # groups done, against grep -c "^Group "
+sudo dumpe2fs /dev/sdXN | grep -c ITABLE_ZEROED       # groups done, against grep -c "^Group [0-9]"
 sudo fstrim -av                                        # a reinstalled SSD hasn't been told its old data is free
 sudo mount -o remount,noinit_itable /home              # pause the zeroing until the next mount
 ```
