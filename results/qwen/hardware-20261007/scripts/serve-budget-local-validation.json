@@ -1,0 +1,21 @@
+{
+  "hardware_run": false,
+  "ssh_run": false,
+  "syntax": "Python compile passed",
+  "tests": {
+    "command": "python3 results/qwen/hardware-20261007/scripts/test-serve-budget.py",
+    "passed": 13,
+    "log": "serve-budget-tests.log"
+  },
+  "files": {
+    "run-serve-budget.py": "70966cbe56913b8d343f3fcb0f8db45be886f31e501f1acbb9e95c53be9da35a",
+    "serve-budget-client.py": "c21c5136b45b79097e2e493757d2de0b7e7baf5eab65bdbb7bb03a8d61a87fdb",
+    "test-serve-budget.py": "4f345759e0260818ed56eb9ccb5a73d02f4f9561e7d1fb41be172a25915d282b",
+    "cooled-serve-plan.py": "96310e0698d52c85f27eea5325128e5669d094d5012e43328877ea52f55f2a73",
+    "serve-budget-plan.json": "e1fedee8bec553b33b70969772488e56d472a92c77230391f830a741520fb2ea",
+    "SERVE-BUDGET-PLAN.md": "f8becd430de999c8cc46a209693d5d77cb20727b70943dca7b9f9e345d6f7b32",
+    "run-tp4.py": "61e3f0d08c912469c323c5b2a9a3c4c90170a8ca478a0a8510fe7f7576f1a7bd",
+    "cooled-plan.py": "642985a9eb422ff24581f161d36ad025cce4a27f4bd3125fccc5a84e76a5cc8b",
+    "scoped-run.py": "c7d416dd649adba34bfeb40e1e4d9537bb55b40f34f6217dfc40541a66300f0d"
+  }
+}

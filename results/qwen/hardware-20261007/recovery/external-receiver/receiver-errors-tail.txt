@@ -1,0 +1,7 @@
+dump capture failed for invite /var/log/trashcan-crash/2adea731-ca6d-4058-980f-f2f21c0a12a4/devcd99999-1791391251758792000.dump: Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'invite', 'sudo', '-n', 'cat', '/var/log/trashcan-crash/2adea731-ca6d-4058-980f-f2f21c0a12a4/devcd99999-1791391251758792000.dump']' returned non-zero exit status 255.
+dump capture failed for invite /var/log/trashcan-crash/2adea731-ca6d-4058-980f-f2f21c0a12a4/devcd99999-1791391251758792000.dump: Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'invite', 'sudo', '-n', 'cat', '/var/log/trashcan-crash/2adea731-ca6d-4058-980f-f2f21c0a12a4/devcd99999-1791391251758792000.dump']' returned non-zero exit status 255.
+ssh: connect to host 192.168.0.100 port 22: No route to host
+
+dump capture failed for invite /var/log/trashcan-crash/2adea731-ca6d-4058-980f-f2f21c0a12a4/devcd99999-1791391251758792000.dump: Command '['ssh', '-o', 'HostName=100.97.51.99', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3', 'invite', 'sudo', '-n', 'cat', '/var/log/trashcan-crash/2adea731-ca6d-4058-980f-f2f21c0a12a4/devcd99999-1791391251758792000.dump']' returned non-zero exit status 255.
+Host key verification failed.
+

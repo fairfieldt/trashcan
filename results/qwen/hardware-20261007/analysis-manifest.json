@@ -1,0 +1,1468 @@
+{
+  "runs": [
+    {
+      "name": "maxfan-chinese-adaptive-3",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-3/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-3/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-3/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-3/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-chinese-adaptive-4",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-4/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-4/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-4/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-adaptive-4/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-chinese-fixed-2",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-2/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-2/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-2/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-2/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-chinese-fixed-5",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-5/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-5/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-5/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-fixed-5/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-chinese-plain-1",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-1/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-1/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-1/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-1/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-chinese-plain-6",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-6/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-6/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-6/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-chinese-plain-6/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-code-adaptive-3",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-3/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-3/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-3/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-3/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-code-adaptive-4",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-4/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-4/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-4/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-code-adaptive-4/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-code-fixed-2",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-2/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-2/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-2/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-2/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-code-fixed-5",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-5/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-5/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-5/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-code-fixed-5/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-code-plain-1",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-1/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-1/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-1/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-1/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-code-plain-6",
+      "output": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-6/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-6/incite/clocks.txt",
+        "invite": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-6/invite/clocks.txt"
+      },
+      "source_manifest": "plans/adaptive-maxfan-plan/runs/maxfan-code-plain-6/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-new-mtp-c",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-c/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-c/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-c/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-c/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-new-mtp-f",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-f/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-f/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-f/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-mtp-f/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-new-plain-b",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-b/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-b/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-b/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-b/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-new-plain-g",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-g/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-g/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-g/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-new-plain-g/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-old-mtp-d",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-d/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-d/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-d/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-d/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-old-mtp-e",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-e/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-e/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-e/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-mtp-e/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-old-plain-a",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-a/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-a/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-a/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-a/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-decode3-old-plain-h",
+      "output": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-h/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-h/incite/clocks.txt",
+        "invite": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-h/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-maxfan-plan/runs/maxfan-decode3-old-plain-h/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "decode3-new-mtp-c",
+      "output": "plans/decode-plan/runs/decode3-new-mtp-c/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-plan/runs/decode3-new-mtp-c/incite/clocks.txt",
+        "invite": "plans/decode-plan/runs/decode3-new-mtp-c/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-plan/runs/decode3-new-mtp-c/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "decode3-new-plain-b",
+      "output": "plans/decode-plan/runs/decode3-new-plain-b/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-plan/runs/decode3-new-plain-b/incite/clocks.txt",
+        "invite": "plans/decode-plan/runs/decode3-new-plain-b/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-plan/runs/decode3-new-plain-b/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "decode3-old-plain-a",
+      "output": "plans/decode-plan/runs/decode3-old-plain-a/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/decode-plan/runs/decode3-old-plain-a/incite/clocks.txt",
+        "invite": "plans/decode-plan/runs/decode3-old-plain-a/invite/clocks.txt"
+      },
+      "source_manifest": "plans/decode-plan/runs/decode3-old-plain-a/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-final-check-4300",
+      "output": "plans/long-check-maxfan-plan/runs/maxfan-final-check-4300/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/long-check-maxfan-plan/runs/maxfan-final-check-4300/incite/clocks.txt",
+        "invite": "plans/long-check-maxfan-plan/runs/maxfan-final-check-4300/invite/clocks.txt"
+      },
+      "source_manifest": "plans/long-check-maxfan-plan/runs/maxfan-final-check-4300/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-base3-pp2048-a",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-a/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-a/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-a/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-a/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-base3-pp2048-h",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-h/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-h/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-h/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-base3-pp2048-h/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-both3-pp2048-d",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-d/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-d/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-d/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-d/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-both3-pp2048-e",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-e/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-e/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-e/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-both3-pp2048-e/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-gdn3-pp2048-b",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-b/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-b/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-b/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-b/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-gdn3-pp2048-g",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-g/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-g/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-g/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-gdn3-pp2048-g/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-sum3-pp2048-c",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-c/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-c/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-c/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-c/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-sum3-pp2048-f",
+      "output": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-f/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-f/incite/clocks.txt",
+        "invite": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-f/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-maxfan-plan/runs/maxfan-sum3-pp2048-f/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "base3-pp2048-a",
+      "output": "plans/prefill-plan/runs/base3-pp2048-a/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/base3-pp2048-a/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/base3-pp2048-a/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/base3-pp2048-a/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "base3-pp2048-h",
+      "output": "plans/prefill-plan/runs/base3-pp2048-h/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/base3-pp2048-h/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/base3-pp2048-h/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/base3-pp2048-h/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "both3-pp2048-d",
+      "output": "plans/prefill-plan/runs/both3-pp2048-d/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/both3-pp2048-d/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/both3-pp2048-d/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/both3-pp2048-d/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "both3-pp2048-e",
+      "output": "plans/prefill-plan/runs/both3-pp2048-e/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/both3-pp2048-e/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/both3-pp2048-e/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/both3-pp2048-e/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "gdn3-pp2048-b",
+      "output": "plans/prefill-plan/runs/gdn3-pp2048-b/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/gdn3-pp2048-b/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/gdn3-pp2048-b/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/gdn3-pp2048-b/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "gdn3-pp2048-g",
+      "output": "plans/prefill-plan/runs/gdn3-pp2048-g/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/gdn3-pp2048-g/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/gdn3-pp2048-g/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/gdn3-pp2048-g/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "sum3-pp2048-c",
+      "output": "plans/prefill-plan/runs/sum3-pp2048-c/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/sum3-pp2048-c/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/sum3-pp2048-c/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/sum3-pp2048-c/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "sum3-pp2048-f",
+      "output": "plans/prefill-plan/runs/sum3-pp2048-f/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/prefill-plan/runs/sum3-pp2048-f/incite/clocks.txt",
+        "invite": "plans/prefill-plan/runs/sum3-pp2048-f/invite/clocks.txt"
+      },
+      "source_manifest": "plans/prefill-plan/runs/sum3-pp2048-f/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "maxfan-profile3-gdn-base-pp2048",
+      "output": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-base-pp2048/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-base-pp2048/incite/clocks.txt",
+        "invite": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-base-pp2048/invite/clocks.txt"
+      },
+      "source_manifest": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-base-pp2048/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": true,
+        "dispatch_profile": true
+      }
+    },
+    {
+      "name": "maxfan-profile3-gdn-prepared-pp2048",
+      "output": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-prepared-pp2048/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-prepared-pp2048/incite/clocks.txt",
+        "invite": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-prepared-pp2048/invite/clocks.txt"
+      },
+      "source_manifest": "plans/profile-maxfan-plan/runs/maxfan-profile3-gdn-prepared-pp2048/manifest.json",
+      "fan_condition": "dynamic-smc-maximum",
+      "instrumentation": {
+        "tp_profile": true,
+        "dispatch_profile": true
+      }
+    },
+    {
+      "name": "short-budget-adaptive",
+      "output": "plans/short-budget-plan/runs/short-budget-adaptive/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/short-budget-plan/runs/short-budget-adaptive/incite/clocks.txt",
+        "invite": "plans/short-budget-plan/runs/short-budget-adaptive/invite/clocks.txt"
+      },
+      "source_manifest": "plans/short-budget-plan/runs/short-budget-adaptive/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "short-budget-new-mtp",
+      "output": "plans/short-budget-plan/runs/short-budget-new-mtp/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/short-budget-plan/runs/short-budget-new-mtp/incite/clocks.txt",
+        "invite": "plans/short-budget-plan/runs/short-budget-new-mtp/invite/clocks.txt"
+      },
+      "source_manifest": "plans/short-budget-plan/runs/short-budget-new-mtp/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "short-budget-old-mtp",
+      "output": "plans/short-budget-plan/runs/short-budget-old-mtp/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/short-budget-plan/runs/short-budget-old-mtp/incite/clocks.txt",
+        "invite": "plans/short-budget-plan/runs/short-budget-old-mtp/invite/clocks.txt"
+      },
+      "source_manifest": "plans/short-budget-plan/runs/short-budget-old-mtp/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "short-budget-plain",
+      "output": "plans/short-budget-plan/runs/short-budget-plain/incite/stdout.log",
+      "clocks": {
+        "incite": "plans/short-budget-plan/runs/short-budget-plain/incite/clocks.txt",
+        "invite": "plans/short-budget-plan/runs/short-budget-plain/invite/clocks.txt"
+      },
+      "source_manifest": "plans/short-budget-plan/runs/short-budget-plain/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    },
+    {
+      "name": "base-pp2048-a",
+      "output": "runs/base-pp2048-a/incite/stdout.log",
+      "clocks": {
+        "incite": "runs/base-pp2048-a/incite/clocks.txt",
+        "invite": "runs/base-pp2048-a/invite/clocks.txt"
+      },
+      "source_manifest": "runs/base-pp2048-a/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      },
+      "exclude_from_comparisons": true,
+      "exploratory_reason": "Two streams; the third physical link was replugged during model loading/prefill. Retain as exploratory, exclude from performance comparisons."
+    },
+    {
+      "name": "check-prepared-700-warm",
+      "output": "runs/check-prepared-700-warm/incite/stdout.log",
+      "clocks": {
+        "incite": "runs/check-prepared-700-warm/incite/clocks.txt",
+        "invite": "runs/check-prepared-700-warm/invite/clocks.txt"
+      },
+      "source_manifest": "runs/check-prepared-700-warm/manifest.json",
+      "fan_condition": "historical-before-dynamic-maximum-fan-policy",
+      "instrumentation": {
+        "tp_profile": false,
+        "dispatch_profile": false
+      }
+    }
+  ],
+  "comparisons": [
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "gdn3-pp2048-b",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "sum3-pp2048-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "both3-pp2048-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "base3-pp2048-a",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-b",
+      "candidate": "sum3-pp2048-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-b",
+      "candidate": "both3-pp2048-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-b",
+      "candidate": "both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-b",
+      "candidate": "sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-b",
+      "candidate": "gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-b",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-c",
+      "candidate": "both3-pp2048-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-c",
+      "candidate": "both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-c",
+      "candidate": "sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-c",
+      "candidate": "gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-c",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-d",
+      "candidate": "both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-d",
+      "candidate": "sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-d",
+      "candidate": "gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-d",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-e",
+      "candidate": "sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-e",
+      "candidate": "gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "both3-pp2048-e",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-f",
+      "candidate": "gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "sum3-pp2048-f",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "gdn3-pp2048-g",
+      "candidate": "base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "short-budget-plain",
+      "candidate": "short-budget-old-mtp",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "short-budget-plain",
+      "candidate": "short-budget-new-mtp",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "short-budget-plain",
+      "candidate": "short-budget-adaptive",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "short-budget-old-mtp",
+      "candidate": "short-budget-new-mtp",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "short-budget-old-mtp",
+      "candidate": "short-budget-adaptive",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "short-budget-new-mtp",
+      "candidate": "short-budget-adaptive",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "decode3-old-plain-a",
+      "candidate": "decode3-new-plain-b",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "decode3-old-plain-a",
+      "candidate": "decode3-new-mtp-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "decode3-new-plain-b",
+      "candidate": "decode3-new-mtp-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-gdn3-pp2048-b",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-sum3-pp2048-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-both3-pp2048-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-base3-pp2048-a",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-b",
+      "candidate": "maxfan-sum3-pp2048-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-b",
+      "candidate": "maxfan-both3-pp2048-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-b",
+      "candidate": "maxfan-both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-b",
+      "candidate": "maxfan-sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-b",
+      "candidate": "maxfan-gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-b",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-c",
+      "candidate": "maxfan-both3-pp2048-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-c",
+      "candidate": "maxfan-both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-c",
+      "candidate": "maxfan-sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-c",
+      "candidate": "maxfan-gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-c",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-d",
+      "candidate": "maxfan-both3-pp2048-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-d",
+      "candidate": "maxfan-sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-d",
+      "candidate": "maxfan-gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-d",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-e",
+      "candidate": "maxfan-sum3-pp2048-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-e",
+      "candidate": "maxfan-gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-both3-pp2048-e",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-f",
+      "candidate": "maxfan-gdn3-pp2048-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-sum3-pp2048-f",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-gdn3-pp2048-g",
+      "candidate": "maxfan-base3-pp2048-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-new-plain-b",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-new-mtp-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-old-mtp-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-old-mtp-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-new-mtp-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-new-plain-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-plain-a",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-b",
+      "candidate": "maxfan-decode3-new-mtp-c",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-b",
+      "candidate": "maxfan-decode3-old-mtp-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-b",
+      "candidate": "maxfan-decode3-old-mtp-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-b",
+      "candidate": "maxfan-decode3-new-mtp-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-b",
+      "candidate": "maxfan-decode3-new-plain-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-b",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-c",
+      "candidate": "maxfan-decode3-old-mtp-d",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-c",
+      "candidate": "maxfan-decode3-old-mtp-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-c",
+      "candidate": "maxfan-decode3-new-mtp-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-c",
+      "candidate": "maxfan-decode3-new-plain-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-c",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-d",
+      "candidate": "maxfan-decode3-old-mtp-e",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-d",
+      "candidate": "maxfan-decode3-new-mtp-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-d",
+      "candidate": "maxfan-decode3-new-plain-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-d",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-e",
+      "candidate": "maxfan-decode3-new-mtp-f",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-e",
+      "candidate": "maxfan-decode3-new-plain-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-old-mtp-e",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-f",
+      "candidate": "maxfan-decode3-new-plain-g",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-mtp-f",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-decode3-new-plain-g",
+      "candidate": "maxfan-decode3-old-plain-h",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-plain-1",
+      "candidate": "maxfan-code-fixed-2",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-plain-1",
+      "candidate": "maxfan-code-adaptive-3",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-plain-1",
+      "candidate": "maxfan-code-adaptive-4",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-plain-1",
+      "candidate": "maxfan-code-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-plain-1",
+      "candidate": "maxfan-code-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-fixed-2",
+      "candidate": "maxfan-code-adaptive-3",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-fixed-2",
+      "candidate": "maxfan-code-adaptive-4",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-fixed-2",
+      "candidate": "maxfan-code-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-fixed-2",
+      "candidate": "maxfan-code-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-adaptive-3",
+      "candidate": "maxfan-code-adaptive-4",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-adaptive-3",
+      "candidate": "maxfan-code-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-adaptive-3",
+      "candidate": "maxfan-code-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-adaptive-4",
+      "candidate": "maxfan-code-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-adaptive-4",
+      "candidate": "maxfan-code-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-code-fixed-5",
+      "candidate": "maxfan-code-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-plain-1",
+      "candidate": "maxfan-chinese-fixed-2",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-plain-1",
+      "candidate": "maxfan-chinese-adaptive-3",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-plain-1",
+      "candidate": "maxfan-chinese-adaptive-4",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-plain-1",
+      "candidate": "maxfan-chinese-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-plain-1",
+      "candidate": "maxfan-chinese-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-fixed-2",
+      "candidate": "maxfan-chinese-adaptive-3",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-fixed-2",
+      "candidate": "maxfan-chinese-adaptive-4",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-fixed-2",
+      "candidate": "maxfan-chinese-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-fixed-2",
+      "candidate": "maxfan-chinese-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-adaptive-3",
+      "candidate": "maxfan-chinese-adaptive-4",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-adaptive-3",
+      "candidate": "maxfan-chinese-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-adaptive-3",
+      "candidate": "maxfan-chinese-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-adaptive-4",
+      "candidate": "maxfan-chinese-fixed-5",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-adaptive-4",
+      "candidate": "maxfan-chinese-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-chinese-fixed-5",
+      "candidate": "maxfan-chinese-plain-6",
+      "atol": 0,
+      "rtol": 0
+    },
+    {
+      "baseline": "maxfan-profile3-gdn-base-pp2048",
+      "candidate": "maxfan-profile3-gdn-prepared-pp2048",
+      "atol": 0,
+      "rtol": 0
+    }
+  ],
+  "time_sync_evidence": [
+    "incite/time-sync.txt",
+    "invite/time-sync.txt"
+  ],
+  "clock_alignment": "Both hosts report NTPSynchronized=yes. Recorded NTP offsets are -11.979 ms and -3.927 ms; no post-hoc timestamp adjustment is applied. Clock samples are approximately 250 ms apart.",
+  "policy": "Every successful, retrieved run is retained. Compare chronological pairs with identical fan regime and command/workload arguments after ignoring binary, --mtp, --draft-tokens and --reps. Same attention settings require exact top scores; changed attention uses absolute tolerance 0.002. No repetition is silently dropped.",
+  "excluded": [
+    {
+      "name": "check-prepared-700",
+      "reason": "Thunderbolt stream permission failure before inference"
+    },
+    {
+      "name": "check-prepared-700-retry",
+      "reason": "Cold peer model loading exceeded the readiness interval; driver failed"
+    }
+  ],
+  "pending": [],
+  "skipped_nonbenchmark": [
+    {
+      "name": "serve-budget-final-plain",
+      "command": "serve",
+      "reason": "Uses separate nonbenchmark/client evidence"
+    },
+    {
+      "name": "serve-budget-final-v2-adaptive",
+      "command": "serve",
+      "reason": "Uses separate nonbenchmark/client evidence"
+    },
+    {
+      "name": "serve-budget-final-v2-mtp",
+      "command": "serve",
+      "reason": "Uses separate nonbenchmark/client evidence"
+    },
+    {
+      "name": "serve-budget-final-v2-plain",
+      "command": "serve",
+      "reason": "Uses separate nonbenchmark/client evidence"
+    },
+    {
+      "name": "serve-budget-final-v2-uncached",
+      "command": "serve",
+      "reason": "Uses separate nonbenchmark/client evidence"
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "started_unix": 1791410524.2449565,
+  "model": "budget-serve-budget-final-plain",
+  "budgets": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "prompt": "Write every integer from 1 through 30, separated by commas. Write the entire list and no explanation.",
+  "followup": "Continue the list from the next integer. Write the next 20 integers, separated by commas.",
+  "passed": false,
+  "safe_to_stop": false,
+  "completed_requests": 1,
+  "followup_cache_hits": 0,
+  "pause_seconds": 2.0,
+  "server_identity_verified": true,
+  "last_generation_terminal_verified": false,
+  "stop_probe": true,
+  "prefix_cache_disabled": false,
+  "idle_barrier_unix": 1791410525.1438634,
+  "error": "AssertionError((400, '{\"error\":{\"code\":null,\"message\":\"replayed input items must have completed status\",\"param\":null,\"type\":\"invalid_request_error\"}}'))",
+  "finished_unix": 1791410525.1457288
+}

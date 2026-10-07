@@ -1,0 +1,22 @@
+{
+  "utc": "2026-10-07T21:21:08.969924+00:00",
+  "host": "incite",
+  "argv": [
+    "ssh",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ConnectTimeout=5",
+    "-o",
+    "ServerAliveInterval=5",
+    "-o",
+    "ServerAliveCountMax=2",
+    "incite",
+    "date -u; hostname; cat /proc/sys/kernel/random/boot_id; uptime; systemctl show fancurve.service -p MainPID -p ActiveState -p SubState -p UnitFileState -p ActiveEnterTimestamp -p Environment -p FragmentPath -p DropInPaths; systemctl cat fancurve.service; sudo -n cat /usr/local/sbin/fancurve.sh; sha256sum /usr/local/sbin/fancurve.sh; for f in /sys/devices/platform/applesmc.768/fan1_*; do printf \"%s \" \"$f\"; cat \"$f\"; done; sudo -n journalctl -b -u fancurve.service --no-pager -o short-iso-precise; for f in /sys/class/drm/card[0-9]/device/hwmon/hwmon*/temp1_input; do printf \"%s \" \"$f\"; cat \"$f\"; done"
+  ],
+  "exact_shell_command": "ssh -o BatchMode=yes -o ConnectTimeout=5 -o ServerAliveInterval=5 -o ServerAliveCountMax=2 incite 'date -u; hostname; cat /proc/sys/kernel/random/boot_id; uptime; systemctl show fancurve.service -p MainPID -p ActiveState -p SubState -p UnitFileState -p ActiveEnterTimestamp -p Environment -p FragmentPath -p DropInPaths; systemctl cat fancurve.service; sudo -n cat /usr/local/sbin/fancurve.sh; sha256sum /usr/local/sbin/fancurve.sh; for f in /sys/devices/platform/applesmc.768/fan1_*; do printf \"%s \" \"$f\"; cat \"$f\"; done; sudo -n journalctl -b -u fancurve.service --no-pager -o short-iso-precise; for f in /sys/class/drm/card[0-9]/device/hwmon/hwmon*/temp1_input; do printf \"%s \" \"$f\"; cat \"$f\"; done'",
+  "returncode": 0,
+  "capture_context": "Read-only snapshot during the root-owned live maximum probe (2026-10-07T21:20:44Z to 21:21:14Z); fancurve.service inactive is intentional during that test. This is not the initial 1900 RPM baseline. Use the first before row of the live-max-probe JSONL for that baseline.",
+  "stdout_file": "incite-during-probe-context.txt",
+  "stderr_file": "incite-during-probe-context.stderr"
+}

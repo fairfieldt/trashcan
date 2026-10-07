@@ -1,0 +1,15 @@
+NTPSynchronized=yes
+bash: line 1: chronyc: command not found
+       Server: 2600:3c02:e000:74::123:0 (2.debian.pool.ntp.org)
+Poll interval: 8min 32s (min: 32s; max 34min 8s)
+         Leap: normal
+      Version: 4
+      Stratum: 2
+    Reference: 2349C590
+    Precision: 1us (-25)
+Root distance: 1.174ms (max: 5s)
+       Offset: -3.927ms
+        Delay: 62.961ms
+       Jitter: 2.135ms
+ Packet count: 5
+    Frequency: -25.368ppm

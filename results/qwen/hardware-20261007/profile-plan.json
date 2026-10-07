@@ -1,0 +1,24 @@
+[
+  {
+    "name": "profile3-gdn-base-pp2048",
+    "binary": "trashcan",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--pp 2048 --tg 1 --context 12288 --reps 1",
+    "minutes": 4,
+    "profile": true,
+    "source_commit": "7ef122bed5e6c602f01c450fbd5190b0743217e8",
+    "expected_binary_sha256": "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+    "source_archive": "../offline-20261007/source.tar.gz"
+  },
+  {
+    "name": "profile3-gdn-prepared-pp2048",
+    "binary": "trashcan",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared",
+    "args": "--pp 2048 --tg 1 --context 12288 --reps 1",
+    "minutes": 4,
+    "profile": true,
+    "source_commit": "7ef122bed5e6c602f01c450fbd5190b0743217e8",
+    "expected_binary_sha256": "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+    "source_archive": "../offline-20261007/source.tar.gz"
+  }
+]

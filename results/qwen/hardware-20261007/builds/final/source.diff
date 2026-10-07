@@ -1,0 +1,36 @@
+diff --git a/engine/src/qwen/chat.rs b/engine/src/qwen/chat.rs
+index 1446a42..dd22573 100644
+--- a/engine/src/qwen/chat.rs
++++ b/engine/src/qwen/chat.rs
+@@ -254,6 +254,7 @@ fn bench_ids(e: &mut Chain, t: &Tokenizer, ids: &[u32], tg: usize, sampler: &mut
+             "mtp_kv_only":std::env::var("TRASHCAN_TP_KV_ONLY").as_deref()==Ok("1"),
+             "prepared_gdn":std::env::var("TRASHCAN_QWEN_GDN").as_deref()==Ok("prepared"),
+             "direct_sum":std::env::var("TRASHCAN_TP_SUM_DIRECT").as_deref()==Ok("1"),
++            "direct_sum_max_columns":1,"direct_sum_required_local_ranks":2,
+             "adaptive_mtp":std::env::var("TRASHCAN_QWEN_ADAPTIVE_MTP").as_deref()==Ok("1")}, "pp":pp,"pp_seconds":pp_s,"pp_tok_s":pp as f64/pp_s,"tg":out.len(),"tg_seconds":tg_s,
+         "tg_tok_s":out.len() as f64/tg_s,"plans":e.plans,"local_device_mib":mib,"pp_tp_ms":pp_tp_ms,"tg_tp_ms":tp_ms,
+         "pp_top":top.iter().take(8).collect::<Vec<_>>(),"pp_profile":profile,
+diff --git a/engine/src/qwen/tp.rs b/engine/src/qwen/tp.rs
+index e6c2c2b..09e8305 100644
+--- a/engine/src/qwen/tp.rs
++++ b/engine/src/qwen/tp.rs
+@@ -64,7 +64,7 @@ pub struct TpGroup {
+     remote: Vec<f32>,
+     /// Host threads for large all-reduces; the driver's choice, which it passes on with each forward.
+     threads: usize,
+-    /// Locally tested one-pass two-rank sum; opt-in until measured on the Mac Pros.
++    /// Opt-in one-column, two-local-rank sum: measured CPU phase saving, no model throughput claim.
+     direct_sum: bool,
+     /// Seconds spent submitting segments, waiting for the GPUs, adding partials and exchanging with the
+     /// other machine, since the group was created.
+@@ -609,7 +609,9 @@ impl TpGroup {
+             *p = s.tp_part(row, n);
+         }
+         let parts = &parts[..self.shards.len()];
+-        let direct = self.direct_sum;
++        // Only one-column two-rank reductions have a repeated target-host component win.
++        // Keep larger batches on the original path; the standalone helper remains shape-general.
++        let direct = self.direct_sum && n == 1 && parts.len() == 2;
+         parallel(sum, threads, |at, out| {
+             if direct {
+                 super::host::sum_partials(out, parts, at);

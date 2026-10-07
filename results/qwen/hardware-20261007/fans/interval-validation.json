@@ -1,0 +1,42 @@
+{
+  "utc": "2026-10-07T21:46:57.390654+00:00",
+  "scope": "local mocks only; no SSH, deployment, GPU work, or commit",
+  "reason": "Reject oversized INTERVAL values lexically before Bash arithmetic can wrap. The default interval and fan policy are unchanged.",
+  "commands": [
+    {
+      "argv": [
+        "python3",
+        "scripts/test-fancurve.py"
+      ],
+      "returncode": 0,
+      "tests": 12,
+      "elapsed_seconds": 4.092,
+      "output": "Ran 12 tests in 4.092s\nOK"
+    },
+    {
+      "argv": [
+        "bash",
+        "-n",
+        "scripts/fancurve.sh"
+      ],
+      "returncode": 0
+    },
+    {
+      "argv": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "scripts/fancurve.sh",
+        "scripts/test-fancurve.py",
+        "results/qwen/hardware-20261007/fans/README.md"
+      ],
+      "returncode": 0
+    }
+  ],
+  "sha256": {
+    "scripts/fancurve.sh": "b175a2bb41002a52a133a1d6ed7eb2988a421a4d2bac9a8005efed3fd6b0b3c3",
+    "scripts/fancurve.service": "ad1d7e35f7bf8e0053f10329ea008ff842a8ff748f0d18ed7ea4a775b9451de8",
+    "scripts/test-fancurve.py": "45437aa245bab6a2754817ddf8347180cda3ae2ff0c1ef87101d0d225525647e"
+  }
+}

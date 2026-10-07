@@ -1,0 +1,4 @@
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4, 4116.3 MiB allocated
+GPU1: rank 1 of 4, 4116.3 MiB allocated
+Responses server listening on http://127.0.0.1:8017 (model: budget-serve-budget-final-plain)

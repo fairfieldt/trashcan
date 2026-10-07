@@ -1,0 +1,166 @@
+{
+  "started_unix": 1791408975.8134341,
+  "dry_run": false,
+  "max_c": 65.0,
+  "poll_seconds": 10,
+  "root": "/home/fairfieldt/trashcan-exp/tp4-offline-20261007",
+  "streams": "/dev/tbstream0,/dev/tbstream1,/dev/tbstream2",
+  "source_plan": "/Users/fairfieldt/dev/trashcan/results/qwen/hardware-20261007/decode-maxfan-plan.json",
+  "cases": [
+    {
+      "name": "maxfan-decode3-old-plain-a",
+      "settings": {
+        "name": "maxfan-decode3-old-plain-a",
+        "binary": "baseline",
+        "mtp": false,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 93,
+        "invite": 81
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-new-plain-b",
+      "settings": {
+        "name": "maxfan-decode3-new-plain-b",
+        "binary": "trashcan",
+        "mtp": false,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 94,
+        "invite": 82
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-new-mtp-c",
+      "settings": {
+        "name": "maxfan-decode3-new-mtp-c",
+        "binary": "trashcan",
+        "mtp": true,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 95,
+        "invite": 83
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-old-mtp-d",
+      "settings": {
+        "name": "maxfan-decode3-old-mtp-d",
+        "binary": "baseline",
+        "mtp": true,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 96,
+        "invite": 84
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-old-mtp-e",
+      "settings": {
+        "name": "maxfan-decode3-old-mtp-e",
+        "binary": "baseline",
+        "mtp": true,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 97,
+        "invite": 85
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-new-mtp-f",
+      "settings": {
+        "name": "maxfan-decode3-new-mtp-f",
+        "binary": "trashcan",
+        "mtp": true,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 98,
+        "invite": 86
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-new-plain-g",
+      "settings": {
+        "name": "maxfan-decode3-new-plain-g",
+        "binary": "trashcan",
+        "mtp": false,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 99,
+        "invite": 87
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "maxfan-decode3-old-plain-h",
+      "settings": {
+        "name": "maxfan-decode3-old-plain-h",
+        "binary": "baseline",
+        "mtp": false,
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+        "args": "--pp 512 --tg 256 --context 4096 --reps 1",
+        "minutes": 4,
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 100,
+        "invite": 88
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    }
+  ],
+  "active_tickets": {},
+  "state": "completed",
+  "finished_unix": 1791409507.08583
+}

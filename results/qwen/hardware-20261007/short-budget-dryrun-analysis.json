@@ -1,0 +1,19 @@
+{
+  "plan": "plans/short-budget-dryrun/plan.json",
+  "summary": "plans/short-budget-dryrun/summary.json",
+  "dry_run": true,
+  "measured": false,
+  "complete": false,
+  "state": "Non-measured dry-run preview; no remote operations or result matching.",
+  "planned_runs": [
+    "short-budget-plain",
+    "short-budget-old-mtp",
+    "short-budget-new-mtp",
+    "short-budget-adaptive"
+  ],
+  "pending": [],
+  "rows": [],
+  "matched_comparisons": [],
+  "configuration_summaries": [],
+  "work_totals": []
+}

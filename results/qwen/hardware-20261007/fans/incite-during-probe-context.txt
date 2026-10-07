@@ -1,0 +1,144 @@
+Wed Oct  7 21:21:09 UTC 2026
+incite
+43167ad0-6779-4307-a7ec-1a600edd52df
+ 14:21:09 up 36 min,  2 users,  load average: 0.21, 0.57, 0.56
+MainPID=0
+Environment=
+ActiveState=inactive
+SubState=dead
+FragmentPath=/etc/systemd/system/fancurve.service
+DropInPaths=
+UnitFileState=enabled
+ActiveEnterTimestamp=Wed 2026-10-07 13:45:18 PDT
+# /etc/systemd/system/fancurve.service
+[Unit]
+Description=Aggressive fan curve for the Mac Pro 6,1 (trashcan scripts/fancurve.sh)
+ConditionPathExists=/sys/devices/platform/applesmc.768/fan1_manual
+
+[Service]
+ExecStart=/usr/local/sbin/fancurve.sh
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+#!/bin/bash
+# Aggressive fan curve for a Mac Pro 6,1. One SMC fan cools both D700s and the CPU, so its speed follows
+# the hottest of the two GPU edge sensors and the CPU package: minimum at or below T_LOW, linear to full speed at
+# T_HIGH and above. A sensor that can't be read means full speed. Stopping the service hands the fan back to the SMC.
+# Installed as /usr/local/sbin/fancurve.sh, run by fancurve.service.
+set -u
+T_LOW=${T_LOW:-40}     # °C
+T_HIGH=${T_HIGH:-50}   # °C
+INTERVAL=${INTERVAL:-2}
+smc=/sys/devices/platform/applesmc.768
+min=$(cat $smc/fan1_min)
+max=$(cat $smc/fan1_max)
+
+restore() {
+    echo 0 > $smc/fan1_manual
+    echo "fan back to SMC control"
+    exit 0
+}
+trap restore TERM INT
+
+hottest() {
+    local f t m=0
+    for f in /sys/class/drm/card[0-9]/device/hwmon/hwmon*/temp1_input \
+             /sys/devices/platform/coretemp.0/hwmon/hwmon*/temp1_input; do
+        t=$(cat "$f" 2>/dev/null) || return 1
+        (( t > m )) && m=$t
+    done
+    echo $(( m / 1000 ))
+}
+
+echo "curve: ${min} rpm at <=${T_LOW} C, ${max} rpm at >=${T_HIGH} C"
+last=
+while :; do
+    if t=$(hottest); then
+        if (( t <= T_LOW )); then
+            rpm=$min
+        elif (( t >= T_HIGH )); then
+            rpm=$max
+        else
+            rpm=$(( min + (max - min) * (t - T_LOW) / (T_HIGH - T_LOW) ))
+        fi
+    else
+        t='?'
+        rpm=$max
+    fi
+    # Re-assert manual mode if the SMC took it back.
+    if [[ $(cat $smc/fan1_manual) != 1 ]]; then
+        echo 1 > $smc/fan1_manual
+        last=
+    fi
+    if [[ $rpm != "$last" ]]; then
+        echo $rpm > $smc/fan1_output
+        echo "hottest ${t} C -> ${rpm} rpm"
+        last=$rpm
+    fi
+    sleep "$INTERVAL" & wait $!
+done
+75f76a94c099015f07f55d592b2f2a89118cad739dec6faac6937e1433819233  /usr/local/sbin/fancurve.sh
+/sys/devices/platform/applesmc.768/fan1_input 2359
+/sys/devices/platform/applesmc.768/fan1_label Main 
+/sys/devices/platform/applesmc.768/fan1_manual 1
+/sys/devices/platform/applesmc.768/fan1_max 2365
+/sys/devices/platform/applesmc.768/fan1_min 790
+/sys/devices/platform/applesmc.768/fan1_output 2363
+/sys/devices/platform/applesmc.768/fan1_safe 2026-10-07T13:45:18.380577-07:00 incite systemd[1]: Started fancurve.service - Aggressive fan curve for the Mac Pro 6,1 (trashcan scripts/fancurve.sh).
+2026-10-07T13:45:18.401405-07:00 incite fancurve.sh[985]: curve: 790 rpm at <=40 C, 1900 rpm at >=50 C
+2026-10-07T13:45:18.414055-07:00 incite fancurve.sh[985]: hottest 43 C -> 1123 rpm
+2026-10-07T13:45:26.468635-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:45:28.481935-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:45:30.494891-07:00 incite fancurve.sh[985]: hottest 43 C -> 1123 rpm
+2026-10-07T13:45:32.507496-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:45:34.520520-07:00 incite fancurve.sh[985]: hottest 43 C -> 1123 rpm
+2026-10-07T13:45:50.618810-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:45:52.631147-07:00 incite fancurve.sh[985]: hottest 43 C -> 1123 rpm
+2026-10-07T13:46:02.694961-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:46:20.813673-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:46:22.827834-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:46:24.840694-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:46:26.853619-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:46:36.918547-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:46:40.946017-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:46:44.971334-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:46:46.984051-07:00 incite fancurve.sh[985]: hottest 44 C -> 1234 rpm
+2026-10-07T13:46:48.996969-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:47:03.084040-07:00 incite fancurve.sh[985]: hottest 46 C -> 1456 rpm
+2026-10-07T13:47:05.097139-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:47:13.148534-07:00 incite fancurve.sh[985]: hottest 46 C -> 1456 rpm
+2026-10-07T13:47:15.161504-07:00 incite fancurve.sh[985]: hottest 45 C -> 1345 rpm
+2026-10-07T13:47:27.238591-07:00 incite fancurve.sh[985]: hottest 47 C -> 1567 rpm
+2026-10-07T13:47:33.277150-07:00 incite fancurve.sh[985]: hottest 46 C -> 1456 rpm
+2026-10-07T13:48:05.479295-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:48:09.505413-07:00 incite fancurve.sh[985]: hottest 50 C -> 1900 rpm
+2026-10-07T13:48:11.518945-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:48:13.534476-07:00 incite fancurve.sh[985]: hottest 50 C -> 1900 rpm
+2026-10-07T13:48:25.611377-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:48:27.623989-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:49:28.013167-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:49:30.026491-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:49:32.039321-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:49:34.054443-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:50:52.550309-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:50:54.565352-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:51:02.615468-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:51:08.657486-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:51:12.682548-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:51:14.695121-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:51:16.709093-07:00 incite fancurve.sh[985]: hottest 50 C -> 1900 rpm
+2026-10-07T13:51:18.721832-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:51:24.759816-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:51:26.777641-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:51:38.854563-07:00 incite fancurve.sh[985]: hottest 49 C -> 1789 rpm
+2026-10-07T13:51:40.867281-07:00 incite fancurve.sh[985]: hottest 48 C -> 1678 rpm
+2026-10-07T13:51:50.932393-07:00 incite fancurve.sh[985]: hottest 57 C -> 1900 rpm
+2026-10-07T14:20:44.378623-07:00 incite systemd[1]: Stopping fancurve.service - Aggressive fan curve for the Mac Pro 6,1 (trashcan scripts/fancurve.sh)...
+2026-10-07T14:20:44.379020-07:00 incite fancurve.sh[985]: fan back to SMC control
+2026-10-07T14:20:44.380983-07:00 incite systemd[1]: fancurve.service: Deactivated successfully.
+2026-10-07T14:20:44.381554-07:00 incite systemd[1]: Stopped fancurve.service - Aggressive fan curve for the Mac Pro 6,1 (trashcan scripts/fancurve.sh).
+2026-10-07T14:20:44.382039-07:00 incite systemd[1]: fancurve.service: Consumed 13.666s CPU time, 9.2M memory peak.
+/sys/class/drm/card0/device/hwmon/hwmon1/temp1_input 55000
+/sys/class/drm/card1/device/hwmon/hwmon2/temp1_input 54000

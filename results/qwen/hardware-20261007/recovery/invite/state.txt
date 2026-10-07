@@ -1,0 +1,51 @@
+Wed Oct  7 20:47:28 UTC 2026
+invite
+96d9c5b9-f34a-49a6-9713-f945ea225320
+Linux invite 7.2.9-p2p #2p2p SMP PREEMPT_DYNAMIC Tue Oct  6 15:52:10 PDT 2026 x86_64 GNU/Linux
+ 13:47:29 up 2 min,  3 users,  load average: 4.52, 1.81, 0.68
+/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu1/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu10/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu11/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu12/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu13/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu14/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu15/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu16/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu17/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu18/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu19/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu2/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu20/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu21/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu22/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu23/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu3/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu4/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu5/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu6/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu7/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu8/cpufreq/scaling_governor schedutil
+/sys/devices/system/cpu/cpu9/cpufreq/scaling_governor schedutil
+NRestarts=0
+ExecMainStatus=0
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Wed 2026-10-07 13:45:07 PDT
+
+NRestarts=0
+ExecMainStatus=0
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Wed 2026-10-07 13:45:07 PDT
+/sys/bus/thunderbolt/devices/0-3/rx_speed 10.0 Gb/s
+/sys/bus/thunderbolt/devices/2-1/rx_speed 10.0 Gb/s
+/sys/bus/thunderbolt/devices/0-3/tx_speed 10.0 Gb/s
+/sys/bus/thunderbolt/devices/2-1/tx_speed 10.0 Gb/s
+/sys/bus/thunderbolt/devices/0-3/rx_lanes 2
+/sys/bus/thunderbolt/devices/2-1/rx_lanes 2
+/sys/bus/thunderbolt/devices/0-3/tx_lanes 2
+/sys/bus/thunderbolt/devices/2-1/tx_lanes 2
+ff199d8eb204f952c9865853862aa972b65ff28ab9ab7f60e6f9a2819fd23e74  /home/fairfieldt/trashcan-exp/prefill-lds-20261007/trashcan

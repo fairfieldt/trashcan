@@ -1,0 +1,5 @@
+Error: opening /dev/tbstream0
+
+Caused by:
+    Permission denied (os error 13)
+[clocks] 3 samples card0 (02:00.0) sclk/mclk: 300/150 x3  max 48C card1 (06:00.0) sclk/mclk: 300/150 x3  max 48C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/check-prepared-700/clocks.txt

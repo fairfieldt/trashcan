@@ -1,0 +1,38 @@
+/sys/fs/pstore:
+total 0
+drwxr-x--- 2 root root 0 Oct  7 13:45 .
+drwxr-xr-x 9 root root 0 Oct  7 13:45 ..
+
+/var/log/trashcan-crash:
+total 18296
+drwx------  5 root root     4096 Oct  7 13:45 .
+drwxr-xr-x 12 root root     4096 Oct  7 13:45 ..
+drwx------  2 root root     4096 Oct  7 11:14 38f2ea0a-69e7-4c43-98ce-df86d1f225ec
+drwx------  2 root root     4096 Oct  7 13:45 43167ad0-6779-4307-a7ec-1a600edd52df
+drwx------  2 root root     4096 Oct  7 11:33 c7692794-b9bd-44fe-bfe8-2401ddd8f04d
+-rw-------  1 root root  1926242 Oct  7 13:47 telemetry.jsonl
+-rw-------  1 root root 16776027 Oct  7 11:57 telemetry.jsonl.1
+
+/var/log/trashcan-crash/38f2ea0a-69e7-4c43-98ce-df86d1f225ec:
+total 496
+drwx------ 2 root root   4096 Oct  7 11:14 .
+drwx------ 5 root root   4096 Oct  7 13:45 ..
+-rw------- 1 root root 247315 Oct  7 11:14 devcd1-1791396853979384060.dump
+-rw------- 1 root root 247325 Oct  7 11:14 devcd2-1791396854587838922.dump
+
+/var/log/trashcan-crash/43167ad0-6779-4307-a7ec-1a600edd52df:
+total 8
+drwx------ 2 root root 4096 Oct  7 13:45 .
+drwx------ 5 root root 4096 Oct  7 13:45 ..
+
+/var/log/trashcan-crash/c7692794-b9bd-44fe-bfe8-2401ddd8f04d:
+total 8
+drwx------ 2 root root 4096 Oct  7 11:33 .
+drwx------ 5 root root 4096 Oct  7 13:45 ..
+{"event":"telemetry","host":"incite","boot":"43167ad0-6779-4307-a7ec-1a600edd52df","utc":"2026-10-07T20:47:26.784269+00:00","uptime":"142.77 3361.43","gpu":{"0000:02:00.0":{"power/runtime_status":"active","current_link_speed":"8.0 GT/s PCIe","current_link_width":"16","temp1_input":"48000","fan1_input":null,"power1_average":null},"0000:06:00.0":{"power/runtime_status":"active","current_link_speed":"8.0 GT/s PCIe","current_link_width":"16","temp1_input":"45000","fan1_input":null,"power1_average":null}},"aer":{"0000:00:02.0":{"aer_rootport_total_err_cor":"0","aer_rootport_total_err_fatal":"0","aer_dev_nonfatal":{"TOTAL_ERR_NONFATAL":0},"aer_dev_correctable":{"TOTAL_ERR_COR":0},"aer_dev_fatal":{"TOTAL_ERR_FATAL":0},"aer_rootport_total_err_nonfatal":"0"},"0000:00:03.0":{"aer_rootport_total_err_cor":"0","aer_rootport_total_err_fatal":"0","aer_dev_nonfatal":{"TOTAL_ERR_NONFATAL":0},"aer_dev_correctable":{"TOTAL_ERR_COR":0},"aer_dev_fatal":{"TOTAL_ERR_FATAL":0},"aer_rootport_total_err_nonfatal":"0"}},"smc":{"MSAL":{"type":"hex_","hex":"4b"},"MSEE":{"type":"ch8*","hex":"00000000000000000000000000000000"},"MSF0":{"type":"ui16","hex":"0000"},"MSF1":{"type":"ui8","hex":"00"},"MSF2":{"type":"ui8","hex":"00"},"MSPS":{"type":"hex_","hex":"0004"},"MSRC":{"type":"ui32","hex":"00000002"},"MSSD":{"type":"si8","hex":"00","signed":0},"MSSP":{"type":"si8","hex":"00","signed":0},"MSSR":{"type":"flag","hex":"01"},"PCPC":{"type":"spa5","hex":"0223","watts":17.09375},"PG0R":{"type":"spa5","hex":"01df","watts":14.96875},"PG1R":{"type":"spa5","hex":"0208","watts":16.25},"PSTR":{"type":"spa5","hex":"0b59","watts":90.78125},"TA0P":{"type":"sp78","hex":"2220","celsius":34.125},"TC0P":{"type":"sp78","hex":"2860","celsius":40.375},"TG0D":{"type":"sp78","hex":"2ae0","celsius":42.875},"TG1D":{"type":"sp78","hex":"2a80","celsius":42.5},"TPCD":{"type":"sp78","hex":"3f00","celsius":63.0},"Tp0F":{"type":"sp78","hex":"2a46","celsius":42.2734375}},"fan_rpm":"1346","load":"0.27 0.17 0.07 1/809 4591","sample_ms":23.09}
+{"event":"telemetry","host":"incite","boot":"43167ad0-6779-4307-a7ec-1a600edd52df","utc":"2026-10-07T20:47:27.775598+00:00","uptime":"143.76 3384.32","gpu":{"0000:02:00.0":{"power/runtime_status":"active","current_link_speed":"8.0 GT/s PCIe","current_link_width":"16","temp1_input":"47000","fan1_input":null,"power1_average":null},"0000:06:00.0":{"power/runtime_status":"active","current_link_speed":"8.0 GT/s PCIe","current_link_width":"16","temp1_input":"47000","fan1_input":null,"power1_average":null}},"aer":{"0000:00:02.0":{"aer_rootport_total_err_cor":"0","aer_rootport_total_err_fatal":"0","aer_dev_nonfatal":{"TOTAL_ERR_NONFATAL":0},"aer_dev_correctable":{"TOTAL_ERR_COR":0},"aer_dev_fatal":{"TOTAL_ERR_FATAL":0},"aer_rootport_total_err_nonfatal":"0"},"0000:00:03.0":{"aer_rootport_total_err_cor":"0","aer_rootport_total_err_fatal":"0","aer_dev_nonfatal":{"TOTAL_ERR_NONFATAL":0},"aer_dev_correctable":{"TOTAL_ERR_COR":0},"aer_dev_fatal":{"TOTAL_ERR_FATAL":0},"aer_rootport_total_err_nonfatal":"0"}},"smc":{"MSAL":{"type":"hex_","hex":"4b"},"MSEE":{"type":"ch8*","hex":"00000000000000000000000000000000"},"MSF0":{"type":"ui16","hex":"0000"},"MSF1":{"type":"ui8","hex":"00"},"MSF2":{"type":"ui8","hex":"00"},"MSPS":{"type":"hex_","hex":"0004"},"MSRC":{"type":"ui32","hex":"00000002"},"MSSD":{"type":"si8","hex":"00","signed":0},"MSSP":{"type":"si8","hex":"00","signed":0},"MSSR":{"type":"flag","hex":"01"},"PCPC":{"type":"spa5","hex":"0200","watts":16.0},"PG0R":{"type":"spa5","hex":"0981","watts":76.03125},"PG1R":{"type":"spa5","hex":"04b8","watts":37.75},"PSTR":{"type":"spa5","hex":"158b","watts":172.34375},"TA0P":{"type":"sp78","hex":"2200","celsius":34.0},"TC0P":{"type":"sp78","hex":"2840","celsius":40.25},"TG0D":{"type":"sp78","hex":"2d80","celsius":45.5},"TG1D":{"type":"sp78","hex":"2c60","celsius":44.375},"TPCD":{"type":"sp78","hex":"3f00","celsius":63.0},"Tp0F":{"type":"sp78","hex":"2a49","celsius":42.28515625}},"fan_rpm":"1346","load":"0.27 0.17 0.07 2/803 4702","sample_ms":14.35}
+{"event":"platform_trace","host":"incite","boot":"c7692794-b9bd-44fe-bfe8-2401ddd8f04d","utc":"2026-10-07T19:08:17.089221+00:00","trace":" => do_syscall_64"}
+{"event":"platform_trace","host":"incite","boot":"c7692794-b9bd-44fe-bfe8-2401ddd8f04d","utc":"2026-10-07T19:08:17.091135+00:00","trace":" => entry_SYSCALL_64_after_hwframe"}
+{"event":"platform_trace","host":"incite","boot":"c7692794-b9bd-44fe-bfe8-2401ddd8f04d","utc":"2026-10-07T19:11:12.374661+00:00","trace":"          <idle>-0       [002] dNh1.  2285.384619: pcie_link_event: 0000:00:01.0 type:4, reason:3, cur_bus_speed:20, max_bus_speed:22, width:8, flit_mode:0, status:LT|DLLLA"}
+{"event":"platform_trace","host":"incite","boot":"c7692794-b9bd-44fe-bfe8-2401ddd8f04d","utc":"2026-10-07T19:11:12.375810+00:00","trace":""}
+{"event":"platform_trace_start","host":"incite","boot":"43167ad0-6779-4307-a7ec-1a600edd52df","utc":"2026-10-07T20:45:26.307305+00:00","probes":["slot_power_off","slot_power_on","slot_disable","slot_indicators","slot_command","slot_read","kernel_poweroff","machine_poweroff","acpi_poweroff","gpu_config_reset","pci/pci_hp_event","pci/pcie_link_event","ras/aer_event","ras/mc_event","ras/memory_failure_event"]}

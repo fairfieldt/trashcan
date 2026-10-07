@@ -1,0 +1,2414 @@
+{
+  "generated_unix": 1791411241.930537,
+  "binary_sha256": "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+  "heads": {
+    "key": 4,
+    "value": 12
+  },
+  "positions": [
+    0,
+    700
+  ],
+  "tokens": [
+    9,
+    64,
+    129,
+    188,
+    256,
+    257
+  ],
+  "iterations_per_mode": 12,
+  "warmup_ms_per_mode": 300,
+  "timing_scope": "GPU timestamps include preparation plus barrier and recurrence; exclude input/state restoration. Each replay is a separate submission.",
+  "clock_caveats": [
+    "Clock logs cover each complete process, with the two GPUs tested sequentially. Kernel modes have no Unix timing windows, so individual timing samples cannot be joined exactly to clocks.",
+    "The n=9, position=0 first process on both hosts includes startup/idle clock samples. It remains a correctness result; clock logs do not establish a clean full-clock timing pair.",
+    "Subsequent processes have all sampled cards at 850/1370 MHz, but the approximately 0.25-second sampler cannot prove clocks throughout each millisecond-scale kernel sample.",
+    "Baseline then prepared mode is a fixed order with separate 300-ms warmups; these are kernel timings, not TP4 model throughput."
+  ],
+  "total_pairs": 48,
+  "hosts": {
+    "incite": {
+      "pairs": 24,
+      "all_pass": true,
+      "all_bitwise_equal": true,
+      "maximum_absolute_error": 0.0,
+      "pairs_with_whole_process_full_clock_samples": 22,
+      "by_n": {
+        "9": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            0.0844074070854187,
+            0.08709876509984334
+          ],
+          "prepared_ms_range": [
+            0.07416049354426064,
+            0.07741975279108683
+          ],
+          "time_reduction_percent_range": [
+            10.745801309422154,
+            12.139827409682635
+          ],
+          "median_time_reduction_percent": 11.978872273913606
+        },
+        "64": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            0.4979259240264893,
+            0.500716047472636
+          ],
+          "prepared_ms_range": [
+            0.3963456775004069,
+            0.39975308489481604
+          ],
+          "time_reduction_percent_range": [
+            20.14402683239619,
+            20.422378107726257
+          ],
+          "median_time_reduction_percent": 20.2250649824906
+        },
+        "129": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            0.9874320949986778,
+            0.9905678974558513
+          ],
+          "prepared_ms_range": [
+            0.7783456760431925,
+            0.7823333303489685
+          ],
+          "time_reduction_percent_range": [
+            20.97248896316065,
+            21.19545517043112
+          ],
+          "median_time_reduction_percent": 21.106305685691908
+        },
+        "188": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            1.432703698238373,
+            1.4357407352638247
+          ],
+          "prepared_ms_range": [
+            1.1252962920036318,
+            1.1287407364349367
+          ],
+          "time_reduction_percent_range": [
+            21.382690571391727,
+            21.48892736246413
+          ],
+          "median_time_reduction_percent": 21.401900823799842
+        },
+        "256": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            1.9470864123255411,
+            1.9494938197237648
+          ],
+          "prepared_ms_range": [
+            1.5222098707364402,
+            1.5256296238098146
+          ],
+          "time_reduction_percent_range": [
+            21.742269281674876,
+            21.843444748001694
+          ],
+          "median_time_reduction_percent": 21.772081389200665
+        },
+        "257": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            1.9546790048891702,
+            1.9579506098149622
+          ],
+          "prepared_ms_range": [
+            1.5283456731821696,
+            1.5314197472445168
+          ],
+          "time_reduction_percent_range": [
+            21.763344286696405,
+            21.813152809528003
+          ],
+          "median_time_reduction_percent": 21.803094353729414
+        }
+      },
+      "shapes": [
+        {
+          "gpu": 0,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.987691354256948,
+          "prepared_ms": 0.7783456760431925,
+          "time_reduction_percent": 21.19545517043112,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-129-0.jsonl",
+          "clocks": "incite/clocks/gdn-129-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.9874320949986778,
+          "prepared_ms": 0.7786296266593933,
+          "time_reduction_percent": 21.14600785176667,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-129-0.jsonl",
+          "clocks": "incite/clocks/gdn-129-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.9905678974558513,
+          "prepared_ms": 0.7818888859062194,
+          "time_reduction_percent": 21.066603519617143,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-129-700.jsonl",
+          "clocks": "incite/clocks/gdn-129-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.9899506135075886,
+          "prepared_ms": 0.7823333303489685,
+          "time_reduction_percent": 20.97248896316065,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-129-700.jsonl",
+          "clocks": "incite/clocks/gdn-129-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.4332962908287048,
+          "prepared_ms": 1.1252962920036318,
+          "time_reduction_percent": 21.48892736246413,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-188-0.jsonl",
+          "clocks": "incite/clocks/gdn-188-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.432703698238373,
+          "prepared_ms": 1.1258888845939636,
+          "time_reduction_percent": 21.415091900835005,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-188-0.jsonl",
+          "clocks": "incite/clocks/gdn-188-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.4357407352638243,
+          "prepared_ms": 1.1286543166821799,
+          "time_reduction_percent": 21.38870974676468,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-188-700.jsonl",
+          "clocks": "incite/clocks/gdn-188-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.4357407352638247,
+          "prepared_ms": 1.1287407364349367,
+          "time_reduction_percent": 21.382690571391727,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-188-700.jsonl",
+          "clocks": "incite/clocks/gdn-188-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9470864123255411,
+          "prepared_ms": 1.5227901176478067,
+          "time_reduction_percent": 21.791343824898235,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-256-0.jsonl",
+          "clocks": "incite/clocks/gdn-256-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9476419678789776,
+          "prepared_ms": 1.5222098707364402,
+          "time_reduction_percent": 21.843444748001694,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-256-0.jsonl",
+          "clocks": "incite/clocks/gdn-256-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.9494938197237648,
+          "prepared_ms": 1.5256296238098146,
+          "time_reduction_percent": 21.742269281674876,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-256-700.jsonl",
+          "clocks": "incite/clocks/gdn-256-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.9488888814544676,
+          "prepared_ms": 1.5249506114667257,
+          "time_reduction_percent": 21.752818953503095,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-256-700.jsonl",
+          "clocks": "incite/clocks/gdn-256-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9549876468633016,
+          "prepared_ms": 1.528543204045614,
+          "time_reduction_percent": 21.813152809528003,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-257-0.jsonl",
+          "clocks": "incite/clocks/gdn-257-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9546790048891702,
+          "prepared_ms": 1.5283456731821696,
+          "time_reduction_percent": 21.810912719716534,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-257-0.jsonl",
+          "clocks": "incite/clocks/gdn-257-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.9579506098149622,
+          "prepared_ms": 1.531209870702108,
+          "time_reduction_percent": 21.79527598774229,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-257-700.jsonl",
+          "clocks": "incite/clocks/gdn-257-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.957419745619456,
+          "prepared_ms": 1.5314197472445168,
+          "time_reduction_percent": 21.763344286696405,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-257-700.jsonl",
+          "clocks": "incite/clocks/gdn-257-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 49.0,
+              "max_temperature": 50.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.4979259240264893,
+          "prepared_ms": 0.39709876391728716,
+          "time_reduction_percent": 20.24942973321433,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-64-0.jsonl",
+          "clocks": "incite/clocks/gdn-64-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 48.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.49806172649510705,
+          "prepared_ms": 0.3963456775004069,
+          "time_reduction_percent": 20.422378107726257,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-64-0.jsonl",
+          "clocks": "incite/clocks/gdn-64-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 48.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.500716047472636,
+          "prepared_ms": 0.3995678997103373,
+          "time_reduction_percent": 20.200700231766866,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-64-700.jsonl",
+          "clocks": "incite/clocks/gdn-64-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 48.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.5005925906829835,
+          "prepared_ms": 0.39975308489481604,
+          "time_reduction_percent": 20.14402683239619,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-64-700.jsonl",
+          "clocks": "incite/clocks/gdn-64-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 48.0,
+              "max_temperature": 48.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.0844074070854187,
+          "prepared_ms": 0.07416049354426064,
+          "time_reduction_percent": 12.139827409682635,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-9-0.jsonl",
+          "clocks": "incite/clocks/gdn-9-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "300/150": 1,
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 6,
+              "min_temperature": 46.0,
+              "max_temperature": 48.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "300/150": 3,
+                "850/1370": 3
+              },
+              "full_clock_samples": 3,
+              "total_samples": 6,
+              "min_temperature": 46.0,
+              "max_temperature": 47.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": false
+        },
+        {
+          "gpu": 1,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.08449382683817545,
+          "prepared_ms": 0.07439506144460042,
+          "time_reduction_percent": 11.952074810052594,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-9-0.jsonl",
+          "clocks": "incite/clocks/gdn-9-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "300/150": 1,
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 6,
+              "min_temperature": 46.0,
+              "max_temperature": 48.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "300/150": 3,
+                "850/1370": 3
+              },
+              "full_clock_samples": 3,
+              "total_samples": 6,
+              "min_temperature": 46.0,
+              "max_temperature": 47.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": false
+        },
+        {
+          "gpu": 0,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.08709876509984334,
+          "prepared_ms": 0.07664197501627605,
+          "time_reduction_percent": 12.005669737774616,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-9-700.jsonl",
+          "clocks": "incite/clocks/gdn-9-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 48.0,
+              "max_temperature": 48.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 47.0,
+              "max_temperature": 48.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.08674074040985108,
+          "prepared_ms": 0.07741975279108683,
+          "time_reduction_percent": 10.745801309422154,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "incite/gdn-9-700.jsonl",
+          "clocks": "incite/clocks/gdn-9-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 48.0,
+              "max_temperature": 48.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 47.0,
+              "max_temperature": 48.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        }
+      ]
+    },
+    "invite": {
+      "pairs": 24,
+      "all_pass": true,
+      "all_bitwise_equal": true,
+      "maximum_absolute_error": 0.0,
+      "pairs_with_whole_process_full_clock_samples": 22,
+      "by_n": {
+        "9": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            0.08450617251714071,
+            0.08767901201121013
+          ],
+          "prepared_ms_range": [
+            0.07444444416046142,
+            0.07813580217107137
+          ],
+          "time_reduction_percent_range": [
+            10.884257955505493,
+            12.099125364431496
+          ],
+          "median_time_reduction_percent": 11.960457465924762
+        },
+        "64": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            0.49839505982716875,
+            0.5010864178415934
+          ],
+          "prepared_ms_range": [
+            0.39659259107971195,
+            0.4004074058799744
+          ],
+          "time_reduction_percent_range": [
+            20.0823004706404,
+            20.42605895466929
+          ],
+          "median_time_reduction_percent": 20.272168498672983
+        },
+        "129": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            0.9876172801831564,
+            0.9906296258506774
+          ],
+          "prepared_ms_range": [
+            0.779395058755239,
+            0.7826172809651694
+          ],
+          "time_reduction_percent_range": [
+            20.995039756723756,
+            21.083290623398376
+          ],
+          "median_time_reduction_percent": 21.04680409123545
+        },
+        "188": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            1.4325308587328591,
+            1.4361481426696778
+          ],
+          "prepared_ms_range": [
+            1.1259259216308595,
+            1.1293333290252685
+          ],
+          "time_reduction_percent_range": [
+            21.363730142356108,
+            21.422665495323244
+          ],
+          "median_time_reduction_percent": 21.38978585783525
+        },
+        "256": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            1.9472592518310547,
+            1.949530856760661
+          ],
+          "prepared_ms_range": [
+            1.5233703645591739,
+            1.5265802410901388
+          ],
+          "time_reduction_percent_range": [
+            21.6949946805816,
+            21.785503792943917
+          ],
+          "median_time_reduction_percent": 21.735277947172825
+        },
+        "257": {
+          "pairs": 4,
+          "baseline_ms_range": [
+            1.9543209801991785,
+            1.9585061653683982
+          ],
+          "prepared_ms_range": [
+            1.5291728336728412,
+            1.5327283892148336
+          ],
+          "time_reduction_percent_range": [
+            21.7300575593088,
+            21.77648623604538
+          ],
+          "median_time_reduction_percent": 21.748316838406595
+        }
+      },
+      "shapes": [
+        {
+          "gpu": 0,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.9876172801831564,
+          "prepared_ms": 0.779395058755239,
+          "time_reduction_percent": 21.083290623398376,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-129-0.jsonl",
+          "clocks": "invite/clocks/gdn-129-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 55.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 54.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.9876790085779827,
+          "prepared_ms": 0.7796790093714395,
+          "time_reduction_percent": 21.059473513162196,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-129-0.jsonl",
+          "clocks": "invite/clocks/gdn-129-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 55.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 54.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.990592588813782,
+          "prepared_ms": 0.7826172809651694,
+          "time_reduction_percent": 20.995039756723756,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-129-700.jsonl",
+          "clocks": "invite/clocks/gdn-129-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 54.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 129,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.9906296258506774,
+          "prepared_ms": 0.782259256275177,
+          "time_reduction_percent": 21.034134669308703,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-129-700.jsonl",
+          "clocks": "invite/clocks/gdn-129-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 54.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.4325308587328591,
+          "prepared_ms": 1.1259259216308595,
+          "time_reduction_percent": 21.40302494936871,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-188-0.jsonl",
+          "clocks": "invite/clocks/gdn-188-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.433407401939392,
+          "prepared_ms": 1.1263333290367126,
+          "time_reduction_percent": 21.422665495323244,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-188-0.jsonl",
+          "clocks": "invite/clocks/gdn-188-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.4356913525479635,
+          "prepared_ms": 1.1287901191507974,
+          "time_reduction_percent": 21.376546766301786,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-188-700.jsonl",
+          "clocks": "invite/clocks/gdn-188-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 57.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 188,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.4361481426696778,
+          "prepared_ms": 1.1293333290252685,
+          "time_reduction_percent": 21.363730142356108,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-188-700.jsonl",
+          "clocks": "invite/clocks/gdn-188-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 57.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9480617209637956,
+          "prepared_ms": 1.5236666608543394,
+          "time_reduction_percent": 21.785503792943917,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-256-0.jsonl",
+          "clocks": "invite/clocks/gdn-256-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 56.0,
+              "max_temperature": 57.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9472592518310547,
+          "prepared_ms": 1.5233703645591739,
+          "time_reduction_percent": 21.76848752282409,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-256-0.jsonl",
+          "clocks": "invite/clocks/gdn-256-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 56.0,
+              "max_temperature": 57.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 54.0,
+              "max_temperature": 55.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.9494073999710082,
+          "prepared_ms": 1.526345673189799,
+          "time_reduction_percent": 21.702068371521566,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-256-700.jsonl",
+          "clocks": "invite/clocks/gdn-256-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 56.0,
+              "max_temperature": 57.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 256,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.949530856760661,
+          "prepared_ms": 1.5265802410901388,
+          "time_reduction_percent": 21.6949946805816,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-256-700.jsonl",
+          "clocks": "invite/clocks/gdn-256-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 56.0,
+              "max_temperature": 57.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9544814740257264,
+          "prepared_ms": 1.5291728336728412,
+          "time_reduction_percent": 21.760689267463828,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-257-0.jsonl",
+          "clocks": "invite/clocks/gdn-257-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 57.0,
+              "max_temperature": 58.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 1.9543209801991785,
+          "prepared_ms": 1.5295308583628335,
+          "time_reduction_percent": 21.73594440934936,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-257-0.jsonl",
+          "clocks": "invite/clocks/gdn-257-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 57.0,
+              "max_temperature": 58.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.9585061653683982,
+          "prepared_ms": 1.5320123398348489,
+          "time_reduction_percent": 21.77648623604538,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-257-700.jsonl",
+          "clocks": "invite/clocks/gdn-257-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 57.0,
+              "max_temperature": 58.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 257,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 1.9582592517890933,
+          "prepared_ms": 1.5327283892148336,
+          "time_reduction_percent": 21.7300575593088,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-257-700.jsonl",
+          "clocks": "invite/clocks/gdn-257-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 57.0,
+              "max_temperature": 58.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 55.0,
+              "max_temperature": 56.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.49839505982716875,
+          "prepared_ms": 0.39659259107971195,
+          "time_reduction_percent": 20.42605895466929,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-64-0.jsonl",
+          "clocks": "invite/clocks/gdn-64-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 51.0,
+              "max_temperature": 53.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 51.0,
+              "max_temperature": 53.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.49865431908543906,
+          "prepared_ms": 0.3970617268803914,
+          "time_reduction_percent": 20.37335049887352,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-64-0.jsonl",
+          "clocks": "invite/clocks/gdn-64-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 51.0,
+              "max_temperature": 53.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 51.0,
+              "max_temperature": 53.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.5010246894467671,
+          "prepared_ms": 0.4004074058799744,
+          "time_reduction_percent": 20.0823004706404,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-64-700.jsonl",
+          "clocks": "invite/clocks/gdn-64-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 54.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 52.0,
+              "max_temperature": 53.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 64,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.5010864178415934,
+          "prepared_ms": 0.40001234415308634,
+          "time_reduction_percent": 20.170986498472445,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-64-700.jsonl",
+          "clocks": "invite/clocks/gdn-64-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 53.0,
+              "max_temperature": 54.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 6
+              },
+              "full_clock_samples": 6,
+              "total_samples": 6,
+              "min_temperature": 52.0,
+              "max_temperature": 53.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 0,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.08450617251714071,
+          "prepared_ms": 0.07448148119735717,
+          "time_reduction_percent": 11.862673484295117,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-9-0.jsonl",
+          "clocks": "invite/clocks/gdn-9-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "300/150": 28,
+                "850/1370": 4
+              },
+              "full_clock_samples": 4,
+              "total_samples": 32,
+              "min_temperature": 46.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "300/150": 30,
+                "850/1370": 2
+              },
+              "full_clock_samples": 2,
+              "total_samples": 32,
+              "min_temperature": 46.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": false
+        },
+        {
+          "gpu": 1,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 0,
+          "baseline_ms": 0.08469135770161947,
+          "prepared_ms": 0.07444444416046142,
+          "time_reduction_percent": 12.099125364431496,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-9-0.jsonl",
+          "clocks": "invite/clocks/gdn-9-0.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "300/150": 28,
+                "850/1370": 4
+              },
+              "full_clock_samples": 4,
+              "total_samples": 32,
+              "min_temperature": 46.0,
+              "max_temperature": 49.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "300/150": 30,
+                "850/1370": 2
+              },
+              "full_clock_samples": 2,
+              "total_samples": 32,
+              "min_temperature": 46.0,
+              "max_temperature": 49.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": false
+        },
+        {
+          "gpu": 0,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.08767901201121013,
+          "prepared_ms": 0.07813580217107137,
+          "time_reduction_percent": 10.884257955505493,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-9-700.jsonl",
+          "clocks": "invite/clocks/gdn-9-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 49.0,
+              "max_temperature": 51.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        },
+        {
+          "gpu": 1,
+          "n": 9,
+          "k_heads": 4,
+          "v_heads": 12,
+          "position": 700,
+          "baseline_ms": 0.0873333330001831,
+          "prepared_ms": 0.07680246884282431,
+          "time_reduction_percent": 12.058241447554408,
+          "pass": true,
+          "bitwise_equal": true,
+          "max_abs_error": [
+            0.0,
+            0.0
+          ],
+          "max_rel_error": [
+            0.0,
+            0.0
+          ],
+          "output": "invite/gdn-9-700.jsonl",
+          "clocks": "invite/clocks/gdn-9-700.txt",
+          "whole_process_clock_samples": [
+            {
+              "card": 0,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 50.0,
+              "max_temperature": 51.0
+            },
+            {
+              "card": 1,
+              "clock_sample_counts": {
+                "850/1370": 5
+              },
+              "full_clock_samples": 5,
+              "total_samples": 5,
+              "min_temperature": 49.0,
+              "max_temperature": 51.0
+            }
+          ],
+          "whole_process_all_samples_full_clock": true
+        }
+      ]
+    }
+  }
+}

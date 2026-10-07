@@ -1,0 +1,12 @@
+Oct 07 14:24:23 incite fancurve.sh[286203]: hottest 49 C -> 2205 rpm
+Oct 07 14:24:57 incite fancurve.sh[286203]: hottest 48 C -> 2048 rpm
+Oct 07 14:24:59 incite fancurve.sh[286203]: hottest 49 C -> 2205 rpm
+Oct 07 14:25:06 incite fancurve.sh[286203]: hottest 48 C -> 2048 rpm
+Oct 07 14:25:18 incite systemd[1]: Stopping fancurve.service - Keep the Mac Pro main fan at the live SMC maximum...
+Oct 07 14:25:18 incite fancurve.sh[286203]: fan back to SMC control
+Oct 07 14:25:18 incite systemd[1]: fancurve.service: Deactivated successfully.
+Oct 07 14:25:18 incite systemd[1]: Stopped fancurve.service - Keep the Mac Pro main fan at the live SMC maximum.
+Oct 07 14:25:18 incite systemd[1]: fancurve.service: Consumed 1.639s CPU time, 6M memory peak.
+Oct 07 14:25:18 incite systemd[1]: Started fancurve.service - Keep the Mac Pro main fan at the live SMC maximum.
+Oct 07 14:25:18 incite fancurve.sh[291427]: fan policy: live SMC maximum at all temperatures; refresh every 2s
+Oct 07 14:25:18 incite fancurve.sh[291427]: fan target 2362 rpm (live SMC maximum)

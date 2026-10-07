@@ -1,0 +1,12 @@
+[
+  {
+    "name": "ready-check-4300",
+    "binary": "trashcan-ready",
+    "command": "qwen-check",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+    "args": "--tokens 4300 --steps 32 --context 8192",
+    "minutes": 6,
+    "timeout": 240
+  }
+]

@@ -1,0 +1,1 @@
+[clocks] 6 samples card0 (02:00.0) sclk/mclk: 850/1370 x6  max 50C card1 (06:00.0) sclk/mclk: 850/1370 x6  max 49C  log=results/clocks/gdn-188-0.txt

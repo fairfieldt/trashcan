@@ -1,0 +1,11 @@
+02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50  fancurve.sh
+ad1d7e35f7bf8e0053f10329ea008ff842a8ff748f0d18ed7ea4a775b9451de8  fancurve.service
+75f76a94c099015f07f55d592b2f2a89118cad739dec6faac6937e1433819233  backup/fancurve.sh
+4b125c83edddc73e32d36f9e31128a020c8eafd167e7eb485fd353936cc86723  backup/fancurve.service
+NRestarts=0
+ExecMainStatus=0
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50  /usr/local/sbin/fancurve.sh
+ad1d7e35f7bf8e0053f10329ea008ff842a8ff748f0d18ed7ea4a775b9451de8  /etc/systemd/system/fancurve.service

@@ -1,0 +1,98 @@
+[
+  {
+    "name": "code-plain-1",
+    "binary": "trashcan",
+    "mtp": false,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/code-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "code-fixed-2",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/code-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "code-adaptive-3",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_ADAPTIVE_MTP=1",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/code-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "code-adaptive-4",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_ADAPTIVE_MTP=1",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/code-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "code-fixed-5",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/code-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "code-plain-6",
+    "binary": "trashcan",
+    "mtp": false,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/code-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "chinese-plain-1",
+    "binary": "trashcan",
+    "mtp": false,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/chinese-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "chinese-fixed-2",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/chinese-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "chinese-adaptive-3",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_ADAPTIVE_MTP=1",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/chinese-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "chinese-adaptive-4",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_ADAPTIVE_MTP=1",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/chinese-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "chinese-fixed-5",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/chinese-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "chinese-plain-6",
+    "binary": "trashcan",
+    "mtp": false,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/chinese-256.jsonl --context 4096 --reps 1",
+    "minutes": 4
+  }
+]

@@ -1,0 +1,2 @@
+The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 103 -- CMD'`, and release with gpu_release / `gpuq release 103 -r RESULT` as soon as you are done.
+#103 [running] maxfan-final-check-4300 (owner: Qwen TP4 cooled hardware validation) · running 2 s, 6 min left of the estimate

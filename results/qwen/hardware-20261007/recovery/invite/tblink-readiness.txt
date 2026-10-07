@@ -1,0 +1,243 @@
+Wed Oct  7 20:48:44 UTC 2026
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	incite	0	0	2	up	thunderbolt0	10.99.18.2	10.99.18.1
+2-1	incite	2	2	2	up	thunderbolt1	10.99.18.34	10.99.18.33
+node invite index 2 (/etc/tblink/nodes.tsv)
+0-3 bus 0 -> incite bus 0, 2 lane(s), thunderbolt0 10.99.18.2/30 carrier 1
+2-1 bus 2 -> incite bus 2, 2 lane(s), thunderbolt1 10.99.18.34/30 carrier 1
+10.99.18.1 incite.tb0
+10.99.18.33 incite.tb2
+● tblink.service - Address Thunderbolt links to other trashcan nodes and reset stuck controllers (/usr/local/sbin/tblink)
+     Loaded: loaded (/etc/systemd/system/tblink.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-10-07 13:45:07 PDT; 3min 38s ago
+ Invocation: 6277517d23a74555bdc7ede61682b9ca
+   Main PID: 915 (tblink)
+      Tasks: 2 (limit: 77069)
+     Memory: 4.2M (peak: 12.5M)
+        CPU: 3.260s
+     CGroup: /system.slice/tblink.service
+             ├─ 915 /bin/bash /usr/local/sbin/tblink run
+             └─6779 sleep 5
+
+Warning: some journal files were not opened due to insufficient permissions.
+tblink.service                                                            enabled         enabled
+2026-10-07T13:45:06.048444-07:00 invite kernel: ACPI: bus type thunderbolt registered
+2026-10-07T13:45:06.048778-07:00 invite kernel: thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+2026-10-07T13:45:06.049433-07:00 invite kernel: thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+2026-10-07T13:45:06.049797-07:00 invite kernel: thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+2026-10-07T13:45:06.211082-07:00 invite kernel: Modules linked in: snd(+) mei(+) apple_gmux(+) bcma(+) i2c_algo_bit video soundcore wmi evdev fjes(-) apple_mfi_fastcharge button sg drm efi_pstore efivarfs autofs4 hid_generic usbhid hid ext4 crc16 mbcache jbd2 sd_mod ahci xhci_pci xhci_hcd libahci ehci_pci ehci_hcd iTCO_wdt libata intel_pmc_bxt tg3 thunderbolt watchdog usbcore scsi_mod libphy i2c_i801 ioatdma lpc_ich i2c_smbus scsi_common mdio_bus configfs dca usb_common
+2026-10-07T13:45:07.054666-07:00 invite systemd[1]: Started tblink.service - Address Thunderbolt links to other trashcan nodes and reset stuck controllers (/usr/local/sbin/tblink).
+2026-10-07T13:45:13.605630-07:00 invite kernel: thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+2026-10-07T13:45:13.606193-07:00 invite kernel: thunderbolt 0-3: Linux (none)
+2026-10-07T13:45:17.637662-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:18.661644-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:18.909726-07:00 invite tailscaled[860]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6]} v4=false v6=true} new: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6]} v4=true v6=true} diff: HaveV4: false->true; numInterfaces: 4->5; numInterfaceIPs: 4->5; if thunderbolt0: added; ips enp12s0: [2600:1700:89c0:f04f:68e3:9827:167d:5705/64 fe80::1b96:59f1:24eb:e36a/64]->[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 fe80::1b96:59f1:24eb:e36a/64]; ips thunderbolt0: added [] rebind-reason=[ips-changed,protocols-changed]
+2026-10-07T13:45:19.581860-07:00 invite tblink[915]: 0-3 (thunderbolt0): 10.99.18.2/30 to incite bus 0
+2026-10-07T13:45:19.689644-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:19.911714-07:00 invite tailscaled[860]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6]} v4=true v6=true} new: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6] thunderbolt0:[10.99.18.2/30]} v4=true v6=true} diff: if thunderbolt0 flags: broadcast|multicast->up|broadcast|multicast; ips thunderbolt0: []->[10.99.18.2/30] rebind-reason=[ips-changed]
+2026-10-07T13:45:20.709638-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:21.733637-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:22.757782-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:23.781761-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:24.805763-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:25.413638-07:00 invite kernel: thunderbolt 2-1: new host found, vendor=0x1d6b device=0x4
+2026-10-07T13:45:25.414415-07:00 invite kernel: thunderbolt 2-1: Linux incite
+2026-10-07T13:45:25.829752-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:26.853751-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:27.877800-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:29.055105-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:30.306771-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:31.532106-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:32.757661-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:34.016084-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:35.246147-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:36.496376-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:37.751874-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:38.983239-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:40.215095-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:41.465952-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:42.697657-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:43.929193-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:45.169228-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:46.403258-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:47.633061-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:48.888667-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:50.143528-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:51.395532-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:52.629178-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:53.862166-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:55.094715-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:56.327705-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:57.562702-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:58.795835-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:00.028279-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:01.260364-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:02.516082-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:03.748785-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:05.004180-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:06.237342-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:07.470113-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:08.702679-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:09.936190-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:11.171376-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:12.403952-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:13.638516-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:14.871545-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:16.105836-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:17.338950-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:18.573022-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:19.831809-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:22.305384-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:23.560947-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:24.815177-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:26.068578-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:28.562247-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:29.806454-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:31.074385-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:32.334500-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:33.581987-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:34.826806-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:37.269171-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:38.524853-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:39.758199-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:40.990845-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:42.225786-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:43.459486-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:44.715054-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:45.967182-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:47.220589-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:48.478742-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:50.968214-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:52.220844-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:53.464439-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:54.718197-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:55.978000-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:58.443117-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:59.686468-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:00.931741-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:03.392346-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:04.625683-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:05.877527-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:07.122201-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:08.368245-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:09.633836-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:10.886205-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:12.147178-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:14.601161-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:15.851930-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:17.108612-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:18.349271-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:19.595608-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:22.062486-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:23.308572-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:24.551693-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:26.991618-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:28.241086-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:29.494617-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:30.738437-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:31.993418-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.046362-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.046580-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.046753-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.046945-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.047116-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.047300-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.047470-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.047634-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.047798-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.047962-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.048126-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.048300-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.048469-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.048695-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.048871-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.049142-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.049319-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.049484-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.049692-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.049864-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.050028-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.050192-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.050366-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.050550-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.050737-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.050908-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.051076-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.051252-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.051421-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.051585-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.051846-07:00 invite tailscaled[860]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6] thunderbolt0:[10.99.18.2/30 llu6]} v4=true v6=true} new: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6] thunderbolt0:[10.99.18.2/30 llu6] thunderbolt1:down} v4=true v6=true} diff: numInterfaces: 5->6; numInterfaceIPs: 5->6; if thunderbolt1: added; ips thunderbolt1: added [10.99.18.34/30] rebind-reason=[ips-changed]
+2026-10-07T13:47:32.053197-07:00 invite tblink[915]: 2-1 (thunderbolt1): 10.99.18.34/30 to incite bus 2
+2026-10-07T13:47:32.056041-07:00 invite tailscaled[860]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6] thunderbolt0:[10.99.18.2/30 llu6] thunderbolt1:down} v4=true v6=true} new: interfaces.State{defaultRoute=enp12s0 ifs={enp12s0:[192.168.0.100/24 2600:1700:89c0:f04f:68e3:9827:167d:5705/64 llu6] tailscale0:[100.97.51.99/32 fd7a:115c:a1e0::d438:3364/128 llu6] thunderbolt0:[10.99.18.2/30 llu6] thunderbolt1:[10.99.18.34/30]} v4=true v6=true} diff: if thunderbolt1 flags: broadcast|multicast->up|broadcast|multicast rebind-reason=[ips-changed]
+2026-10-07T13:47:32.805655-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:34.193457-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:36.698468-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:37.975948-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:39.236802-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:40.487406-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:41.743413-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:42.988417-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:44.239218-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:45.493937-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:46.782720-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:48.009819-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:49.260911-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:50.518811-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:51.769054-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:54.221065-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:55.467356-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:56.712612-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:57.970869-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:01.626821-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:02.887537-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:04.127986-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:05.383313-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:06.638454-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:09.080292-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:10.334200-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:11.584395-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.046729-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.069450-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.069836-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.070113-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.070393-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.070657-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.070914-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.071338-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.071618-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.071877-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.072137-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.072394-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.072666-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:14.072930-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:15.313339-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:15.813626-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:16.837662-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:17.861853-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:18.885646-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:19.909809-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:20.933772-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:21.961785-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:22.981782-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:24.009740-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:25.029811-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:26.053786-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:27.081834-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:28.101798-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:29.125616-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:30.149754-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:31.173795-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:31.659407-07:00 invite sudo[6423]: fairfieldt : PWD=/home/fairfieldt ; USER=root ; COMMAND=/usr/sbin/modprobe thunderbolt_stream
+2026-10-07T13:48:32.197738-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:33.402405-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:34.692919-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:35.269639-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:36.293660-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:37.317753-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:38.345751-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:39.365755-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:40.389643-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:41.413763-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:42.437752-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:43.461746-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:44.485767-07:00 invite kernel: thunderbolt 1-3: failed request link state change, aborting

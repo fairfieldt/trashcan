@@ -1,0 +1,10 @@
+/usr/local/sbin/fancurve.sh: OK
+/home/fairfieldt/trashcan-exp/tp4-offline-20261007/fan-interval-20261007/fancurve.sh: OK
+/etc/systemd/system/fancurve.service: OK
+enabled
+NRestarts=0
+ExecMainStatus=0
+ActiveState=active
+SubState=running
+b175a2bb41002a52a133a1d6ed7eb2988a421a4d2bac9a8005efed3fd6b0b3c3  /usr/local/sbin/fancurve.sh
+ad1d7e35f7bf8e0053f10329ea008ff842a8ff748f0d18ed7ea4a775b9451de8  /etc/systemd/system/fancurve.service

@@ -1,0 +1,152 @@
+{
+  "event": "telemetry",
+  "host": "invite",
+  "boot": "96d9c5b9-f34a-49a6-9713-f945ea225320",
+  "utc": "2026-10-07T20:47:34.280863+00:00",
+  "uptime": "152.29 3179.35",
+  "gpu": {
+    "0000:02:00.0": {
+      "power/runtime_status": "active",
+      "current_link_speed": "8.0 GT/s PCIe",
+      "current_link_width": "16",
+      "temp1_input": "46000",
+      "fan1_input": null,
+      "power1_average": null
+    },
+    "0000:06:00.0": {
+      "power/runtime_status": "active",
+      "current_link_speed": "8.0 GT/s PCIe",
+      "current_link_width": "16",
+      "temp1_input": "46000",
+      "fan1_input": null,
+      "power1_average": null
+    }
+  },
+  "aer": {
+    "0000:00:02.0": {
+      "aer_rootport_total_err_cor": "0",
+      "aer_rootport_total_err_fatal": "0",
+      "aer_dev_nonfatal": {
+        "TOTAL_ERR_NONFATAL": 0
+      },
+      "aer_dev_correctable": {
+        "TOTAL_ERR_COR": 0
+      },
+      "aer_dev_fatal": {
+        "TOTAL_ERR_FATAL": 0
+      },
+      "aer_rootport_total_err_nonfatal": "0"
+    },
+    "0000:00:03.0": {
+      "aer_rootport_total_err_cor": "0",
+      "aer_rootport_total_err_fatal": "0",
+      "aer_dev_nonfatal": {
+        "TOTAL_ERR_NONFATAL": 0
+      },
+      "aer_dev_correctable": {
+        "TOTAL_ERR_COR": 0
+      },
+      "aer_dev_fatal": {
+        "TOTAL_ERR_FATAL": 0
+      },
+      "aer_rootport_total_err_nonfatal": "0"
+    }
+  },
+  "smc": {
+    "MSAL": {
+      "type": "hex_",
+      "hex": "4b"
+    },
+    "MSEE": {
+      "type": "ch8*",
+      "hex": "00000000000000000000000000000000"
+    },
+    "MSF0": {
+      "type": "ui16",
+      "hex": "0000"
+    },
+    "MSF1": {
+      "type": "ui8",
+      "hex": "00"
+    },
+    "MSF2": {
+      "type": "ui8",
+      "hex": "00"
+    },
+    "MSPS": {
+      "type": "hex_",
+      "hex": "0004"
+    },
+    "MSRC": {
+      "type": "ui32",
+      "hex": "00000002"
+    },
+    "MSSD": {
+      "type": "si8",
+      "hex": "00",
+      "signed": 0
+    },
+    "MSSP": {
+      "type": "si8",
+      "hex": "00",
+      "signed": 0
+    },
+    "MSSR": {
+      "type": "flag",
+      "hex": "01"
+    },
+    "PCPC": {
+      "type": "spa5",
+      "hex": "0150",
+      "watts": 10.5
+    },
+    "PG0R": {
+      "type": "spa5",
+      "hex": "01d1",
+      "watts": 14.53125
+    },
+    "PG1R": {
+      "type": "spa5",
+      "hex": "0234",
+      "watts": 17.625
+    },
+    "PSTR": {
+      "type": "spa5",
+      "hex": "0a02",
+      "watts": 80.0625
+    },
+    "TA0P": {
+      "type": "sp78",
+      "hex": "2200",
+      "celsius": 34.0
+    },
+    "TC0P": {
+      "type": "sp78",
+      "hex": "2540",
+      "celsius": 37.25
+    },
+    "TG0D": {
+      "type": "sp78",
+      "hex": "2aa0",
+      "celsius": 42.625
+    },
+    "TG1D": {
+      "type": "sp78",
+      "hex": "2ae0",
+      "celsius": 42.875
+    },
+    "TPCD": {
+      "type": "sp78",
+      "hex": "3700",
+      "celsius": 55.0
+    },
+    "Tp0F": {
+      "type": "sp78",
+      "hex": "29d0",
+      "celsius": 41.8125
+    }
+  },
+  "fan_rpm": "1457",
+  "load": "4.32 1.81 0.69 1/430 4012",
+  "sample_ms": 22.7
+}

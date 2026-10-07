@@ -1,0 +1,190 @@
+Wed Oct  7 20:48:15 UTC 2026
+Module                  Size  Used by
+netconsole             49152  0
+thunderbolt_net        53248  0
+xt_connmark            12288  6
+xt_conntrack           12288  4
+xt_MASQUERADE          16384  2
+xt_tcpudp              16384  0
+xt_mark                12288  2
+nft_compat             24576  14
+x_tables               53248  6 xt_conntrack,nft_compat,xt_tcpudp,xt_connmark,xt_MASQUERADE,xt_mark
+nft_chain_nat          12288  2
+nf_nat                 65536  2 nft_chain_nat,xt_MASQUERADE
+nf_conntrack          200704  4 xt_conntrack,nf_nat,xt_connmark,xt_MASQUERADE
+nf_defrag_ipv6         24576  1 nf_conntrack
+nf_defrag_ipv4         12288  1 nf_conntrack
+tun                    69632  2
+nf_tables             389120  109 nft_compat,nft_chain_nat
+amdgpu              16875520  2
+8021q                  57344  0
+garp                   20480  1 8021q
+stp                    12288  1 garp
+mrp                    24576  1 8021q
+b43                   528384  0
+llc                    16384  2 stp,garp
+cordic                 12288  1 b43
+binfmt_misc            28672  1
+mac80211             1613824  1 b43
+nls_ascii              12288  1
+nls_cp437              16384  1
+vfat                   28672  1
+fat                   106496  1 vfat
+drm_buddy              12288  1 amdgpu
+amdxcp                 12288  1 amdgpu
+intel_rapl_msr         24576  0
+drm_panel_backlight_quirks    12288  1 amdgpu
+intel_rapl_common      49152  1 intel_rapl_msr
+gpu_sched              77824  1 amdgpu
+sb_edac                36864  0
+radeon               1961984  0
+x86_pkg_temp_thermal    16384  0
+intel_powerclamp       20480  0
+cfg80211             1560576  2 b43,mac80211
+coretemp               16384  0
+snd_hda_codec_cs420x    16384  1
+snd_hda_codec_generic   114688  1 snd_hda_codec_cs420x
+snd_hda_codec_atihdmi    16384  2
+btusb                  86016  0
+snd_hda_codec_hdmi     61440  1 snd_hda_codec_atihdmi
+kvm_intel             323584  0
+btmtk                  36864  1 btusb
+drm_ttm_helper         20480  2 amdgpu,radeon
+btrtl                  36864  1 btusb
+ttm                   151552  3 amdgpu,radeon,drm_ttm_helper
+btbcm                  24576  1 btusb
+snd_hda_intel          61440  0
+btintel                77824  1 btusb
+drm_exec               16384  2 amdgpu,radeon
+ssb                   114688  1 b43
+kvm                  1490944  1 kvm_intel
+drm_suballoc_helper    20480  2 amdgpu,radeon
+snd_hda_codec         225280  5 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hda_codec_cs420x,snd_hda_intel,snd_hda_codec_atihdmi
+bluetooth            1204224  6 btrtl,btmtk,btintel,btbcm,btusb
+drm_display_helper    315392  2 amdgpu,radeon
+mmc_core              286720  2 b43,ssb
+joydev                 24576  0
+snd_hda_core          151552  6 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hda_codec_cs420x,snd_hda_intel,snd_hda_codec,snd_hda_codec_atihdmi
+snd_intel_dspcfg       49152  1 snd_hda_intel
+irqbypass              16384  1 kvm
+pcmcia                 94208  1 ssb
+snd_intel_sdw_acpi     16384  1 snd_intel_dspcfg
+aesni_intel            98304  0
+snd_hwdep              24576  1 snd_hda_codec
+cec                    77824  2 drm_display_helper,amdgpu
+pcmcia_core            40960  1 pcmcia
+gf128mul               12288  1 aesni_intel
+rapl                   20480  0
+snd_pcm               204800  4 snd_hda_codec_hdmi,snd_hda_intel,snd_hda_codec,snd_hda_core
+libarc4                12288  1 mac80211
+rc_core                77824  1 cec
+aead                   16384  2 mac80211,aesni_intel
+intel_cstate           20480  0
+drm_client_lib         16384  2 amdgpu,radeon
+ecdh_generic           16384  1 bluetooth
+mei_me                 57344  0
+snd_timer              53248  1 snd_pcm
+rfkill                 45056  3 bluetooth,cfg80211
+intel_uncore          282624  0
+at24                   28672  0
+applesmc               32768  0
+pcspkr                 12288  0
+drm_kms_helper        274432  5 drm_display_helper,amdgpu,radeon,drm_ttm_helper,drm_client_lib
+snd                   159744  7 snd_hda_codec_generic,snd_hda_codec_hdmi,snd_hwdep,snd_hda_intel,snd_hda_codec,snd_timer,snd_pcm
+mei                   196608  1 mei_me
+apple_gmux             28672  0
+bcma                   77824  1 b43
+i2c_algo_bit           16384  2 amdgpu,radeon
+video                  81920  3 apple_gmux,amdgpu,radeon
+soundcore              16384  1 snd
+wmi                    36864  1 video
+evdev                  32768  3
+apple_mfi_fastcharge    16384  0
+button                 28672  0
+sg                     45056  0
+drm                   892928  16 gpu_sched,drm_panel_backlight_quirks,drm_kms_helper,drm_exec,drm_suballoc_helper,drm_display_helper,drm_buddy,amdgpu,radeon,drm_ttm_helper,drm_client_lib,ttm,amdxcp
+efi_pstore             12288  0
+efivarfs               32768  1
+autofs4                65536  2
+hid_generic            12288  0
+usbhid                 81920  0
+hid                   270336  2 usbhid,hid_generic
+ext4                 1200128  2
+crc16                  12288  3 bluetooth,amdgpu,ext4
+mbcache                20480  1 ext4
+jbd2                  200704  1 ext4
+sd_mod                 86016  4
+ahci                   53248  4
+xhci_pci               24576  0
+xhci_hcd              405504  1 xhci_pci
+libahci                61440  1 ahci
+ehci_pci               16384  0
+ehci_hcd              110592  1 ehci_pci
+iTCO_wdt               12288  0
+libata                491520  2 libahci,ahci
+intel_pmc_bxt          16384  1 iTCO_wdt
+tg3                   233472  0
+thunderbolt           581632  1 thunderbolt_net
+watchdog               53248  1 iTCO_wdt
+usbcore               434176  8 xhci_hcd,ehci_pci,usbhid,btmtk,apple_mfi_fastcharge,ehci_hcd,btusb,xhci_pci
+scsi_mod              339968  3 sd_mod,libata,sg
+libphy                229376  1 tg3
+i2c_i801               32768  0
+ioatdma                73728  0
+lpc_ich                28672  0
+i2c_smbus              20480  1 i2c_i801
+scsi_common            16384  4 scsi_mod,sd_mod,libata,sg
+mdio_bus               32768  2 libphy,tg3
+configfs               69632  3 netconsole,thunderbolt
+dca                    20480  1 ioatdma
+usb_common             16384  3 xhci_hcd,usbcore,ehci_hcd
+total 0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 0-0 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:02.0/0000:14:00.0/0000:15:00.0/0000:16:00.0/domain0/0-0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 0-3 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:02.0/0000:14:00.0/0000:15:00.0/0000:16:00.0/domain0/0-0/0-3
+lrwxrwxrwx 1 root root 0 Oct  7 13:47 0-3.0 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:02.0/0000:14:00.0/0000:15:00.0/0000:16:00.0/domain0/0-0/0-3/0-3.0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 1-0 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:09.0/0000:5b:00.0/0000:5c:00.0/0000:5d:00.0/domain1/1-0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 2-0 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:0a.0/0000:a2:00.0/0000:a3:00.0/0000:a4:00.0/domain2/2-0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 2-1 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:0a.0/0000:a2:00.0/0000:a3:00.0/0000:a4:00.0/domain2/2-0/2-1
+lrwxrwxrwx 1 root root 0 Oct  7 13:47 2-1.0 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:0a.0/0000:a2:00.0/0000:a3:00.0/0000:a4:00.0/domain2/2-0/2-1/2-1.0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 domain0 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:02.0/0000:14:00.0/0000:15:00.0/0000:16:00.0/domain0
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 domain1 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:09.0/0000:5b:00.0/0000:5c:00.0/0000:5d:00.0/domain1
+lrwxrwxrwx 1 root root 0 Oct  7 13:45 domain2 -> ../../../devices/pci0000:00/0000:00:01.0/0000:10:00.0/0000:11:0a.0/0000:a2:00.0/0000:a3:00.0/0000:a4:00.0/domain2
+/sys/bus/thunderbolt/devices/0-0
+device_name Macintosh
+unique_id 00000000-0000-0008-8041-c5264ae46855
+authorized 1
+/sys/bus/thunderbolt/devices/0-3
+device_name incite
+unique_id 00000000-0000-0018-00bb-a7dca2027060
+rx_speed 10.0 Gb/s
+tx_speed 10.0 Gb/s
+rx_lanes 2
+tx_lanes 2
+/sys/bus/thunderbolt/devices/0-3.0
+modalias tbsvc:knetworkp00000001v00000001r00000001
+/sys/bus/thunderbolt/devices/1-0
+device_name Macintosh
+unique_id 00000000-0000-0018-8041-c5260a046055
+authorized 1
+/sys/bus/thunderbolt/devices/2-0
+device_name Macintosh
+unique_id 00000000-0000-0008-001b-c526e2e36055
+authorized 1
+/sys/bus/thunderbolt/devices/2-1
+device_name incite
+unique_id 00000000-0000-0008-00ea-26dc5cd27960
+rx_speed 10.0 Gb/s
+tx_speed 10.0 Gb/s
+rx_lanes 2
+tx_lanes 2
+/sys/bus/thunderbolt/devices/2-1.0
+modalias tbsvc:knetworkp00000001v00000001r00000001
+/sys/bus/thunderbolt/devices/domain0
+/sys/bus/thunderbolt/devices/domain1
+/sys/bus/thunderbolt/devices/domain2
+lo               UNKNOWN        00:00:00:00:00:00 <LOOPBACK,UP,LOWER_UP> 
+enp11s0          DOWN           00:3e:e1:c7:a4:5c <BROADCAST,MULTICAST> 
+enp12s0          UP             00:3e:e1:c7:a4:5b <BROADCAST,MULTICAST,UP,LOWER_UP> 
+tailscale0       UNKNOWN        <POINTOPOINT,MULTICAST,NOARP,UP,LOWER_UP> 
+thunderbolt0     UP             12:47:48:d2:80:fa <BROADCAST,MULTICAST,UP,LOWER_UP> 
+thunderbolt1     UP             02:61:17:88:01:2b <BROADCAST,MULTICAST,UP,LOWER_UP> 

@@ -1,0 +1,11 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "-p",
+    "trashcan"
+  ],
+  "started_unix": 1791407009.5024042,
+  "finished_unix": 1791407010.943106,
+  "returncode": 0
+}

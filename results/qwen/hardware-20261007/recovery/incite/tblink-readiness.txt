@@ -1,0 +1,264 @@
+Wed Oct  7 20:48:45 UTC 2026
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	invite	0	0	2	up	thunderbolt0	10.99.18.1	10.99.18.2
+2-1	invite	2	2	2	up	thunderbolt1	10.99.18.33	10.99.18.34
+node incite index 1 (/etc/tblink/nodes.tsv)
+0-3 bus 0 -> invite bus 0, 2 lane(s), thunderbolt0 10.99.18.1/30 carrier 1
+2-1 bus 2 -> invite bus 2, 2 lane(s), thunderbolt1 10.99.18.33/30 carrier 1
+10.99.18.2 invite.tb0
+10.99.18.34 invite.tb2
+● tblink.service - Address Thunderbolt links to other trashcan nodes and reset stuck controllers (/usr/local/sbin/tblink)
+     Loaded: loaded (/etc/systemd/system/tblink.service; enabled; preset: enabled)
+     Active: active (running) since Wed 2026-10-07 13:45:19 PDT; 3min 25s ago
+ Invocation: 0856fbd2c2644ab48256f1472554cb5f
+   Main PID: 1136 (tblink)
+      Tasks: 2 (limit: 77028)
+     Memory: 2.5M (peak: 10.4M)
+        CPU: 3.611s
+     CGroup: /system.slice/tblink.service
+             ├─1136 /bin/bash /usr/local/sbin/tblink run
+             └─7374 sleep 5
+
+Warning: some journal files were not opened due to insufficient permissions.
+tblink.service                               enabled         enabled
+2026-10-07T13:45:16.622090-07:00 incite kernel: ACPI: bus type thunderbolt registered
+2026-10-07T13:45:16.623106-07:00 incite kernel: thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+2026-10-07T13:45:16.627822-07:00 incite kernel: thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+2026-10-07T13:45:16.628434-07:00 incite kernel: thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+2026-10-07T13:45:16.681535-07:00 incite kernel: thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+2026-10-07T13:45:16.681965-07:00 incite kernel: thunderbolt 0-3: Linux invite
+2026-10-07T13:45:16.786012-07:00 incite kernel: Modules linked in: soundcore(+) apple_gmux(+) fjes(-) apple_mfi_fastcharge evdev msr i2c_dev parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 hid_generic usbhid hid amdgpu drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core xhci_pci drm_client_lib drm_kms_helper ehci_pci xhci_hcd ehci_hcd drm tg3 nvme iTCO_wdt thunderbolt intel_pmc_bxt usbcore watchdog nvme_core libphy ioatdma i2c_i801 nvme_keyring lpc_ich i2c_smbus nvme_auth mdio_bus dca configfs usb_common button
+2026-10-07T13:45:17.805957-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:18.504751-07:00 incite NetworkManager[1035]: <info>  [1791405918.5047] Read config: /etc/NetworkManager/NetworkManager.conf, /usr/lib/NetworkManager/conf.d/no-mac-addr-change.conf, /etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf
+2026-10-07T13:45:18.825905-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:19.921937-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:19.929496-07:00 incite NetworkManager[1035]: <info>  [1791405919.9294] device (thunderbolt0): driver '(null)' does not support carrier detection.
+2026-10-07T13:45:19.930024-07:00 incite NetworkManager[1035]: <info>  [1791405919.9300] device (thunderbolt0): driver 'thunderbolt-net' does not support carrier detection.
+2026-10-07T13:45:19.930334-07:00 incite NetworkManager[1035]: <info>  [1791405919.9303] manager: (thunderbolt0): new Ethernet device (/org/freedesktop/NetworkManager/Devices/4)
+2026-10-07T13:45:19.938536-07:00 incite systemd[1]: Started tblink.service - Address Thunderbolt links to other trashcan nodes and reset stuck controllers (/usr/local/sbin/tblink).
+2026-10-07T13:45:19.984283-07:00 incite tblink[1136]: 0-3 (thunderbolt0): 10.99.18.1/30 to invite bus 0
+2026-10-07T13:45:19.986481-07:00 incite avahi-daemon[980]: Joining mDNS multicast group on interface thunderbolt0.IPv4 with address 10.99.18.1.
+2026-10-07T13:45:19.986527-07:00 incite avahi-daemon[980]: New relevant interface thunderbolt0.IPv4 for mDNS.
+2026-10-07T13:45:19.986553-07:00 incite avahi-daemon[980]: Registering new address record for 10.99.18.1 on thunderbolt0.IPv4.
+2026-10-07T13:45:20.321000-07:00 incite tailscaled[1132]: link state: interfaces.State{defaultRoute= ifs={thunderbolt0:[10.99.18.1/30]} v4=true v6=false}
+2026-10-07T13:45:20.937939-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:21.961951-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:22.694142-07:00 incite avahi-daemon[980]: Joining mDNS multicast group on interface thunderbolt0.IPv6 with address fe80::10d1:17ff:fe79:d2ba.
+2026-10-07T13:45:22.694188-07:00 incite avahi-daemon[980]: New relevant interface thunderbolt0.IPv6 for mDNS.
+2026-10-07T13:45:22.694240-07:00 incite avahi-daemon[980]: Registering new address record for fe80::10d1:17ff:fe79:d2ba on thunderbolt0.*.
+2026-10-07T13:45:22.985942-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:24.009931-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:24.070693-07:00 incite tailscaled[1132]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute= ifs={tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6]} v4=true v6=false} new: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6]} v4=true v6=true} diff: HaveV6: false->true; DefaultRoute: ""->"enp11s0"; ips enp11s0: [fe80::23e:e1ff:fece:a416/64]->[2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 fe80::23e:e1ff:fece:a416/64] rebind-reason=[default-if-changed,ips-changed,protocols-changed]
+2026-10-07T13:45:25.033946-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:25.071687-07:00 incite tailscaled[1132]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6]} v4=true v6=true} new: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[192.168.0.82/24 2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6]} v4=true v6=true} diff: ips enp11s0: [2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 fe80::23e:e1ff:fece:a416/64]->[192.168.0.82/24 2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 fe80::23e:e1ff:fece:a416/64] rebind-reason=[ips-changed]
+2026-10-07T13:45:25.611996-07:00 incite NetworkManager[1035]: <info>  [1791405925.6119] device (thunderbolt1): driver '(null)' does not support carrier detection.
+2026-10-07T13:45:25.612668-07:00 incite NetworkManager[1035]: <info>  [1791405925.6126] device (thunderbolt1): driver 'thunderbolt-net' does not support carrier detection.
+2026-10-07T13:45:25.613288-07:00 incite NetworkManager[1035]: <info>  [1791405925.6132] manager: (thunderbolt1): new Ethernet device (/org/freedesktop/NetworkManager/Devices/6)
+2026-10-07T13:45:25.613928-07:00 incite kernel: thunderbolt 2-1: new host found, vendor=0x1d6b device=0x4
+2026-10-07T13:45:25.614782-07:00 incite kernel: thunderbolt 2-1: Linux invite
+2026-10-07T13:45:26.061927-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:27.081976-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:28.105931-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:29.129938-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:30.098576-07:00 incite tblink[1136]: 2-1 (thunderbolt1): 10.99.18.33/30 to invite bus 2
+2026-10-07T13:45:30.099090-07:00 incite tailscaled[1132]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[192.168.0.82/24 2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6]} v4=true v6=true} new: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[192.168.0.82/24 2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6] thunderbolt1:down} v4=true v6=true} diff: ips thunderbolt1: []->[10.99.18.33/30] rebind-reason=[ips-changed]
+2026-10-07T13:45:30.100744-07:00 incite avahi-daemon[980]: Joining mDNS multicast group on interface thunderbolt1.IPv4 with address 10.99.18.33.
+2026-10-07T13:45:30.100888-07:00 incite avahi-daemon[980]: New relevant interface thunderbolt1.IPv4 for mDNS.
+2026-10-07T13:45:30.100967-07:00 incite avahi-daemon[980]: Registering new address record for 10.99.18.33 on thunderbolt1.IPv4.
+2026-10-07T13:45:30.153911-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:31.100957-07:00 incite tailscaled[1132]: LinkChange: major, rebinding: old: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[192.168.0.82/24 2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6] thunderbolt1:down} v4=true v6=true} new: interfaces.State{defaultRoute=enp11s0 ifs={enp11s0:[192.168.0.82/24 2600:1700:89c0:f04f:23e:e1ff:fece:a416/64 2600:1700:89c0:f04f:c94:3417:b975:97f1/64 llu6] tailscale0:[100.108.0.1/32 fd7a:115c:a1e0::7838:3/128 llu6] thunderbolt0:[10.99.18.1/30 llu6] thunderbolt1:[10.99.18.33/30]} v4=true v6=true} diff: if thunderbolt1 flags: broadcast|multicast->up|broadcast|multicast rebind-reason=[ips-changed]
+2026-10-07T13:45:31.177954-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:32.201943-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:32.966117-07:00 incite avahi-daemon[980]: Joining mDNS multicast group on interface thunderbolt1.IPv6 with address fe80::90:81ff:fe54:e908.
+2026-10-07T13:45:32.966167-07:00 incite avahi-daemon[980]: New relevant interface thunderbolt1.IPv6 for mDNS.
+2026-10-07T13:45:32.966248-07:00 incite avahi-daemon[980]: Registering new address record for fe80::90:81ff:fe54:e908 on thunderbolt1.*.
+2026-10-07T13:45:33.225991-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:34.250072-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:35.278084-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:36.298045-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:37.322071-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:38.346066-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:39.370051-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:40.394077-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:41.418053-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:42.442068-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:43.465913-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:44.490081-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:45.514073-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:46.538091-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:47.562069-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:48.586001-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:49.609943-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:50.633944-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:51.658065-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:52.686022-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:53.705980-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:54.730080-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:55.754112-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:56.778116-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:57.802061-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:58.826094-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:45:59.850068-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:00.874074-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:01.898077-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:02.922077-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:03.945934-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:04.970095-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:05.994091-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:07.018055-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:08.042098-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:09.066092-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:10.090068-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:11.114074-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:12.138073-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:13.162088-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:14.186069-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:15.209969-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:16.234079-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:17.258093-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:18.282090-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:19.306123-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:20.330147-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:21.354049-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:22.378051-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:23.402047-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:24.426067-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:25.449906-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:26.474050-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:27.498036-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:28.522067-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:29.549949-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:30.570086-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:31.594082-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:32.618079-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:33.642080-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:34.666089-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:35.690070-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:36.713982-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:37.738069-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:38.762050-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:39.790046-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:40.810061-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:41.834055-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:42.858050-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:43.882067-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:44.906115-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:45.930151-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:46.953976-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:47.978108-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:49.001918-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:50.026089-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:51.050025-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:52.074077-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:53.098091-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:54.122088-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:55.150102-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:56.170057-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:57.193911-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:58.218095-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:46:59.242062-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:00.266058-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:01.290081-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:02.318175-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:03.337993-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:04.362161-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:05.386091-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:06.410125-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:07.434093-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:08.457980-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:09.482092-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:10.506095-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:11.530087-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:12.554094-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:13.578062-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:14.602166-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:15.626091-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:16.650102-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:17.674059-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:18.697934-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:19.722066-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:20.746102-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:21.770099-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:22.794061-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:23.818103-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:24.842097-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:25.866013-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:26.890115-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:27.914176-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:28.938084-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:29.961960-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:30.986092-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:32.010104-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:33.034078-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:34.058008-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:35.082094-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:36.106093-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:37.130090-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:38.154073-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:39.177980-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:40.205913-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:41.225949-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:42.250070-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:43.274027-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:44.298064-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:45.322067-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:46.346143-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:47.370020-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:48.394094-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:49.418120-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:50.442087-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:51.465965-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:52.490077-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:53.514069-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:54.538089-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:55.562085-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:56.586154-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:57.610075-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:58.634051-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:47:59.658078-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:00.682064-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:01.705945-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:02.730064-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:03.754126-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:04.778142-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:05.802038-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:06.826088-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:07.850095-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:08.874111-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:09.898081-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:10.922107-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:11.945906-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:12.969911-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:13.994124-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:15.018085-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:16.041995-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:17.070069-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:18.090001-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:19.114088-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:20.138087-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:21.162086-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:22.186030-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:23.209951-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:24.234023-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:25.258062-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:26.282059-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:27.305978-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:28.330080-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:29.354069-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:30.378097-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:31.401934-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:31.455489-07:00 incite sudo[7025]: fairfieldt : PWD=/home/fairfieldt ; USER=root ; COMMAND=/usr/sbin/modprobe thunderbolt_stream
+2026-10-07T13:48:32.430059-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:33.449955-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:34.474055-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:35.498063-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:36.522056-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:37.550086-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:38.570046-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:39.594062-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:40.618038-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:41.642072-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:42.666104-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:43.690063-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:44.713978-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting
+2026-10-07T13:48:45.738112-07:00 incite kernel: thunderbolt 1-3: failed request link state change, aborting

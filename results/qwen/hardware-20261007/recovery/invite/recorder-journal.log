@@ -1,0 +1,2 @@
+2026-10-07T13:45:07.052516-07:00 invite systemd[1]: Started system-platform-trace.service - Record PCIe slot power and software shutdown events externally.
+2026-10-07T13:45:07.055749-07:00 invite systemd[1]: Started system-crash-capture.service - Preserve Mac Pro system telemetry and GPU crash dumps.

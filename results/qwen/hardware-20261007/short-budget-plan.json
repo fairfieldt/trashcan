@@ -1,0 +1,34 @@
+[
+  {
+    "name": "short-budget-plain",
+    "binary": "trashcan",
+    "mtp": false,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/short-budgets.jsonl --context 1024 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "short-budget-old-mtp",
+    "binary": "baseline",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/short-budgets.jsonl --context 1024 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "short-budget-new-mtp",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/short-budgets.jsonl --context 1024 --reps 1",
+    "minutes": 4
+  },
+  {
+    "name": "short-budget-adaptive",
+    "binary": "trashcan",
+    "mtp": true,
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_ADAPTIVE_MTP=1",
+    "args": "--corpus /home/fairfieldt/trashcan-exp/tp4-offline-20261007/fixtures/short-budgets.jsonl --context 1024 --reps 1",
+    "minutes": 4
+  }
+]

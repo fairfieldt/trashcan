@@ -1,0 +1,31 @@
+{
+  "unix": 1791411296.977738,
+  "source_commit": "53c228dd7de8c1d4fb0d282ab0d1479ec86613a9",
+  "cpu_release_tests": {
+    "passed": 61,
+    "ignored_manual_benchmarks": 2,
+    "log": "builds/final/tests.log"
+  },
+  "fan_mock_tests": {
+    "passed": 12,
+    "evidence": "fans/interval-validation.json"
+  },
+  "serving_harness_tests": {
+    "passed": 14,
+    "evidence": "scripts/serve-final-v2-local-validation.json"
+  },
+  "final_artifact_audit": {
+    "state": "passed",
+    "evidence": "final-evidence-audit.json"
+  },
+  "GPU_GDN_bitwise_pairs": 48,
+  "server_requests_passed": 148,
+  "all_comparison_correctness_pass": true,
+  "performance_analysis_pending": [],
+  "all_task_leases_released": true,
+  "both_queues_empty_at_final_capture": true,
+  "all_CPU_governors_restored": true,
+  "experiment_processes_remaining": false,
+  "source_and_authored_artifact_whitespace_check": "git diff --cached --check -- . :(exclude)**/*.log :(exclude)**/*.txt passed",
+  "raw_log_note": "Raw command logs/transcripts retain their original trailing whitespace, CR characters and terminal newlines; the unrestricted whitespace check reports those verbatim captures."
+}

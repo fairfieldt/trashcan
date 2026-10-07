@@ -1,0 +1,20 @@
+{
+  "commit": "b0a2e6884d06ac8798df70f7057910ff1ddff3fb",
+  "source_directory": "/var/folders/50/3jn3w4vs1b736m5hmkl9vkxr0000gn/T/trashcan-b0a2e68-dadrarsq",
+  "local_output": "/Users/fairfieldt/dev/trashcan/results/qwen/hardware-20261007/builds/baseline",
+  "archive_sha256": "d6fe724de5911d898c1f047f82fea3c8192cd7eb7bdd77016f6cfe129a74c46e",
+  "candidate_before_sha256": "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+  "command": [
+    "env",
+    "BUILD_ONLY=1",
+    "bash",
+    "scripts/cross-build.sh"
+  ],
+  "started_unix": 1791406376.218345,
+  "returncode": 0,
+  "finished_unix": 1791406396.653114,
+  "binary_sha256": "22e8874f5af3cd89f7758483a07b74bff469c6f07871e5f977b2882a74deb96d",
+  "binary_size": 42586880,
+  "candidate_after_sha256": "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+  "binary_path": "/Users/fairfieldt/dev/trashcan/target/trashcan-tp4-baseline"
+}

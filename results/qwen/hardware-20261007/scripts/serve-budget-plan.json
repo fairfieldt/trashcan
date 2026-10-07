@@ -1,0 +1,43 @@
+[
+  {
+    "name": "serve-budget-ready-plain",
+    "binary": "trashcan-ready",
+    "mode": "plain",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../cold-readiness/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum"
+  },
+  {
+    "name": "serve-budget-ready-mtp",
+    "binary": "trashcan-ready",
+    "mode": "mtp",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../cold-readiness/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum"
+  },
+  {
+    "name": "serve-budget-ready-adaptive",
+    "binary": "trashcan-ready",
+    "mode": "adaptive",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../cold-readiness/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum"
+  },
+  {
+    "name": "serve-budget-ready-uncached",
+    "binary": "trashcan-ready",
+    "mode": "plain",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../cold-readiness/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum",
+    "no_prefix_cache": true
+  }
+]

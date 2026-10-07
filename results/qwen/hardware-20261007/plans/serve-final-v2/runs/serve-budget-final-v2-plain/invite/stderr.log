@@ -1,0 +1,6 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on ["/dev/tbstream0", "/dev/tbstream1", "/dev/tbstream2"], GPUs [0, 1]
+tp-node: session over 3 stream lanes
+GPU0: rank 2 of 4, 4116.3 MiB allocated
+GPU1: rank 3 of 4, 4116.3 MiB allocated
+tp-node: session ended: the other machine closed the lanes: unexpected end of file
+[clocks] 248 samples card0 (02:00.0) sclk/mclk: 850/1370 x192 300/1370 x1 450/1370 x5 300/150 x50  max 78C card1 (06:00.0) sclk/mclk: 850/1370 x177 300/1370 x2 450/1370 x8 300/150 x61  max 68C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/serve-budget-final-v2-plain/clocks.txt

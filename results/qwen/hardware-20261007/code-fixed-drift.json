@@ -1,0 +1,312 @@
+{
+  "runs": [
+    "maxfan-code-fixed-2",
+    "maxfan-code-fixed-5"
+  ],
+  "tokens_equal": true,
+  "prefill_top_exact": true,
+  "tokens": 256,
+  "throughput_tok_s": [
+    47.616806165956326,
+    43.765365210878336
+  ],
+  "throughput_change_percent": -8.088406731133468,
+  "elapsed_ms": [
+    5376.253063,
+    5849.374243
+  ],
+  "elapsed_delta_ms": 473.1211799999997,
+  "work": {
+    "rounds": [
+      90,
+      90
+    ],
+    "proposed": [
+      180,
+      180
+    ],
+    "accepted": [
+      165,
+      165
+    ],
+    "accepted_at": [
+      [
+        86,
+        79
+      ],
+      [
+        86,
+        79
+      ]
+    ],
+    "offered_at": [
+      [
+        90,
+        90
+      ],
+      [
+        90,
+        90
+      ]
+    ]
+  },
+  "round_costs": {
+    "draft_ms_per_round": {
+      "values": [
+        3.4432546222222205,
+        3.5287953111111108
+      ],
+      "change_percent": 2.4842975113378074,
+      "aggregate_delta_ms": 7.698662000000127
+    },
+    "verify_ms_per_round": {
+      "values": [
+        56.077721266666664,
+        61.24494103333332
+      ],
+      "change_percent": 9.214389689793112,
+      "aggregate_delta_ms": 465.04977899999903
+    },
+    "rollback_ms_per_round": {
+      "values": [
+        0.21391995555555562,
+        0.21786175555555556
+      ],
+      "change_percent": 1.8426518413221293,
+      "aggregate_delta_ms": 0.3547619999999938
+    }
+  },
+  "driver_phases": {
+    "sum": {
+      "ms_per_token": [
+        0.47815366796875114,
+        0.5860366992187459
+      ],
+      "aggregate_delta_ms": 27.61805599999866,
+      "fraction_of_elapsed_delta": 0.05837416959434933
+    },
+    "total": {
+      "ms_per_token": [
+        0.9786856914062575,
+        1.040271906250005
+      ],
+      "aggregate_delta_ms": 15.766070999999357,
+      "fraction_of_elapsed_delta": 0.03332353668884443
+    },
+    "add": {
+      "ms_per_token": [
+        1.4568393593749869,
+        1.6263086054687494
+      ],
+      "aggregate_delta_ms": 43.38412700000322,
+      "fraction_of_elapsed_delta": 0.09169770628320476
+    },
+    "exchange": {
+      "ms_per_token": [
+        2.1954674218750054,
+        3.740063890624993
+      ],
+      "aggregate_delta_ms": 395.4166959999968,
+      "fraction_of_elapsed_delta": 0.8357619838536864
+    },
+    "wait": {
+      "ms_per_token": [
+        16.99522873828113,
+        17.104643667968755
+      ],
+      "aggregate_delta_ms": 28.010222000031717,
+      "fraction_of_elapsed_delta": 0.05920306083112097
+    },
+    "submit": {
+      "ms_per_token": [
+        0.02309535546875042,
+        0.030516605468750194
+      ],
+      "aggregate_delta_ms": 1.8998399999999425,
+      "fraction_of_elapsed_delta": 0.004015546291966772
+    }
+  },
+  "provenance": {
+    "command_equal": true,
+    "environment_equal": true,
+    "driver_host_equal": true,
+    "peer_host_equal": true,
+    "host_settings": {
+      "cpu_affinity": "0-23",
+      "cpu_governor": "performance",
+      "cpu_latency_us": 0,
+      "experiments": {
+        "TRASHCAN_QWEN_ATTN": "tiled",
+        "TRASHCAN_QWEN_ATTN_SLAB": "64",
+        "TRASHCAN_QWEN_GDN": null,
+        "TRASHCAN_TP_KV_ONLY": null,
+        "TRASHCAN_TP_SUM_DIRECT": null
+      }
+    },
+    "fan_regime": [
+      "dynamic-smc-maximum",
+      "dynamic-smc-maximum"
+    ],
+    "incite": {
+      "binary_sha256": [
+        "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+        "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a"
+      ],
+      "restore_errors": [
+        {},
+        {}
+      ],
+      "governors_restored": [
+        true,
+        true
+      ],
+      "fan_snapshots": [
+        {
+          "fan_before": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon3/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2388",
+                "fan1_manual": "1",
+                "fan1_output": "2388",
+                "fan1_input": "2386"
+              }
+            ]
+          },
+          "fan_after": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon3/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2387",
+                "fan1_manual": "1",
+                "fan1_output": "2387",
+                "fan1_input": "2386"
+              }
+            ]
+          }
+        },
+        {
+          "fan_before": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon3/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2387",
+                "fan1_manual": "1",
+                "fan1_output": "2387",
+                "fan1_input": "2389"
+              }
+            ]
+          },
+          "fan_after": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon3/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2387",
+                "fan1_manual": "1",
+                "fan1_output": "2389",
+                "fan1_input": "2388"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "invite": {
+      "binary_sha256": [
+        "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a",
+        "0bb31aab9a45eaa602ce6856623d8ca8884810c7f4926da2c6b17e4e271bca5a"
+      ],
+      "restore_errors": [
+        {},
+        {}
+      ],
+      "governors_restored": [
+        true,
+        true
+      ],
+      "fan_snapshots": [
+        {
+          "fan_before": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon0/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2406",
+                "fan1_manual": "1",
+                "fan1_output": "2407",
+                "fan1_input": "2407"
+              }
+            ]
+          },
+          "fan_after": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon0/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2409",
+                "fan1_manual": "1",
+                "fan1_output": "2409",
+                "fan1_input": "2407"
+              }
+            ]
+          }
+        },
+        {
+          "fan_before": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon0/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2407",
+                "fan1_manual": "1",
+                "fan1_output": "2407",
+                "fan1_input": "2407"
+              }
+            ]
+          },
+          "fan_after": {
+            "script_sha256": "02a62a95ab37e39c21fc3b1efffc815b7f52916fb9d0af00cc4b55e721e6ec50",
+            "readings": [
+              {
+                "path": "/sys/class/hwmon/hwmon0/device",
+                "device_path": "/sys/devices/platform/applesmc.768",
+                "name": "applesmc",
+                "fan1_min": "790",
+                "fan1_max": "2409",
+                "fan1_manual": "1",
+                "fan1_output": "2411",
+                "fan1_input": "2409"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "interpretation": "Most additional driver wall time is inside the exchange call. Exchange includes waiting for the peer and transport; this does not identify a network-only or thermal cause. Driver wait is host waiting for its local GPU completion, not isolated GPU kernel time."
+}

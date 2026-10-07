@@ -1,0 +1,661 @@
+{
+  "plan": "plans/decode-plan/plan.json",
+  "complete": false,
+  "pending": [
+    "decode3-old-mtp-d",
+    "decode3-old-mtp-e",
+    "decode3-new-mtp-f",
+    "decode3-new-plain-g",
+    "decode3-old-plain-h"
+  ],
+  "rows": [
+    {
+      "name": "decode3-old-plain-a",
+      "case": "pp512",
+      "rep": 0,
+      "pp": 512,
+      "tg": 256,
+      "pp_seconds": 3.332177163,
+      "tg_seconds": 8.994780543,
+      "pp_tok_s": 153.65329481432497,
+      "tg_tok_s": 28.4609500783459,
+      "pp_tp_ms": {
+        "add": 295.8235790000001,
+        "allreduces": 256,
+        "exchange": 987.1324269999994,
+        "submit": 5.000900000000004,
+        "sum": 128.89155599999992,
+        "total": 166.9320229999999,
+        "wait": 2032.3995370000011
+      },
+      "tg_tp_ms": {
+        "add": 1.3400677929687557,
+        "allreduces": 32640,
+        "exchange": 4.138706175781308,
+        "submit": 0.03010832421874962,
+        "sum": 0.3829082656250046,
+        "total": 0.957159527343759,
+        "wait": 29.26569807421861
+      },
+      "mtp_stats": null,
+      "clocks": {
+        "pp": {
+          "incite": {
+            "valid": true,
+            "samples": 13,
+            "weighted_samples": 14,
+            "window_seconds": 3.3321776390075684,
+            "covered_seconds": 3.3321776390075684,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 450.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 830.420553104478,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 60.0,
+                "temperature_max": 64.0,
+                "full_clock_fraction": 0.951051382761195,
+                "sample_clock_counts": {
+                  "450/1370": 1,
+                  "850/1370": 12
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 59.0,
+                "temperature_max": 62.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 0.951051382761195
+          },
+          "invite": {
+            "valid": true,
+            "samples": 12,
+            "weighted_samples": 14,
+            "window_seconds": 3.3321776390075684,
+            "covered_seconds": 3.3321776390075684,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 300.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 837.6033062286181,
+                "mclk_min": 150.0,
+                "mclk_mean": 1342.5018792707529,
+                "temperature_min": 65.0,
+                "temperature_max": 80.0,
+                "full_clock_fraction": 0.9774605567793055,
+                "sample_clock_counts": {
+                  "850/1370": 12
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 65.0,
+                "temperature_max": 69.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 12
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 0.9774605567793055
+          }
+        },
+        "tg": {
+          "incite": {
+            "valid": true,
+            "samples": 34,
+            "weighted_samples": 35,
+            "window_seconds": 8.994780778884888,
+            "covered_seconds": 8.994780778884888,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 64.0,
+                "temperature_max": 66.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 34
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 62.0,
+                "temperature_max": 65.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 34
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          },
+          "invite": {
+            "valid": true,
+            "samples": 35,
+            "weighted_samples": 35,
+            "window_seconds": 8.994780778884888,
+            "covered_seconds": 8.994780778884888,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 80.0,
+                "temperature_max": 84.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 35
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 69.0,
+                "temperature_max": 70.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 35
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          }
+        }
+      },
+      "full_clocks": {
+        "pp": false,
+        "tg": true
+      }
+    },
+    {
+      "name": "decode3-new-plain-b",
+      "case": "pp512",
+      "rep": 0,
+      "pp": 512,
+      "tg": 256,
+      "pp_seconds": 3.335585625,
+      "tg_seconds": 8.881181851000001,
+      "pp_tok_s": 153.4962844792809,
+      "tg_tok_s": 28.82499247227721,
+      "pp_tp_ms": {
+        "add": 281.1486590000001,
+        "allreduces": 256,
+        "exchange": 952.8477999999994,
+        "submit": 5.0503610000000005,
+        "sum": 131.6874620000001,
+        "total": 149.46119700000003,
+        "wait": 2084.4264849999995
+      },
+      "tg_tp_ms": {
+        "add": 1.3488750820312425,
+        "allreduces": 32640,
+        "exchange": 3.7973364218750354,
+        "submit": 0.03221855078125311,
+        "sum": 0.3994854609374984,
+        "total": 0.9493896210937632,
+        "wait": 29.268312449218985
+      },
+      "mtp_stats": null,
+      "clocks": {
+        "pp": {
+          "incite": {
+            "valid": true,
+            "samples": 13,
+            "weighted_samples": 13,
+            "window_seconds": 3.3355860710144043,
+            "covered_seconds": 3.3355860710144043,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 61.0,
+                "temperature_max": 65.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 60.0,
+                "temperature_max": 63.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          },
+          "invite": {
+            "valid": true,
+            "samples": 13,
+            "weighted_samples": 13,
+            "window_seconds": 3.3355860710144043,
+            "covered_seconds": 3.3355860710144043,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 67.0,
+                "temperature_max": 81.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 66.0,
+                "temperature_max": 69.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          }
+        },
+        "tg": {
+          "incite": {
+            "valid": true,
+            "samples": 34,
+            "weighted_samples": 35,
+            "window_seconds": 8.881182193756104,
+            "covered_seconds": 8.881182193756104,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 64.0,
+                "temperature_max": 67.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 34
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 63.0,
+                "temperature_max": 65.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 34
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          },
+          "invite": {
+            "valid": true,
+            "samples": 34,
+            "weighted_samples": 35,
+            "window_seconds": 8.881182193756104,
+            "covered_seconds": 8.881182193756104,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 81.0,
+                "temperature_max": 84.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 34
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 69.0,
+                "temperature_max": 71.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 34
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          }
+        }
+      },
+      "full_clocks": {
+        "pp": true,
+        "tg": true
+      }
+    },
+    {
+      "name": "decode3-new-mtp-c",
+      "case": "pp512",
+      "rep": 0,
+      "pp": 512,
+      "tg": 256,
+      "pp_seconds": 3.391556687,
+      "tg_seconds": 6.757484932,
+      "pp_tok_s": 150.96312615458282,
+      "tg_tok_s": 37.88391725266225,
+      "pp_tp_ms": {
+        "add": 277.4972100000001,
+        "allreduces": 256,
+        "exchange": 1004.1873800000001,
+        "submit": 5.164441999999995,
+        "sum": 129.22497599999997,
+        "total": 148.27223399999997,
+        "wait": 2077.501855999998
+      },
+      "tg_tp_ms": {
+        "add": 1.8009552304687475,
+        "allreduces": 14388,
+        "exchange": 2.6922540429687984,
+        "submit": 0.028787578125000164,
+        "sum": 0.5890776679687552,
+        "total": 1.2118775625000042,
+        "wait": 21.312498730468732
+      },
+      "mtp_stats": {
+        "acceptance": 0.6697247706422018,
+        "accepted": 146,
+        "accepted_at": [
+          84,
+          62
+        ],
+        "draft_ms_per_round": 3.5581541009174313,
+        "offered_at": [
+          109,
+          109
+        ],
+        "plain_ms_per_step": 0.0,
+        "plain_steps": 0,
+        "proposed": 218,
+        "rollback_ms_per_round": 0.6500433669724772,
+        "rounds": 109,
+        "tokens_per_round": 2.3394495412844036,
+        "verify_ms_per_round": 57.78578916513763
+      },
+      "clocks": {
+        "pp": {
+          "incite": {
+            "valid": true,
+            "samples": 13,
+            "weighted_samples": 14,
+            "window_seconds": 3.391557455062866,
+            "covered_seconds": 3.391557455062866,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 61.0,
+                "temperature_max": 65.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 61.0,
+                "temperature_max": 64.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          },
+          "invite": {
+            "valid": true,
+            "samples": 13,
+            "weighted_samples": 14,
+            "window_seconds": 3.391557455062866,
+            "covered_seconds": 3.391557455062866,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 450.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 830.4638282296172,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 66.0,
+                "temperature_max": 81.0,
+                "full_clock_fraction": 0.951159570574043,
+                "sample_clock_counts": {
+                  "450/1370": 1,
+                  "850/1370": 12
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 67.0,
+                "temperature_max": 70.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 13
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 0.951159570574043
+          }
+        },
+        "tg": {
+          "incite": {
+            "valid": true,
+            "samples": 26,
+            "weighted_samples": 26,
+            "window_seconds": 6.757485389709473,
+            "covered_seconds": 6.757485389709473,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 65.0,
+                "temperature_max": 67.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 26
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 64.0,
+                "temperature_max": 65.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 26
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          },
+          "invite": {
+            "valid": true,
+            "samples": 26,
+            "weighted_samples": 26,
+            "window_seconds": 6.757485389709473,
+            "covered_seconds": 6.757485389709473,
+            "coverage_fraction": 1.0,
+            "nominal_interval_seconds": 0.2630000114440918,
+            "cards": [
+              {
+                "card": 0,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 81.0,
+                "temperature_max": 85.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 26
+                }
+              },
+              {
+                "card": 1,
+                "sclk_min": 850.0,
+                "sclk_p10": 850.0,
+                "sclk_median": 850.0,
+                "sclk_mean": 850.0,
+                "mclk_min": 1370.0,
+                "mclk_mean": 1370.0,
+                "temperature_min": 70.0,
+                "temperature_max": 71.0,
+                "full_clock_fraction": 1.0,
+                "sample_clock_counts": {
+                  "850/1370": 26
+                }
+              }
+            ],
+            "all_cards_full_clock_fraction": 1.0
+          }
+        }
+      },
+      "full_clocks": {
+        "pp": false,
+        "tg": true
+      }
+    }
+  ],
+  "phase_meaning": "Driver host instrumentation only. pp_tp_ms covers the whole prefill; tg_tp_ms is per emitted token. add=sum+total, so do not add all three. exchange includes peer/transport synchronization; wait is host time waiting for GPU completion. These are not isolated kernel durations.",
+  "matched_comparisons": [],
+  "matching_policy": "Separate binary, MTP mode, environment, exact command workload (including stream endpoints) and corpus case. Each candidate observation pairs with the closest reference in planned order, preferring matching repetition. Cross-version plus cross-mode pairs are correctness-only. Summaries wait for the entire plan."
+}

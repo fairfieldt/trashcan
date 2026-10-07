@@ -1,0 +1,17 @@
+{
+  "collected_utc": "2026-10-07T20:47:37.195437+00:00",
+  "files": [
+    {
+      "path": "/Users/fairfieldt/dev/claude-work/trashcan-kbuild/netconsole-incite.log",
+      "size": 39606553
+    }
+  ],
+  "host_last": {
+    "incite": "2026-10-07T20:47:36.785245+00:00",
+    "invite": "2026-10-07T20:47:34.280863+00:00"
+  },
+  "prior_boot_events": {
+    "incite": 22,
+    "invite": 20
+  }
+}

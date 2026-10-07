@@ -1,0 +1,16 @@
+{"name": "count-1", "max_tokens": 1, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-1", "max_tokens": 1, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-2", "max_tokens": 2, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-2", "max_tokens": 2, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-3", "max_tokens": 3, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-3", "max_tokens": 3, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-4", "max_tokens": 4, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-4", "max_tokens": 4, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-5", "max_tokens": 5, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-5", "max_tokens": 5, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-6", "max_tokens": 6, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-6", "max_tokens": 6, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-7", "max_tokens": 7, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-7", "max_tokens": 7, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}
+{"name": "count-8", "max_tokens": 8, "messages": [{"role": "user", "content": "Count from one to twenty, with one number per line."}]}
+{"name": "stop-8", "max_tokens": 8, "messages": [{"role": "user", "content": "Reply with exactly one word: Hello"}]}

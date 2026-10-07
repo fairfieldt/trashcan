@@ -1,0 +1,14 @@
+[Unit]
+Description=Record PCIe slot power and software shutdown events externally
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+EnvironmentFile=/etc/default/netconsole-target
+ExecStart=/usr/bin/python3 /usr/local/sbin/system-platform-trace.py --target ${NETCONSOLE_TARGET}
+Restart=always
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

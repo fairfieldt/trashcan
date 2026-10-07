@@ -1,0 +1,12 @@
+Oct 07 14:20:44 invite systemd[1]: fancurve.service: Consumed 12.195s CPU time, 7.6M memory peak.
+Oct 07 14:21:14 invite systemd[1]: Started fancurve.service - Aggressive fan curve for the Mac Pro 6,1 (trashcan scripts/fancurve.sh).
+Oct 07 14:21:14 invite fancurve.sh[297870]: curve: 790 rpm at <=40 C, 2356 rpm at >=50 C
+Oct 07 14:21:14 invite fancurve.sh[297870]: hottest 58 C -> 2356 rpm
+Oct 07 14:25:20 invite systemd[1]: Stopping fancurve.service - Keep the Mac Pro main fan at the live SMC maximum...
+Oct 07 14:25:21 invite fancurve.sh[297870]: fan back to SMC control
+Oct 07 14:25:20 invite systemd[1]: fancurve.service: Deactivated successfully.
+Oct 07 14:25:23 invite fancurve.sh[303457]: fan policy: live SMC maximum at all temperatures; refresh every 2s
+Oct 07 14:25:23 invite fancurve.sh[303457]: fan target 2371 rpm (live SMC maximum)
+Oct 07 14:25:20 invite systemd[1]: Stopped fancurve.service - Keep the Mac Pro main fan at the live SMC maximum.
+Oct 07 14:25:20 invite systemd[1]: fancurve.service: Consumed 1.444s CPU time, 6.1M memory peak.
+Oct 07 14:25:20 invite systemd[1]: Started fancurve.service - Keep the Mac Pro main fan at the live SMC maximum.

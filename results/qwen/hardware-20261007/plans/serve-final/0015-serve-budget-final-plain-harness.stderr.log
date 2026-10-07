@@ -1,0 +1,6 @@
+incite: Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+    assert client.get('safe_to_stop') and client.get('server_identity_verified'), 'serial idle barrier not confirmed'
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: serial idle barrier not confirmed
+

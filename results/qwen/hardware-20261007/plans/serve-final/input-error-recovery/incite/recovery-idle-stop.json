@@ -1,0 +1,17 @@
+{
+  "unix": 1791410686.8071053,
+  "reason": "One generation completed; next request rejected before generation for invalid replay status; fresh serial health barrier confirms driver checkpoint finished",
+  "health": "{\"status\":\"ok\"}",
+  "models": {
+    "data": [
+      {
+        "created": 0,
+        "id": "budget-serve-budget-final-plain",
+        "object": "model",
+        "owned_by": "trashcan"
+      }
+    ],
+    "object": "list"
+  },
+  "pid": 546274
+}

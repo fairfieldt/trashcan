@@ -1,0 +1,42 @@
+{
+  "unix": 1791411194.2483466,
+  "boot_id": "96d9c5b9-f34a-49a6-9713-f945ea225320",
+  "fan": {
+    "fan1_min": 790,
+    "fan1_max": 2419,
+    "fan1_manual": 1,
+    "fan1_output": 2419,
+    "fan1_input": 2417
+  },
+  "fan_script_sha256": "b175a2bb41002a52a133a1d6ed7eb2988a421a4d2bac9a8005efed3fd6b0b3c3",
+  "fan_service_sha256": "ad1d7e35f7bf8e0053f10329ea008ff842a8ff748f0d18ed7ea4a775b9451de8",
+  "fan_service": [
+    "NRestarts=0",
+    "ExecMainStatus=0",
+    "ActiveState=active",
+    "SubState=running"
+  ],
+  "fan_enabled": "enabled",
+  "cpu_governors": {
+    "schedutil": 24
+  },
+  "experiment_model_processes": [],
+  "streams": {
+    "/dev/tbstream0": {
+      "exists": true,
+      "readable": true,
+      "writable": true
+    },
+    "/dev/tbstream1": {
+      "exists": true,
+      "readable": true,
+      "writable": true
+    },
+    "/dev/tbstream2": {
+      "exists": true,
+      "readable": true,
+      "writable": true
+    }
+  },
+  "final_binary_sha256": "8f9eefc47d7bf01a9072ecf8567b4312d8eacfdab3e65069d258cd93be9706bf"
+}

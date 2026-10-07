@@ -1,0 +1,43 @@
+[
+  {
+    "name": "serve-budget-final-plain",
+    "binary": "trashcan-final",
+    "mode": "plain",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../builds/final/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum"
+  },
+  {
+    "name": "serve-budget-final-mtp",
+    "binary": "trashcan-final",
+    "mode": "mtp",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../builds/final/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum"
+  },
+  {
+    "name": "serve-budget-final-adaptive",
+    "binary": "trashcan-final",
+    "mode": "adaptive",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../builds/final/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum"
+  },
+  {
+    "name": "serve-budget-final-uncached",
+    "binary": "trashcan-final",
+    "mode": "plain",
+    "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+    "minutes": 6,
+    "timeout": 240,
+    "source_archive": "../builds/final/source.tar.gz",
+    "fan_regime": "dynamic-smc-maximum",
+    "no_prefix_cache": true
+  }
+]

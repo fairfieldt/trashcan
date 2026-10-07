@@ -1,0 +1,1 @@
+{"name": "code", "messages": [{"role": "user", "content": "Write a Python function that parses CSV text with quoted commas, preserves empty fields, and rejects inconsistent row lengths. Include tests."}], "max_tokens": 256}

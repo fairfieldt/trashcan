@@ -1,0 +1,95 @@
+{
+  "started_unix": 1791410745.500475,
+  "dry_run": false,
+  "max_c": 65.0,
+  "poll_seconds": 10.0,
+  "root": "/home/fairfieldt/trashcan-exp/tp4-offline-20261007",
+  "streams": "/dev/tbstream0,/dev/tbstream1,/dev/tbstream2",
+  "source_plan": "/Users/fairfieldt/dev/trashcan/results/qwen/hardware-20261007/scripts/serve-final-v2-plan.json",
+  "cases": [
+    {
+      "name": "serve-budget-final-v2-plain",
+      "settings": {
+        "name": "serve-budget-final-v2-plain",
+        "binary": "trashcan-final",
+        "mode": "plain",
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+        "minutes": 6,
+        "timeout": 240,
+        "source_archive": "../builds/final/source.tar.gz",
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 117,
+        "invite": 105
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "serve-budget-final-v2-mtp",
+      "settings": {
+        "name": "serve-budget-final-v2-mtp",
+        "binary": "trashcan-final",
+        "mode": "mtp",
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+        "minutes": 6,
+        "timeout": 240,
+        "source_archive": "../builds/final/source.tar.gz",
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 118,
+        "invite": 106
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "serve-budget-final-v2-adaptive",
+      "settings": {
+        "name": "serve-budget-final-v2-adaptive",
+        "binary": "trashcan-final",
+        "mode": "adaptive",
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+        "minutes": 6,
+        "timeout": 240,
+        "source_archive": "../builds/final/source.tar.gz",
+        "fan_regime": "dynamic-smc-maximum"
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 119,
+        "invite": 107
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    },
+    {
+      "name": "serve-budget-final-v2-uncached",
+      "settings": {
+        "name": "serve-budget-final-v2-uncached",
+        "binary": "trashcan-final",
+        "mode": "plain",
+        "env": "TRASHCAN_QWEN_ATTN=tiled TRASHCAN_QWEN_ATTN_SLAB=64 TRASHCAN_QWEN_GDN=prepared TRASHCAN_TP_SUM_DIRECT=1",
+        "minutes": 6,
+        "timeout": 240,
+        "source_archive": "../builds/final/source.tar.gz",
+        "fan_regime": "dynamic-smc-maximum",
+        "no_prefix_cache": true
+      },
+      "state": "completed",
+      "tickets": {
+        "incite": 120,
+        "invite": 108
+      },
+      "harness_returncode": 0,
+      "release_evidence": "harness and both GPU commands finished; governors restored"
+    }
+  ],
+  "active_tickets": {},
+  "state": "completed",
+  "finished_unix": 1791411143.492772
+}
