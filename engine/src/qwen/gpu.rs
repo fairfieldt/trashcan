@@ -489,6 +489,17 @@ fn tp_partitions(pos: usize, n: usize) -> u32 {
     }
 }
 
+/// The many-rows decode matvec for rows of `k` values (`TRASHCAN_QWEN_SHORTK=8|16`, rows per wave, for k up to 2048:
+/// the out-projections of TP8 and TP4 ranks) and its rows per wave; the same bits as `matvecq4`.
+fn short_k(k: usize) -> Option<(&'static str, usize)> {
+    static ROWS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
+    match *ROWS.get_or_init(|| std::env::var("TRASHCAN_QWEN_SHORTK").ok().and_then(|v| v.parse().ok()).unwrap_or(0)) {
+        8 if k <= 2048 => Some(("qwen_matvec_rows8", 8)),
+        16 if k <= 2048 => Some(("qwen_matvec_rows16", 16)),
+        _ => None,
+    }
+}
+
 /// Whether a DeltaNet layer of a batch of `n` columns folds its convolution into the recurrence
 /// (`TRASHCAN_QWEN_FUSED_GDN=1`): decode and verification batches (up to 8 columns), not when dumping activations,
 /// whose convolution output is a captured tensor.
@@ -796,6 +807,10 @@ impl<'a> Rec<'a> {
         // only starts once the previous one has finished on the D700s, so independent projections cannot overlap.
         let decode = if self.s.tp.is_some() { "matvecq4" } else { q4_decode_shader(rows, k) };
         let (shader, gx, gy) = match n {
+            1 if short_k(k).is_some() => {
+                let (kernel, per_wave) = short_k(k).unwrap();
+                (kernel, rows.div_ceil(4 * per_wave), 1)
+            }
             1 => (decode, rows.div_ceil(16), 1),
             2 => ("qwen_q4c2", rows.div_ceil(16), 1),
             3 => ("qwen_q4c3", rows.div_ceil(16), 1),

@@ -1,5 +1,7 @@
 #version 460
 #include "common.glsl"
+layout(set=2,binding=1,std430) readonly restrict buffer Binding_b_u2 { uvec2 v[]; } b_u2;
+layout(set=2,binding=2,std430) readonly restrict buffer Binding_c_u2 { uvec2 v[]; } c_u2;
 // Split-K decode attention for every query head of one KV head at once (docs/tp8-optimization.md A1). One
 // workgroup of one subgroup per (KV head, partition, column): the subgroup keeps the G query heads that read the
 // KV head in registers, DIM / LANES contiguous dims per lane, and walks its partition's keys KB at a time. All K

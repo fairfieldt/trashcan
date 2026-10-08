@@ -24,6 +24,7 @@ const RELAXED: &[&str] = &[
     "qwen_ffn_gu4",
     "qwen_gdn_conv",
     "qwen_gated_norm_conv",
+    "qwen_matvec_rows",
 ];
 
 /// Uniform values in [-1, 1) from a xorshift state.
@@ -114,6 +115,9 @@ pub fn run(any_device: bool, only: &[String], iterations: usize) -> Result<()> {
         }
         if want("gdn") {
             rows.extend(gdn(&ctx)?);
+        }
+        if want("matvec") {
+            rows.extend(matvec(&ctx)?);
         }
         for row in rows {
             failed += usize::from(row["pass"] != true);
@@ -540,6 +544,55 @@ fn gdn(ctx: &Ctx) -> Result<Vec<Value>> {
         }
         row["pass"] = json!(pass);
         rows_out.push(row);
+    }
+    Ok(rows_out)
+}
+
+/// M1: `qwen_matvec_rows8/16` against an f64 reference and, natively, against `matvecq4` bit for bit.
+fn matvec(ctx: &Ctx) -> Result<Vec<Value>> {
+    let mut rows_out = Vec::new();
+    // (rows, k): TP8 out-projection, TP4 out-projection, an FFN shard.
+    for (case, &(rows, k)) in [(5120usize, 768usize), (5120, 1536), (2176, 5120)].iter().enumerate() {
+        let mut rng = Rng::new(901 + case as u32);
+        let (w, w_ref) = q4_matrix(&mut rng, rows, k);
+        let x: Vec<f32> = (0..k).map(|_| rng.next()).collect();
+        let reference: Vec<f32> = (0..rows).map(|r| (0..k).map(|i| w_ref[r * k + i] as f64 * x[i] as f64).sum::<f64>() as f32).collect();
+        let d = &ctx.d;
+        let wb = d.upload_matrix(&w)?;
+        let xb = ctx.upload_f32(&x)?;
+        let params = d.upload(bytemuck::cast_slice(&[0u32, 1, 0, 0]))?;
+        let mut u = [0u32; 16];
+        u[0] = rows as u32;
+        u[1] = k as u32;
+        u[3] = (rows * k / 32) as u32;
+        let old = if ctx.native {
+            let out = ctx.zeros(rows)?;
+            let us = ctx.time(&|cmd| {
+                d.dispatch_matrix(cmd, "matvecq4", Push { ptr: [0, xb.address, out.address, 0, 0, 0, params.address, 0], u }, rows.div_ceil(16) as u32, 1, &wb).unwrap();
+            })?;
+            Some((ctx.download_f32(&out, rows)?, us))
+        } else {
+            None
+        };
+        for (kernel, per_wave) in [("qwen_matvec_rows8", 8usize), ("qwen_matvec_rows16", 16)] {
+            let out = ctx.zeros(rows)?;
+            let per_group = per_wave * 256 / ctx.lanes;
+            let us = ctx.time(&|cmd| {
+                d.dispatch_matrix(cmd, kernel, Push { ptr: [0, xb.address, out.address, 0, 0, 0, params.address, 0], u }, rows.div_ceil(per_group) as u32, 1, &wb).unwrap();
+            })?;
+            let new = ctx.download_f32(&out, rows)?;
+            let scale = reference.iter().fold(0f32, |a, b| a.max(b.abs()));
+            let err = max_abs_diff(&new, &reference);
+            let mut row = json!({"check": "matvec", "gpu": ctx.gpu, "case": {"rows": rows, "k": k, "kernel": kernel}, "new_us": us, "max_err_vs_reference": err, "reference_scale": scale});
+            let mut pass = err <= 1e-4 * scale.max(1e-3);
+            if let Some((o, old_us)) = &old {
+                row["old_us"] = json!(old_us);
+                row["bitwise_vs_old"] = json!(bitwise(&new, o));
+                pass &= bitwise(&new, o);
+            }
+            row["pass"] = json!(pass);
+            rows_out.push(row);
+        }
     }
     Ok(rows_out)
 }
