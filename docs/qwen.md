@@ -229,6 +229,22 @@ Prefill uses two micro-batches for batches of at least 128 tokens and one otherw
   micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
   prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
 
+Candidates of the TP8 optimization round ([tp8-optimization.md](tp8-optimization.md), runbook in
+[results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)), each off by default until measured
+on the Macs except the bitwise-identical fused host pass:
+
+- `TRASHCAN_TP_WIRE=f16` (driver only, passed to the nodes at setup; `f16:N` for all-reduces of at least N values):
+  f16 all-reduce payload with a power-of-two shift per 256 values;
+- `TRASHCAN_TP_HOSTPASS=0`: the host's separate passes after a decode all-reduce instead of the fused one;
+- `TRASHCAN_QWEN_DECODE_ATTN=1` (decode attention for every query head of a KV head per wave),
+  `TRASHCAN_QWEN_TOPK=wave` (head selection with wave-local barriers), `TRASHCAN_QWEN_FUSED_FFN=1` (gate, up and
+  SwiGLU in one dispatch), `TRASHCAN_QWEN_FUSED_GDN=1` (DeltaNet convolution inside the recurrence),
+  `TRASHCAN_QWEN_SHORTK=8|16` (8 or 16 rows per wave for short rows): per process, so the nodes need them too.
+
+`trashcan qwen-kernel-check` compares those kernels with the ones they replace on the D700s (bit for bit where they
+should match) and with CPU references, and times both; `--any-device` runs them on other Vulkan devices such as
+lavapipe, against the references alone.
+
 `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
 costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded
 sampled output when timings change. It remains optional: the Chinese fixture improved by about 6%, while

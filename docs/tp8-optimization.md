@@ -2,10 +2,16 @@
 
 Proposal of 2026-10-08, written from the source at 261d453 and the measurements in
 [results/qwen/tp8-20261007](../results/qwen/tp8-20261007/README.md), without access to the Macs. Every gain
-below is an estimate from those measurements; none is demonstrated until the runbook (added with the
-implementation in `results/qwen/tp8-opt-20261008/`) has been run on the four Macs.
+below is an estimate from those measurements; none is demonstrated until the runbook in
+[results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md) has been run on the four Macs.
 Following AGENTS.md, each candidate ships behind a switch with its current behaviour as the default, and is
 kept (switch removed) or deleted after its end-to-end A/B.
+
+**Status.** W1, H1, A1, K1, F1, G1 and M1 (in its many-rows form) are implemented, with `trashcan qwen-kernel-check`
+(T1) to check the kernels on the D700s. Off the Macs, the unit tests cover the f16 payload's cross-machine identity
+and the fused host pass, and every new kernel matches an f64 or exact reference on lavapipe; none has run on a D700.
+H1 measured locally at 0.6 µs per all-reduce, well below the 4 µs assumed below: the old passes were already
+vectorized.
 
 ## Baseline
 
@@ -131,7 +137,7 @@ Estimated savings at the baseline workloads; "bitwise" means the outputs are unc
 | X1 | USB4STREAM receive busy polling (backport from linux-next) | -1 (est.) | -2 | small | none | kernel work | no: kernel |
 | X2 | RADV: skip the L2 writeback/invalidate for compute-to-compute buffer barriers on GFX6 (patched Mesa, env-gated) | -1 to -3? | | some | none | driver work, needs ISA-level validation | no: driver |
 | X3 | a sixth cable (incite bus 0 - indite bus 0): one-round decode all-reduce | -2.5 | -6 | -25% exchange | none | hardware | no |
-| M1 | short-K decode matvec (the 64 out-projections at 95 GB/s, K = 768) | -0.8 | | | changes sums unless the verification kernels follow | medium | no: needs tuning on the D700 |
+| M1 | short-K decode matvec (the 64 out-projections at 95 GB/s, K = 768): 8 or 16 rows per wave with `matvecq4`'s per-row arithmetic | 0 to -0.8 | 0 to -0.8 | none | bitwise | low | yes (`TRASHCAN_QWEN_SHORTK`); other lane mappings would need the D700 |
 | B1 | uneven FFN split to balance the 5-7% slower GPUs | up to -0.6 | | small | none | medium | no: needs per-machine calibration |
 | G2 | gated norm folded into the DeltaNet out-projection | -0.3 | | | bitwise possible | medium | no |
 | P1 | chunked (WY) DeltaNet for prefill; f16 totals into `qwen_add_norm` | | | -5 to -10% GPU | | high | no |
@@ -148,13 +154,15 @@ percent faster. They are independent and can be accepted or rejected one by one.
 Each slice sent in an all-reduce round becomes f16 values plus one exponent byte per 256 values: a block whose
 largest magnitude is at least 2^15 is scaled by 2^-e (exact) so it stays far from f16's 65504 limit; Qwen's
 massive activations therefore cannot overflow. Conversion is round to nearest even (F16C when present, the
-same bits in software otherwise). To keep every machine bitwise identical, a machine rounds its own running
-sum in place before sending it, so both partners of a round add the same two rounded values; reduce-scatter
-adds received rounded halves on the one machine that keeps them, and all-gather rounds a finished segment on
-its owner before sending it. The driver chooses the format and passes it to the other machines in the session
-setup, so the lanes never disagree on message sizes. In this format a multi-column all-reduce is sliced per
-column (slice j of every column), so every element of a verification batch is added in the same pairs as in
-a one-column decode step.
+same bits in software otherwise). To keep every machine bitwise identical, each partner of a round continues
+from the values it sent plus those it received (decoded in one pass), so both add the same two rounded values;
+reduce-scatter adds received rounded halves on the one machine that keeps them, and all-gather rounds a finished
+segment on its owner once and relays the owner's bytes, never encoding a value twice (a second encoding could pick
+a different shift). Reduce-scatter in f16 needs segments of whole blocks and otherwise falls back to the rounds. The
+driver chooses the format and passes it to the other machines in the session setup, so the lanes never disagree on
+message sizes; `f16:N` limits it to all-reduces of at least N values. In this format a multi-column all-reduce is
+sliced per column (slice j of every column, on block boundaries), so every element of a verification batch is added
+in the same pairs as in a one-column decode step.
 
 ### A1: decode attention (`TRASHCAN_QWEN_DECODE_ATTN=1`)
 
@@ -164,8 +172,10 @@ at a time: it issues all K and V loads of the batch, then G x 8 independent subg
 online-softmax update per head. Head dimension 256, G and the lane count are specialization constants, so the
 per-lane arrays stay in registers (and the kernel also runs on 8-lane subgroups for testing). Partials are
 written as `[max, denominator, 2 pad, 256 sums]`, vec4 aligned. `qwen_attn_merge` loads the partition headers
-together, issues 16 partition loads at a time per output element and applies `sigmoid(gate)`, replacing both
-`attention_merge*` and `qwen_gate`. Partition counts follow the existing buckets. Prefill keeps its kernels.
+together, computes each partition's weight once, issues 16 partition loads at a time per output element and
+applies `sigmoid(gate)`, replacing both `attention_merge*` and `qwen_gate` (dumps run the merge ungated, capture
+the output and gate it with `qwen_gate`, as before). Partition counts follow the existing buckets
+(`TRASHCAN_TP_PARTS` still scales them). Prefill keeps its kernels.
 
 ### H1: fused host pass (`TRASHCAN_TP_HOSTPASS=0` restores the separate passes)
 
@@ -182,11 +192,21 @@ and writes `silu(g) * u` with `qwen_swiglu`'s expression: one dispatch instead o
 ### G1: convolution in the recurrence (`TRASHCAN_QWEN_FUSED_GDN=1`)
 
 `qwen_gdn_conv` computes the width-4 convolution and SiLU of the q, k and v channels it reads from the raw
-projection and the convolution window, with `qwen_conv`'s expression, then runs `qwen_gdn`'s recurrence. One
-designated wave writes each channel's new window (and its verification snapshots), and the convolved rows are
-still written when an activation dump asks for them. Up to 8 columns; prefill keeps the two kernels.
+projection and the convolution window, with `qwen_conv`'s expression, then runs `qwen_gdn`'s recurrence. A v
+channel is read by one wave, which writes its window (and verification snapshots) back. Every wave of a key head
+reads the q and k windows, and a wave of another workgroup may start after one has finished, so no wave may
+overwrite them: `qwen_gated_norm_conv`, the gated norm that follows behind a barrier anyway, writes the q and k
+windows and their snapshots. Up to 8 columns; prefill and activation dumps (which capture the convolution output)
+keep the separate kernels.
 
-### K1: wave-local bitonic steps (`TRASHCAN_QWEN_TOPK=block` restores the old kernel)
+### M1: many rows per wave (`TRASHCAN_QWEN_SHORTK=8|16`)
+
+`qwen_matvec_rows8/16` is `matvecq4` with 8 or 16 rows per wave: the same lane-to-block mapping and FMA chain per row
+(so the same bits), with each step's activation loads and the final reductions shared by more rows and a quarter
+or half as many waves. Used for one-column projections whose rows hold at most 2048 values: the out-projections of
+TP8 and TP4 ranks.
+
+### K1: wave-local bitonic steps (`TRASHCAN_QWEN_TOPK=wave`)
 
 A thread's elements are assigned so that a wave owns a contiguous run of 2 x subgroup-size elements in each
 half of the 1024-element list; a bitonic step of stride at most the subgroup size then compares only elements
@@ -205,9 +225,9 @@ workgroup barrier. The comparisons are the old kernel's, so the candidates are i
   invalidate) while keeping the flushes around host and transfer access would measure how much of the
   5 ms of small-kernel time is the flushes. Correctness gates: `qwen-validate`, `qwen-check` and
   `qwen-kernel-check`.
-- **M1, short-K matvec.** The 5120 x 768 out-projections run at 95 GB/s because each wave walks only 24 blocks in
-  two half-empty iterations. A variant with 8 lanes per row (8 rows per wave) reduces in 3 swizzle steps; to keep
-  verification columns equal to decode, `qwen_q4cN` would need the same mapping.
+- **M1, other mappings.** If 16 rows per wave do not lift the 5120 x 768 out-projections enough, a variant with 8
+  lanes per row reduces in 3 swizzle steps instead of 6; to keep verification columns equal to decode, `qwen_q4cN`
+  would need the same mapping.
 - **B1, balance.** Give the slower GPUs (invite, indite) 32-64 fewer FFN columns; needs a `Split` with per-rank
   widths and a per-machine calibration.
 - **Syscall cost.** Ivy Bridge runs with KPTI, so each non-blocking `read` that finds nothing costs about a
