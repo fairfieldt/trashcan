@@ -7,6 +7,7 @@ written in Rust on raw Vulkan, with tensor parallelism across the two GPUs. llam
 - `docs/upstream-survey.md`: upstream TP/meta-backend state, Vulkan PRs and forks
 - `docs/qwen.md`: Qwen3.8-27B / Qwen3.5-9B support, stages across GPUs and machines, MTP speculative
   decoding, prefix reuse, Flash-Next plan
+- `docs/tp8-optimization.md`: Qwen3.8-27B TP8 (four Macs) cost model, bottlenecks and the optimization plan
 - `docs/qwen4.md`: Qwen3.8-Flash-Next (`qwen4exp`): CPU reference, n-gram table placement, quantization and
   VRAM for six and four Macs, GPU stages, projected chain speed
 - `docs/engine-plan.md`: the Rust engine design (TP layout, schedule, prefill, MTP, milestones)
