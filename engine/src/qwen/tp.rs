@@ -53,6 +53,8 @@ pub fn host_settings() -> Value {
         "TRASHCAN_QWEN_FUSED_FFN",
         "TRASHCAN_QWEN_FUSED_GDN",
         "TRASHCAN_QWEN_TOPK",
+        "TRASHCAN_QWEN_SHORTK",
+        "TRASHCAN_TP_PARTS",
     ]
         .into_iter().map(|name| (name, std::env::var(name).ok())).collect();
     json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok()),"experiments":experiments})
