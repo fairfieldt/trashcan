@@ -126,7 +126,11 @@ impl Split {
     pub fn local(&self, c: &Config) -> Result<Config> {
         let r = self.ranks;
         ensure!(
-            c.k_heads.is_multiple_of(r) && c.kv_heads.is_multiple_of(r) && c.ff.is_multiple_of(32 * r) && c.vocab.is_multiple_of(r),
+            c.k_heads.is_multiple_of(r)
+                && c.heads.is_multiple_of(r)
+                && (c.kv_heads.is_multiple_of(r) || r.is_multiple_of(c.kv_heads))
+                && c.ff.is_multiple_of(32 * r)
+                && c.vocab.is_multiple_of(r),
             "{} ranks do not divide this model's heads, FFN or vocabulary",
             r
         );
@@ -134,7 +138,7 @@ impl Split {
         l.k_heads /= r;
         l.v_heads /= r;
         l.heads /= r;
-        l.kv_heads /= r;
+        l.kv_heads = self.kv_part(c.kv_heads).1;
         l.ff /= r;
         l.vocab /= r;
         Ok(l)
@@ -143,6 +147,16 @@ impl Split {
     /// This rank's (first, count) of `total` items split evenly.
     pub fn part(&self, total: usize) -> (usize, usize) {
         (self.rank * total / self.ranks, total / self.ranks)
+    }
+
+    /// This rank's (first, count) of `total` KV heads. With more ranks than KV heads, the ranks whose query heads
+    /// read one KV head each hold (and compute) that head.
+    pub fn kv_part(&self, total: usize) -> (usize, usize) {
+        if self.ranks <= total {
+            self.part(total)
+        } else {
+            (self.rank * total / self.ranks, 1)
+        }
     }
 
     /// `ranges` scaled by `unit`, or empty (everything) for the whole layer.
@@ -521,7 +535,7 @@ fn upload_vector(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, name: &str) 
 /// A gated-attention block: this rank's query heads (`[q | gate]` rows) and KV heads, and the matching
 /// columns of the output projection. `c` is the whole model's configuration.
 fn load_attn(gpu: &Rc<Device>, g: &Gguf, c: &Config, il: usize, context: usize, split: Split) -> Result<Attn> {
-    let (heads, kv_heads) = (split.part(c.heads), split.part(c.kv_heads));
+    let (heads, kv_heads) = (split.part(c.heads), split.kv_part(c.kv_heads));
     let kv = context * kv_heads.1 * c.head_dim * 2;
     let kv_rows = split.sel(&[kv_heads], c.head_dim);
     Ok(Attn {

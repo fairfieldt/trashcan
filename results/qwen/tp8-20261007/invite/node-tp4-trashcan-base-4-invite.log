@@ -1,0 +1,7 @@
+CPU latency request: 0 us, scoped to this command
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on ["/dev/tbstream0"], GPUs [0, 1]
+tp-node: session over 1 stream lanes
+GPU0: rank 2 of 4, 4341.7 MiB allocated
+GPU1: rank 3 of 4, 4341.7 MiB allocated
+tp-node: session ended
+[clocks] 150 samples card0 (02:00.0) sclk/mclk: 850/1370 x104 450/1370 x4 300/150 x42  max 97C card1 (06:00.0) sclk/mclk: 850/1370 x83 300/1370 x1 450/1370 x8 300/150 x58  max 79C  log=results/clocks/node-tp4-trashcan-base-4-invite.txt

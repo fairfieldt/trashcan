@@ -394,12 +394,12 @@ impl Chain {
     }
 
     /// Tensor parallelism instead of a chain: every layer split across this machine's `gpus` and, with
-    /// `peer`, the other machine's (`tp`).
+    /// `mesh`, the other machines' (`tp`).
     #[allow(clippy::too_many_arguments)]
     pub fn tensor_parallel(
         model: &Path,
         gpus: &[usize],
-        peer: Option<crate::link::Lanes>,
+        peer: Option<super::tp::Mesh>,
         context: usize,
         max_batch: usize,
         verify: usize,

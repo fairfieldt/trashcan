@@ -87,6 +87,10 @@ pub struct Options {
     /// Qwen: the other machine of the tensor-parallel group over USB4STREAM devices, one per cable.
     #[arg(long, value_delimiter = ',')]
     tp_stream: Vec<String>,
+    /// Qwen: a tensor-parallel group of 2, 4 or 8 machines, MACHINE=DEVICE[,DEVICE...] per cabled machine (see
+    /// `qwen-chat --tp-peer`).
+    #[arg(long)]
+    tp_peer: Vec<String>,
 }
 
 /// A resident model behind the HTTP layer.
@@ -300,10 +304,10 @@ pub fn serve(mut options: Options) -> Result<()> {
         let draft = options.mtp.is_some();
         let k = options.draft_tokens.unwrap_or(2);
         let verify = if draft { k + 1 } else { 0 };
-        let mut chain = if options.tp || !options.tp_connect.is_empty() || !options.tp_stream.is_empty() {
+        let mut chain = if options.tp || !options.tp_connect.is_empty() || !options.tp_stream.is_empty() || !options.tp_peer.is_empty() {
             anyhow::ensure!(options.nodes.is_empty() && !options.cpu && options.cuts.is_empty(), "tensor parallelism runs without --nodes, --cpu or --cuts");
             let qwen::pipeline::Devices::Gpus(gpus) = devices else { unreachable!() };
-            let peer = qwen::tp::peer(&options.tp_connect, &options.tp_stream)?;
+            let peer = qwen::tp::mesh(&options.tp_connect, &options.tp_stream, &options.tp_peer)?;
             let mtp = options.mtp.as_deref();
             qwen::net::Chain::tensor_parallel(&options.model, &gpus, peer, options.context, options.batch, verify, mtp, options.draft_vocab)?
         } else {

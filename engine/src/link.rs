@@ -341,6 +341,72 @@ impl Lanes {
     }
 }
 
+/// Several `exchange`s at once, each with the peer of its lanes, polled together from the calling thread so that the
+/// cables to different machines carry their slices at the same time. Each lane moves its slice in rounds of at most
+/// ROUND bytes each way on streams (see `exchange`); a lane's round ends only when its bytes have arrived. One
+/// exchange alone is `Lanes::exchange_within`, which keeps the lanes of its rounds in step (measured 0.6% faster for
+/// a TP4 decode than this loop, results/qwen/tp8-20261007).
+pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration) -> Result<()> {
+    for (_, out, inp) in jobs.iter() {
+        ensure!(out.len() == inp.len() && out.len().is_multiple_of(4), "exchange sizes must match and align to 4 bytes");
+    }
+    const ROUND: usize = 256 << 10;
+    /// One lane's slice: bytes `..end` of it may move in the current round.
+    struct Part<'a> {
+        lane: &'a mut Lane,
+        out: &'a [u8],
+        inp: &'a mut [u8],
+        round: usize,
+        end: usize,
+        sent: usize,
+        read: usize,
+    }
+    let mut parts = Vec::new();
+    for (lanes, out, inp) in jobs.iter_mut() {
+        let n = lanes.lanes.len();
+        let round = if lanes.kind == "stream" { ROUND } else { usize::MAX };
+        let cuts: Vec<usize> = (0..=n).map(|i| out.len() / 4 * i / n * 4).collect();
+        let mut rest: &mut [u8] = inp;
+        for (i, lane) in lanes.lanes.iter_mut().enumerate() {
+            let (chunk, tail) = std::mem::take(&mut rest).split_at_mut(cuts[i + 1] - cuts[i]);
+            rest = tail;
+            let len = chunk.len();
+            parts.push(Part { lane, out: &out[cuts[i]..cuts[i + 1]], inp: chunk, round, end: len.min(round), sent: 0, read: 0 });
+        }
+    }
+    let mut last = Instant::now();
+    loop {
+        let (mut busy, mut done) = (false, true);
+        for p in parts.iter_mut() {
+            if p.sent < p.end {
+                let k = step(p.lane.write(&p.out[p.sent..p.end]))?;
+                p.sent += k;
+                busy |= k > 0;
+            }
+            if p.read < p.end {
+                let k = step(p.lane.read(&mut p.inp[p.read..p.end]))?;
+                p.read += k;
+                busy |= k > 0;
+            }
+            if p.sent == p.end && p.read == p.end && p.end < p.out.len() {
+                p.end = p.out.len().min(p.end.saturating_add(p.round));
+                busy = true;
+            }
+            done &= p.read == p.out.len() && p.sent == p.out.len();
+        }
+        if done {
+            return Ok(());
+        }
+        if busy {
+            last = Instant::now();
+        } else if last.elapsed() > stall {
+            bail!("lanes stalled for {stall:?}");
+        } else {
+            std::hint::spin_loop();
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

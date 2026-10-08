@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks, 2 on this machine, the rest on the other
+GPU0: rank 0 of 4, 4341.7 MiB allocated
+GPU1: rank 1 of 4, 4341.7 MiB allocated
+[clocks] 127 samples card0 (02:00.0) sclk/mclk: 850/1370 x87 450/1370 x19 300/150 x20 450/150 x1  max 68C card1 (06:00.0) sclk/mclk: 850/1370 x66 300/1370 x1 450/1370 x5 300/150 x55  max 66C  log=results/clocks/tp4-trashcan-base-1.txt

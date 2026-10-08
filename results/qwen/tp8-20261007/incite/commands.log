@@ -1,0 +1,34 @@
+2026-10-07T17:45:29 tp4-1cable-tg trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T17:46:18 tp4-1cable-mtp trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf
+2026-10-07T17:46:57 tp4-1cable-pp2048 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 2048 --tg 32 --reps 2
+2026-10-07T17:57:23 tp8-val trashcan-tp8  qwen-validate results/tp8-27b-val --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T17:58:10 tp8-tg trashcan-tp8  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T17:58:50 tp8-mtp trashcan-tp8  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T17:59:28 tp8-pp2048 trashcan-tp8  qwen-bench --pp 2048 --tg 32 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:01:27 tp8-prof trashcan-tp8 TRASHCAN_TP_PROFILE=results/profile-tp8-prof.jsonl qwen-bench --pp 512 --tg 64 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:05:23 ab-split-1 trashcan-split  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:06:00 ab-whole-1 trashcan-split TRASHCAN_TP_SPLIT=0 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:06:39 ab-split-2 trashcan-split  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:07:17 ab-whole-2 trashcan-split TRASHCAN_TP_SPLIT=0 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:08:33 split-val trashcan-split  qwen-validate results/tp8-split-val --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:09:01 split-mtp trashcan-split  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:09:38 split-pp2048 trashcan-split  qwen-bench --pp 2048 --tg 32 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:10:36 tp4-trashcan-base-1 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:11:16 tp4-trashcan-split-1 trashcan-split  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:11:57 tp4-trashcan-base-2 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:12:37 tp4-trashcan-split-2 trashcan-split  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:13:32 tp4-trashcan-split-3 trashcan-split  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:14:12 tp4-trashcan-base-3 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:14:52 tp4-trashcan-split-4 trashcan-split  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:15:32 tp4-trashcan-base-4 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:17:34 tp4b-trashcan-split2-1 trashcan-split2  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:18:14 tp4b-trashcan-base-1 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:18:54 tp4b-trashcan-split2-2 trashcan-split2  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:19:34 tp4b-trashcan-base-2 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:20:14 tp4b-trashcan-split2-3 trashcan-split2  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:20:54 tp4b-trashcan-base-3 trashcan-base  qwen-bench --tp-stream /dev/tbstream0 --pp 512 --tg 128 --reps 2
+2026-10-07T18:22:11 split2-tg trashcan-split2  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:23:27 check-tp8 trashcan-split2  qwen-check --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:23:51 check-tp8-mtp trashcan-split2  qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:24:34 check-tp8-v3 trashcan-split2  qwen-check --verify 3 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:25:22 serve-tp8 trashcan-split2  serve --port 8000 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1

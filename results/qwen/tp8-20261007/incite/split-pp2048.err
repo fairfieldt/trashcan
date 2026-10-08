@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 8 ranks over 4 machine(s), GPUs per machine [2, 2, 2, 2]
+GPU0: rank 0 of 8, 2269.6 MiB allocated
+GPU1: rank 1 of 8, 2269.6 MiB allocated
+[clocks] 131 samples card0 (02:00.0) sclk/mclk: 850/1370 x96 450/1370 x4 300/150 x30 450/150 x1  max 67C card1 (06:00.0) sclk/mclk: 850/1370 x96 300/150 x34 450/150 x1  max 65C  log=results/clocks/split-pp2048.txt

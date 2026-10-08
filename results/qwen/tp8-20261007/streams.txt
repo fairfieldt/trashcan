@@ -1,0 +1,5 @@
+bus 1: incite 1-3.1/tp8 /dev/tbstream0 (in 9 out 9) <-> invite 1-3.1/tp8 /dev/tbstream0
+bus 2: incite 2-1.1/tp8 /dev/tbstream1 (in 9 out 9) <-> enlight 0-1.1/tp8 /dev/tbstream0
+bus 0: invite 0-3.1/tp8 /dev/tbstream1 (in 9 out 9) <-> enlight 1-3.1/tp8 /dev/tbstream1
+bus 2: invite 2-1.1/tp8 /dev/tbstream2 (in 9 out 9) <-> indite 2-1.1/tp8 /dev/tbstream0
+bus 2: enlight 2-1.1/tp8 /dev/tbstream2 (in 9 out 9) <-> indite 1-3.1/tp8 /dev/tbstream1

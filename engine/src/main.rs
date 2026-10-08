@@ -315,6 +315,13 @@ enum Cmd {
         /// USB4STREAM devices instead, one per cable, in the same cable order on both machines.
         #[arg(long, value_delimiter = ',')]
         stream: Vec<String>,
+        /// This machine's index in a group of 2, 4 or 8 machines (0 is the driver), with --peer.
+        #[arg(long, default_value_t = 1)]
+        machine: usize,
+        /// MACHINE=DEVICE[,DEVICE...]: the USB4STREAM devices of the cables to each machine of the group this one
+        /// is cabled to. Four machines need the cables 0-1, 2-3, 0-2 and 1-3.
+        #[arg(long)]
+        peer: Vec<String>,
         #[arg(long, value_delimiter = ',')]
         gpus: Option<Vec<usize>>,
     },
@@ -395,16 +402,20 @@ struct QwenRun {
     /// The other machine over USB4STREAM devices, one per cable, in the same cable order on both machines.
     #[arg(long, value_delimiter = ',')]
     tp_stream: Vec<String>,
+    /// A group of 2, 4 or 8 machines over USB4STREAM: MACHINE=DEVICE[,DEVICE...] for each machine this one (machine
+    /// 0) is cabled to, e.g. --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 (see `qwen-tp-node --peer`).
+    #[arg(long)]
+    tp_peer: Vec<String>,
 }
 impl QwenRun {
     fn chain(&self, model: &Path) -> Result<qwen::net::Chain> {
-        if self.tp || !self.tp_connect.is_empty() || !self.tp_stream.is_empty() {
+        if self.tp || !self.tp_connect.is_empty() || !self.tp_stream.is_empty() || !self.tp_peer.is_empty() {
             anyhow::ensure!(
                 self.nodes.is_empty() && !self.cpu && self.cuts.is_empty(),
                 "tensor parallelism runs without --nodes, --cpu or --cuts"
             );
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, self.gpus.clone())? else { unreachable!() };
-            let peer = qwen::tp::peer(&self.tp_connect, &self.tp_stream)?;
+            let peer = qwen::tp::mesh(&self.tp_connect, &self.tp_stream, &self.tp_peer)?;
             let verify = self.verify.unwrap_or(if self.mtp.is_some() { self.draft_tokens + 1 } else { 0 });
             let mtp = self.mtp.as_deref();
             let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify, mtp, self.draft_vocab)?;
@@ -986,10 +997,13 @@ fn main() -> Result<()> {
             gpus,
             mtp,
         } => qwen::net::serve(&model, mtp, &listen, qwen::chat::devices(cpu, gpus)?),
-        Cmd::QwenTpNode { model, mtp, listen, stream, gpus } => {
-            anyhow::ensure!(listen.is_some() == stream.is_empty(), "give --listen or --stream");
+        Cmd::QwenTpNode { model, mtp, listen, stream, machine, peer, gpus } => {
+            anyhow::ensure!(
+                [listen.is_some(), !stream.is_empty(), !peer.is_empty()].into_iter().filter(|&b| b).count() == 1,
+                "give --listen, --stream or --peer"
+            );
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, gpus)? else { unreachable!() };
-            qwen::tp::serve(&model, mtp.as_deref(), &gpus, listen.as_deref(), &stream)
+            qwen::tp::serve(&model, mtp.as_deref(), &gpus, listen.as_deref(), &stream, machine, &peer)
         }
         Cmd::QwenRef {
             model,

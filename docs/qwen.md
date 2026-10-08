@@ -143,12 +143,17 @@ pushes with cross-device semaphores, as in the Gemma tensor-parallel path, are t
 ### Tensor parallelism (`--tp`, `tp.rs`)
 
 Instead of a range of layers per GPU, every GPU can hold one rank's share of every layer (`Split` in `gpu.rs`):
-its key heads with the value heads that read them, its query heads with their KV heads, a slice of the FFN and of
-the vocabulary. The hidden state is replicated. Each rank runs the unchanged kernels with the per-rank head counts;
+its key heads with the value heads that read them, its query heads with their KV heads (with more ranks than KV
+heads, the ranks reading one KV head each hold and compute it), a slice of the FFN and of the vocabulary. The hidden
+state is replicated. Each rank runs the unchanged kernels with the per-rank head counts;
 value head h reads key head h % k_heads, so taking each group of k_heads value heads' share in order keeps that
 mapping locally. Each mixer and FFN ends a segment with its partial output projection in host memory; the host
-adds the ranks' partials and exchanges the sum with the other machine over 1-3 lanes (`link.rs`, TCP or USB4STREAM):
-two all-reduces per layer, 2 × layers + 1 segments per forward. Each machine merges its ranks' candidates and the
+adds the ranks' partials and all-reduces the sum with the other machines (`link.rs`, TCP or USB4STREAM; `Mesh` in
+`tp.rs`): two all-reduces per layer, 2 × layers + 1 segments per forward. A group is 2, 4 or 8 machines. With four,
+the all-reduce takes two rounds of recursive doubling over a ring of cables (machines 0-1, 0-2, 1-3, 2-3), each round
+sending half the vector to each of a machine's two partners; every machine adds each element in the same pairs, so
+the residuals stay bitwise identical. The driver's operations reach the other machines down a binomial tree over the
+same cables (0 to 1 and 2, 2 to 3). Each machine merges its ranks' candidates and the
 machines exchange theirs. Rollback and checkpoints apply to every rank. A forward runs one of three ways:
 
 - Decode, verification and draft steps (up to 8 columns) are one command buffer and one submission per rank. Each
@@ -175,7 +180,19 @@ trashcan qwen-tp-node MODEL --mtp MTP.gguf --stream /dev/tbstream0,/dev/tbstream
 trashcan qwen-chat MODEL --mtp MTP.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 "Hello"
 trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP, one connection per link
 trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
+# four machines (TP8): start the nodes, then the driver (machine 0); --peer MACHINE=DEVICE[,DEVICE...] per cable
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 1=/dev/tbstream0 --peer 2=/dev/tbstream1   # indite
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0=/dev/tbstream0 --peer 3=/dev/tbstream2   # enlight
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0=/dev/tbstream0 --peer 3=/dev/tbstream2   # invite
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 "Hello"   # incite
 ```
+
+Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-20261007](../results/qwen/tp8-20261007/)):
+192 tok/s prefill (512-token prompts; 185 at 2048), 35.0 tok/s decode and 46.0 with MTP, against TP4's 149 / 28.3 /
+38.6 measured the same day over the one incite-invite cable now left (three cables gave 150 / 28.4 / 39.5). It
+matches the CPU reference to 4.0e-4 with the same greedy tokens, and `qwen-check` (with and without drafting) and
+`scripts/test-server.py` pass. Each GPU allocates 2.3 GiB. A decode step spends about 19-20 ms on the GPUs and
+7.5 ms in exchanges; prefill is limited by the cables' bandwidth.
 
 Qwen3.8-27B on incite and invite (four D700s; [results/qwen/tp-merged-20261006](../results/qwen/tp-merged-20261006/),
 which builds on [tp-20261006](../results/qwen/tp-20261006/), [tp-decode-20261006](../results/qwen/tp-decode-20261006/)
