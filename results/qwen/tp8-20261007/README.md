@@ -1,5 +1,8 @@
 # Qwen3.8-27B TP8 over four Mac Pros (2026-10-07)
 
+Result: 204 tok/s prefill (512-token prompts; 197 at 2048), 35.0 tok/s decode and 46.0 with MTP, against TP4's
+149 / 28.3 / 38.6 on two of the same Macs that day.
+
 Tensor parallelism over incite, invite, enlight and indite: eight D700s, one rank each. Before this, `TpGroup` had
 one peer; a group is now 2, 4 or 8 machines (`Mesh` in `engine/src/qwen/tp.rs`), and with more ranks than the
 model's 4 KV heads, each KV head is held and computed by the ranks whose query heads read it (`Split::kv_part`).
@@ -34,6 +37,11 @@ once fixed every link (2 lanes, no link errors): on each Mac, remove the stream 
   cables of a machine carry half the vector in every round. Each element is added in the same pairs on every
   machine (the first half (s0 + s1) + (s2 + s3), the second (s0 + s2) + (s1 + s3)), so all GPUs keep bitwise-identical
   residuals. Candidates merge in the same rounds.
+- **Prefill-sized all-reduces** (at least 64K elements) use reduce-scatter then all-gather over the same slices and
+  partner orders: each step keeps the half of a slice segment selected by this machine's bit for that partner and
+  adds the partner's copy; the all-gather copies the finished segments back. Each cable moves 3/4 of the bytes.
+  Every element is added on one machine in the same pairs as above, so totals are bitwise identical to the
+  two-round path.
 - **Operations.** The driver's forwards, drafts, rollbacks and checkpoints go down a binomial tree over the same
   cables: machine m hears from `m & (m - 1)` (0 to 1 and 2, then 2 to 3) and passes each message on before running
   it. Logit dumps go back up the tree.
@@ -64,7 +72,8 @@ Binaries (each cross-built with `scripts/cross-build.sh`):
 | `trashcan-base` | 12826cb |
 | `trashcan-tp8` | 12826cb + KV sharing and `Mesh`, whole vector to one partner per round |
 | `trashcan-split` | + slices to both partners per round; `TRASHCAN_TP_SPLIT=0` restored the whole-vector rounds for the A/B; single-partner exchanges in the new polling loop |
-| `trashcan-split2` | + the original `exchange_within` for single-partner rounds (TP4 path unchanged). The commit is this with the switch removed |
+| `trashcan-split2` | + the original `exchange_within` for single-partner rounds (TP4 path unchanged); 75fe01a is this with the switch removed |
+| `trashcan-rsag` | 75fe01a + reduce-scatter/all-gather for prefill-sized vectors (`TRASHCAN_TP_RSAG=0` turned it off for the A/B); the next commit is this with the switch removed |
 
 ## Correctness
 
@@ -75,6 +84,9 @@ Binaries (each cross-built with `scripts/cross-build.sh`):
 | TP8 vs TP4 dump | worst 3.92e-5 ([tp8-vs-tp4.txt](tp8-vs-tp4.txt)); TP4's record was 4.11e-4 vs the reference |
 | `qwen-check --verify 3`, TP8 | pass: restore exact, no column mismatches, column score error 2.25e-4 |
 | `qwen-check --mtp`, TP8 | pass: restore exact, speculative output identical, 83% accepted |
+| `qwen-validate`, TP8 with reduce-scatter/all-gather | every tensor bitwise identical to the split run's dump (the 14-token prompt takes the new path) |
+| `qwen-check --mtp`, TP8 with reduce-scatter/all-gather | pass: restore exact, speculative output identical (600-token prefill on the new path) |
+| prefill candidates (`pp_top`), reduce-scatter on and off | bitwise identical at 512 and 2048 |
 | `scripts/test-server.py`, `serve --tp-peer ... --mtp` | pass ([incite/test-server-tp8.txt](incite/test-server-tp8.txt)) |
 | generated text | the same 128 tokens in every TP4 and TP8 `qwen-bench` run |
 
@@ -85,11 +97,17 @@ Binaries (each cross-built with `scripts/cross-build.sh`):
 | TP4, incite + invite, 3 cables (2026-10-06 record) | 150.4, 151.3 | 28.44, 28.24 | 39.48, 39.63 | 134.1, 133.6 |
 | TP4, incite + invite, 1 cable | 148.1, 148.9 | 28.28, 28.27 | 38.33, 38.85 | 140.9, 136.0 |
 | TP8, whole vector per round | 140.9, 142.1 | 33.87, 33.68 | 42.69, 42.76 | 139.5, 140.9 |
-| **TP8, split rounds** | **190.4, 192.7** | **35.20, 35.01** | **45.98, 46.10** | **184.8, 185.1** |
+| TP8, split rounds | 190.4, 192.7 | 35.20, 35.01 | 45.98, 46.10 | 184.8, 185.1 |
+| **TP8, + reduce-scatter/all-gather for prefill** | **202.5, 206.7, 200.6, 203.8** | **35.0** (decode unchanged) | **46.0** | **195.9, 198.1** |
 
 Split against whole-vector rounds, alternating in one session (`ab-*`): pp512 190.4, 192.7, 189.6, 191.3 against
 141.9, 141.2, 142.2, 142.6; tg128 35.20, 35.01, 35.00, 35.06 against 33.71, 33.77, 33.69, 33.63; exchange 7.4-7.6
 against 8.3-8.7 ms per token. The final binary: pp512 187.7, 193.1, tg128 34.86, 35.03 (`split2-tg`).
+
+Reduce-scatter/all-gather on against off, alternating (`rs-*`, tg64): pp512 202.5, 206.7, 200.6, 203.8 against
+192.5, 192.2, 191.2, 193.3; pp2048 195.9, 198.1 against 186.0, 184.5 (decode does not take this path: tg64 35.35-35.49 against 35.02-35.28). Exchange
+time per 512-token prompt fell only 7% (2.21 to 2.07 s) for 25% fewer bytes: four dependent steps instead of two, each
+waiting for its slowest partner.
 
 TP4 with the multi-machine code, alternating with `trashcan-base` on incite + invite: the first build (every
 exchange in the new polling loop) decoded 0.56% slower over 8 runs each (28.07 against 28.22, `tp4-trashcan-*`).
@@ -103,10 +121,20 @@ Decode, TP8 with whole-vector rounds (`TRASHCAN_TP_PROFILE`, [prof-*.txt](.)): a
 segments, nearly all exchange (60-96 µs per all-reduce). The head segment takes 1.19 ms. TP4's step is 35 ms
 with 29-30 ms on the GPUs, so halving each GPU's weights cut GPU time by a third, not a half.
 
-Prefill, TP8 split: of 2.7 s per 512-token prompt, the host spends 2.28 s in exchanges and 0.12 s waiting for
-GPUs, so prefill is limited by cable bandwidth (each cable moves about 2.5 MiB each way per round per micro-batch).
+Prefill: of 2.53 s per 512-token prompt, the host spends 2.07 s in exchanges and 0.2 s waiting for GPUs. Each
+all-reduce moves 3.75 MiB each way per cable in about 8.1 ms, about 0.5 GB/s each way, the rate a cable carried in
+both directions at once before (a 10 MiB exchange over three streams took 6.9 ms, `../tp4-viability-20261006/`;
+`thunderbolt_net`, 11 Gb/s combined, `../../kernel/tb-nodes-20261006/`). Prefill is bound by the cables.
+
+Decode GPU time per dispatch ([timeline-tp8-decode.txt](timeline-tp8-decode.txt), incite rank 0, step 20): the
+Q4_0 matrix kernels run at 130-140 GB/s (the FFN's gate and up, 13.9 MB, in 100 µs); `attention_merge64` takes 39 µs
+per attention layer for three heads, `qwen_qk` 14 µs, and the head's three `qwen_topk` passes 214 µs after a 970 µs
+`headvec`. `TRASHCAN_TP_PARTS` 1, 2 and 4 gave 34.3-35.1 tok/s with no consistent order (`parts*`), so the default
+(2) stays.
 
 ## Not done
 
-- Reduce-scatter and all-gather for prefill-sized all-reduces (each cable would move 3/4 of the bytes).
-- A sixth cable (incite bus 0 to indite bus 0) for a one-round all-reduce.
+- A sixth cable (incite bus 0 to indite bus 0) for a one-round decode all-reduce and a direct reduce-scatter
+  (half the bytes per cable of today's prefill).
+- GPU decode efficiency at TP8 shard sizes: matrix kernels at half the D700's bandwidth, and fixed-cost kernels
+  (attention merge, `qwen_qk`, head top-k).

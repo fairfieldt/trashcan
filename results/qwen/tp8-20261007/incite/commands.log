@@ -32,3 +32,18 @@
 2026-10-07T18:23:51 check-tp8-mtp trashcan-split2  qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
 2026-10-07T18:24:34 check-tp8-v3 trashcan-split2  qwen-check --verify 3 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
 2026-10-07T18:25:22 serve-tp8 trashcan-split2  serve --port 8000 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:32:43 rs-on-1 trashcan-rsag  qwen-bench --pp 512 --tg 64 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:33:15 rs-off-1 trashcan-rsag TRASHCAN_TP_RSAG=0 qwen-bench --pp 512 --tg 64 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:33:48 rs-on-2 trashcan-rsag  qwen-bench --pp 512 --tg 64 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:34:21 rs-off-2 trashcan-rsag TRASHCAN_TP_RSAG=0 qwen-bench --pp 512 --tg 64 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:34:54 rs-on-2k-1 trashcan-rsag  qwen-bench --pp 2048 --tg 16 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:35:40 rs-off-2k-1 trashcan-rsag TRASHCAN_TP_RSAG=0 qwen-bench --pp 2048 --tg 16 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:38:41 rsag-val trashcan-rsag  qwen-validate results/tp8-rsag-val --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:39:10 rsag-check-mtp trashcan-rsag  qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:39:58 rsag-dprof trashcan-rsag TRASHCAN_TP_PROFILE=results/profile-rsag-dprof.jsonl TRASHCAN_TP_PROFILE_DISPATCH=1 qwen-bench --pp 512 --tg 32 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:41:15 parts1-1 trashcan-rsag TRASHCAN_TP_PARTS=1 qwen-bench --pp 512 --tg 128 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:41:47 parts2-1 trashcan-rsag TRASHCAN_TP_PARTS=2 qwen-bench --pp 512 --tg 128 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:42:17 parts4-1 trashcan-rsag TRASHCAN_TP_PARTS=4 qwen-bench --pp 512 --tg 128 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:42:49 parts1-2 trashcan-rsag TRASHCAN_TP_PARTS=1 qwen-bench --pp 512 --tg 128 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:43:20 parts2-2 trashcan-rsag TRASHCAN_TP_PARTS=2 qwen-bench --pp 512 --tg 128 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-07T18:43:50 parts4-2 trashcan-rsag TRASHCAN_TP_PARTS=4 qwen-bench --pp 512 --tg 128 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1

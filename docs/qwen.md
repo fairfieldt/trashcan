@@ -188,11 +188,12 @@ trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/
 ```
 
 Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-20261007](../results/qwen/tp8-20261007/)):
-192 tok/s prefill (512-token prompts; 185 at 2048), 35.0 tok/s decode and 46.0 with MTP, against TP4's 149 / 28.3 /
+204 tok/s prefill (512-token prompts; 197 at 2048), 35.0 tok/s decode and 46.0 with MTP, against TP4's 149 / 28.3 /
 38.6 measured the same day over the one incite-invite cable now left (three cables gave 150 / 28.4 / 39.5). It
 matches the CPU reference to 4.0e-4 with the same greedy tokens, and `qwen-check` (with and without drafting) and
 `scripts/test-server.py` pass. Each GPU allocates 2.3 GiB. A decode step spends about 19-20 ms on the GPUs and
-7.5 ms in exchanges; prefill is limited by the cables' bandwidth.
+7.5 ms in exchanges. Prefill-sized all-reduces use reduce-scatter and all-gather (3/4 of the bytes per cable) and are
+limited by the cables' bandwidth, about 0.5 GB/s each way when a cable carries both directions.
 
 Qwen3.8-27B on incite and invite (four D700s; [results/qwen/tp-merged-20261006](../results/qwen/tp-merged-20261006/),
 which builds on [tp-20261006](../results/qwen/tp-20261006/), [tp-decode-20261006](../results/qwen/tp-decode-20261006/)

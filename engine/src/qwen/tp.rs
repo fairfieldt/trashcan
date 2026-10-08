@@ -305,6 +305,27 @@ pub struct Mesh {
     links: Vec<(usize, Lanes)>,
 }
 
+/// Element ranges of `Mesh::exchange_ranges`: sends from the first buffer and receives into the second, or both
+/// within one buffer.
+enum Ranges<'a> {
+    Split(&'a [f32], &'a [(usize, usize)], &'a mut [f32], &'a [(usize, usize)]),
+    Within(&'a mut [f32], &'a [(usize, usize)], &'a [(usize, usize)]),
+}
+
+/// The byte ranges `ranges` (sorted, disjoint) of `buf` as separate slices.
+fn carve<'a>(mut buf: &'a mut [u8], ranges: &[(usize, usize)]) -> Vec<&'a mut [u8]> {
+    let mut at = 0;
+    let mut parts = Vec::new();
+    for &(a, b) in ranges {
+        let (_, rest) = std::mem::take(&mut buf).split_at_mut(a - at);
+        let (part, rest) = rest.split_at_mut(b - a);
+        parts.push(part);
+        buf = rest;
+        at = b;
+    }
+    parts
+}
+
 /// The machine that passes the driver's operations to machine `m`.
 fn parent(m: usize) -> usize {
     m & (m - 1)
@@ -400,6 +421,92 @@ impl Mesh {
             }
         }
         Ok(())
+    }
+
+    /// All-reduce `sum` in place by reduce-scatter and all-gather (`scratch` holds received partials): every cable
+    /// moves 3/4 of the bytes of `reduce`, in 2k steps instead of k, so it suits prefill-sized vectors. As in
+    /// `reduce`, the vector is cut in k slices, slice j taking the bits of the partners in the order j, j + 1, ...
+    /// In reduce-scatter step i, a machine keeps the half of its slice segment its bit (i + j) % k selects, sends the
+    /// other half to that bit's partner and adds the partner's copy of its half; all-gather undoes the steps, so
+    /// each element is added on one machine, in the same pairs as `reduce`, and copied to the others. Returns false,
+    /// doing nothing, when the slices do not halve evenly.
+    fn reduce_scatter_gather(&mut self, sum: &mut [f32], scratch: &mut [f32], stall: Duration, threads: usize) -> Result<bool> {
+        let k = self.rounds();
+        if k < 2 || !sum.len().is_multiple_of(k << k) {
+            return Ok(false);
+        }
+        let (me, slice) = (self.machine, sum.len() / k);
+        // Each slice's current segment, in elements.
+        let mut segs: Vec<(usize, usize)> = (0..k).map(|j| (j * slice, (j + 1) * slice)).collect();
+        let bit = |step: usize, j: usize| (step + j) % k;
+        for step in 0..k {
+            // (partner, send range in sum, receive range in scratch) per slice; the receive range is kept.
+            let mut moves = Vec::new();
+            for (j, seg) in segs.iter_mut().enumerate() {
+                let b = bit(step, j);
+                let mid = (seg.0 + seg.1) / 2;
+                let (keep, give) = if me >> b & 1 == 0 { ((seg.0, mid), (mid, seg.1)) } else { ((mid, seg.1), (seg.0, mid)) };
+                moves.push((me ^ 1 << b, give, keep));
+                *seg = keep;
+            }
+            let outs: Vec<_> = moves.iter().map(|m| m.1).collect();
+            let ins: Vec<_> = moves.iter().map(|m| m.2).collect();
+            self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Split(sum, &outs, scratch, &ins), stall)?;
+            for &(a, b) in &ins {
+                let r = &scratch[a..b];
+                parallel(&mut sum[a..b], threads, |at, out| {
+                    for (x, y) in out.iter_mut().zip(&r[at..]) {
+                        *x += y;
+                    }
+                });
+            }
+        }
+        for step in (0..k).rev() {
+            // Send this machine's segment, receive the partner's sibling segment into place.
+            let mut moves = Vec::new();
+            for (j, seg) in segs.iter_mut().enumerate() {
+                let b = bit(step, j);
+                let len = seg.1 - seg.0;
+                let sibling = if me >> b & 1 == 0 { (seg.1, seg.1 + len) } else { (seg.0 - len, seg.0) };
+                moves.push((me ^ 1 << b, *seg, sibling));
+                *seg = (seg.0.min(sibling.0), seg.1.max(sibling.1));
+            }
+            let outs: Vec<_> = moves.iter().map(|m| m.1).collect();
+            let ins: Vec<_> = moves.iter().map(|m| m.2).collect();
+            self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Within(sum, &outs, &ins), stall)?;
+        }
+        Ok(true)
+    }
+
+    /// One `exchange_all` step: to `peers[i]`, send the elements `outs[i]` and receive into `ins[i]`.
+    fn exchange_ranges(&mut self, peers: &[usize], ranges: Ranges, stall: Duration) -> Result<()> {
+        let bytes = |r: &[(usize, usize)]| r.iter().map(|&(a, b)| (4 * a, 4 * b)).collect::<Vec<_>>();
+        let (outs, ins): (Vec<&[u8]>, Vec<&mut [u8]>) = match ranges {
+            Ranges::Split(src, outs, dst, ins) => {
+                let src: &[u8] = bytemuck::cast_slice(src);
+                (bytes(outs).iter().map(|&(a, b)| &src[a..b]).collect(), carve(bytemuck::cast_slice_mut(dst), &bytes(ins)))
+            }
+            Ranges::Within(buf, outs, ins) => {
+                // Sends and receives are disjoint ranges of one buffer.
+                let (o, i) = (bytes(outs), bytes(ins));
+                let mut all: Vec<_> = o.iter().chain(&i).copied().collect();
+                all.sort_unstable();
+                let mut parts: Vec<Option<&mut [u8]>> = carve(bytemuck::cast_slice_mut(buf), &all).into_iter().map(Some).collect();
+                let mut take = |r: &(usize, usize)| parts[all.iter().position(|x| x == r).unwrap()].take().unwrap();
+                let outs: Vec<&[u8]> = o.iter().map(|r| &*take(r)).collect();
+                (outs, i.iter().map(&mut take).collect())
+            }
+        };
+        let mut slots: Vec<_> = outs.into_iter().zip(ins).map(Some).collect();
+        let mut jobs = Vec::new();
+        for (peer, lanes) in self.links.iter_mut() {
+            if let Some(j) = peers.iter().position(|p| p == peer) {
+                let (o, i) = slots[j].take().expect("one range per partner");
+                jobs.push((lanes, o, i));
+            }
+        }
+        ensure!(jobs.len() == peers.len(), "machine {} has no lanes to one of machines {peers:?}", self.machine);
+        crate::link::exchange_all(&mut jobs, stall)
     }
 
     /// Pass a message from the driver on to the machines that hear from this one.
@@ -780,9 +887,14 @@ impl TpGroup {
             // While a gated submission waits on the GPUs, a stalled exchange must fail (and drain them) well
             // before amdgpu's job timeout.
             let stall = if self.shards[0].tp_gated() { Duration::from_secs(2) } else { crate::link::STALL };
-            m.reduce(sum, &mut self.remote[..len], stall, threads)?;
-            exchanged = Instant::now();
-            remote = Some(&self.remote[..len]);
+            // Prefill-sized vectors: TP8 prefill 6% faster than with `reduce` (results/qwen/tp8-20261007).
+            if len >= PARALLEL_MIN && m.reduce_scatter_gather(sum, &mut self.remote[..len], stall, threads)? {
+                exchanged = Instant::now();
+            } else {
+                m.reduce(sum, &mut self.remote[..len], stall, threads)?;
+                exchanged = Instant::now();
+                remote = Some(&self.remote[..len]);
+            }
         }
         if self.shards[0].tp_hostnorm() {
             if let Some(r) = remote {
@@ -1064,7 +1176,14 @@ mod tests {
                         for (a, b) in sum.iter_mut().zip(&remote) {
                             *a += b;
                         }
+                        // Reduce-scatter and all-gather of a prefill-sized vector add in the same pairs.
+                        let big = 64 * 5120;
+                        let mut sum2: Vec<f32> = (0..big).map(|i| value(m, i)).collect();
+                        let mut scratch = vec![0f32; big];
+                        assert!(mesh.reduce_scatter_gather(&mut sum2, &mut scratch, crate::link::STALL, 4).unwrap());
+                        assert!(!mesh.reduce_scatter_gather(&mut vec![0f32; 4 * 7], &mut vec![0f32; 4 * 7], crate::link::STALL, 1).unwrap());
                         let gathered = mesh.gather(vec![m as u8; m + 1]).unwrap();
+                        sum.extend(sum2);
                         (sum, gathered, heard)
                     })
                 })
@@ -1073,8 +1192,9 @@ mod tests {
         });
         // The first half is added in the pairs of rounds 0-1 then 2-3, the second in 0-2 then 1-3.
         let v = |m, i| value(m, i);
-        let expected: Vec<f32> =
-            (0..n).map(|i| if i < n / 2 { (v(0, i) + v(1, i)) + (v(2, i) + v(3, i)) } else { (v(0, i) + v(2, i)) + (v(1, i) + v(3, i)) }).collect();
+        let pairs = |len: usize, i: usize| if i < len / 2 { (v(0, i) + v(1, i)) + (v(2, i) + v(3, i)) } else { (v(0, i) + v(2, i)) + (v(1, i) + v(3, i)) };
+        let big = 64 * 5120;
+        let expected: Vec<f32> = (0..n).map(|i| pairs(n, i)).chain((0..big).map(|i| pairs(big, i))).collect();
         for (m, (sum, gathered, heard)) in results.iter().enumerate() {
             assert!(sum.iter().zip(&expected).all(|(a, b)| a.to_bits() == b.to_bits()), "machine {m}");
             assert!(sum.iter().zip(&results[0].0).all(|(a, b)| a.to_bits() == b.to_bits()), "machine {m} differs from machine 0");
