@@ -3,6 +3,7 @@ mod assistant;
 mod generation;
 mod gguf;
 mod gpu;
+mod kernel_check;
 mod link;
 mod micro;
 mod model;
@@ -247,6 +248,20 @@ enum Cmd {
         gpu: usize,
         #[arg(long, default_value_t = 500)]
         warmup_ms: u64,
+    },
+    /// Check the TP8 plan's kernels (docs/tp8-optimization.md) against CPU references and, on the D700s, against the
+    /// kernels they replace (bit for bit where they should match), and time both.
+    QwenKernelCheck {
+        /// Run on every Vulkan device, including ones without 64-lane subgroups (e.g. lavapipe), where only the new
+        /// kernels run, against the CPU references.
+        #[arg(long)]
+        any_device: bool,
+        /// Checks to run (attention, topk, ffn, gdn); all by default.
+        #[arg(long, value_delimiter = ',')]
+        only: Vec<String>,
+        /// Timed repetitions per case (0: check only).
+        #[arg(long, default_value_t = 50)]
+        iterations: usize,
     },
     /// Compare Qwen tiled prefill attention against scalar attention on deterministic inputs.
     QwenAttentionBench {
@@ -959,6 +974,7 @@ fn main() -> Result<()> {
             micro::gemm(&shapes, n, &kernels, iterations, gpu, warmup_ms)
         }
         Cmd::QwenAttentionBench { tokens, n, heads, iterations } => micro::qwen_attention(tokens, n, heads, iterations),
+        Cmd::QwenKernelCheck { any_device, only, iterations } => kernel_check::run(any_device, &only, iterations),
         Cmd::QwenSpecBench { model, run, tokens, reps } => {
             let mut chain = run.chain(&model)?;
             let t = tokenizer::Tokenizer::new(&chain.local.gguf)?;

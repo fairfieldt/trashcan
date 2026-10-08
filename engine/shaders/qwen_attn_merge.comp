@@ -1,0 +1,34 @@
+#version 460
+#include "common.glsl"
+// Merge of `qwen_attn_decode`'s partials, one workgroup per (query head, column) and one output element per thread.
+// The partition headers are loaded together and each partition's weight exp(max - overall max) is computed once;
+// every thread then loads its element of 16 partitions at a time, with `attention_merge`'s maximum, denominator and
+// FMA order. With p.b set the output gate sigmoid(g) of `qwen_gate` follows (g: the second half of the head's
+// query projection), saving that dispatch.
+// e: partials [t][head][partition][DIM + 4], d: output [t][head][DIM], b: query projection [t][head][q | gate]
+// (0: no gate). p.heads = local query heads, p.m = partitions (at most 128).
+layout(local_size_x=256) in;
+#define DIM 256
+shared float hm[128],hd[128],hw[128];
+void main(){
+    uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+    if(t>=batch())return;
+    uint parts=p.m,rec=DIM+4,base=(t*p.heads+head)*parts*rec;
+    if(l<parts){hm[l]=e_f.v[base+l*rec];hd[l]=e_f.v[base+l*rec+1];}
+    barrier();
+    float mx=-1e30;
+    for(uint c=0;c<parts;c++)mx=max(mx,hm[c]);
+    if(l<parts)hw[l]=exp(hm[l]-mx);
+    barrier();
+    float den=0,acc=0;
+    for(uint c0=0;c0<parts;c0+=16){
+        float v[16];
+        [[unroll]]for(uint i=0;i<16;i++)v[i]=c0+i<parts?e_f.v[base+(c0+i)*rec+4+l]:0.0;
+        [[unroll]]for(uint i=0;i<16;i++){
+            if(c0+i<parts){float w=hw[c0+i];den+=w*hd[c0+i];acc=fma(w,v[i],acc);}
+        }
+    }
+    float o=acc/den;
+    if(p.b!=0){float g=b_f.v[t*2*p.heads*DIM+head*2*DIM+DIM+l];o*=1.0/(1.0+exp(-g));}
+    d_f.v[(t*p.heads+head)*DIM+l]=o;
+}

@@ -1,0 +1,43 @@
+#version 460
+#include "common.glsl"
+#extension GL_KHR_shader_subgroup_basic : require
+// `qwen_topk` (the best 64 of up to 1024 entries per workgroup, highest score first and ties by lower id) with the
+// same 55 bitonic steps and comparisons, so the same candidates, but most steps synchronized within a subgroup:
+// thread x (numbered by subgroup and lane, so a subgroup holds S consecutive values of x) compares the pair at
+// i = 2x - (x & (s - 1)) and i + s, and for strides s up to the subgroup size S those pairs lie in the subgroup's
+// own runs [2Sw, 2Sw + 2S) and [512 + 2Sw, ...). Only steps of a longer stride, and those before them, need a
+// workgroup barrier: 10 of the 55 with S = 64 (docs/tp8-optimization.md K1). Entries and outputs as in qwen_topk.
+layout(local_size_x=256) in;
+shared float sv[1024];
+shared uint si[1024];
+bool first(float va,uint ia,float vb,uint ib){return va>vb||(va==vb&&ia<ib);}
+void main(){
+uint S=gl_SubgroupSize,x0=gl_SubgroupID*S+gl_SubgroupInvocationID,w=gl_WorkGroupID.x,t=gl_WorkGroupID.y;
+if(t>=batch())return;
+// Each thread loads the four entries its subgroup's first steps compare.
+uint run=2*S*gl_SubgroupID+gl_SubgroupInvocationID;
+for(uint q=0;q<4;q++){
+    uint j=run+(q&1)*S+(q>>1)*512;
+    uint i=w*1024+j;float v=-1e30;uint id=0xffffffffu;
+    if(i<p.n){
+        if(p.kind==0){v=a_f.v[t*p.n+i];id=i+p.offset;}
+        else{v=a_f.v[(t*p.n+i)*2];id=a_u.v[(t*p.n+i)*2+1];}
+    }
+    sv[j]=v;si[j]=id;
+}
+subgroupMemoryBarrierShared();subgroupBarrier();
+for(uint k=2;k<=1024;k<<=1){
+    for(uint s=k>>1;s>0;s>>=1){
+        for(uint x=x0;x<512;x+=256){
+            uint i=2*x-(x&(s-1)),o=i+s;
+            float va=sv[i],vb=sv[o];uint ia=si[i],ib=si[o];
+            bool down=(i&k)==0;
+            if(down?first(vb,ib,va,ia):first(va,ia,vb,ib)){sv[i]=vb;sv[o]=va;si[i]=ib;si[o]=ia;}
+        }
+        uint next=s>1?s>>1:k;
+        if(s>S||next>S||k==1024&&s==1)barrier();
+        else{subgroupMemoryBarrierShared();subgroupBarrier();}
+    }
+}
+if(x0<64){uint at=(t*p.m+w*64+x0)*2;c_f.v[at]=sv[x0];c_u.v[at+1]=si[x0];}
+}
