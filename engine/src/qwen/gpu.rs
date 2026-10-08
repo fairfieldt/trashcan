@@ -233,6 +233,8 @@ struct Delta {
     /// `[dt bias(heads) | A(heads)]`.
     dt_a: Buffer,
     conv_w: Buffer,
+    /// `[conv weights | dt bias | A]`, the weight binding of `qwen_gdn_conv`.
+    conv_wdt: Buffer,
     conv: Buffer,
     state: Buffer,
     norm: Buffer,
@@ -485,6 +487,14 @@ fn tp_partitions(pos: usize, n: usize) -> u32 {
     } else {
         (p * scale).min(128)
     }
+}
+
+/// Whether a DeltaNet layer of a batch of `n` columns folds its convolution into the recurrence
+/// (`TRASHCAN_QWEN_FUSED_GDN=1`): decode and verification batches (up to 8 columns), not when dumping activations,
+/// whose convolution output is a captured tensor.
+fn fused_gdn(n: usize, dump: bool) -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TRASHCAN_QWEN_FUSED_GDN").as_deref() == Ok("1")) && n <= 8 && !dump
 }
 
 /// The fused gate/up/SwiGLU kernel for a batch of `n` columns (`TRASHCAN_QWEN_FUSED_FFN=1`, up to four columns: the
@@ -864,6 +874,41 @@ impl<'a> Rec<'a> {
             (Some((a, b)), true) => (a.address, b.address),
             _ => (0, 0),
         };
+        if fused_gdn(self.n, self.dump) {
+            // The convolution inside the recurrence; the q and k windows are written by the gated norm, after every
+            // wave has read them (docs/tp8-optimization.md G1). The same bits as the three dispatches below.
+            let mut u = [0; 16];
+            u[0] = cd as u32;
+            u[4] = c.v_heads as u32;
+            u[5] = c.k_heads as u32;
+            u[6] = c.state as u32;
+            u[12] = eps;
+            s.gpu.dispatch_matrix(
+                self.cmd,
+                "qwen_gdn_conv",
+                self.push([big, ab, dl.state.address, o, dl.conv.address, snap], u).with_extra(snap_conv),
+                (c.v_heads * c.state / 16) as u32,
+                1,
+                &dl.conv_wdt,
+            )?;
+            self.capture(format!("attn_output-{il}"), &s.o, vd)?;
+            let mut u = [0; 16];
+            u[0] = vd as u32;
+            u[1] = cd as u32;
+            u[2] = (2 * c.key_dim()) as u32;
+            u[6] = c.state as u32;
+            u[12] = eps;
+            s.gpu.dispatch(
+                self.cmd,
+                "qwen_gated_norm_conv",
+                self.push([o, z, dl.norm.address, big, dl.conv.address, snap_conv], u),
+                c.v_heads as u32,
+                self.n as u32,
+            );
+            self.capture(format!("final_output-{il}"), &s.o, vd)?;
+            self.matrix(&dl.out, o, self.out, vd, d, false)?;
+            return self.capture(format!("linear_attn_out-{il}"), &s.y, d);
+        }
         let mut u = [0; 16];
         u[0] = cd as u32;
         s.gpu.dispatch(
@@ -1239,6 +1284,7 @@ impl GpuStage {
                 let mut dt_a = pick(vector(g, c.layer_tensor(g, il, "ssm_dt.bias")?)?, 1, &value_heads);
                 dt_a.extend(pick(vector(g, c.layer_tensor(g, il, "ssm_a")?)?, 1, &value_heads));
                 let conv_w = pick(vector(g, c.layer_tensor(g, il, "ssm_conv1d.weight")?)?, gc.conv, &channels);
+                let conv_wdt: Vec<f32> = conv_w.iter().chain(&dt_a).copied().collect();
                 let (state, conv) = (c.v_heads * c.state * c.state * 4, (c.conv - 1) * c.conv_dim() * 4);
                 Mixer::Delta(Delta {
                     qkv: upload_q4_cut(&gpu, g, c, il, "attn_qkv.weight", &channels, &[])?,
@@ -1246,6 +1292,7 @@ impl GpuStage {
                     ab: gpu.upload_matrix(bytemuck::cast_slice(&ab))?,
                     dt_a: upload_f32(&gpu, &dt_a)?,
                     conv_w: upload_f32(&gpu, &conv_w)?,
+                    conv_wdt: gpu.upload_matrix(bytemuck::cast_slice(&conv_wdt))?,
                     conv: gpu.buffer(conv, false, false, None)?,
                     state: gpu.buffer(state, false, false, None)?,
                     norm: upload_vector(&gpu, g, c, il, "ssm_norm.weight")?,

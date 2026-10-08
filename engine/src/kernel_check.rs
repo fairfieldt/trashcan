@@ -14,7 +14,17 @@ use serde_json::{json, Value};
 use std::{rc::Rc, time::Instant};
 
 /// Shaders a relaxed device compiles: the plan's kernels written for any subgroup size.
-const RELAXED: &[&str] = &["qwen_attn_decode", "qwen_attn_merge", "qwen_topk_wave", "qwen_ffn_gu1", "qwen_ffn_gu2", "qwen_ffn_gu3", "qwen_ffn_gu4"];
+const RELAXED: &[&str] = &[
+    "qwen_attn_decode",
+    "qwen_attn_merge",
+    "qwen_topk_wave",
+    "qwen_ffn_gu1",
+    "qwen_ffn_gu2",
+    "qwen_ffn_gu3",
+    "qwen_ffn_gu4",
+    "qwen_gdn_conv",
+    "qwen_gated_norm_conv",
+];
 
 /// Uniform values in [-1, 1) from a xorshift state.
 struct Rng(u32);
@@ -48,7 +58,10 @@ impl Ctx {
         self.upload_f32(&vec![0f32; floats.max(1)])
     }
     fn download_f32(&self, b: &Buffer, floats: usize) -> Result<Vec<f32>> {
-        Ok(bytemuck::cast_slice(&b.download_range(0, floats * 4)?).to_vec())
+        if floats == 0 {
+            return Ok(Vec::new());
+        }
+        Ok(b.download_range(0, floats * 4)?.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
     }
     /// Record `body` once to check it and `iterations` times to time it: (microseconds per call).
     fn time(&self, body: &dyn Fn(ash::vk::CommandBuffer)) -> Result<f64> {
@@ -98,6 +111,9 @@ pub fn run(any_device: bool, only: &[String], iterations: usize) -> Result<()> {
         }
         if want("ffn") {
             rows.extend(ffn(&ctx)?);
+        }
+        if want("gdn") {
+            rows.extend(gdn(&ctx)?);
         }
         for row in rows {
             failed += usize::from(row["pass"] != true);
@@ -346,6 +362,181 @@ fn ffn(ctx: &Ctx) -> Result<Vec<Value>> {
             row["bitwise_vs_old"] = json!(bitwise(&new, &old));
             row["max_err_vs_old"] = json!(max_abs_diff(&new, &old));
             pass &= bitwise(&new, &old);
+        }
+        row["pass"] = json!(pass);
+        rows_out.push(row);
+    }
+    Ok(rows_out)
+}
+
+/// G1: `qwen_gdn_conv` + `qwen_gated_norm_conv` against an f64 reference of the convolution, recurrence and gated norm
+/// and, natively, against `qwen_conv` + `qwen_gdn` + `qwen_gated_norm` bit for bit: the output, the state, the
+/// convolution window and, for verification batches, both kinds of snapshots.
+fn gdn(ctx: &Ctx) -> Result<Vec<Value>> {
+    const DIM: usize = 128;
+    let mut rows_out = Vec::new();
+    // (key heads, value heads, columns, position, snapshots): TP8, TP4 and the pipeline; decode, verification, a
+    // fresh sequence.
+    for (case, &(kh, vh, n, pos, snaps)) in [(2usize, 6usize, 1usize, 10usize, false), (2, 6, 3, 10, true), (4, 12, 2, 0, true), (16, 48, 1, 5, false), (2, 6, 8, 3, true)].iter().enumerate() {
+        let (kd, vd) = (kh * DIM, vh * DIM);
+        let cd = 2 * kd + vd;
+        let mut rng = Rng::new(701 + case as u32);
+        let mut gen = |len: usize, scale: f32| (0..len).map(|_| rng.next() * scale).collect::<Vec<f32>>();
+        let raw = gen(n * cd, 1.0);
+        let window = gen(3 * cd, 1.0);
+        let conv_w = gen(cd * 4, 0.5);
+        let ab = gen(n * 2 * vh, 3.0);
+        let dt = gen(vh, 1.0);
+        let a_neg: Vec<f32> = gen(vh, 1.0).iter().map(|x| -x.exp()).collect();
+        let state = gen(vh * DIM * DIM, 0.1);
+        let z = gen(n * vd, 2.0);
+        let norm_w: Vec<f32> = gen(DIM, 0.1).iter().map(|x| 1.0 + x).collect();
+        let eps = 1e-6f32;
+        // f64 reference.
+        let fresh = pos == 0;
+        let mut win: Vec<f64> = window.iter().map(|&x| if fresh { 0.0 } else { x as f64 }).collect();
+        let mut st: Vec<f64> = state.iter().map(|&x| if fresh { 0.0 } else { x as f64 }).collect();
+        let (mut out, mut st_snaps, mut win_snaps) = (vec![0f64; n * vd], Vec::new(), Vec::new());
+        for t in 0..n {
+            let mut cv = vec![0f64; cd];
+            for ch in 0..cd {
+                let x3 = raw[t * cd + ch] as f64;
+                let w = &conv_w[ch * 4..ch * 4 + 4];
+                let s = w[0] as f64 * win[ch] + w[1] as f64 * win[cd + ch] + w[2] as f64 * win[2 * cd + ch] + w[3] as f64 * x3;
+                cv[ch] = s / (1.0 + (-s).exp());
+                (win[ch], win[cd + ch], win[2 * cd + ch]) = (win[cd + ch], win[2 * cd + ch], x3);
+            }
+            for h in 0..vh {
+                let k_head = h % kh;
+                let q = &cv[k_head * DIM..][..DIM];
+                let k = &cv[kd + k_head * DIM..][..DIM];
+                let qn = 1.0 / (q.iter().map(|x| x * x).sum::<f64>() + eps as f64).sqrt() / (DIM as f64).sqrt();
+                let kn = 1.0 / (k.iter().map(|x| x * x).sum::<f64>() + eps as f64).sqrt();
+                let x = ab[t * 2 * vh + h] as f64 + dt[h] as f64;
+                let decay = ((if x > 20.0 { x } else { (1.0 + x.exp()).ln() }) * a_neg[h] as f64).exp();
+                let beta = 1.0 / (1.0 + (-(ab[t * 2 * vh + vh + h] as f64)).exp());
+                for i in 0..DIM {
+                    let row = &mut st[(h * DIM + i) * DIM..][..DIM];
+                    row.iter_mut().for_each(|s| *s *= decay);
+                    let sk: f64 = row.iter().zip(k).map(|(s, k)| s * k * kn).sum();
+                    let delta = (cv[2 * kd + h * DIM + i] - sk) * beta;
+                    row.iter_mut().zip(k).for_each(|(s, k)| *s += k * kn * delta);
+                    out[t * vd + h * DIM + i] = row.iter().zip(q).map(|(s, q)| s * q * qn).sum();
+                }
+            }
+            if t + 1 < n {
+                st_snaps.extend(st.iter().copied());
+                win_snaps.extend(win.iter().copied());
+            }
+        }
+        let mut gated = vec![0f32; n * vd];
+        for t in 0..n {
+            for h in 0..vh {
+                let o = &out[t * vd + h * DIM..][..DIM];
+                let inv = 1.0 / (o.iter().map(|x| x * x).sum::<f64>() / DIM as f64 + eps as f64).sqrt();
+                for i in 0..DIM {
+                    let zz = z[t * vd + h * DIM + i] as f64;
+                    gated[t * vd + h * DIM + i] = (o[i] * inv * norm_w[i] as f64 * (zz / (1.0 + (-zz).exp()))) as f32;
+                }
+            }
+        }
+        let d = &ctx.d;
+        let params = d.upload(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
+        let (rawb, abb, zb, wb) = (ctx.upload_f32(&raw)?, ctx.upload_f32(&ab)?, ctx.upload_f32(&z)?, ctx.upload_f32(&norm_w)?);
+        let wdt: Vec<f32> = conv_w.iter().chain(&dt).chain(&a_neg).copied().collect();
+        let wdtb = d.upload_matrix(bytemuck::cast_slice(&wdt))?;
+        // Mutable buffers of one run: state, window, output, state and window snapshots.
+        let fresh_buffers = || -> Result<[Buffer; 5]> {
+            Ok([ctx.upload_f32(&state)?, ctx.upload_f32(&window)?, ctx.zeros(n * vd)?, ctx.zeros(n.max(2) * vh * DIM * DIM)?, ctx.zeros(n.max(2) * 3 * cd)?])
+        };
+        let new_b = fresh_buffers()?;
+        let (snap, snap_conv) = if snaps { (new_b[3].address, new_b[4].address) } else { (0, 0) };
+        let mut u = [0u32; 16];
+        u[0] = cd as u32;
+        u[4] = vh as u32;
+        u[5] = kh as u32;
+        u[6] = DIM as u32;
+        u[12] = eps.to_bits();
+        let mut un = [0u32; 16];
+        un[0] = vd as u32;
+        un[1] = cd as u32;
+        un[2] = (2 * kd) as u32;
+        un[6] = DIM as u32;
+        un[12] = eps.to_bits();
+        let per_group = 4 * 256 / ctx.lanes;
+        // One run only: the kernels update the state in place.
+        let cmd = d.begin()?;
+        d.dispatch_matrix(cmd, "qwen_gdn_conv", Push { ptr: [rawb.address, abb.address, new_b[0].address, new_b[2].address, new_b[1].address, snap, params.address, snap_conv], u }, (vh * DIM / per_group) as u32, 1, &wdtb)?;
+        d.dispatch(cmd, "qwen_gated_norm_conv", Push { ptr: [new_b[2].address, zb.address, wb.address, rawb.address, new_b[1].address, snap_conv, params.address, 0], u: un }, vh as u32, n as u32);
+        d.finish(cmd)?;
+        d.run(cmd)?;
+        let got = |b: &[Buffer; 5]| -> Result<[Vec<f32>; 5]> {
+            Ok([
+                ctx.download_f32(&b[0], vh * DIM * DIM)?,
+                ctx.download_f32(&b[1], 3 * cd)?,
+                ctx.download_f32(&b[2], n * vd)?,
+                ctx.download_f32(&b[3], (n - 1) * vh * DIM * DIM)?,
+                ctx.download_f32(&b[4], (n - 1) * 3 * cd)?,
+            ])
+        };
+        let new = got(&new_b)?;
+        let f = |v: &[f64]| v.iter().map(|&x| x as f32).collect::<Vec<f32>>();
+        let refs = [f(&st), f(&win), gated.clone(), f(&st_snaps), f(&win_snaps)];
+        let names = ["state", "window", "output", "state_snapshots", "window_snapshots"];
+        let mut errors = serde_json::Map::new();
+        let mut pass = true;
+        for (i, name) in names.iter().enumerate() {
+            if i >= 3 && !snaps {
+                continue;
+            }
+            let scale = refs[i].iter().fold(0f32, |a, b| a.max(b.abs())).max(1e-3);
+            let err = max_abs_diff(&new[i], &refs[i]);
+            errors.insert(name.to_string(), json!(err / scale));
+            pass &= err <= 1e-4 * scale && new[i].iter().all(|v| v.is_finite());
+        }
+        let mut row = json!({"check": "gdn", "gpu": ctx.gpu, "case": {"k_heads": kh, "v_heads": vh, "n": n, "pos": pos, "snapshots": snaps}, "rel_err_vs_reference": errors});
+        if ctx.native {
+            let old_b = fresh_buffers()?;
+            let (snap, snap_conv) = if snaps { (old_b[3].address, old_b[4].address) } else { (0, 0) };
+            let conv_out = ctx.zeros(n * cd)?;
+            let (cwb, dtab) = (ctx.upload_f32(&conv_w)?, ctx.upload_f32(&dt.iter().chain(&a_neg).copied().collect::<Vec<f32>>())?);
+            let mut uc = [0u32; 16];
+            uc[0] = cd as u32;
+            let mut ug = [0u32; 16];
+            ug[0] = vd as u32;
+            ug[6] = DIM as u32;
+            ug[12] = eps.to_bits();
+            let cmd = d.begin()?;
+            d.dispatch(cmd, "qwen_conv", Push { ptr: [rawb.address, cwb.address, old_b[1].address, conv_out.address, snap_conv, 0, params.address, 0], u: uc }, cd.div_ceil(256) as u32, 1);
+            d.dispatch(cmd, "qwen_gdn", Push { ptr: [conv_out.address, abb.address, old_b[0].address, old_b[2].address, dtab.address, snap, params.address, 0], u }, (vh * DIM / 16) as u32, 1);
+            d.dispatch(cmd, "qwen_gated_norm", Push { ptr: [old_b[2].address, zb.address, wb.address, 0, 0, 0, params.address, 0], u: ug }, vh as u32, n as u32);
+            d.finish(cmd)?;
+            d.run(cmd)?;
+            let old = got(&old_b)?;
+            let mut same = serde_json::Map::new();
+            for (i, name) in names.iter().enumerate() {
+                if i >= 3 && !snaps {
+                    continue;
+                }
+                let eq = bitwise(&new[i], &old[i]);
+                same.insert(name.to_string(), json!(eq));
+                pass &= eq;
+            }
+            row["bitwise_vs_old"] = Value::Object(same);
+            if ctx.iterations > 0 {
+                // Timing on throwaway state: the outputs above were taken from single runs.
+                let t_new = ctx.time(&|cmd| {
+                    d.dispatch_matrix(cmd, "qwen_gdn_conv", Push { ptr: [rawb.address, abb.address, new_b[0].address, new_b[2].address, new_b[1].address, 0, params.address, 0], u }, (vh * DIM / 16) as u32, 1, &wdtb).unwrap();
+                    d.dispatch(cmd, "qwen_gated_norm_conv", Push { ptr: [new_b[2].address, zb.address, wb.address, rawb.address, new_b[1].address, 0, params.address, 0], u: un }, vh as u32, n as u32);
+                })?;
+                let t_old = ctx.time(&|cmd| {
+                    d.dispatch(cmd, "qwen_conv", Push { ptr: [rawb.address, cwb.address, old_b[1].address, conv_out.address, 0, 0, params.address, 0], u: uc }, cd.div_ceil(256) as u32, 1);
+                    d.dispatch(cmd, "qwen_gdn", Push { ptr: [conv_out.address, abb.address, old_b[0].address, old_b[2].address, dtab.address, 0, params.address, 0], u }, (vh * DIM / 16) as u32, 1);
+                    d.dispatch(cmd, "qwen_gated_norm", Push { ptr: [old_b[2].address, zb.address, wb.address, 0, 0, 0, params.address, 0], u: ug }, vh as u32, n as u32);
+                })?;
+                row["new_us"] = json!(t_new);
+                row["old_us"] = json!(t_old);
+            }
         }
         row["pass"] = json!(pass);
         rows_out.push(row);

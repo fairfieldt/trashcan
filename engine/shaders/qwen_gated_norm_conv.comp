@@ -1,0 +1,35 @@
+#version 460
+#include "common.glsl"
+// qwen_gated_norm, plus the convolution-window update of the q and k channels that qwen_gdn_conv read (it cannot
+// write them itself: every wave of a key head reads them). The windows after the batch, and for verification after
+// every column but the last, are those qwen_conv writes. The norm part is qwen_gated_norm's, one wave per
+// (head, token); the window update runs in the waves of the first token.
+// a: DeltaNet output [t][head][dim] (in place), b: z (same layout), c: weight [dim], d: raw projection
+// [t][p.k channels], e: convolution window [3][p.k], f: window snapshots [t][3][p.k] (0: none).
+// p.n = heads * dim, p.dim, p.r0 = eps bits, p.k = channels, p.m = q and k channels (the first p.m).
+// With 64-lane subgroups the norm is qwen_gated_norm's instruction for instruction; smaller subgroups (kernel checks
+// on other devices) add their sums through shared memory.
+layout(local_size_x=64) in;
+shared float sums[64];
+void main(){uint h=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
+uint base=t*p.n+h*p.dim;float ss=0;
+for(uint j=l;j<p.dim;j+=64){float x=a_f.v[base+j];ss=fma(x,x,ss);}
+float total=subgroupAdd(ss);
+if(gl_NumSubgroups>1){
+    if(subgroupElect())sums[gl_SubgroupID]=total;
+    barrier();
+    total=0;
+    for(uint i=0;i<gl_NumSubgroups;i++)total+=sums[i];
+}
+float inv=inversesqrt(total/float(p.dim)+uintBitsToFloat(p.r0));
+for(uint j=l;j<p.dim;j+=64){float z=b_f.v[base+j];a_f.v[base+j]=a_f.v[base+j]*inv*c_f.v[j]*(z/(1.0+exp(-z)));}
+if(t!=0)return;
+uint nb=batch(),cd=p.k;bool fresh=position()==0;
+for(uint ch=h*64+l;ch<p.m;ch+=gl_NumWorkGroups.x*64){
+    float x0=fresh?0:e_f.v[ch],x1=fresh?0:e_f.v[cd+ch],x2=fresh?0:e_f.v[2*cd+ch];
+    for(uint s=0;s<nb;s++){
+        float x3=d_f.v[s*cd+ch];x0=x1;x1=x2;x2=x3;
+        if(p.f!=0&&s+1<nb){uint at=s*3*cd+ch;f_f.v[at]=x0;f_f.v[at+cd]=x1;f_f.v[at+2*cd]=x2;}
+    }
+    e_f.v[ch]=x0;e_f.v[cd+ch]=x1;e_f.v[2*cd+ch]=x2;
+}}

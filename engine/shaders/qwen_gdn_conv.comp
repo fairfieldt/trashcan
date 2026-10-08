@@ -1,0 +1,86 @@
+#version 460
+#include "common.glsl"
+// qwen_conv folded into qwen_gdn for decode and verification batches (docs/tp8-optimization.md G1). Each wave
+// convolves (width 4 and SiLU, with qwen_conv's arithmetic) the q and k channels of its key head and the v channels
+// of its rows, straight from the raw projection and the convolution window, then runs qwen_gdn's recurrence on those
+// values unchanged, so outputs and states equal the two dispatches' bit for bit. The one wave that reads a v channel
+// writes its window back; the q and k windows are read by every wave of their key head, so the following
+// qwen_gated_norm_conv writes them once all have read. Written for any subgroup size (LANES): lane l holds key dims
+// l + LANES * i, as vec2 pairs (l, l + 64 with 64 lanes, as qwen_gdn).
+// Weights: [conv weights (channels x 4) | dt bias (heads) | A (heads)] f32. a: raw projection [t][q | k | v]
+// (p.n channels), b: raw gates [t][alpha(heads) | beta(heads)], c: state [head][row][128] (read/write), d: output
+// [t][head][128], e: convolution window [3][p.n] (v channels written), f: state snapshots (0: none), extra: window
+// snapshots [t][3][p.n] (0: none). p.heads = value heads, p.kvheads = key heads, p.r0 = eps bits.
+layout(constant_id=0) const uint ROWS=4;
+layout(constant_id=1) const uint LANES=64;
+layout(local_size_x=256) in;
+#define DIM 128
+const uint P2=DIM/LANES/2;
+float cw(uint i){return uintBitsToFloat(ww.words[i]);}
+float conv(uint ch,float x0,float x1,float x2,float x3){
+    float s=cw(ch*4)*x0;s+=cw(ch*4+1)*x1;s+=cw(ch*4+2)*x2;s+=cw(ch*4+3)*x3;
+    return s/(1+exp(-s));
+}
+void main(){
+uint lane=gl_SubgroupInvocationID,waves=gl_NumSubgroups,per_head=DIM/(ROWS*waves);
+uint vh=gl_WorkGroupID.x/per_head,row0=(gl_WorkGroupID.x%per_head)*(ROWS*waves)+gl_SubgroupID*ROWS;
+uint kh=vh%p.kvheads,kd=p.kvheads*DIM,cd=p.n;
+bool fresh=position()==0;
+vec2 s[ROWS][P2];
+[[unroll]]for(uint r=0;r<ROWS;r++){uint at=(vh*DIM+row0+r)*DIM;
+    [[unroll]]for(uint j=0;j<P2;j++){uint d0=lane+LANES*2*j;s[r][j]=fresh?vec2(0):vec2(c_f.v[at+d0],c_f.v[at+d0+LANES]);}}
+// Convolution windows: q and k of this lane's dims, v of this wave's rows (the same in every lane).
+vec2 qw[3][P2],kw[3][P2];
+[[unroll]]for(uint j=0;j<P2;j++){uint d0=lane+LANES*2*j,qc=kh*DIM+d0,kc=kd+kh*DIM+d0;
+    [[unroll]]for(uint i=0;i<3;i++){
+        qw[i][j]=fresh?vec2(0):vec2(e_f.v[i*cd+qc],e_f.v[i*cd+qc+LANES]);
+        kw[i][j]=fresh?vec2(0):vec2(e_f.v[i*cd+kc],e_f.v[i*cd+kc+LANES]);
+    }}
+float vw[ROWS][3];
+[[unroll]]for(uint r=0;r<ROWS;r++){uint vc=2*kd+vh*DIM+row0+r;[[unroll]]for(uint i=0;i<3;i++)vw[r][i]=fresh?0:e_f.v[i*cd+vc];}
+float dt=cw(4*cd+vh),A=cw(4*cd+p.heads+vh),eps=uintBitsToFloat(p.r0),scale=inversesqrt(float(DIM));
+uint nb=batch();
+for(uint t=0;t<nb;t++){
+    uint base=t*cd;
+    vec2 q[P2],k[P2];
+    [[unroll]]for(uint j=0;j<P2;j++){uint d0=lane+LANES*2*j,qc=kh*DIM+d0,kc=kd+kh*DIM+d0;
+        vec2 rq=vec2(a_f.v[base+qc],a_f.v[base+qc+LANES]),rk=vec2(a_f.v[base+kc],a_f.v[base+kc+LANES]);
+        q[j]=vec2(conv(qc,qw[0][j].x,qw[1][j].x,qw[2][j].x,rq.x),conv(qc+LANES,qw[0][j].y,qw[1][j].y,qw[2][j].y,rq.y));
+        k[j]=vec2(conv(kc,kw[0][j].x,kw[1][j].x,kw[2][j].x,rk.x),conv(kc+LANES,kw[0][j].y,kw[1][j].y,kw[2][j].y,rk.y));
+        qw[0][j]=qw[1][j];qw[1][j]=qw[2][j];qw[2][j]=rq;
+        kw[0][j]=kw[1][j];kw[1][j]=kw[2][j];kw[2][j]=rk;
+    }
+    float qq=dot(q[0],q[0]),kk=dot(k[0],k[0]);
+    [[unroll]]for(uint j=1;j<P2;j++){qq+=dot(q[j],q[j]);kk+=dot(k[j],k[j]);}
+    float qs=inversesqrt(subgroupAdd(qq)+eps)*scale,ks=inversesqrt(subgroupAdd(kk)+eps);
+    [[unroll]]for(uint j=0;j<P2;j++){q[j]*=qs;k[j]*=ks;}
+    float x=b_f.v[t*2*p.heads+vh]+dt;
+    float decay=exp((x>20.0?x:log(1.0+exp(x)))*A);
+    float beta=1.0/(1.0+exp(-b_f.v[t*2*p.heads+p.heads+vh]));
+    [[unroll]]for(uint r=0;r<ROWS;r++){
+        uint vc=2*kd+vh*DIM+row0+r;
+        float raw=a_f.v[base+vc];
+        float v=conv(vc,vw[r][0],vw[r][1],vw[r][2],raw);
+        vw[r][0]=vw[r][1];vw[r][1]=vw[r][2];vw[r][2]=raw;
+        [[unroll]]for(uint j=0;j<P2;j++)s[r][j]*=decay;
+        float sk=dot(s[r][0],k[0]);
+        [[unroll]]for(uint j=1;j<P2;j++)sk+=dot(s[r][j],k[j]);
+        float delta=(v-subgroupAdd(sk))*beta;
+        [[unroll]]for(uint j=0;j<P2;j++)s[r][j]+=k[j]*delta;
+        float sq=dot(s[r][0],q[0]);
+        [[unroll]]for(uint j=1;j<P2;j++)sq+=dot(s[r][j],q[j]);
+        float o=subgroupAdd(sq);
+        if(lane==0)d_f.v[(t*p.heads+vh)*DIM+row0+r]=o;
+    }
+    if(p.f!=0&&t+1<nb){uint snap=t*p.heads*DIM*DIM;
+        [[unroll]]for(uint r=0;r<ROWS;r++){uint at=snap+(vh*DIM+row0+r)*DIM;
+            [[unroll]]for(uint j=0;j<P2;j++){uint d0=lane+LANES*2*j;f_f.v[at+d0]=s[r][j].x;f_f.v[at+d0+LANES]=s[r][j].y;}}}
+    if(p.extra!=0&&t+1<nb&&lane==0){
+        [[unroll]]for(uint r=0;r<ROWS;r++){uint vc=2*kd+vh*DIM+row0+r,at=t*3*cd+vc;
+            extra_f.v[at]=vw[r][0];extra_f.v[at+cd]=vw[r][1];extra_f.v[at+2*cd]=vw[r][2];}}
+}
+[[unroll]]for(uint r=0;r<ROWS;r++){uint at=(vh*DIM+row0+r)*DIM;
+    [[unroll]]for(uint j=0;j<P2;j++){uint d0=lane+LANES*2*j;c_f.v[at+d0]=s[r][j].x;c_f.v[at+d0+LANES]=s[r][j].y;}}
+if(lane==0)[[unroll]]for(uint r=0;r<ROWS;r++){uint vc=2*kd+vh*DIM+row0+r;
+    e_f.v[vc]=vw[r][0];e_f.v[cd+vc]=vw[r][1];e_f.v[2*cd+vc]=vw[r][2];}
+}

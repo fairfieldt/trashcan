@@ -54,6 +54,8 @@ fn main() {
         "qwen_ffn_gu2",
         "qwen_ffn_gu3",
         "qwen_ffn_gu4",
+        "qwen_gdn_conv",
+        "qwen_gated_norm_conv",
         "qwen_attn_scores",
         "qwen_attn_softmax",
         "qwen_attn_values",

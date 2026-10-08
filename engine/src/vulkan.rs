@@ -470,6 +470,8 @@ impl Device {
             ("qwen_ffn_gu2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu2.spv")).as_slice()),
             ("qwen_ffn_gu3", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu3.spv")).as_slice()),
             ("qwen_ffn_gu4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu4.spv")).as_slice()),
+            ("qwen_gdn_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gdn_conv.spv")).as_slice()),
+            ("qwen_gated_norm_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gated_norm_conv.spv")).as_slice()),
             // Qwen3.8-Flash-Next (qwen4exp)
             ("qwen4_hc_norm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_norm.spv")).as_slice()),
             ("qwen4_hc_mix", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_mix.spv")).as_slice()),
@@ -527,6 +529,8 @@ impl Device {
                     ("attention_partial128", Some(128)),
                 ],
                 "qwen_add_norm_wide" => &[("qwen_add_norm_j16", Some(16)), ("qwen_add_norm_j20", Some(20))],
+                // Rows per wave; specialized so that the lane count (constant 1) is the device's.
+                "qwen_gdn_conv" => &[("qwen_gdn_conv", Some(4))],
                 // Query heads per KV head (`DECODE_ATTN_HEADS`).
                 "qwen_attn_decode" => &[
                     ("qwen_attn_decode_g1", Some(1)),
