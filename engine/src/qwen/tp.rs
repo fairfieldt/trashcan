@@ -18,7 +18,9 @@ use super::{
     embed,
     gpu::{micro_batches, GpuStage, Split, MAX_MICRO, TOP_K},
     pipeline::Draft,
-    vector, Config,
+    vector,
+    wire::{self, Wire},
+    Config,
 };
 use crate::{
     generation::Sampler,
@@ -43,7 +45,15 @@ use std::{
 pub fn host_settings() -> Value {
     let governor = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor").ok().map(|s| s.trim().to_owned());
     let affinity = std::fs::read_to_string("/proc/self/status").ok().and_then(|s| s.lines().find_map(|l| l.strip_prefix("Cpus_allowed_list:").map(|x| x.trim().to_owned())));
-    let experiments: BTreeMap<_, _> = ["TRASHCAN_QWEN_ATTN"]
+    let experiments: BTreeMap<_, _> = [
+        "TRASHCAN_QWEN_ATTN",
+        "TRASHCAN_TP_WIRE",
+        "TRASHCAN_TP_HOSTPASS",
+        "TRASHCAN_QWEN_DECODE_ATTN",
+        "TRASHCAN_QWEN_FUSED_FFN",
+        "TRASHCAN_QWEN_FUSED_GDN",
+        "TRASHCAN_QWEN_TOPK",
+    ]
         .into_iter().map(|name| (name, std::env::var(name).ok())).collect();
     json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok()),"experiments":experiments})
 }
@@ -93,14 +103,23 @@ fn segment_norms(g: &Gguf, c: &Config) -> Result<Vec<Vec<f32>>> {
 /// local rank's input rows. Eight running sums in a fixed order keep the result identical on every machine
 /// without a dependent add per element; separate simple loops vectorize.
 fn normed_rows(resid: &mut [f32], total: Option<&[f32]>, w: &[f32], eps: f32, shards: &[GpuStage]) {
+    let mut outs: [&mut [f32]; LOCAL] = Default::default();
+    for (o, s) in outs.iter_mut().zip(shards) {
+        *o = s.tp_hin(resid.len());
+    }
+    normed_rows_into(resid, total, w, eps, &mut outs[..shards.len()]);
+}
+
+/// `normed_rows` into the given input rows (every slice at least `resid.len()` long).
+fn normed_rows_into(resid: &mut [f32], total: Option<&[f32]>, w: &[f32], eps: f32, outs: &mut [&mut [f32]]) {
     let d = w.len();
     if let Some(total) = total {
         for (r, &t) in resid.iter_mut().zip(total) {
             *r += t;
         }
     }
-    let (first, rest) = shards.split_first().expect("a tensor-parallel group has local ranks");
-    let out = first.tp_hin(resid.len());
+    let (first, rest) = outs.split_first_mut().expect("a tensor-parallel group has local ranks");
+    let out = &mut first[..resid.len()];
     for (x, o) in resid.chunks_exact(d).zip(out.chunks_exact_mut(d)) {
         let mut acc = [0f32; 8];
         for c in x.chunks_exact(8) {
@@ -114,9 +133,80 @@ fn normed_rows(resid: &mut [f32], total: Option<&[f32]>, w: &[f32], eps: f32, sh
             *o = v * inv * wv;
         }
     }
-    for s in rest {
-        s.tp_hin(resid.len()).copy_from_slice(out);
+    for o in rest {
+        o[..resid.len()].copy_from_slice(out);
     }
+}
+
+/// `normed_rows` after an all-reduce in two passes per row instead of five (`TRASHCAN_TP_HOSTPASS=0`: the separate
+/// passes). The first adds `sum` and the last round's `remote` half (when given) into the residual and accumulates
+/// the squares; the second writes the normed row into every local rank's input rows at once. Each element sees
+/// the same operations in the same order as before (`sum + remote`, then `resid + total`, the eight running sums,
+/// `v * inv * w`), so the rows are bitwise those of the separate passes.
+fn normed_rows_fused(resid: &mut [f32], sum: &[f32], remote: Option<&[f32]>, w: &[f32], eps: f32, shards: &[GpuStage]) {
+    let mut outs: [&mut [f32]; LOCAL] = Default::default();
+    for (o, s) in outs.iter_mut().zip(shards) {
+        *o = s.tp_hin(resid.len());
+    }
+    normed_rows_fused_into(resid, sum, remote, w, eps, &mut outs[..shards.len()]);
+}
+
+/// `normed_rows_fused` into the given input rows (every slice at least `resid.len()` long).
+fn normed_rows_fused_into(resid: &mut [f32], sum: &[f32], remote: Option<&[f32]>, w: &[f32], eps: f32, outs: &mut [&mut [f32]]) {
+    let d = w.len();
+    for (row, (x, s)) in resid.chunks_exact_mut(d).zip(sum.chunks_exact(d)).enumerate() {
+        let mut acc = [0f32; 8];
+        match remote {
+            Some(r) => {
+                for ((x, s), r) in x.chunks_exact_mut(8).zip(s.chunks_exact(8)).zip(r[row * d..(row + 1) * d].chunks_exact(8)) {
+                    for j in 0..8 {
+                        x[j] += s[j] + r[j];
+                        acc[j] += x[j] * x[j];
+                    }
+                }
+            }
+            None => {
+                for (x, s) in x.chunks_exact_mut(8).zip(s.chunks_exact(8)) {
+                    for j in 0..8 {
+                        x[j] += s[j];
+                        acc[j] += x[j] * x[j];
+                    }
+                }
+            }
+        }
+        let ss = ((acc[0] + acc[1]) + (acc[2] + acc[3])) + ((acc[4] + acc[5]) + (acc[6] + acc[7]));
+        let inv = 1.0 / (ss / d as f32 + eps).sqrt();
+        let rows = row * d..(row + 1) * d;
+        match outs {
+            [a] => {
+                for ((o, &v), &wv) in a[rows].iter_mut().zip(x.iter()).zip(w) {
+                    *o = v * inv * wv;
+                }
+            }
+            [a, b] => {
+                for (((oa, ob), &v), &wv) in a[rows.clone()].iter_mut().zip(b[rows].iter_mut()).zip(x.iter()).zip(w) {
+                    let n = v * inv * wv;
+                    *oa = n;
+                    *ob = n;
+                }
+            }
+            _ => {
+                let (first, rest) = outs.split_first_mut().expect("a tensor-parallel group has local ranks");
+                for ((o, &v), &wv) in first[rows.clone()].iter_mut().zip(x.iter()).zip(w) {
+                    *o = v * inv * wv;
+                }
+                for o in rest {
+                    o[rows.clone()].copy_from_slice(&first[rows.clone()]);
+                }
+            }
+        }
+    }
+}
+
+/// Whether the host residual work after an all-reduce runs as one fused pass (`normed_rows_fused`).
+fn fused_host_pass() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TRASHCAN_TP_HOSTPASS").as_deref() != Ok("0"))
 }
 
 /// Profiling (`TRASHCAN_TP_PROFILE=FILE`): every forward and draft step writes one JSON line per local rank and
@@ -303,6 +393,13 @@ pub struct Mesh {
     /// Machines in the group, once known (the driver's probe, a node's setup).
     machines: usize,
     links: Vec<(usize, Lanes)>,
+    /// Payload format of the all-reduces of at least `wire_min` values: the driver's choice, passed to the others
+    /// at setup (`wire`).
+    wire: Wire,
+    wire_min: usize,
+    /// Encoded slices sent and received in one step of a compact all-reduce, one per partner.
+    sent: Vec<Vec<u8>>,
+    got: Vec<Vec<u8>>,
 }
 
 /// Element ranges of `Mesh::exchange_ranges`: sends from the first buffer and receives into the second, or both
@@ -333,7 +430,7 @@ fn parent(m: usize) -> usize {
 
 impl Mesh {
     fn new(machine: usize, links: Vec<(usize, Lanes)>) -> Self {
-        Self { machine, machines: 0, links }
+        Self { machine, machines: 0, links, wire: Wire::F32, wire_min: 0, sent: Vec::new(), got: Vec::new() }
     }
 
     /// Open the USB4STREAM lanes to every machine in `peers` (machine, devices). Lanes to lower machines wait for
@@ -384,7 +481,12 @@ impl Mesh {
     /// this machine busy: against the whole vector to one partner per round, TP8 prefill 190 instead of 142 tok/s
     /// and decode 35.0 instead of 33.7 (results/qwen/tp8-20261007). Every machine adds an element in the same pairs,
     /// so the totals stay identical.
-    fn reduce(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize) -> Result<()> {
+    ///
+    /// `width` is the row length of a batch of rows; only the compact payload (`reduce_compact`) uses it.
+    fn reduce(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<()> {
+        if self.compact(sum.len()) {
+            return self.reduce_compact(sum, remote, stall, width);
+        }
         let k = self.rounds();
         for round in 0..k {
             if k == 1 {
@@ -431,6 +533,9 @@ impl Mesh {
     /// each element is added on one machine, in the same pairs as `reduce`, and copied to the others. Returns false,
     /// doing nothing, when the slices do not halve evenly.
     fn reduce_scatter_gather(&mut self, sum: &mut [f32], scratch: &mut [f32], stall: Duration, threads: usize) -> Result<bool> {
+        if self.compact(sum.len()) {
+            return self.reduce_scatter_gather_compact(sum, stall, threads);
+        }
         let k = self.rounds();
         if k < 2 || !sum.len().is_multiple_of(k << k) {
             return Ok(false);
@@ -476,6 +581,152 @@ impl Mesh {
             self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Within(sum, &outs, &ins), stall)?;
         }
         Ok(true)
+    }
+
+    /// `reduce` with the compact payload (`wire`, `TRASHCAN_TP_WIRE=f16`). Each machine continues from the values it
+    /// sent (its rounded running sums) plus those it received, so both partners of a round add the same two rounded
+    /// values and every machine ends with identical totals. A batch of `width`-wide rows is sliced per row
+    /// (slice j of every row, on block boundaries), so each element of a verification batch is added in the pairs
+    /// of a one-column decode step.
+    fn reduce_compact(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, width: usize) -> Result<()> {
+        let k = self.rounds();
+        let width = if width > 0 && sum.len().is_multiple_of(width) { width } else { sum.len() };
+        let rows = sum.len() / width.max(1);
+        let blocks = width.div_ceil(wire::BLOCK);
+        let cut = |j: usize| (j * blocks / k * wire::BLOCK).min(width);
+        let slices: Vec<Vec<(usize, usize)>> =
+            (0..k).map(|j| (0..rows).map(|r| (r * width + cut(j), r * width + cut(j + 1))).filter(|r| r.0 < r.1).collect()).collect();
+        for round in 0..k {
+            let peers: Vec<usize> = (0..k).map(|j| self.partner((round + j) % k)).collect();
+            self.stage(k);
+            for (j, ranges) in slices.iter().enumerate() {
+                let bytes = wire::message_bytes(ranges);
+                self.sent[j].resize(bytes, 0);
+                self.got[j].resize(bytes, 0);
+                wire::encode(sum, ranges, false, &mut self.sent[j]);
+            }
+            self.swap(&peers, stall)?;
+            for (j, ranges) in slices.iter().enumerate() {
+                if round + 1 < k {
+                    // Both partners add the same two rounded values.
+                    wire::decode_sum(&self.sent[j], &self.got[j], ranges, sum);
+                } else {
+                    // The caller adds the last round's values: this machine's rounded sums and the partner's.
+                    wire::decode(&self.sent[j], ranges, sum, false);
+                    wire::decode(&self.got[j], ranges, remote, false);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `reduce_scatter_gather` with the compact payload. Reduce-scatter sends encoded halves that only their receiver
+    /// adds (to unrounded sums it keeps). All-gather rounds each machine's finished segment in place once, encodes it,
+    /// and passes on the bytes it receives instead of encoding them again, so every machine decodes the same bytes
+    /// for every element. Returns false, doing nothing, unless every segment is whole blocks.
+    fn reduce_scatter_gather_compact(&mut self, sum: &mut [f32], stall: Duration, threads: usize) -> Result<bool> {
+        let k = self.rounds();
+        if k < 2 || !sum.len().is_multiple_of(k << k) || !(sum.len() / (k << k)).is_multiple_of(wire::BLOCK) {
+            return Ok(false);
+        }
+        let (me, slice) = (self.machine, sum.len() / k);
+        let piece = slice >> k;
+        let mut segs: Vec<(usize, usize)> = (0..k).map(|j| (j * slice, (j + 1) * slice)).collect();
+        let bit = |step: usize, j: usize| (step + j) % k;
+        for step in 0..k {
+            // (partner, range sent, range kept) per slice.
+            let mut moves = Vec::new();
+            for (j, seg) in segs.iter_mut().enumerate() {
+                let b = bit(step, j);
+                let mid = (seg.0 + seg.1) / 2;
+                let (keep, give) = if me >> b & 1 == 0 { ((seg.0, mid), (mid, seg.1)) } else { ((mid, seg.1), (seg.0, mid)) };
+                moves.push((me ^ 1 << b, give, keep));
+                *seg = keep;
+            }
+            self.stage(k);
+            for (j, m) in moves.iter().enumerate() {
+                let bytes = wire::range_bytes(m.1 .1 - m.1 .0);
+                self.sent[j].resize(bytes, 0);
+                self.got[j].resize(bytes, 0);
+                wire::encode_par(sum, m.1, false, &mut self.sent[j], threads);
+            }
+            self.swap(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), stall)?;
+            for (j, m) in moves.iter().enumerate() {
+                wire::decode_par(&self.got[j], m.2, sum, true, threads);
+            }
+        }
+        // Each slice's segment as encoded pieces of `piece` values in position order: this machine's own piece,
+        // rounded in place, then the pieces gathered from the others.
+        let mut parts: Vec<Vec<u8>> = Vec::new();
+        for seg in &segs {
+            let mut bytes = vec![0u8; wire::range_bytes(piece)];
+            wire::encode_par(sum, *seg, true, &mut bytes, threads);
+            parts.push(bytes);
+        }
+        for step in (0..k).rev() {
+            let mut moves = Vec::new();
+            for (j, seg) in segs.iter_mut().enumerate() {
+                let b = bit(step, j);
+                let len = seg.1 - seg.0;
+                let sibling = if me >> b & 1 == 0 { (seg.1, seg.1 + len) } else { (seg.0 - len, seg.0) };
+                moves.push((me ^ 1 << b, *seg, sibling));
+                *seg = (seg.0.min(sibling.0), seg.1.max(sibling.1));
+            }
+            self.stage(k);
+            for (j, part) in parts.iter().enumerate() {
+                self.sent[j].clear();
+                self.sent[j].extend_from_slice(part);
+                self.got[j].resize(part.len(), 0);
+            }
+            self.swap(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), stall)?;
+            for (j, m) in moves.iter().enumerate() {
+                let sibling = m.2;
+                let one = wire::range_bytes(piece);
+                for (i, a) in (sibling.0..sibling.1).step_by(piece).enumerate() {
+                    wire::decode_par(&self.got[j][i * one..(i + 1) * one], (a, a + piece), sum, false, threads);
+                }
+                if sibling.0 < m.1 .0 {
+                    let mut joined = self.got[j].clone();
+                    joined.extend_from_slice(&parts[j]);
+                    parts[j] = joined;
+                } else {
+                    parts[j].extend_from_slice(&self.got[j]);
+                }
+            }
+        }
+        Ok(true)
+    }
+
+    /// Whether an all-reduce of `len` values uses the compact payload.
+    fn compact(&self, len: usize) -> bool {
+        self.wire == Wire::F16 && len >= self.wire_min
+    }
+
+    /// Room for `k` encoded slices each way.
+    fn stage(&mut self, k: usize) {
+        self.sent.resize_with(k, Vec::new);
+        self.got.resize_with(k, Vec::new);
+    }
+
+    /// Send `sent[j]` to `peers[j]` and receive as many bytes into `got[j]`, all partners at once.
+    fn swap(&mut self, peers: &[usize], stall: Duration) -> Result<()> {
+        let me = self.machine;
+        let Self { links, sent, got, .. } = self;
+        if let ([peer], [lanes]) = (peers, links.as_mut_slice()) {
+            // One partner on one set of lanes: the in-step exchange of `reduce`'s single round.
+            ensure!(lanes.0 == *peer, "machine {me} has no lanes to machine {peer}");
+            return lanes.1.exchange_within(&sent[0], &mut got[0], stall);
+        }
+        let mut slots: Vec<_> = sent.iter().zip(got.iter_mut()).map(|(o, i)| Some((o.as_slice(), i.as_mut_slice()))).collect();
+        let mut jobs = Vec::new();
+        for (peer, lanes) in links.iter_mut() {
+            if let Some(j) = peers.iter().position(|p| p == peer) {
+                let (o, i) = slots[j].take().expect("one slice per partner");
+                jobs.push((lanes, o, i));
+            }
+        }
+        ensure!(jobs.len() == peers.len(), "machine {me} has no lanes to one of machines {peers:?}");
+        crate::link::exchange_all(&mut jobs, stall)
     }
 
     /// One `exchange_all` step: to `peers[i]`, send the elements `outs[i]` and receive into `ins[i]`.
@@ -612,10 +863,20 @@ impl TpGroup {
         let ranks: usize = counts.values().sum();
         ensure!(ranks > 1, "tensor parallelism needs at least two GPUs");
         if let Some(m) = mesh.as_mut() {
-            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": max_batch, "verify": verify, "mtp": mtp.is_some(), "draft_vocab": draft_vocab});
+            // The driver chooses the all-reduce payload format for the whole session.
+            (m.wire, m.wire_min) = Wire::from_env();
+            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": max_batch, "verify": verify, "mtp": mtp.is_some(), "draft_vocab": draft_vocab, "wire": m.wire.name(), "wire_min": m.wire_min});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
-        eprintln!("tp: {ranks} ranks over {} machine(s), GPUs per machine {:?}", counts.len(), counts.values().collect::<Vec<_>>());
+        eprintln!(
+            "tp: {ranks} ranks over {} machine(s), GPUs per machine {:?}{}",
+            counts.len(),
+            counts.values().collect::<Vec<_>>(),
+            mesh.as_ref().map_or(String::new(), |m| match m.wire {
+                Wire::F16 if m.wire_min > 0 => format!(", f16 all-reduce payload from {} values", m.wire_min),
+                w => format!(", {} all-reduce payload", w.name()),
+            })
+        );
         let (gguf, c, mut shards) = shards(model, gpus, 0, ranks, context, max_batch, verify, mtp)?;
         for s in shards.iter_mut() {
             s.tp_draft_head(&gguf, draft_vocab)?;
@@ -891,18 +1152,22 @@ impl TpGroup {
             if len >= PARALLEL_MIN && m.reduce_scatter_gather(sum, &mut self.remote[..len], stall, threads)? {
                 exchanged = Instant::now();
             } else {
-                m.reduce(sum, &mut self.remote[..len], stall, threads)?;
+                m.reduce(sum, &mut self.remote[..len], stall, threads, self.c.d)?;
                 exchanged = Instant::now();
                 remote = Some(&self.remote[..len]);
             }
         }
         if self.shards[0].tp_hostnorm() {
-            if let Some(r) = remote {
-                for (a, b) in sum.iter_mut().zip(r) {
-                    *a += b;
+            if fused_host_pass() {
+                normed_rows_fused(&mut self.resid[..len], sum, remote, &self.norms[seg + 1], self.c.eps, &self.shards);
+            } else {
+                if let Some(r) = remote {
+                    for (a, b) in sum.iter_mut().zip(r) {
+                        *a += b;
+                    }
                 }
+                normed_rows(&mut self.resid[..len], Some(sum), &self.norms[seg + 1], self.c.eps, &self.shards);
             }
-            normed_rows(&mut self.resid[..len], Some(sum), &self.norms[seg + 1], self.c.eps, &self.shards);
         } else {
             // Add the last round's sum and write the total for every local GPU in the same pass.
             let mut totals = [Ptr(std::ptr::null_mut()); LOCAL];
@@ -1099,6 +1364,8 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut mesh: Mesh) -> 
         let first = s["firsts"][me].as_u64().context("setup firsts")? as usize;
         let loaded = (|| {
             mesh.join(num("machines")?)?;
+            mesh.wire = Wire::parse(s["wire"].as_str().unwrap_or("f32"))?;
+            mesh.wire_min = s["wire_min"].as_u64().unwrap_or(0) as usize;
             let m = match (s["mtp"].as_bool().unwrap_or(false), mtp) {
                 (true, None) => bail!("the driver drafts; start this node with --mtp"),
                 (want, m) => m.filter(|_| want),
@@ -1172,7 +1439,7 @@ mod tests {
                         }
                         let mut sum: Vec<f32> = (0..n).map(|i| value(m, i)).collect();
                         let mut remote = vec![0f32; n];
-                        mesh.reduce(&mut sum, &mut remote, crate::link::STALL, 4).unwrap();
+                        mesh.reduce(&mut sum, &mut remote, crate::link::STALL, 4, 0).unwrap();
                         for (a, b) in sum.iter_mut().zip(&remote) {
                             *a += b;
                         }
@@ -1203,6 +1470,131 @@ mod tests {
             } else {
                 assert!(gathered.is_empty());
                 assert_eq!(*heard, ["op0", "op1", "op2"]);
+            }
+        }
+    }
+
+    #[test]
+    fn compact_payload_keeps_every_machine_identical_and_columns_like_decode() {
+        let d = 5120;
+        // Ordinary partial sums with a massive activation every 1000 elements (far beyond f16's 65504).
+        let value = |m: usize, i: usize| {
+            let x = ((i * 7919 + m * 104729) % 1000) as f32 * 1e-3 - 0.5 + 1.0 / (m + 1) as f32;
+            if i % 1000 == 17 { x * 4.0e5 } else { x }
+        };
+        let big = 64 * 5120;
+        let results: Vec<(Vec<f32>, Vec<f32>, Vec<f32>)> = std::thread::scope(|s| {
+            let threads: Vec<_> = ring()
+                .into_iter()
+                .map(|mut mesh| {
+                    s.spawn(move || {
+                        mesh.join(4).unwrap();
+                        mesh.wire = Wire::F16;
+                        let m = mesh.machine;
+                        let total = |mesh: &mut Mesh, start: usize, len: usize| {
+                            let mut sum: Vec<f32> = (start..start + len).map(|i| value(m, i)).collect();
+                            let mut remote = vec![0f32; len];
+                            mesh.reduce(&mut sum, &mut remote, crate::link::STALL, 1, d).unwrap();
+                            sum.iter().zip(&remote).map(|(a, b)| a + b).collect::<Vec<f32>>()
+                        };
+                        // A three-column verification batch, then each of its columns as a decode step.
+                        let three = total(&mut mesh, 0, 3 * d);
+                        let ones: Vec<f32> = (0..3).flat_map(|c| total(&mut mesh, c * d, d)).collect();
+                        let mut prefill: Vec<f32> = (0..big).map(|i| value(m, i)).collect();
+                        assert!(mesh.reduce_scatter_gather(&mut prefill, &mut vec![0f32; big], crate::link::STALL, 4).unwrap());
+                        (three, ones, prefill)
+                    })
+                })
+                .collect();
+            threads.into_iter().map(|t| t.join().unwrap()).collect()
+        });
+        let bits = |a: &[f32], b: &[f32]| a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits());
+        for (m, (three, ones, prefill)) in results.iter().enumerate() {
+            assert!(bits(three, &results[0].0), "machine {m}: verification totals differ from machine 0");
+            assert!(bits(three, ones), "machine {m}: a verification column differs from its decode step");
+            assert!(bits(prefill, &results[0].2), "machine {m}: prefill totals differ from machine 0");
+            // Two or three roundings of 2^-11 each (plus the subnormal floor of a block holding a massive value).
+            let close = |got: &[f32], i0: usize| {
+                got.iter().enumerate().all(|(i, &t)| {
+                    let parts: Vec<f32> = (0..4).map(|k| value(k, i0 + i)).collect();
+                    let exact: f32 = parts.iter().sum();
+                    let scale: f32 = parts.iter().map(|p| p.abs()).sum();
+                    (t - exact).abs() <= scale * 2e-3 + 1e-3 && t.is_finite()
+                })
+            };
+            assert!(close(three, 0), "machine {m}: verification totals too far from the f32 sums");
+            assert!(close(prefill, 0), "machine {m}: prefill totals too far from the f32 sums");
+        }
+    }
+
+    #[test]
+    fn compact_payload_between_two_machines_over_three_lanes() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap());
+        let a = Mesh::new(0, vec![(1, Lanes::connect(&[addr.clone(), addr.clone(), addr]).unwrap())]);
+        let b = Mesh::new(1, vec![(0, accept.join().unwrap())]);
+        let d = 5120;
+        let totals: Vec<Vec<f32>> = std::thread::scope(|s| {
+            [a, b]
+                .into_iter()
+                .map(|mut mesh| {
+                    s.spawn(move || {
+                        mesh.join(2).unwrap();
+                        mesh.wire = Wire::F16;
+                        let m = mesh.machine;
+                        let mut sum: Vec<f32> = (0..2 * d).map(|i| ((i * 31 + m * 17) % 101) as f32 * 0.25 - 12.0).collect();
+                        let mut remote = vec![0f32; sum.len()];
+                        mesh.reduce(&mut sum, &mut remote, crate::link::STALL, 1, d).unwrap();
+                        sum.iter().zip(&remote).map(|(x, y)| x + y).collect()
+                    })
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .map(|t| t.join().unwrap())
+                .collect()
+        });
+        assert!(totals[0].iter().zip(&totals[1]).all(|(x, y)| x.to_bits() == y.to_bits()));
+        // These values are exact in f16, so the totals are the exact sums.
+        for (i, &t) in totals[0].iter().enumerate() {
+            let v = |m: usize| ((i * 31 + m * 17) % 101) as f32 * 0.25 - 12.0;
+            assert_eq!(t, v(0) + v(1));
+        }
+    }
+
+    #[test]
+    fn fused_host_pass_matches_the_separate_passes_bit_for_bit() {
+        let d = 5120;
+        let mut state = 0x9e3779b9u32;
+        let mut next = || {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            (state as f32 / u32::MAX as f32 - 0.5) * 64.0
+        };
+        for (rows, with_remote, ranks) in [(1, true, 1), (1, true, 2), (3, true, 2), (1, false, 2), (2, true, 3), (4, false, 1)] {
+            let len = rows * d;
+            let resid: Vec<f32> = (0..len).map(|_| next()).collect();
+            let sum: Vec<f32> = (0..len).map(|_| next()).collect();
+            let remote: Vec<f32> = (0..len).map(|_| next()).collect();
+            let w: Vec<f32> = (0..d).map(|_| next() / 32.0).collect();
+            let (mut old_resid, mut new_resid) = (resid.clone(), resid.clone());
+            let mut old_outs = vec![vec![0f32; len]; ranks];
+            let mut new_outs = vec![vec![0f32; len]; ranks];
+            let mut total = sum.clone();
+            if with_remote {
+                for (a, b) in total.iter_mut().zip(&remote) {
+                    *a += b;
+                }
+            }
+            let mut o: Vec<&mut [f32]> = old_outs.iter_mut().map(|v| v.as_mut_slice()).collect();
+            normed_rows_into(&mut old_resid, Some(&total), &w, 1e-6, &mut o);
+            let mut n: Vec<&mut [f32]> = new_outs.iter_mut().map(|v| v.as_mut_slice()).collect();
+            normed_rows_fused_into(&mut new_resid, &sum, with_remote.then_some(&remote[..]), &w, 1e-6, &mut n);
+            let same = |a: &[f32], b: &[f32]| a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits());
+            assert!(same(&old_resid, &new_resid), "residual, {rows} rows");
+            for (a, b) in old_outs.iter().zip(&new_outs) {
+                assert!(same(a, b), "normed rows, {rows} rows, {ranks} ranks");
             }
         }
     }
