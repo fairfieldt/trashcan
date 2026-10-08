@@ -112,7 +112,7 @@ case ${1:-} in
             lanes=$(cat "$DEVS/$xd/rx_lanes" 2>/dev/null)
             echo "$xd bus $lbus -> $rhost bus $rbus, ${lanes:-?} lane(s), $iface $(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}') carrier $(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo -)$( [ "$vendor" = "$APPLE_FIRMWARE" ] && echo ', Mac firmware')"
         done
-        sed -n '/^# BEGIN tblink$/,/^# END tblink$/p' /etc/hosts | grep -v '^#'
+        sed -n '/^# BEGIN tblink$/,/^# END tblink$/p' /etc/hosts | grep -v '^#' || true  # no links yet
         ;;
     links)
         me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)

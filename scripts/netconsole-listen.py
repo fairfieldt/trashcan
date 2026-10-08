@@ -15,11 +15,21 @@ handler = logging.handlers.RotatingFileHandler(log, maxBytes=64 * 1024**2, backu
 dump_root = pathlib.Path(log).parent / 'crash-dumps'
 dump_root.mkdir(exist_ok=True, mode=0o700)
 seen = set()
+# Nodes whose crash dumps are copied: tailnet address (launchd's background SSH cannot reach the LAN on this
+# workstation) and the known_hosts name that holds the node's host key.
+NODES = {
+    'incite': ('100.108.0.1', '192.168.0.83'),
+    'invite': ('100.97.51.99', '192.168.0.100'),
+    'indite': ('100.76.233.103', '192.168.0.71'),
+    'enlight': ('100.73.237.53', '192.168.0.5'),
+    'inflight': ('100.123.84.126', '192.168.0.156'),
+    'alight': ('100.89.213.114', '192.168.0.171'),
+}
 
 def fetch_dump(record):
     # Accept only these machines and the recorder's fixed directory/file layout.
     host, path = record.get('host'), record.get('path', '')
-    if host not in ('incite', 'invite') or not re.fullmatch(
+    if host not in NODES or not re.fullmatch(
             r'/var/log/trashcan-crash/[0-9a-f-]{36}/devcd[0-9]+-[0-9]+\.dump', path):
         return
     key = (host, path)
@@ -32,10 +42,7 @@ def fetch_dump(record):
         try:
             with partial.open('wb') as output:
                 os.chmod(partial, 0o600)
-                # launchd's background SSH cannot reach the LAN on this workstation;
-                # use each node's established tailnet address for dump transfer.
-                tailnet = {'incite': '100.108.0.1', 'invite': '100.97.51.99'}[host]
-                trusted_alias = {'incite': '192.168.0.83', 'invite': '192.168.0.100'}[host]
+                tailnet, trusted_alias = NODES[host]
                 subprocess.run(['ssh', '-o', 'HostName=' + tailnet,
                                 '-o', 'HostKeyAlias=' + trusted_alias,
                                 '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=3',

@@ -137,7 +137,7 @@ shuts down cleanly either way.
 - A reboot that never reaches the startup chime with Thunderbolt cables attached is the firmware hang above, not a
   kernel problem.
 - After hard power cuts on 2026-10-06 the left Ethernet port (`enp12s0`) stopped getting a link; the cable is now
-  in `enp11s0` (192.168.0.83).
+  in `enp11s0` (DHCP).
 
 ## Fallback: 6.12.111-p2p
 

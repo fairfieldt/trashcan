@@ -76,7 +76,7 @@ to boot, check and recover it.
 ## Network
 
 Two Broadcom BCM57762 ports (`tg3`). Since hard power cuts on 2026-10-06 the left one (`enp12s0`) gets no link; the
-cable is in `enp11s0` (192.168.0.83, DHCP). Tailscale address 100.108.0.1. NetworkManager ignores `thunderbolt*`
+cable is in `enp11s0` (DHCP; reach it as `incite.tdf.sh`). NetworkManager ignores `thunderbolt*`
 interfaces (`/etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf`); otherwise it runs DHCP on them and reports
 failed connections.
 

@@ -3,18 +3,18 @@
 # rerun, and running it against an already-provisioned node (incite) changes nothing. See nodes/macpro/README.md.
 #
 # usage: nodes/macpro/provision.sh HOST [STEP...]
-#   default steps: check packages tailscale rust system tblink kernel workspace
-#   other steps:   reboot (reboots into the new kernel and waits), models, verify
-#   first run:     provision.sh HOST && provision.sh HOST reboot models verify
+#   default steps: check disk packages tailscale rust system tblink kernel workspace
+#   other steps:   reboot (reboots into the new kernel and waits), models, verify, itable (finishes ext4
+#                  inode-table zeroing that `disk` paused; run while the node is idle)
+#   first run:     provision.sh HOST && provision.sh HOST models reboot verify itable
 # env: KVER (7.2.9-p2p), DEBS (~/dev/claude-work/trashcan-kbuild, from kernel/cross-build-7.2.sh),
-#      MODELS ("gemma-4-12b-qat-gguf gemma-4-12b-assistant"), MODEL_SRC (incite; a LAN address is about twice as
-#      fast as Tailscale)
+#      MODELS ("gemma-4-12b-qat-gguf gemma-4-12b-assistant"), MODEL_SRC (incite)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 host=${1:?usage: provision.sh HOST [STEP...]}
 shift
-steps=${*:-check packages tailscale rust system tblink kernel workspace}
+steps=${*:-check disk packages tailscale rust system tblink kernel workspace}
 KVER=${KVER:-7.2.9-p2p}
 DEBS=${DEBS:-$HOME/dev/claude-work/trashcan-kbuild}
 MODELS=${MODELS:-gemma-4-12b-qat-gguf gemma-4-12b-assistant}
@@ -49,13 +49,68 @@ step_check() {
         lspci -nn | grep -c "Thunderbolt 2 NHI" | sed "s/^/tb nhis: /"'
 }
 
+# ext4 zeroes the inode tables of a new filesystem in the background after every mount (ext4lazyinit). On a
+# drive without write-zeroes (the original Apple SSDs) that writes real zeroes, and each write then takes
+# 400-700 ms. `disk` pauses it on such drives, now and across reboots (noinit_itable in fstab); `itable`
+# finishes it in one go and removes the option.
+itable_state='
+uninit() { dumpe2fs "$1" 2>/dev/null | awk "/^Group [0-9]/{n++} /ITABLE_ZEROED/{z++} END{print n - z, n}"; }
+no_wzeroes() {
+    local d; d=$(lsblk -s -n -r -o NAME,TYPE "$1" | awk "\$2 == \"disk\" {print \$1; exit}")
+    [ "$(cat /sys/block/$d/queue/write_zeroes_max_bytes 2>/dev/null || echo 0)" = 0 ]
+}
+fstab_opt() {   # fstab_opt add|del MOUNTPOINT: noinit_itable in that mount'"'"'s fstab options
+    awk -v m="$2" -v op="$1" "BEGIN{OFS=\"\t\"} !/^#/ && \$2 == m {
+            o = \$4; gsub(/(^|,)noinit_itable/, \"\", o); sub(/^,/, \"\", o); if (o == \"\") o = \"defaults\"
+            if (op == \"add\") o = o \",noinit_itable\"; \$4 = o } {print}" /etc/fstab > /etc/fstab.new
+    cmp -s /etc/fstab /etc/fstab.new && rm /etc/fstab.new || mv /etc/fstab.new /etc/fstab
+}
+'
+
+step_disk() {
+    say "disk: pause ext4 inode-table zeroing on drives without write-zeroes"
+    { echo "$itable_state"; cat <<'EOF'; } | as_root
+set -e
+findmnt -rn -t ext4 -o TARGET,SOURCE | while read -r mnt dev; do
+    read -r left total < <(uninit "$dev")
+    if [ "$left" -gt 0 ] && no_wzeroes "$dev"; then
+        mount -o remount,noinit_itable "$mnt"
+        fstab_opt add "$mnt"
+        echo "$mnt: $left of $total inode-table groups not zeroed; zeroing paused (finish with the itable step)"
+    else
+        echo "$mnt: $left of $total groups not zeroed$( [ "$left" -gt 0 ] && echo ', drive has write-zeroes')"
+    fi
+done
+EOF
+}
+
+step_itable() {
+    say "itable: finish ext4 inode-table zeroing (the disk is slow until it is done)"
+    { echo "$itable_state"; cat <<'EOF'; } | as_root
+set -e
+findmnt -rn -t ext4 -o TARGET,SOURCE | while read -r mnt dev; do
+    read -r left total < <(uninit "$dev")
+    if [ "$left" -gt 0 ]; then
+        start=$(date +%s)
+        mount -o remount,init_itable=0 "$mnt"
+        while read -r left total < <(sync -f "$mnt"; uninit "$dev"); [ "$left" -gt 0 ]; do
+            echo "$mnt: $left of $total groups left ($(( $(date +%s) - start )) s)"; sleep 60
+        done
+        echo "$mnt: zeroed in $(( $(date +%s) - start )) s"
+    fi
+    fstab_opt del "$mnt"
+    echo "$mnt: all $total groups zeroed"
+done
+EOF
+}
+
 step_packages() {
     say "packages"
     as_root <<'EOF'
 set -e
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -q
-apt-get install -y -q --no-install-recommends \
+apt-get install -y -q --no-install-recommends -o Dpkg::Options::=--force-unsafe-io \
     build-essential git curl ca-certificates rsync pciutils usbutils lsof dmidecode pkg-config \
     firmware-amd-graphics firmware-misc-nonfree intel-microcode \
     mesa-vulkan-drivers vulkan-tools libvulkan-dev glslc spirv-headers \
@@ -198,8 +253,10 @@ step_kernel() {
 set -e
 cd /home/$USER_NAME/kernel/7.2/debs
 want=$(dpkg-deb -f "$IMG" Version)
-have=$(dpkg-query -W -f '${Version}' "linux-image-$KVER" 2>/dev/null || true)
-[ "$have" = "$want" ] || dpkg -i "$IMG" "$HDR"
+# Both packages fully installed at this version (an interrupted install leaves them half-installed).
+have=$(dpkg-query -W -f '${Version} ${Status},' "linux-image-$KVER" "linux-headers-$KVER" 2>/dev/null || true)
+# --force-unsafe-io: without the per-file fsyncs; an original Apple SSD needs up to seconds per cache flush.
+[ "$have" = "$want install ok installed,$want install ok installed," ] || dpkg --force-unsafe-io -i "$IMG" "$HDR"
 # Pin GRUB's default to this kernel by entry id, so installing other kernels never changes what boots.
 update-grub 2>/dev/null
 sub=$(grep -o "submenu 'Advanced options[^{]*\$menuentry_id_option '[^']*'" /boot/grub/grub.cfg | sed "s/.*option '//; s/'\$//")
@@ -281,7 +338,7 @@ step_verify() {
 
 for s in $steps; do
     case $s in
-        check|packages|tailscale|rust|system|tblink|kernel|reboot|workspace|models|verify) "step_$s" ;;
+        check|disk|packages|tailscale|rust|system|tblink|kernel|reboot|workspace|models|verify|itable) "step_$s" ;;
         *) echo "unknown step: $s" >&2; exit 2 ;;
     esac
 done
