@@ -233,8 +233,6 @@ struct Delta {
     /// `[dt bias(heads) | A(heads)]`.
     dt_a: Buffer,
     conv_w: Buffer,
-    /// `[conv weights | dt bias | A]`, the weight binding of `qwen_gdn_conv`.
-    conv_wdt: Buffer,
     conv: Buffer,
     state: Buffer,
     norm: Buffer,
@@ -489,72 +487,6 @@ fn tp_partitions(pos: usize, n: usize) -> u32 {
     }
 }
 
-/// The many-rows decode matvec for rows of `k` values (`TRASHCAN_QWEN_SHORTK=8|16`, rows per wave, for k up to 2048:
-/// the out-projections of TP8 and TP4 ranks) and its rows per wave; the same bits as `matvecq4`.
-fn short_k(k: usize) -> Option<(&'static str, usize)> {
-    static ROWS: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    match *ROWS.get_or_init(|| std::env::var("TRASHCAN_QWEN_SHORTK").ok().and_then(|v| v.parse().ok()).unwrap_or(0)) {
-        8 if k <= 2048 => Some(("qwen_matvec_rows8", 8)),
-        16 if k <= 2048 => Some(("qwen_matvec_rows16", 16)),
-        _ => None,
-    }
-}
-
-/// Whether a DeltaNet layer of a batch of `n` columns folds its convolution into the recurrence
-/// (`TRASHCAN_QWEN_FUSED_GDN=1`): decode and verification batches (up to 8 columns), not when dumping activations,
-/// whose convolution output is a captured tensor.
-fn fused_gdn(n: usize, dump: bool) -> bool {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    *ON.get_or_init(|| std::env::var("TRASHCAN_QWEN_FUSED_GDN").as_deref() == Ok("1")) && n <= 8 && !dump
-}
-
-/// The fused gate/up/SwiGLU kernel for a batch of `n` columns (`TRASHCAN_QWEN_FUSED_FFN=1`, up to four columns: the
-/// widths whose projections use `matvecq4` and `qwen_q4cN`, whose bits the fused kernel reproduces).
-fn fused_ffn(n: usize) -> Option<&'static str> {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("TRASHCAN_QWEN_FUSED_FFN").as_deref() == Ok("1")) {
-        return None;
-    }
-    match n {
-        1 => Some("qwen_ffn_gu1"),
-        2 => Some("qwen_ffn_gu2"),
-        3 => Some("qwen_ffn_gu3"),
-        4 => Some("qwen_ffn_gu4"),
-        _ => None,
-    }
-}
-
-/// The head's candidate selection: `qwen_topk`, or with `TRASHCAN_QWEN_TOPK=wave` the same steps with wave-local
-/// barriers (`qwen_topk_wave`, the same candidates).
-fn topk_kernel() -> &'static str {
-    static WAVE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if *WAVE.get_or_init(|| std::env::var("TRASHCAN_QWEN_TOPK").as_deref() == Ok("wave")) {
-        "qwen_topk_wave"
-    } else {
-        "qwen_topk"
-    }
-}
-
-/// The decode attention kernel for `heads` local query heads over `kv_heads` KV heads of size `dim`, when
-/// `TRASHCAN_QWEN_DECODE_ATTN=1` selects `qwen_attn_decode` and it has a variant for the shape.
-fn decode_attention(heads: usize, kv_heads: usize, dim: usize) -> Option<&'static str> {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    if !*ON.get_or_init(|| std::env::var("TRASHCAN_QWEN_DECODE_ATTN").as_deref() == Ok("1")) || dim != 256 || kv_heads == 0 || heads % kv_heads != 0 {
-        return None;
-    }
-    DECODE_ATTN_HEADS.iter().find(|v| v.0 == heads / kv_heads).map(|v| v.1)
-}
-
-/// `qwen_attn_decode` pipelines by query heads per KV head.
-pub const DECODE_ATTN_HEADS: [(usize, &str); 6] = [
-    (1, "qwen_attn_decode_g1"),
-    (2, "qwen_attn_decode_g2"),
-    (3, "qwen_attn_decode_g3"),
-    (4, "qwen_attn_decode_g4"),
-    (6, "qwen_attn_decode_g6"),
-    (8, "qwen_attn_decode_g8"),
-];
-
 fn partitions(pos: usize, n: usize) -> u32 {
     if n > 8 {
         return 0;
@@ -807,10 +739,6 @@ impl<'a> Rec<'a> {
         // only starts once the previous one has finished on the D700s, so independent projections cannot overlap.
         let decode = if self.s.tp.is_some() { "matvecq4" } else { q4_decode_shader(rows, k) };
         let (shader, gx, gy) = match n {
-            1 if short_k(k).is_some() => {
-                let (kernel, per_wave) = short_k(k).unwrap();
-                (kernel, rows.div_ceil(4 * per_wave), 1)
-            }
             1 => (decode, rows.div_ceil(16), 1),
             2 => ("qwen_q4c2", rows.div_ceil(16), 1),
             3 => ("qwen_q4c3", rows.div_ceil(16), 1),
@@ -889,41 +817,6 @@ impl<'a> Rec<'a> {
             (Some((a, b)), true) => (a.address, b.address),
             _ => (0, 0),
         };
-        if fused_gdn(self.n, self.dump) {
-            // The convolution inside the recurrence; the q and k windows are written by the gated norm, after every
-            // wave has read them (docs/tp8-optimization.md G1). The same bits as the three dispatches below.
-            let mut u = [0; 16];
-            u[0] = cd as u32;
-            u[4] = c.v_heads as u32;
-            u[5] = c.k_heads as u32;
-            u[6] = c.state as u32;
-            u[12] = eps;
-            s.gpu.dispatch_matrix(
-                self.cmd,
-                "qwen_gdn_conv",
-                self.push([big, ab, dl.state.address, o, dl.conv.address, snap], u).with_extra(snap_conv),
-                (c.v_heads * c.state / 16) as u32,
-                1,
-                &dl.conv_wdt,
-            )?;
-            self.capture(format!("attn_output-{il}"), &s.o, vd)?;
-            let mut u = [0; 16];
-            u[0] = vd as u32;
-            u[1] = cd as u32;
-            u[2] = (2 * c.key_dim()) as u32;
-            u[6] = c.state as u32;
-            u[12] = eps;
-            s.gpu.dispatch(
-                self.cmd,
-                "qwen_gated_norm_conv",
-                self.push([o, z, dl.norm.address, big, dl.conv.address, snap_conv], u),
-                c.v_heads as u32,
-                self.n as u32,
-            );
-            self.capture(format!("final_output-{il}"), &s.o, vd)?;
-            self.matrix(&dl.out, o, self.out, vd, d, false)?;
-            return self.capture(format!("linear_attn_out-{il}"), &s.y, d);
-        }
         let mut u = [0; 16];
         u[0] = cd as u32;
         s.gpu.dispatch(
@@ -1022,7 +915,6 @@ impl<'a> Rec<'a> {
         u[5] = c.kv_heads as u32;
         u[6] = hd as u32;
         u[7] = s.context as u32;
-        let mut gated = false;
         if parts == 0 && s.prefill_scores.is_some() && self.n >= 64 {
             let score = self.sc(s.prefill_scores.as_ref().unwrap());
             let stride = s.context.next_multiple_of(64);
@@ -1046,25 +938,6 @@ impl<'a> Rec<'a> {
                 c.heads as u32,
                 self.n as u32,
             );
-        } else if let Some(kernel) = decode_attention(c.heads, c.kv_heads, hd) {
-            // Every query head of a KV head in one wave, then a merge that also applies the output gate, except when
-            // dumping, which captures the ungated output first (docs/tp8-optimization.md A1).
-            u[2] = parts;
-            s.gpu.dispatch(
-                self.cmd,
-                kernel,
-                self.push([rq, a.kc.address, a.vc.address, 0, scratch, 0], u),
-                c.kv_heads as u32 * parts,
-                self.n as u32,
-            );
-            s.gpu.dispatch(
-                self.cmd,
-                "qwen_attn_merge",
-                self.push([0, if self.dump { 0 } else { big }, 0, o, scratch, 0], u),
-                c.heads as u32,
-                self.n as u32,
-            );
-            gated = !self.dump;
         } else {
             let (partial, merge) = attention_shaders(parts)?;
             s.gpu.dispatch(
@@ -1083,18 +956,16 @@ impl<'a> Rec<'a> {
             );
         }
         self.capture(format!("attn_pregate-{il}"), &s.o, qd)?;
-        if !gated {
-            let mut u = [0; 16];
-            u[0] = qd as u32;
-            u[6] = hd as u32;
-            s.gpu.dispatch(
-                self.cmd,
-                "qwen_gate",
-                self.push([o, big, 0, 0, 0, 0], u),
-                qd.div_ceil(256) as u32,
-                self.n as u32,
-            );
-        }
+        let mut u = [0; 16];
+        u[0] = qd as u32;
+        u[6] = hd as u32;
+        s.gpu.dispatch(
+            self.cmd,
+            "qwen_gate",
+            self.push([o, big, 0, 0, 0, 0], u),
+            qd.div_ceil(256) as u32,
+            self.n as u32,
+        );
         self.capture(format!("attn_gated-{il}"), &s.o, qd)?;
         self.matrix(&a.out, o, self.out, qd, d, false)?;
         self.capture(format!("attn_output-{il}"), &s.y, d)
@@ -1104,16 +975,6 @@ impl<'a> Rec<'a> {
     fn ffn(&mut self, f: &Ffn, il: usize) -> Result<()> {
         let (s, c) = (self.s, &self.s.c);
         let (h, gate, up, act) = (self.h_in, self.sc(&s.gate), self.sc(&s.up), self.sc(&s.act));
-        if let Some(kernel) = fused_ffn(self.n) {
-            // Gate, up and SwiGLU in one dispatch, the same bits (docs/tp8-optimization.md F1).
-            let mut u = [0; 16];
-            u[0] = c.ff as u32;
-            u[1] = c.d as u32;
-            u[3] = (c.ff * c.d / 32) as u32;
-            s.gpu.dispatch_matrix(self.cmd, kernel, self.push([0, h, act, f.up.address, 0, 0], u), c.ff.div_ceil(16) as u32, 1, &f.gate)?;
-            self.capture(format!("ffn_swiglu-{il}"), &s.act, c.ff)?;
-            return self.matrix(&f.down, act, self.out, c.ff, c.d, false);
-        }
         self.matrix(&f.gate, h, gate, c.d, c.ff, true)?;
         self.matrix(&f.up, h, up, c.d, c.ff, false)?;
         let mut u = [0; 16];
@@ -1181,7 +1042,7 @@ impl<'a> Rec<'a> {
                 u[2] = (groups * TOP_K) as u32;
                 u[9] = kind;
                 u[15] = single;
-                s.gpu.dispatch(self.cmd, topk_kernel(), self.push([src, 0, dst, 0, 0, 0], u), groups as u32, cols as u32);
+                s.gpu.dispatch(self.cmd, "qwen_topk", self.push([src, 0, dst, 0, 0, 0], u), groups as u32, cols as u32);
                 if groups == 1 {
                     return Ok(());
                 }
@@ -1299,7 +1160,6 @@ impl GpuStage {
                 let mut dt_a = pick(vector(g, c.layer_tensor(g, il, "ssm_dt.bias")?)?, 1, &value_heads);
                 dt_a.extend(pick(vector(g, c.layer_tensor(g, il, "ssm_a")?)?, 1, &value_heads));
                 let conv_w = pick(vector(g, c.layer_tensor(g, il, "ssm_conv1d.weight")?)?, gc.conv, &channels);
-                let conv_wdt: Vec<f32> = conv_w.iter().chain(&dt_a).copied().collect();
                 let (state, conv) = (c.v_heads * c.state * c.state * 4, (c.conv - 1) * c.conv_dim() * 4);
                 Mixer::Delta(Delta {
                     qkv: upload_q4_cut(&gpu, g, c, il, "attn_qkv.weight", &channels, &[])?,
@@ -1307,7 +1167,6 @@ impl GpuStage {
                     ab: gpu.upload_matrix(bytemuck::cast_slice(&ab))?,
                     dt_a: upload_f32(&gpu, &dt_a)?,
                     conv_w: upload_f32(&gpu, &conv_w)?,
-                    conv_wdt: gpu.upload_matrix(bytemuck::cast_slice(&conv_wdt))?,
                     conv: gpu.buffer(conv, false, false, None)?,
                     state: gpu.buffer(state, false, false, None)?,
                     norm: upload_vector(&gpu, g, c, il, "ssm_norm.weight")?,
@@ -1400,9 +1259,8 @@ impl GpuStage {
             kb: work(c.kv_heads * c.head_dim)?,
             vb: work(c.kv_heads * c.head_dim)?,
             rq: work(qd)?,
-            // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`), each a
-            // record of head_dim + 2 (`attention_partial*`) or + 4 (`qwen_attn_decode`) floats.
-            scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 4) * 4 * 8 * halves, false, false, None)?,
+            // Split-K attention partials: up to 64 partitions, 128 on tensor-parallel ranks (`tp_partitions`).
+            scratch: gpu.buffer(c.heads * if tp { 128 } else { 64 } * (c.head_dim + 2) * 4 * 8 * halves, false, false, None)?,
             // Tiled prefill keeps bounded score scratch separate for each active queue.
             prefill_scores: if max_batch >= 64 && std::env::var("TRASHCAN_QWEN_ATTN").as_deref() == Ok("tiled") {
                 Some(gpu.buffer(c.heads * 64 * (context.next_multiple_of(64) + 1) * 4 * halves, false, false, None)?)

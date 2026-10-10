@@ -40,7 +40,6 @@ gates)
   for cfg in all w1 a1 k1 f1 g1 m1; do
     if [ $cfg = all ]; then env=$ALL; else env=$(sw $cfg); fi
     run val-$cfg $NEW "qwen-validate results/val-$cfg" "$env"
-    run check-$cfg $NEW "qwen-check" "$env"
     run check-mtp-$cfg $NEW "qwen-check --mtp $MTP" "$env"
     run check-v3-$cfg $NEW "qwen-check --verify 3" "$env"
   done

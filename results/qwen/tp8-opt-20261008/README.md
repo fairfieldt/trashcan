@@ -1,11 +1,141 @@
 # Qwen3.8-27B TP8 optimization round (2026-10-08): runbook
 
 The plan, cost model and design are in [docs/tp8-optimization.md](../../../docs/tp8-optimization.md). This round was
-implemented and checked without access to the Macs: nothing here has run on a D700 yet. This file says how to test it
-on incite, invite, enlight and indite, what to expect, how to decide, and what to look at once it runs.
+implemented and checked without access to the Macs; the runbook below says how to test it on incite, invite, enlight
+and indite, what to expect and how to decide. It ran on 2026-10-09: the results come first.
 
 Branch `claude/wizardly-planck-823ef4` (AGENTS.md asks for work on `main`; this session was given that branch, so merge
 it to `main` with the measurements once they are recorded). Source of the off-hardware checks below: 302a18f.
+
+## Results on the Macs (2026-10-09)
+
+**Outcome.** On the D700s every new kernel gives the bits it claims but runs slower than the kernel it replaces, and
+none is faster end to end; the fused host pass (H1) is slower too. All of them are removed. W1 makes decode 3.6% and
+MTP 2.1-2.4% faster but made prefill 5% slower, so it now covers only all-reduces below prefill size, where it is the
+default. With that, TP8 decodes at 36.2 tok/s (record 35.0) and 47.0 with MTP (record 46.0); prefill is unchanged.
+
+Tested: d76f73b (`trashcan-opt`, this round as merged) against 261d453 (`trashcan-base`, the TP8 record), then
+`trashcan-eval`: the record with W1 below prefill size, the commit that records these results. Cross-built with
+`scripts/cross-build.sh`; kernel 7.2.9-p2p on incite, invite, enlight and indite over the four cables of
+results/qwen/tp8-20261007 (a sixth cable was installed for results/qwen/tp8-mesh-20261009; these runs do not use it).
+gpuq leases, the performance governor and the 0 µs latency request on all four; every card ran at 850/1370 MHz while
+computing (`clocks/`). Each A/B alternates single runs of `qwen-bench --pp 512 --tg 128 --reps 2` (with `--mtp` for
+MTP), two runs a side (`tools/h1.sh`, `dec.sh`, `rest.sh`, `eval.sh`; tables from `tools/pairs.py` and
+`mtppairs.py`). tok/s are per repetition; GPU wait and exchange are incite's milliseconds per generated token. The
+generated tokens were the same in every run of every configuration.
+
+### Kernel checks (`tools/kcheck.sh trashcan-opt 200`, all eight GPUs)
+
+All 28 cases pass on every GPU. ACO kept the bitwise claims: top-k, FFN, DeltaNet and the many-rows matvec are
+identical to the kernels they replace, and decode attention is within 5e-7 of the split-K kernels. Medians over the
+eight GPUs (each within a few percent):
+
+| kernel | case | against the old kernel | old µs | new µs |
+|---|---|---|---|---|
+| A1 attention | g 3, kv_heads 1, n 1, parts 64, pos 520 | within 2.1e-07 | 101 | 116 |
+| A1 attention | g 3, kv_heads 1, n 3, parts 64, pos 520 | within 1.5e-07 | 103 | 107 |
+| A1 attention | g 6, kv_heads 1, n 1, parts 64, pos 600 | within 3.3e-07 | 107 | 149 |
+| A1 attention | g 6, kv_heads 2, n 2, parts 16, pos 37 | within 3.3e-07 | 45 | 78 |
+| A1 attention | g 6, kv_heads 4, n 1, parts 64, pos 1500 | within 3.6e-07 | 321 | 397 |
+| A1 attention | g 3, kv_heads 1, n 1, parts 128, pos 8000 | within 1.9e-07 | 395 | 323 |
+| A1 attention | g 2, kv_heads 1, n 4, parts 32, pos 5 | within 2.4e-07 | 39 | 56 |
+| A1 attention | g 4, kv_heads 1, n 8, parts 32, pos 300 | within 4.8e-07 | 95 | 100 |
+| K1 top-k | cols 1, rows 31040 | identical | 217 | 228 |
+| K1 top-k | cols 1, rows 8192 | identical | 146 | 153 |
+| K1 top-k | cols 3, rows 31040 | identical | 231 | 243 |
+| K1 top-k | cols 2, rows 1000 | identical | 75 | 79 |
+| F1 FFN | k 5120, n 1, rows 2176 | identical | 91 | 100 |
+| F1 FFN | k 5120, n 3, rows 2176 | identical | 141 | 157 |
+| F1 FFN | k 5120, n 2, rows 4352 | identical | 193 | 196 |
+| F1 FFN | k 5120, n 4, rows 1088 | identical | 114 | 153 |
+| G1 DeltaNet | k_heads 2, n 1, pos 10, snapshots False, v_heads 6 | identical | 41 | 53 |
+| G1 DeltaNet | k_heads 2, n 3, pos 10, snapshots True, v_heads 6 | identical | 56 | 71 |
+| G1 DeltaNet | k_heads 4, n 2, pos 0, snapshots True, v_heads 12 | identical | 48 | 60 |
+| G1 DeltaNet | k_heads 16, n 1, pos 5, snapshots False, v_heads 48 | identical | 77 | 106 |
+| G1 DeltaNet | k_heads 2, n 8, pos 3, snapshots True, v_heads 6 | identical | 97 | 120 |
+| M1 matvec | k 768, kernel qwen_matvec_rows8, rows 5120 | identical | 28 | 30 |
+| M1 matvec | k 768, kernel qwen_matvec_rows16, rows 5120 | identical | 28 | 47 |
+| M1 matvec | k 1536, kernel qwen_matvec_rows8, rows 5120 | identical | 36 | 43 |
+| M1 matvec | k 1536, kernel qwen_matvec_rows16, rows 5120 | identical | 36 | 55 |
+| M1 matvec | k 5120, kernel qwen_matvec_rows8, rows 2176 | identical | 51 | 66 |
+| M1 matvec | k 5120, kernel qwen_matvec_rows16, rows 2176 | identical | 51 | 88 |
+
+Only the decode attention at 8000 keys beats the old kernels. The fused and reshaped kernels run fewer, longer waves than
+the dispatches they replace, which likely hides less memory latency on GCN; lavapipe (8-lane subgroups, run one after
+another) checked their arithmetic but could not show their speed.
+
+### Decode
+
+| candidate | n | default tok/s | candidate tok/s | change | GPU wait ms/token | exchange ms/token | pp512 tok/s |
+|---|---|---|---|---|---|---|---|
+| merged defaults (H1 on) vs the record | 4+4 | 34.60 (34.42-34.77) | 33.66 (33.35-33.92) | -2.7% | 19.40 → 19.80 | 7.72 → 7.49 | 201 → 203 |
+| H1 off | 4+4 | 33.73 (33.28-33.93) | 34.55 (34.51-34.62) | +2.4% | 19.80 → 19.78 | 7.72 → 7.60 | 204 → 202 |
+| W1, every all-reduce | 4+4 | 33.65 (33.32-33.97) | 34.85 (34.75-34.91) | +3.6% | 19.79 → 19.80 | 7.85 → 6.73 | 204 → 193 |
+| A1 | 4+4 | 33.50 (33.03-33.88) | 33.74 (33.67-33.80) | +0.7% | 19.78 → 19.91 | 7.98 → 7.63 | 203 → 203 |
+| K1 | 4+4 | 33.96 (33.81-34.10) | 33.81 (33.79-33.83) | -0.4% | 19.79 → 19.80 | 7.57 → 7.68 | 202 → 204 |
+| F1 | 4+4 | 33.95 (33.87-34.12) | 33.01 (32.88-33.10) | -2.8% | 19.78 → 20.38 | 7.54 → 7.55 | 204 → 204 |
+| G1 | 4+4 | 33.41 (32.51-33.91) | 32.83 (32.59-32.99) | -1.7% | 19.78 → 20.42 | 8.02 → 7.91 | 193 → 203 |
+| M1 (16 rows) | 4+4 | 33.48 (33.17-33.81) | 32.23 (32.13-32.32) | -3.7% | 19.80 → 21.34 | 7.96 → 7.61 | 206 → 205 |
+
+The merged binary with its defaults was 2.7% slower than the record: 0.55 ms per token more host time with H1's fused
+pass (`total` 1.42-1.52 against 0.91-0.93 ms with `TRASHCAN_TP_HOSTPASS=0`) and 0.4 ms more GPU time, which H1 does not
+explain and which came with the kernel commits: with their switches off they still upload G1's per-layer convolution
+buffer, enlarge the attention scratch and register the new pipelines. With H1 and the kernels removed, the binary
+matches the record:
+
+| candidate | n | default tok/s | candidate tok/s | change | GPU wait ms/token | exchange ms/token | pp512 tok/s |
+|---|---|---|---|---|---|---|---|
+| back-out binary vs the record | 4+4 | 34.99 (34.61-35.24) | 34.94 (34.91-35.01) | -0.1% | 19.41 → 19.42 | 7.63 → 7.58 | 203 → 201 |
+| W1 below prefill size | 4+4 | 34.94 (34.91-35.01) | 36.20 (35.96-36.46) | +3.6% | 19.42 → 19.42 | 7.58 → 6.58 | 201 → 203 |
+
+A1's pairs disagree (the first favoured it, the second the default) while incite's GPU time rose 0.13 ms; at a
+520-token context it is not faster.
+
+### MTP (k = 2, 64K draft head)
+
+| candidate | n | default tok/s | candidate tok/s | change | verification ms/round | tokens/round |
+|---|---|---|---|---|---|---|
+| W1, every all-reduce | 4+4 | 44.76 (44.62-44.86) | 45.82 (44.47-46.30) | +2.4% | 52.1 → 50.8 | 2.47 → 2.47 |
+| A1 | 4+4 | 44.54 (44.40-44.70) | 44.62 (44.58-44.65) | +0.2% | 52.4 → 52.3 | 2.47 → 2.47 |
+| back-out binary vs the record | 4+4 | 42.31 (31.04-46.17) | 46.01 (45.63-46.24) | +8.7% | 55.9 → 50.6 | 2.47 → 2.47 |
+| W1 below prefill size | 4+4 | 46.01 (45.63-46.24) | 46.97 (46.76-47.17) | +2.1% | 50.6 → 48.5 | 2.47 → 2.42 |
+
+The record's first repetition (31.0 tok/s) hit a 16 ms/token exchange stall; its other three average 46.1. With W1
+below prefill size the generated text is the same and one fewer draft was accepted over the 128 tokens (2.42 instead of
+2.47 tokens per round); W1 on every all-reduce kept 2.47.
+
+### Prefill
+
+W1 on every all-reduce took the 512-token prefill from 204 to 193 tok/s: its exchanges took 2.22-2.30 s per prompt
+against 1.92-2.06 in f32, although they move half the bytes. Its f16 reduce-scatter/all-gather spawns threads for each
+of about twenty encode and decode passes per all-reduce and allocates its buffers per call, and the bytes saved do not
+pay for that. Prefill-sized all-reduces therefore stay f32 (`trashcan-eval`: 201 against 203 tok/s).
+
+### Long context
+
+Not measured. Forty-five seconds into the first 7680-token prefill (`long-default-1`) the Macs' power strip tripped,
+at about 1.65 kW drawn by the four (results/qwen/tp8-mesh-20261009, Power). A1, the one candidate expected to gain
+there (the kernel check's 8000-key case: 323 against 395 µs per layer), is removed with the others; 90d044f and
+302a18f hold it for a long-context A/B once the Macs have the power for it.
+
+### Correctness gates (`trashcan-eval`, `tools/eval.sh gates`)
+
+| gate | f32 | W1 below prefill size |
+|---|---|---|
+| `qwen-validate` (14-token prompt) | every tensor identical to the record's dump (`tp8-rsag-val`); against the CPU reference worst 4.02e-4, logits top-10 10/10, greedy 10/10 | the same dump (the prompt's all-reduces are prefill-sized, so f32) and the same 10 greedy tokens ([val-w1-vs-ref.txt](val-w1-vs-ref.txt)) |
+| `qwen-check --mtp` | pass: restore exact, speculative output identical, 83% of drafts accepted | pass: the same, 83% |
+| `qwen-check --verify 3` | pass: no column mismatches, column score error 2.25e-4 (the record's) | pass: column score error 0, since each verification column is added and rounded like its decode step |
+
+The runbook's plain `qwen-check` stops at once (it needs `--verify` of at least 2); it is gone from the tools.
+
+### Decisions
+
+- **H1** removed; the record's host passes are back.
+- **W1** kept for all-reduces below prefill size (`PARALLEL_MIN`, 65536 values: decode, verification and draft steps)
+  and on by default; `TRASHCAN_TP_WIRE=f32` (driver only) keeps exact f32 sums for bitwise comparisons and validation.
+  `f16:N` and the f16 reduce-scatter/all-gather are gone.
+- **A1, K1, F1, G1, M1** removed with their shaders, pipelines, switches and `qwen-kernel-check`.
+- `Buffer::drop` keeps evicting the descriptor sets cached by its handle (a fix that came with 90d044f).
 
 ## What changed
 
@@ -191,7 +321,15 @@ commands here, update docs/qwen.md (TP8 numbers, switches) and docs/findings.md,
 ## Files
 
 - `tools/tprun.py`, `tools/tp8.sh`: one TP8 run over the four Macs (from results/qwen/tp8-20261007, with
-  `TP8_ROOT`/`TP8_MODEL`/`TP8_MTP` and `--profile`).
-- `tools/ab.sh`: the runs of sections 3-6, by phase. `tools/kcheck.sh`: section 2. `tools/summarize.py`: tables of
-  rates, host phases, MTP costs, token equality and clocks per configuration.
+  `TP8_ROOT`/`TP8_MODEL`/`TP8_MTP` and `--profile`). Since 2026-10-09 it refuses to start while an engine process of
+  an earlier run is alive, and stops every node after the run (a node left running served the next run's session
+  with the old run's settings once).
+- `tools/ab.sh`: the runs of sections 3-6, by phase. `tools/kcheck.sh`: section 2 (`qwen-kernel-check` was removed with
+  the kernels; 90d044f has it). `tools/summarize.py`: tables of rates, host phases, MTP costs, token equality and clocks
+  per configuration.
+- The runs of 2026-10-09: `tools/h1.sh` (record, defaults, H1 off), `tools/dec.sh` (each candidate against the
+  default), `tools/rest.sh` (MTP, long context, gates of the merged binary), `tools/eval.sh` (the back-out binary);
+  `tools/pairs.py` and `tools/mtppairs.py` make the tables. Their outputs per Mac in `incite/`, `invite/`, `enlight/`,
+  `indite/` (driver `.json`/`.err`, node logs, `clocks/`, `kcheck-*.jsonl`; `incite/commands.log` lists every run);
+  `val-w1-vs-ref.txt` compares the W1 dump with the CPU reference.
 - `lavapipe-kernel-check.jsonl`, `lavapipe-device.txt`, `cargo-test.txt`: the off-hardware checks above.

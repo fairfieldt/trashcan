@@ -145,26 +145,6 @@ pub fn selected_attention_shaders(
 
 impl Device {
     pub fn new(inst: Rc<Instance>, pd: vk::PhysicalDevice) -> Result<Rc<Self>> {
-        Self::create(inst, pd, None)
-    }
-
-    /// A device for kernel tests on other hardware (`qwen-kernel-check --any-device`, e.g. lavapipe): any subgroup
-    /// size, the external-memory extensions only where present, and only the pipelines of the shaders named in
-    /// `shaders` (base names, before specialization). The engine's own kernels assume 64-lane subgroups, so only
-    /// kernels written for any subgroup size give meaningful results on such a device.
-    pub fn new_relaxed(inst: Rc<Instance>, pd: vk::PhysicalDevice, shaders: &[&str]) -> Result<Rc<Self>> {
-        Self::create(inst, pd, Some(shaders))
-    }
-
-    /// Subgroup size of the physical device.
-    pub fn subgroup_size(inst: &Instance, pd: vk::PhysicalDevice) -> u32 {
-        let mut subgroup = vk::PhysicalDeviceSubgroupProperties::default();
-        let mut properties = vk::PhysicalDeviceProperties2::default().push_next(&mut subgroup);
-        unsafe { inst.instance.get_physical_device_properties2(pd, &mut properties) };
-        subgroup.subgroup_size
-    }
-
-    fn create(inst: Rc<Instance>, pd: vk::PhysicalDevice, relaxed: Option<&[&str]>) -> Result<Rc<Self>> {
         let mut subgroup = vk::PhysicalDeviceSubgroupProperties::default();
         let mut properties = vk::PhysicalDeviceProperties2::default().push_next(&mut subgroup);
         unsafe {
@@ -172,7 +152,7 @@ impl Device {
                 .get_physical_device_properties2(pd, &mut properties);
         }
         ensure!(
-            (subgroup.subgroup_size == 64 || relaxed.is_some())
+            subgroup.subgroup_size == 64
                 && subgroup
                     .supported_stages
                     .contains(vk::ShaderStageFlags::COMPUTE)
@@ -193,13 +173,6 @@ impl Device {
             ash::ext::external_memory_dma_buf::NAME.as_ptr(),
             ash::khr::external_semaphore_fd::NAME.as_ptr(),
         ];
-        if relaxed.is_some() {
-            let present = unsafe { inst.instance.enumerate_device_extension_properties(pd)? };
-            extensions.retain(|&e| {
-                let name = unsafe { std::ffi::CStr::from_ptr(e) };
-                present.iter().any(|p| p.extension_name_as_c_str() == Ok(name))
-            });
-        }
         // Profiling aligns GPU timestamps with host time.
         let calibrate = std::env::var_os("TRASHCAN_TP_PROFILE").is_some()
             && unsafe { inst.instance.enumerate_device_extension_properties(pd)? }
@@ -341,8 +314,6 @@ impl Device {
             ("qwen_attn_scores", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_scores.spv")).as_slice()),
             ("qwen_attn_softmax", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_softmax.spv")).as_slice()),
             ("qwen_attn_values", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_values.spv")).as_slice()),
-            ("qwen_attn_decode", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_decode.spv")).as_slice()),
-            ("qwen_attn_merge", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_merge.spv")).as_slice()),
             (
                 "attn_scores",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attn_scores.spv")).as_slice(),
@@ -465,14 +436,6 @@ impl Device {
                 "qwen_topk",
                 include_bytes!(concat!(env!("OUT_DIR"), "/qwen_topk.spv")).as_slice(),
             ),
-            ("qwen_topk_wave", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_topk_wave.spv")).as_slice()),
-            ("qwen_ffn_gu1", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu1.spv")).as_slice()),
-            ("qwen_ffn_gu2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu2.spv")).as_slice()),
-            ("qwen_ffn_gu3", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu3.spv")).as_slice()),
-            ("qwen_ffn_gu4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_ffn_gu4.spv")).as_slice()),
-            ("qwen_gdn_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gdn_conv.spv")).as_slice()),
-            ("qwen_matvec_rows", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_matvec_rows.spv")).as_slice()),
-            ("qwen_gated_norm_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_gated_norm_conv.spv")).as_slice()),
             // Qwen3.8-Flash-Next (qwen4exp)
             ("qwen4_hc_norm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_norm.spv")).as_slice()),
             ("qwen4_hc_mix", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_hc_mix.spv")).as_slice()),
@@ -510,9 +473,6 @@ impl Device {
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
             ("allreduce_work", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_work.spv")).as_slice()),
         ] {
-            if relaxed.is_some_and(|only| !only.contains(&name)) {
-                continue;
-            }
             ensure!(
                 !bytes.is_empty(),
                 "shaders missing: build with glslc on incite"
@@ -530,19 +490,6 @@ impl Device {
                     ("attention_partial128", Some(128)),
                 ],
                 "qwen_add_norm_wide" => &[("qwen_add_norm_j16", Some(16)), ("qwen_add_norm_j20", Some(20))],
-                // Rows per wave; specialized so that the lane count (constant 1) is the device's.
-                "qwen_gdn_conv" => &[("qwen_gdn_conv", Some(4))],
-                // Rows per subgroup.
-                "qwen_matvec_rows" => &[("qwen_matvec_rows8", Some(8)), ("qwen_matvec_rows16", Some(16))],
-                // Query heads per KV head (`DECODE_ATTN_HEADS`).
-                "qwen_attn_decode" => &[
-                    ("qwen_attn_decode_g1", Some(1)),
-                    ("qwen_attn_decode_g2", Some(2)),
-                    ("qwen_attn_decode_g3", Some(3)),
-                    ("qwen_attn_decode_g4", Some(4)),
-                    ("qwen_attn_decode_g6", Some(6)),
-                    ("qwen_attn_decode_g8", Some(8)),
-                ],
                 "qwen_matf32" => &[("qwen_matf32", Some(1)), ("qwen_matf32_u16", Some(16))],
                 "attention_partial_heads2" => &[
                     ("attention_partial_heads2", None),
@@ -606,14 +553,11 @@ impl Device {
                 _ => &[(name, None)],
             };
             for &(variant, parts) in variants {
-                // Constant 0 is the variant's value; constant 1 the subgroup size, for kernels written for any.
-                let entries = [
-                    vk::SpecializationMapEntry::default().constant_id(0).offset(0).size(std::mem::size_of::<u32>()),
-                    vk::SpecializationMapEntry::default().constant_id(1).offset(4).size(std::mem::size_of::<u32>()),
-                ];
-                let mut data = [0u8; 8];
-                data[..4].copy_from_slice(&parts.unwrap_or(32).to_ne_bytes());
-                data[4..].copy_from_slice(&subgroup.subgroup_size.to_ne_bytes());
+                let entries = [vk::SpecializationMapEntry::default()
+                    .constant_id(0)
+                    .offset(0)
+                    .size(std::mem::size_of::<u32>())];
+                let data = parts.unwrap_or(32).to_ne_bytes();
                 let specialization = vk::SpecializationInfo::default()
                     .map_entries(&entries)
                     .data(&data);
@@ -1475,7 +1419,7 @@ impl Drop for Buffer {
     fn drop(&mut self) {
         self.gpu.buffers.borrow_mut().remove(&(self.address >> 32));
         // Descriptor sets cached by buffer handle must not outlive the buffer: the driver may hand the same handle
-        // to a later buffer (a replaced draft head, kernel checks), which would then bind the stale set.
+        // to a later buffer (a replaced draft head), which would then bind the stale set.
         self.gpu.descriptor_sets.borrow_mut().remove(&self.buf);
         self.gpu.receive_sets.borrow_mut().remove(&self.buf);
         self.gpu

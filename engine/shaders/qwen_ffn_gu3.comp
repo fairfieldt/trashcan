@@ -1,3 +1,0 @@
-#version 460
-#define COLS 3
-#include "qwen_ffn_gu_body.glsl"

@@ -38,11 +38,6 @@ impl Instance {
         })
     }
 
-    /// Every Vulkan device, in the loader's order (`qwen-kernel-check --any-device`).
-    pub fn all_devices(&self) -> Result<Vec<vk::PhysicalDevice>> {
-        Ok(unsafe { self.instance.enumerate_physical_devices()? })
-    }
-
     /// The discrete AMD GPUs, ordered by PCI bus number so indices are stable across runs.
     pub fn amd_gpus(&self) -> Result<Vec<vk::PhysicalDevice>> {
         let mut gpus = Vec::new();

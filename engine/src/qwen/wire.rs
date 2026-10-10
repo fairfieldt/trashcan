@@ -1,4 +1,4 @@
-//! Compact all-reduce payloads (`TRASHCAN_TP_WIRE=f16`, docs/tp8-optimization.md W1): f16 values with one
+//! Compact all-reduce payloads (docs/tp8-optimization.md W1; the default below prefill sizes): f16 values with one
 //! exponent shift per block of `BLOCK` values, so a block whose largest magnitude reaches 2^15 is scaled down by a
 //! power of two (exactly) before rounding and Qwen's massive activations cannot overflow f16. A range of `m`
 //! values travels as `[m f16 values, little endian][one shift byte per block][zero padding to 4 bytes]`, its
@@ -6,8 +6,7 @@
 //!
 //! Rounding is to nearest even, with F16C when the CPU has it and the same bits in software otherwise, so every
 //! machine rounds a value the same way. `Mesh` keeps the machines bitwise identical by rounding a running sum in
-//! place before sending it (both partners then add the same two rounded values) and by relaying a finished
-//! segment's bytes rather than encoding it again.
+//! place before sending it, so both partners add the same two rounded values. Prefill-sized all-reduces stay f32.
 
 /// Values per exponent shift.
 pub const BLOCK: usize = 256;
@@ -21,15 +20,14 @@ pub enum Wire {
 }
 
 impl Wire {
-    /// `TRASHCAN_TP_WIRE=f16` selects the compact format for every all-reduce, `f16:N` for those of at least N
-    /// values (so decode steps can keep f32 while verification and prefill batches use f16); anything else keeps
-    /// f32. Returns the format and the minimum length.
-    pub fn from_env() -> (Self, usize) {
-        let v = std::env::var("TRASHCAN_TP_WIRE").unwrap_or_default();
-        match v.split_once(':') {
-            Some(("f16", min)) => (Wire::F16, min.parse().unwrap_or(0)),
-            _ if v == "f16" => (Wire::F16, 0),
-            _ => (Wire::F32, 0),
+    /// The format of the all-reduces below prefill sizes: f16 (decode 3.6% and MTP 2.1% faster on TP8,
+    /// results/qwen/tp8-opt-20261008), or with `TRASHCAN_TP_WIRE=f32` exact f32 sums, for comparing layouts bit for
+    /// bit and validating against references.
+    pub fn from_env() -> Self {
+        if std::env::var("TRASHCAN_TP_WIRE").as_deref() == Ok("f32") {
+            Wire::F32
+        } else {
+            Wire::F16
         }
     }
 
@@ -193,32 +191,6 @@ pub fn decode_sum(a: &[u8], b: &[u8], ranges: &[(usize, usize)], dst: &mut [f32]
     }
 }
 
-/// `encode` of one range over `threads` threads (block-aligned pieces, the last on the calling thread); the bytes
-/// are those of `encode`.
-pub fn encode_par(src: &mut [f32], range: (usize, usize), round: bool, out: &mut [u8], threads: usize) {
-    let m = range.1 - range.0;
-    let blocks = m.div_ceil(BLOCK);
-    if threads <= 1 || blocks < 2 * threads {
-        return encode(src, &[range], round, out);
-    }
-    let per = blocks.div_ceil(threads) * BLOCK;
-    let (vals, shifts) = out[..range_bytes(m)].split_at_mut(2 * m);
-    shifts[blocks..].fill(0);
-    std::thread::scope(|s| {
-        let mut jobs = Vec::new();
-        for ((v, o), sh) in src[range.0..range.1].chunks_mut(per).zip(vals.chunks_mut(2 * per)).zip(shifts.chunks_mut(per / BLOCK)) {
-            jobs.push((v, o, sh));
-        }
-        let last = jobs.pop();
-        for (v, o, sh) in jobs {
-            s.spawn(move || encode_piece(v, round, o, sh));
-        }
-        if let Some((v, o, sh)) = last {
-            encode_piece(v, round, o, sh);
-        }
-    });
-}
-
 /// Encode consecutive blocks of `v`: values into `vals`, one shift per block into `shifts`.
 fn encode_piece(v: &mut [f32], round: bool, vals: &mut [u8], shifts: &mut [u8]) {
     #[cfg(target_arch = "x86_64")]
@@ -229,30 +201,6 @@ fn encode_piece(v: &mut [f32], round: bool, vals: &mut [u8], shifts: &mut [u8]) 
     for (i, b) in v.chunks_mut(BLOCK).enumerate() {
         shifts[i] = encode_block(b, round, &mut vals[i * 2 * BLOCK..i * 2 * BLOCK + 2 * b.len()]);
     }
-}
-
-/// `decode` of one range over `threads` threads.
-pub fn decode_par(bytes: &[u8], range: (usize, usize), dst: &mut [f32], add: bool, threads: usize) {
-    let m = range.1 - range.0;
-    let blocks = m.div_ceil(BLOCK);
-    if threads <= 1 || blocks < 2 * threads {
-        return decode(bytes, &[range], dst, add);
-    }
-    let per = blocks.div_ceil(threads) * BLOCK;
-    let (vals, shifts) = bytes[..range_bytes(m)].split_at(2 * m);
-    std::thread::scope(|s| {
-        let mut jobs = Vec::new();
-        for ((v, o), sh) in dst[range.0..range.1].chunks_mut(per).zip(vals.chunks(2 * per)).zip(shifts.chunks(per / BLOCK)) {
-            jobs.push((v, o, sh));
-        }
-        let last = jobs.pop();
-        for (v, o, sh) in jobs {
-            s.spawn(move || decode_piece(o, sh, v, add));
-        }
-        if let Some((v, o, sh)) = last {
-            decode_piece(o, sh, v, add);
-        }
-    });
 }
 
 /// Decode consecutive blocks into `dst`, or add them to it.
@@ -483,22 +431,5 @@ mod tests {
         let mut plain = vec![0u8; message_bytes(&ranges)];
         encode(&mut a.clone(), &ranges, false, &mut plain);
         assert_eq!(plain, ba);
-    }
-
-    #[test]
-    fn threaded_coding_matches_serial() {
-        let v = samples(64 * 5120 + 300, 3);
-        let range = (100, v.len() - 9);
-        let (mut a, mut b) = (v.clone(), v.clone());
-        let mut ba = vec![0u8; message_bytes(&[range])];
-        let mut bb = ba.clone();
-        encode(&mut a, &[range], true, &mut ba);
-        encode_par(&mut b, range, true, &mut bb, 6);
-        assert_eq!(ba, bb);
-        assert!(a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()));
-        let (mut da, mut db) = (vec![0.5f32; v.len()], vec![0.5f32; v.len()]);
-        decode(&ba, &[range], &mut da, true);
-        decode_par(&ba, range, &mut db, true, 6);
-        assert!(da.iter().zip(&db).all(|(x, y)| x.to_bits() == y.to_bits()));
     }
 }

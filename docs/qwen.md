@@ -152,9 +152,12 @@ adds the ranks' partials and all-reduces the sum with the other machines (`link.
 `tp.rs`): two all-reduces per layer, 2 × layers + 1 segments per forward. A group is 2, 4 or 8 machines. With four,
 the all-reduce takes two rounds of recursive doubling over a ring of cables (machines 0-1, 0-2, 1-3, 2-3), each round
 sending half the vector to each of a machine's two partners; every machine adds each element in the same pairs, so
-the residuals stay bitwise identical. The driver's operations reach the other machines down a binomial tree over the
-same cables (0 to 1 and 2, 2 to 3). Each machine merges its ranks' candidates and the
-machines exchange theirs. Rollback and checkpoints apply to every rank. A forward runs one of three ways:
+the residuals stay bitwise identical. All-reduces below prefill size (decode, verification and draft steps) carry f16
+values with a power-of-two shift per 256 values (`wire.rs`), which every machine rounds the same way;
+`TRASHCAN_TP_WIRE=f32` on the driver keeps exact f32 sums, for comparing layouts bit for bit and for validation. The
+driver's operations reach the other machines down a binomial tree over the same cables (0 to 1 and 2, 2 to 3). Each
+machine merges its ranks' candidates and the machines exchange theirs. Rollback and checkpoints apply to every rank.
+A forward runs one of three ways:
 
 - Decode, verification and draft steps (up to 8 columns) are one command buffer and one submission per rank. Each
   segment after the first waits on a VkEvent the host sets (RADV: a command-processor poll of host memory, about
@@ -192,8 +195,10 @@ Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-2026
 38.6 measured the same day over the one incite-invite cable now left (three cables gave 150 / 28.4 / 39.5). It
 matches the CPU reference to 4.0e-4 with the same greedy tokens, and `qwen-check` (with and without drafting) and
 `scripts/test-server.py` pass. Each GPU allocates 2.3 GiB. A decode step spends about 19-20 ms on the GPUs and
-7.5 ms in exchanges. Prefill-sized all-reduces use reduce-scatter and all-gather (3/4 of the bytes per cable) and are
-limited by the cables' bandwidth, about 0.5 GB/s each way when a cable carries both directions.
+7.5 ms in exchanges. With the f16 payload it decodes at 36.2 tok/s and 47.0 with MTP, 6.6 ms in exchanges
+([results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)). Prefill-sized all-reduces use
+reduce-scatter and all-gather (3/4 of the bytes per cable) and are limited by the cables' bandwidth, about 0.5 GB/s
+each way when a cable carries both directions.
 
 Qwen3.8-27B on incite and invite (four D700s; [results/qwen/tp-merged-20261006](../results/qwen/tp-merged-20261006/),
 which builds on [tp-20261006](../results/qwen/tp-20261006/), [tp-decode-20261006](../results/qwen/tp-decode-20261006/)
@@ -229,21 +234,12 @@ Prefill uses two micro-batches for batches of at least 128 tokens and one otherw
   micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
   prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
 
-Candidates of the TP8 optimization round ([tp8-optimization.md](tp8-optimization.md), runbook in
-[results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)), each off by default until measured
-on the Macs except the bitwise-identical fused host pass:
-
-- `TRASHCAN_TP_WIRE=f16` (driver only, passed to the nodes at setup; `f16:N` for all-reduces of at least N values):
-  f16 all-reduce payload with a power-of-two shift per 256 values;
-- `TRASHCAN_TP_HOSTPASS=0`: the host's separate passes after a decode all-reduce instead of the fused one;
-- `TRASHCAN_QWEN_DECODE_ATTN=1` (decode attention for every query head of a KV head per wave),
-  `TRASHCAN_QWEN_TOPK=wave` (head selection with wave-local barriers), `TRASHCAN_QWEN_FUSED_FFN=1` (gate, up and
-  SwiGLU in one dispatch), `TRASHCAN_QWEN_FUSED_GDN=1` (DeltaNet convolution inside the recurrence),
-  `TRASHCAN_QWEN_SHORTK=8|16` (8 or 16 rows per wave for short rows): per process, so the nodes need them too.
-
-`trashcan qwen-kernel-check` compares those kernels with the ones they replace on the D700s (bit for bit where they
-should match) and with CPU references, and times both; `--any-device` runs them on other Vulkan devices such as
-lavapipe, against the references alone.
+The TP8 optimization round of 2026-10-08 ([tp8-optimization.md](tp8-optimization.md), measured in
+[results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)) left the f16 payload: decode 3.6% and
+MTP 2.1% faster; in prefill-sized all-reduces it was 5% slower, so those stay f32. Its kernels (decode attention for
+all query heads of a KV head per wave, wave-local top-k barriers, fused FFN and DeltaNet convolution, more rows per
+wave for short rows) gave the bits they claimed on the D700s but ran slower than the kernels they replaced, and the
+fused host pass was slower too; all were removed.
 
 `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
 costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded

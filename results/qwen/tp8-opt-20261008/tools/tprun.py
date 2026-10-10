@@ -44,6 +44,10 @@ def wrapped(clock, args):
                        'python3', 'scripts/latency-run.py', f'{ROOT}/{a.binary}', *args])
 
 
+hosts = ['incite'] + [spec.split(':', 1)[0] for spec in a.node]
+for host in hosts:
+    if subprocess.run(['ssh', host, f'pgrep -f "^{ROOT}/trashcan"'], capture_output=True).returncode == 0:
+        sys.exit(f'{host}: an engine process from an earlier run is still running; stop it first')
 nodes = []
 for spec in a.node:
     host, args = spec.split(':', 1)
@@ -56,6 +60,8 @@ dcmd, *dargs = shlex.split(a.driver)
 subprocess.run(['ssh', 'incite', f'cd {ROOT}; echo {shlex.quote(time.strftime("%FT%T") + " " + a.name + " " + a.binary + " " + a.env + " " + a.driver)} >> results/commands.log'])
 cmd = wrapped(f'{a.name}', [dcmd, a.model, *dargs]) + f' > results/{a.name}.json 2> results/{a.name}.err'
 rc = subprocess.run(leased('incite', cmd)).returncode
+# Stop every node, even one that did not end its session or exits slowly: a node left running would serve the next
+# run's session with this run's settings (the next run's node waits behind it under the same lease).
 for host, log, child in nodes:
     for _ in range(60):
         r = subprocess.run(['ssh', host, f'grep -q "session ended" {ROOT}/{log}'])
@@ -63,9 +69,13 @@ for host, log, child in nodes:
             break
         time.sleep(1)
     else:
-        print(f'{host}: node did not end its session; left running', file=sys.stderr)
-        continue
-    subprocess.run(['ssh', host, f'pkill -TERM -f "^{ROOT}/{a.binary} qwen-tp-node "'])
-    child.wait(timeout=30)
+        print(f'{host}: node did not end its session; stopping it', file=sys.stderr)
+    for signal, wait in (('TERM', 150), ('KILL', 60)):
+        subprocess.run(['ssh', host, f'pkill -{signal} -f "^{ROOT}/{a.binary} qwen-tp-node "'])
+        try:
+            child.wait(timeout=wait)
+            break
+        except subprocess.TimeoutExpired:
+            print(f'{host}: node still running {wait} s after SIG{signal}', file=sys.stderr)
 subprocess.run(['ssh', 'incite', f'cd {ROOT}; tail -3 results/{a.name}.err; cat results/{a.name}.json | head -c 3000'])
 sys.exit(rc)

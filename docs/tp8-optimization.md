@@ -7,11 +7,12 @@ below is an estimate from those measurements; none is demonstrated until the run
 Following AGENTS.md, each candidate ships behind a switch with its current behaviour as the default, and is
 kept (switch removed) or deleted after its end-to-end A/B.
 
-**Status.** W1, H1, A1, K1, F1, G1 and M1 (in its many-rows form) are implemented, with `trashcan qwen-kernel-check`
-(T1) to check the kernels on the D700s. Off the Macs, the unit tests cover the f16 payload's cross-machine identity
-and the fused host pass, and every new kernel matches an f64 or exact reference on lavapipe; none has run on a D700.
-H1 measured locally at 0.6 µs per all-reduce, well below the 4 µs assumed below: the old passes were already
-vectorized.
+**Status (measured on the Macs 2026-10-09, [results](../results/qwen/tp8-opt-20261008/README.md#results-on-the-macs-2026-10-09)).**
+W1 is kept for all-reduces below prefill size and is the default: decode 35.0 to 36.2 tok/s and MTP 46.0 to 47.0. On
+prefill-sized all-reduces it made prefill 5% slower, and its f16 reduce-scatter/all-gather is gone. Every kernel (A1,
+K1, F1, G1, M1) produced the bits it claimed on the D700s but ran slower than the kernel it replaced, except A1 at
+8000 keys; none was faster end to end, and A1 could not be measured at long context. H1 cost 0.55 ms per token.
+All of them, and `qwen-kernel-check`, are removed. The estimates below are kept as written.
 
 ## Baseline
 

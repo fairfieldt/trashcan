@@ -1,0 +1,106 @@
+2026-10-09T15:40:13 base-old-1 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:41:14 base-new-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:41:53 base-old-2 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:42:31 base-new-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:48:24 h1-old-1 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:49:03 h1-new-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:50:01 h1-off-1 trashcan-opt TRASHCAN_TP_HOSTPASS=0 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:50:38 h1-old-2 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:51:16 h1-new-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:51:56 h1-off-2 trashcan-opt TRASHCAN_TP_HOSTPASS=0 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:54:24 dec-default-w1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:55:09 dec-w1-1 trashcan-opt TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:55:47 dec-default-w1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:56:26 dec-w1-2 trashcan-opt TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:57:04 dec-default-a1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:57:43 dec-a1-1 trashcan-opt TRASHCAN_QWEN_DECODE_ATTN=1 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:58:21 dec-default-a1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:59:07 dec-a1-2 trashcan-opt TRASHCAN_QWEN_DECODE_ATTN=1 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T15:59:51 dec-default-k1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:00:30 dec-k1-1 trashcan-opt TRASHCAN_QWEN_TOPK=wave qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:01:08 dec-default-k1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:01:44 dec-k1-2 trashcan-opt TRASHCAN_QWEN_TOPK=wave qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:02:22 dec-default-f1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:03:04 dec-f1-1 trashcan-opt TRASHCAN_QWEN_FUSED_FFN=1 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:03:43 dec-default-f1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:04:22 dec-f1-2 trashcan-opt TRASHCAN_QWEN_FUSED_FFN=1 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:05:00 dec-default-g1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:06:19 mtp-default-w1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:08:55 mtp-default-w1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:09:59 mtp-w1-1 trashcan-opt TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:10:40 mtp-default-w1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:11:27 mtp-w1-2 trashcan-opt TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:12:06 mtp-default-a1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:13:08 mtp-a1-1 trashcan-opt TRASHCAN_QWEN_DECODE_ATTN=1 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:13:46 mtp-default-a1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:14:26 mtp-a1-2 trashcan-opt TRASHCAN_QWEN_DECODE_ATTN=1 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:15:06 long-default-1 trashcan-opt  qwen-bench --pp 7680 --tg 64 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:33:57 dec-default-g1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:34:57 dec-g1-1 trashcan-opt TRASHCAN_QWEN_FUSED_GDN=1 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:35:37 dec-default-g1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:36:19 dec-g1-2 trashcan-opt TRASHCAN_QWEN_FUSED_GDN=1 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:37:05 dec-default-m1-1 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:37:45 dec-m1-1 trashcan-opt TRASHCAN_QWEN_SHORTK=16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:38:26 dec-default-m1-2 trashcan-opt  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:39:08 dec-m1-2 trashcan-opt TRASHCAN_QWEN_SHORTK=16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:51:18 e-base-1 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:52:00 e-eval-1 trashcan-eval  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:52:39 e-evalw-1 trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:53:18 e-base-2 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:53:57 e-eval-2 trashcan-eval  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:54:36 e-evalw-2 trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:55:16 e-mtp-base-1 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:56:00 e-mtp-eval-1 trashcan-eval  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:56:39 e-mtp-evalw-1 trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:57:20 e-mtp-base-2 trashcan-base  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:57:59 e-mtp-eval-2 trashcan-eval  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:58:37 e-mtp-evalw-2 trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:59:16 e-val-eval trashcan-eval  qwen-validate results/e-val-eval --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T16:59:45 e-val-evalw trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-validate results/e-val-evalw --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T17:00:15 e-check-evalw trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-check --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T17:00:41 m-dec-ring-1 trashcan-mesh  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:01:24 m-dec-full-1 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:02:10 m-dec-ringw-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:02:54 m-dec-fullw-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:03:37 m-dec-ring-2 trashcan-mesh  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:04:26 m-dec-full-2 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:05:06 m-dec-ringw-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:05:55 m-dec-fullw-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:06:38 m-dec-ring-3 trashcan-mesh  qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:07:18 m-dec-full-3 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:08:06 m-dec-ringw-3 trashcan-mesh TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:08:49 m-dec-fullw-3 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:09:30 m-mtp-ring-1 trashcan-mesh  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:10:11 m-mtp-full-1 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:10:51 m-mtp-ringw-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:11:31 m-mtp-fullw-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:12:10 m-mtp-ring-2 trashcan-mesh  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:12:51 m-mtp-full-2 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:13:32 m-mtp-ringw-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:14:13 m-mtp-fullw-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:14:50 m-pp-ring-1 trashcan-mesh  qwen-bench --pp 512 --tg 16 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:15:32 m-pp-full-1 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 16 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:16:09 m-pp2k-ring-1 trashcan-mesh  qwen-bench --pp 2048 --tg 16 --reps 1 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:16:49 m-pp2k-full-1 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 2048 --tg 16 --reps 1 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:17:38 m-pp-ring-2 trashcan-mesh  qwen-bench --pp 512 --tg 16 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:18:12 m-pp-full-2 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 16 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:19:03 m-pp2k-ring-2 trashcan-mesh  qwen-bench --pp 2048 --tg 16 --reps 1 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:19:57 m-pp2k-full-2 trashcan-mesh TRASHCAN_TP_MESH=full qwen-bench --pp 2048 --tg 16 --reps 1 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:24:55 m-dir-full-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:25:36 m-dir-all-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full:0 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:26:14 m-dir-none-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full:1000000000 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:27:00 m-dir-full-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:27:42 m-dir-all-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full:0 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:28:22 m-dir-none-2 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full:1000000000 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:29:03 m-val-ring trashcan-mesh  qwen-validate results/m-val-ring --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:29:33 m-val-full trashcan-mesh TRASHCAN_TP_MESH=full qwen-validate results/m-val-full --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:30:04 m-val-fullw trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-validate results/m-val-fullw --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:30:36 m-check-mtp-full trashcan-mesh TRASHCAN_TP_MESH=full qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:31:34 m-check-v3-full trashcan-mesh TRASHCAN_TP_MESH=full qwen-check --verify 3 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:32:11 m-check-mtp-fullw trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:32:52 m-check-v3-fullw trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-check --verify 3 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
+2026-10-09T17:38:57 e-check-mtp-evalw trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T17:39:36 e-check-mtp-eval trashcan-eval  qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T17:40:15 e-check-v3-evalw trashcan-eval TRASHCAN_TP_WIRE=f16 qwen-check --verify 3 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T17:40:53 e-check-v3-eval trashcan-eval  qwen-check --verify 3 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1
+2026-10-09T17:41:32 m-dec1-once-1 trashcan-mesh TRASHCAN_TP_WIRE=f16 TRASHCAN_TP_MESH=full qwen-bench --pp 512 --tg 128 --reps 2 --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2
