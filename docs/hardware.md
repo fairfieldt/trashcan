@@ -106,7 +106,11 @@ unplug them first ([kernel.md](kernel.md#installing-and-booting)).
 Between two Mac Pros (incite and invite, one cable per controller pair): 8.6-9.3 Gb/s per link each way, 25.9 Gb/s
 over all three at once, 0.18 ms ping; a model copy with `tar | socat` runs at 505 MB/s, limited by the receiving
 Apple SSD ([results](../results/kernel/tb-nodes-20261006/README.md)). After one Mac reboots, the other can keep a
-stale peer from its firmware; reload `thunderbolt` on both, and replug a link that comes back with one lane.
+stale peer from its firmware; reload `thunderbolt` on both, and replug a link that comes back with one lane. After
+several Macs reboot, `scripts/tb-reset.sh HOST...` resets all their controllers together (unload and NHI reset on
+every Mac, then the modules loaded on all at once), which brought the six cables of the four TP8 Macs back on two
+lanes where resetting one Mac after another left links stale; a link still down after two rounds needs a replug
+([results](../results/qwen/tp8-mesh-20261009/README.md#cables)). Create the streams again afterwards.
 
 ## Fan control
 
