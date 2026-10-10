@@ -153,13 +153,54 @@ pieces, for every Q4_0 kernel and `repack_q4`), the bias partial sums precompute
 normed rows (21 VALU per iteration, 9%, with the bit-exactness of the host's add order to prove), and per-shape
 geometry (2 rows up to 1280 rows, 5 past 2048), worth about 1% of a round together.
 
+## Round 3b: the three next steps, microbenchmarked (enlight lease #12, `trashcan-c3j`/`trashcan-c3k`)
+
+Everything bit for bit `qwen_q4c3`'s (or `matvecq4_r2u2`'s) results; `microbench/c3k-*.jsonl` (`c3j-*` is the
+first form of the tiled kernels, whose per-row index helpers cost 33 VALU per iteration and lost 5-21%).
+
+**Tiled weight layout** (`kernels/tiled-layout-and-bias.patch`): groups of four rows contiguous, the blocks in
+tiles of 16 per row, [tile][row of 4][block][word], so a wave's 16 blocks of four rows are one 256-byte run of
+scales and one 1 KB run of nibbles, with uniform tile bases and constant row offsets for full tiles. The loop
+bodies lose the per-row address arithmetic (three columns: 212 VALU per iteration instead of 229; two-row decode,
+two tiles: 114 instead of 126).
+
+| shape | `qwen_q4c3` | tiled | g2: `qwen_q4c3` | tiled | `qwen_q4c2` | tiled | `matvecq4_r2u2` | tiled | `matvecq4_r2` | tiled |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2048x5120 | 70.7 | 66.9 (-5%) | 121.9 | 120.0 (-2%) | - | - | - | - | - | - |
+| 2176x5120 | 91.3 | 87.7 (-4%) | 133.0 | 129.8 (-2%) | 66.8 | 65.9 (-1%) | 45.2 | 46.5 (+3%) | 47.3 | 49.7 (+10%) |
+| 5120x2176 | 88.0 | 89.8 (+2%) | 155.1 | 153.2 (-1%) | 65.9 | 66.6 (+1%) | 47.2 | 47.6 (+1%) | 45.7 | 45.7 (-3%) |
+| 1280x5120 | 59.0 | 55.7 (-6%) | 94.1 | 90.7 (-4%) | 48.8 | 46.8 (-4%) | 28.4 | 29.6 (+4%) | 30.7 | 31.5 (+11%) |
+| 768x5120 | 47.8 | 45.7 (-5%) | 58.5 | 56.5 (-3%) | 38.7 | 36.8 (-5%) | 21.4 | 22.4 (+5%) | 23.6 | 24.6 (+15%) |
+| 5120x768 | 60.4 | 67.0 (+11%) | 97.6 | 103.8 (+6%) | 41.7 | 46.5 (+11%) | 31.6 | 26.9 (-15%) | 23.1 | 25.5 (-19%) |
+| 1536x5120 | 59.7 | 56.6 (-5%) | 95.5 | 92.3 (-3%) | - | - | 32.2 | 32.6 (+1%) | 35.7 | 36.0 (+12%) |
+
+The three-column kernels gain 4-6% on the 5120-long rows (2-4% with two dispatches overlapping, as gate and up
+run) and lose 11% on the 768-long rows (one full tile and a partial one); the decode kernels do not gain (the
+engine uses `matvecq4_r2u2` at 5120 and `matvecq4_r2` at 2176 and 768). A verification round would save about
+1% and a decode token nothing, for a per-matrix layout flag and tiled variants of every Q4_0 kernel the model
+touches (`matvecq4_r2u2`, `qwen_q4c2/3/4`, `multivec4`, `gemm2`, `gemm`), whose prefill GEMM behaviour is
+unmeasured. Not integrated.
+
+**Zero-point biases precomputed by the producer of x** (`BIAS` in the patch: the kernel reads 8 x the sum of a
+lane's eight activations, in its own order of additions, from buffer d instead of summing them): 364 VALU instead
+of 377 for the shader, three more loads per iteration; 2048x5120 73.8 µs (+4%), 2176x5120 87.7 (-4%), 5120x2176
+89.1 (+1%), 1280x5120 59.0 (0%), 768x5120 49.0 (+2%), 5120x768 60.1 (0%); with two dispatches overlapping +0 to
++9%. The loads cost more than the 13 VALU they replace. Not integrated (it would also need the host norm pass
+and the gated-norm and SwiGLU kernels to write the biases).
+
+**Per-shape row geometry**: measured above (two rows per wave: 768x5120 -9%, 5120x768 -6%, 1280x5120 -2%; five
+rows at 2176 rows). The out-projections (5120x768, 64 per round) would save about 0.2 ms of a 44.6 ms round and
+the five-row kernel 0.07 ms (measured on the cluster); the 768-row z projection runs concurrently with the
+1280-row qkv projection, where two-row waves would exceed the 640 slots of 5 waves per SIMD. Below what an A/B
+on the cluster resolves (the same configuration repeats within about 1%); not pursued.
+
 ## Files
 
 - `tools/c3.sh`: the cluster phases (`mtp`, `profile`, `gates`); `tools/phases.py` (from round 2): the run table;
   `tools/dispatches.py`: per-dispatch medians of a profiled run; `tools/shaderstats_map.py`: names the pipelines of
   a `RADV_DEBUG=shaderstats` dump; `tools/table.py`: microbenchmark tables.
-- `kernels/`: the shared-memory kernel bodies and the define-based variants of `qwen_q4cols_body.glsl` and
-  `matvecq4_body.glsl` as they were measured (not in the engine).
+- `kernels/`: the shared-memory kernel bodies, the define-based variants of `qwen_q4cols_body.glsl` and
+  `matvecq4_body.glsl` as they were measured, and the tiled-layout and bias patch (none in the engine).
 - `microbench/`: every `qwen-matvec-bench` run (`c3a` … `c3i`, JSON lines) and the shader statistics of each
   binary.
 - `incite/`: the runs' driver `.json`/`.err`, `commands.log`, the dispatch profiles, `clocks/`; `invite/`,

@@ -24,9 +24,10 @@ the three-column verification kernel (64 VGPRs, 4 waves per SIMD) and found no f
 contract: it is bound by latency hiding (98% VALU issue at 7 waves per SIMD, about 65% at 4), and activations in
 shared memory (three designs), a weight prefetch, compiled-in row lengths, hoisted indices and a reordered
 epilogue all run slower; five rows per wave only helps the 2176-row FFN shard (-10% alone, -2% with gate and up
-concurrent) and was 0.3% of GPU time on the cluster, so it was removed. The next candidates, untried because they
-reach beyond that kernel, are a weight layout interleaving a wave's 16 blocks of four rows (every Q4_0 kernel and
-`repack_q4`) and the bias partial sums precomputed by the host pass.
+concurrent) and was 0.3% of GPU time on the cluster, so it was removed. The candidates beyond that kernel were
+microbenchmarked too: a weight layout interleaving a wave's 16 blocks of four rows gains 4-6% on the three-column
+kernel for 5120-long rows and nothing on decode (about 1% of a verification round for tiled variants of every
+Q4_0 kernel), precomputed zero-point biases gain nothing, per-shape row geometry about 0.5%. None integrated.
 The estimates below are kept as written.
 
 ## Baseline
