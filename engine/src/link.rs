@@ -52,6 +52,15 @@ impl Write for Lane {
     }
 }
 
+/// When an exchange had issued all its sends and when its first incoming byte arrived, as time since its start:
+/// the one-way trip to the other machine plus its lateness, and the transfer that follows (`Mesh` tallies them).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Trip {
+    pub sent: Duration,
+    pub first: Duration,
+    pub total: Duration,
+}
+
 /// Bytes moved by one non-blocking call; 0 when the lane would block.
 fn step(r: io::Result<usize>) -> io::Result<usize> {
     match r {
@@ -289,30 +298,39 @@ impl Lanes {
     /// holds (256 frames of 4 KiB), so stream lanes move at most ROUND bytes each way per round, and a round
     /// ends only when its bytes have arrived from the other machine.
     pub fn exchange(&mut self, out: &[u8], inp: &mut [u8]) -> Result<()> {
-        self.exchange_within(out, inp, STALL)
+        self.exchange_within(out, inp, STALL).map(|_| ())
     }
 
     /// `exchange`, failing when the lanes make no progress for `stall`.
-    pub fn exchange_within(&mut self, out: &[u8], inp: &mut [u8], stall: Duration) -> Result<()> {
+    pub fn exchange_within(&mut self, out: &[u8], inp: &mut [u8], stall: Duration) -> Result<Trip> {
         ensure!(out.len() == inp.len() && out.len().is_multiple_of(4), "exchange sizes must match and align to 4 bytes");
         const ROUND: usize = 256 << 10;
         let n = self.lanes.len();
         let cuts: Vec<usize> = (0..=n).map(|i| out.len() / 4 * i / n * 4).collect();
         let round = if self.kind == "stream" { ROUND } else { usize::MAX };
         let mut begin: Vec<usize> = cuts[..n].to_vec();
+        let start = Instant::now();
+        let mut trip = Trip::default();
         while begin != cuts[1..] {
             let ends: Vec<usize> = (0..n).map(|i| cuts[i + 1].min(begin[i].saturating_add(round))).collect();
-            self.exchange_round(out, inp, &begin, &ends, stall)?;
+            let t = self.exchange_round(out, inp, &begin, &ends, stall)?;
+            if begin == cuts[..n] {
+                trip = t;
+            }
             begin = ends;
         }
-        Ok(())
+        trip.total = start.elapsed();
+        Ok(trip)
     }
 
     /// Move `out[begin[i]..end[i]]` out and into `inp` at the same offsets on every lane `i`.
-    fn exchange_round(&mut self, out: &[u8], inp: &mut [u8], begin: &[usize], end: &[usize], stall: Duration) -> Result<()> {
+    fn exchange_round(&mut self, out: &[u8], inp: &mut [u8], begin: &[usize], end: &[usize], stall: Duration) -> Result<Trip> {
         let mut sent = begin.to_vec();
         let mut read = begin.to_vec();
-        let mut last = Instant::now();
+        let start = Instant::now();
+        let mut last = start;
+        let mut trip = Trip::default();
+        let (mut all_sent, mut any_read) = (false, false);
         loop {
             let mut busy = false;
             for (i, lane) in self.lanes.iter_mut().enumerate() {
@@ -327,8 +345,17 @@ impl Lanes {
                     busy |= k > 0;
                 }
             }
+            if !all_sent && sent == end {
+                all_sent = true;
+                trip.sent = start.elapsed();
+            }
+            if !any_read && read != begin {
+                any_read = true;
+                trip.first = start.elapsed();
+            }
             if sent == end && read == end {
-                return Ok(());
+                trip.total = start.elapsed();
+                return Ok(trip);
             }
             if busy {
                 last = Instant::now();
@@ -346,7 +373,7 @@ impl Lanes {
 /// ROUND bytes each way on streams (see `exchange`); a lane's round ends only when its bytes have arrived. One
 /// exchange alone is `Lanes::exchange_within`, which keeps the lanes of its rounds in step (measured 0.6% faster for
 /// a TP4 decode than this loop, results/qwen/tp8-20261007).
-pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration) -> Result<()> {
+pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration) -> Result<Trip> {
     for (_, out, inp) in jobs.iter() {
         ensure!(out.len() == inp.len() && out.len().is_multiple_of(4), "exchange sizes must match and align to 4 bytes");
     }
@@ -374,15 +401,21 @@ pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration
             parts.push(Part { lane, out: &out[cuts[i]..cuts[i + 1]], inp: chunk, round, end: len.min(round), sent: 0, read: 0 });
         }
     }
-    let mut last = Instant::now();
+    let start = Instant::now();
+    let mut last = start;
+    let mut trip = Trip::default();
+    let (mut all_sent, mut any_read) = (false, false);
     loop {
-        let (mut busy, mut done) = (false, true);
+        let (mut busy, mut done, mut sent, mut read) = (false, true, true, false);
+        // Every lane's send first, then the reads: the sends go out back to back.
         for p in parts.iter_mut() {
             if p.sent < p.end {
                 let k = step(p.lane.write(&p.out[p.sent..p.end]))?;
                 p.sent += k;
                 busy |= k > 0;
             }
+        }
+        for p in parts.iter_mut() {
             if p.read < p.end {
                 let k = step(p.lane.read(&mut p.inp[p.read..p.end]))?;
                 p.read += k;
@@ -393,9 +426,21 @@ pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration
                 busy = true;
             }
             done &= p.read == p.out.len() && p.sent == p.out.len();
+            // The first round's sends issued, and the first byte of any lane.
+            sent &= p.sent >= p.out.len().min(p.round);
+            read |= p.read > 0;
+        }
+        if !all_sent && sent {
+            all_sent = true;
+            trip.sent = start.elapsed();
+        }
+        if !any_read && read {
+            any_read = true;
+            trip.first = start.elapsed();
         }
         if done {
-            return Ok(());
+            trip.total = start.elapsed();
+            return Ok(trip);
         }
         if busy {
             last = Instant::now();

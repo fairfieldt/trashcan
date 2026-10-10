@@ -124,6 +124,36 @@ pub fn attention_shaders(parts: u32) -> Result<(&'static str, &'static str)> {
     }
 }
 
+/// `attention_shaders` for Qwen's decode and verification: with one column the partial kernel walks keys two at a
+/// time (`attention_partial_p2`, 15% faster on the D700 at 520 keys; with more columns its 64 VGPRs cost occupancy),
+/// and head dimensions up to 256 take the 256-thread, fully unrolled merge (`attention_merge_u`, 25% faster). Both
+/// give `attention_shaders`' bits (results/qwen/tp8-round2-20261009). `TRASHCAN_QWEN_ATTN_KERNELS=old` keeps the
+/// reference pair.
+pub fn qwen_attention_shaders(parts: u32, dim: usize, cols: usize) -> Result<(&'static str, &'static str)> {
+    static OLD: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    let (partial, merge) = attention_shaders(parts)?;
+    if *OLD.get_or_init(|| std::env::var("TRASHCAN_QWEN_ATTN_KERNELS").as_deref() == Ok("old")) {
+        return Ok((partial, merge));
+    }
+    let partial = match (parts, cols) {
+        (8, 1) => "attention_partial_p2_8",
+        (16, 1) => "attention_partial_p2_16",
+        (32, 1) => "attention_partial_p2",
+        (64, 1) => "attention_partial_p2_64",
+        (128, 1) => "attention_partial_p2_128",
+        _ => partial,
+    };
+    let merge = match (parts, dim <= 256) {
+        (8, true) => "attention_merge_u8",
+        (16, true) => "attention_merge_u16",
+        (32, true) => "attention_merge_u",
+        (64, true) => "attention_merge_u64",
+        (128, true) => "attention_merge_u128",
+        _ => merge,
+    };
+    Ok((partial, merge))
+}
+
 /// Share KV across the eight local query heads for measured model shapes.
 /// Tiny contexts and unmeasured shape/partition combinations retain scalar loads.
 pub fn selected_attention_shaders(
@@ -311,6 +341,7 @@ impl Device {
                 "attention_merge",
                 include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge.spv")).as_slice(),
             ),
+            ("attention_merge_u", include_bytes!(concat!(env!("OUT_DIR"), "/attention_merge_u.spv")).as_slice()),
             ("qwen_attn_scores", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_scores.spv")).as_slice()),
             ("qwen_attn_softmax", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_softmax.spv")).as_slice()),
             ("qwen_attn_values", include_bytes!(concat!(env!("OUT_DIR"), "/qwen_attn_values.spv")).as_slice()),
@@ -351,6 +382,9 @@ impl Device {
                 "matvecq4narrow",
                 include_bytes!(concat!(env!("OUT_DIR"), "/matvecq4narrow.spv")).as_slice(),
             ),
+            ("matvecq4_r2", include_bytes!(concat!(env!("OUT_DIR"), "/matvecq4_r2.spv")).as_slice()),
+            ("attention_partial_p2", include_bytes!(concat!(env!("OUT_DIR"), "/attention_partial_p2.spv")).as_slice()),
+            ("matvecq4_r2u2", include_bytes!(concat!(env!("OUT_DIR"), "/matvecq4_r2u2.spv")).as_slice()),
             (
                 "multivec",
                 include_bytes!(concat!(env!("OUT_DIR"), "/multivec.spv")).as_slice(),
@@ -489,6 +523,13 @@ impl Device {
                     ("attention_partial64", Some(64)),
                     ("attention_partial128", Some(128)),
                 ],
+                "attention_partial_p2" => &[
+                    ("attention_partial_p2", None),
+                    ("attention_partial_p2_8", Some(8)),
+                    ("attention_partial_p2_16", Some(16)),
+                    ("attention_partial_p2_64", Some(64)),
+                    ("attention_partial_p2_128", Some(128)),
+                ],
                 "qwen_add_norm_wide" => &[("qwen_add_norm_j16", Some(16)), ("qwen_add_norm_j20", Some(20))],
                 "qwen_matf32" => &[("qwen_matf32", Some(1)), ("qwen_matf32_u16", Some(16))],
                 "attention_partial_heads2" => &[
@@ -549,6 +590,13 @@ impl Device {
                     ("attention_merge16", Some(16)),
                     ("attention_merge64", Some(64)),
                     ("attention_merge128", Some(128)),
+                ],
+                "attention_merge_u" => &[
+                    ("attention_merge_u", None),
+                    ("attention_merge_u8", Some(8)),
+                    ("attention_merge_u16", Some(16)),
+                    ("attention_merge_u64", Some(64)),
+                    ("attention_merge_u128", Some(128)),
                 ],
                 _ => &[(name, None)],
             };

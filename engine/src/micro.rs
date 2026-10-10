@@ -856,6 +856,187 @@ pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations:
     Ok(())
 }
 
+/// Rows one workgroup of a decode or verification Q4_0 kernel covers (rows per wave times waves), or None for a
+/// GEMM kernel (64-row tiles).
+fn rows_per_workgroup(kernel: &str) -> Option<usize> {
+    Some(match kernel {
+        "matvecq4" | "matvecq4narrow" | "multivec4" | "qwen_q4c2" | "qwen_q4c3" | "qwen_q4c4" => 16,
+        "matvecq4_r2" | "matvecq4_r2u2" => 8,
+        _ => return None,
+    })
+}
+
+/// Time Q4_0 decode and verification kernels (1 to 8 columns) at ROWSxK shapes with random weights, checking every
+/// kernel against the first bit for bit. `group` dispatches share one trailing barrier (the first `group - 1` defer
+/// it), as a layer's independent projections do, so their overlap is measured too; each timed unit is one group.
+pub fn matvec(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations: u32, gpu: usize, warmup_ms: u64, group: usize) -> Result<()> {
+    ensure!(iterations > 0 && (1..=8).contains(&n) && group > 0, "positive iterations and group, 1 to 8 columns");
+    let inst = Rc::new(Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("GPU not found")?;
+    let d = Device::new(inst.clone(), pd)?;
+    let mut state = 0x2545_f491u32;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        state
+    };
+    let mut keep = Vec::new();
+    let q = unsafe { d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(2), None)? };
+    for &(rows, k) in shapes {
+        ensure!(rows.is_multiple_of(16) && k.is_multiple_of(32), "rows must be a multiple of 16 and k of 32");
+        let mut blocks = vec![0u8; rows * k / 32 * 18];
+        for b in blocks.chunks_exact_mut(18) {
+            let scale = half::f16::from_f32(0.001 + (next() % 1000) as f32 * 5e-5);
+            b[..2].copy_from_slice(&scale.to_le_bytes());
+            for byte in &mut b[2..] {
+                *byte = next() as u8;
+            }
+        }
+        // One matrix per dispatch of the group, so a group streams as many bytes as the projections it stands for.
+        let ws: Vec<_> = (0..group).map(|_| d.upload_matrix(&quant::repack_q4(&blocks, k, rows, 0, rows, 0, k))).collect::<Result<_>>()?;
+        let input: Vec<f32> = (0..n * k).map(|_| (next() as f64 / u32::MAX as f64 * 2. - 1.) as f32).collect();
+        let x = d.upload(bytemuck::cast_slice(&input))?;
+        let mut reference: Option<Vec<u8>> = None;
+        for kernel in kernels {
+            let per = rows_per_workgroup(kernel);
+            let (gx, gy) = match per {
+                Some(r) => (rows.div_ceil(r), if kernel.starts_with("multivec4") { n.div_ceil(4) } else { 1 }),
+                None => (rows.div_ceil(64), n.div_ceil(64)),
+            };
+            ensure!(per.is_none() || kernel.starts_with("qwen_q4c") || kernel.starts_with("multivec") || n == 1, "{kernel} takes one column");
+            let ys: Vec<_> = (0..group).map(|_| d.buffer(n * rows * 4, false, false, None)).collect::<Result<_>>()?;
+            let cmd = d.begin()?;
+            unsafe {
+                d.dev.cmd_reset_query_pool(cmd, q, 0, 2);
+                d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
+            }
+            for _ in 0..iterations {
+                for (g, (w, y)) in ws.iter().zip(&ys).enumerate() {
+                    let mut p = Push::default();
+                    p.ptr[1] = x.address;
+                    p.ptr[2] = y.address;
+                    p.u[0] = rows as u32;
+                    p.u[1] = k as u32;
+                    p.u[3] = (rows * k / 32) as u32;
+                    p.u[15] = n as u32;
+                    d.dispatch_matrix(cmd, kernel, p.defer_barrier(g + 1 < group), gx as u32, gy as u32, w)?;
+                }
+            }
+            unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+            d.finish(cmd)?;
+            let warmup = Instant::now();
+            while warmup.elapsed() < Duration::from_millis(warmup_ms) {
+                d.run_reusable(cmd)?;
+            }
+            let mut samples = Vec::new();
+            for _ in 0..5 {
+                d.run(cmd)?;
+                let mut ts = [0u64; 2];
+                unsafe { d.dev.get_query_pool_results(q, 0, &mut ts, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+                samples.push((ts[1] - ts[0]) as f64 * d.period as f64 * 1e-3 / iterations as f64);
+            }
+            samples.sort_by(f64::total_cmp);
+            let us = samples[samples.len() / 2];
+            let out = ys[0].download()?;
+            let (mismatches, max_diff) = match &reference {
+                None => (0, 0f32),
+                Some(r) => {
+                    let (a, b): (&[f32], &[f32]) = (bytemuck::cast_slice(r), bytemuck::cast_slice(&out));
+                    let m = a.iter().zip(b).filter(|(u, v)| u.to_bits() != v.to_bits()).count();
+                    (m, a.iter().zip(b).map(|(u, v)| (u - v).abs()).fold(0f32, f32::max))
+                }
+            };
+            if reference.is_none() {
+                reference = Some(out);
+            }
+            let bytes = (rows * k / 32 * 20 * group) as f64;
+            println!("{}", serde_json::json!({"gpu": gpu, "rows": rows, "k": k, "n": n, "group": group, "kernel": kernel, "us": us, "gb_s": bytes / (us * 1e-6) / 1e9, "mismatches": mismatches, "max_diff": max_diff}));
+            keep.extend(ys);
+        }
+        keep.extend(ws);
+        keep.push(x);
+    }
+    unsafe { d.dev.destroy_query_pool(q, None) };
+    drop(keep);
+    Ok(())
+}
+
+/// Time split-K decode attention (partial + merge) at a tensor-parallel rank's shape: `heads` query heads over
+/// `kv` KV heads of 256, `n` columns after `pos` cached keys, `parts` partitions; each merge kernel named in
+/// `merges` is checked against the first bit for bit.
+#[allow(clippy::too_many_arguments)]
+pub fn decode_attention(pos: usize, n: usize, heads: usize, kv: usize, parts: u32, merges: &[String], iterations: u32, gpu: usize) -> Result<()> {
+    const DIM: usize = 256;
+    ensure!(n > 0 && n <= 8 && heads > 0 && heads.is_multiple_of(kv) && iterations > 0, "invalid decode attention shape");
+    let inst = Rc::new(Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("GPU not found")?;
+    let d = Device::new(inst.clone(), pd)?;
+    let cap = pos + n + 3;
+    let mut state = 0x9e37_79b9u32;
+    let mut sample = || { state ^= state << 13; state ^= state >> 17; state ^= state << 5; (state as f64 / u32::MAX as f64 * 2. - 1.) as f32 };
+    let q: Vec<f32> = (0..n * heads * DIM).map(|_| sample() * 0.25).collect();
+    let k16: Vec<u16> = (0..cap * kv * DIM).map(|_| half::f16::from_f32(sample() * 2.0).to_bits()).collect();
+    let v16: Vec<u16> = (0..cap * kv * DIM).map(|_| half::f16::from_f32(sample()).to_bits()).collect();
+    let qb = d.upload(bytemuck::cast_slice(&q))?;
+    let kb = d.upload(bytemuck::cast_slice(&k16))?;
+    let vb = d.upload(bytemuck::cast_slice(&v16))?;
+    let params = d.upload(bytemuck::cast_slice(&[pos as u32, n as u32, 0u32, 0]))?;
+    let out = d.buffer(n * heads * DIM * 4, false, false, None)?;
+    let scratch = d.buffer(n * heads * parts as usize * (DIM + 2) * 4, false, false, None)?;
+    let (partial, _) = crate::vulkan::attention_shaders(parts)?;
+    let mut p = Push { ptr: [qb.address, kb.address, vb.address, out.address, scratch.address, 0, params.address, 0], ..Default::default() };
+    p.u[4] = heads as u32;
+    p.u[5] = kv as u32;
+    p.u[6] = DIM as u32;
+    p.u[7] = cap as u32;
+    let qp = unsafe { d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(4), None)? };
+    let mut reference: Option<Vec<u8>> = None;
+    for merge in merges {
+        let cmd = d.begin()?;
+        unsafe {
+            d.dev.cmd_reset_query_pool(cmd, qp, 0, 4);
+            d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, qp, 0);
+        }
+        for _ in 0..iterations {
+            d.dispatch(cmd, partial, p, heads as u32 * parts, n as u32);
+        }
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, qp, 1) };
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, qp, 2) };
+        for _ in 0..iterations {
+            d.dispatch(cmd, merge, p, heads as u32, n as u32);
+        }
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, qp, 3) };
+        d.finish(cmd)?;
+        let warmup = Instant::now();
+        while warmup.elapsed() < Duration::from_millis(300) {
+            d.run_reusable(cmd)?;
+        }
+        let mut samples = Vec::new();
+        for _ in 0..5 {
+            d.run(cmd)?;
+            let mut ts = [0u64; 4];
+            unsafe { d.dev.get_query_pool_results(qp, 0, &mut ts, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+            let us = |a: u64, b: u64| (b - a) as f64 * d.period as f64 * 1e-3 / iterations as f64;
+            samples.push((us(ts[0], ts[1]), us(ts[2], ts[3])));
+        }
+        samples.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let (partial_us, merge_us) = samples[samples.len() / 2];
+        let bytes = out.download()?;
+        let mismatches = match &reference {
+            None => 0,
+            Some(r) => bytemuck::cast_slice::<u8, f32>(r).iter().zip(bytemuck::cast_slice::<u8, f32>(&bytes)).filter(|(a, b)| a.to_bits() != b.to_bits()).count(),
+        };
+        if reference.is_none() {
+            reference = Some(bytes);
+        }
+        println!("{}", serde_json::json!({"gpu": gpu, "pos": pos, "n": n, "heads": heads, "kv": kv, "parts": parts, "partial": partial, "merge": merge, "partial_us": partial_us, "merge_us": merge_us, "mismatches": mismatches}));
+    }
+    unsafe { d.dev.destroy_query_pool(qp, None) };
+    drop((qb, kb, vb, params, out, scratch));
+    Ok(())
+}
+
 /// Deterministic attention checks for Qwen's GQA ratio six, padded tiles, tails, and later positions.
 pub fn qwen_attention(tokens: usize, n: usize, heads: usize, iterations: usize) -> Result<()> {
     ensure!(tokens >= n && n > 0 && heads > 0 && heads <= 64 && iterations > 0, "invalid attention shape");

@@ -62,8 +62,9 @@ uses the same recipe without an importance matrix, from `unsloth/Qwen3.5-9B-GGUF
 ## GPU stages (`engine/src/qwen/gpu.rs`)
 
 One command buffer per batch shape, replayed with a new position. Q4_0 projections reuse the Gemma kernels
-(`gemm2` above 8 columns, `multivec4` for 5-8, `matvecq4*` for decode); verification widths 2-4 use
-`qwen_q4c2/3/4`. The head uses `headvec` (or the multi-column kernels for verification), `topk` and
+(`gemm2` above 8 columns, `multivec4` for 5-8, `matvecq4*` for decode; tensor-parallel ranks take `matvecq4_r2`
+and `matvecq4_r2u2`, two rows per wave with the same bits per row, see [the round-2 results](../results/qwen/tp8-round2-20261009/README.md));
+verification widths 2-4 use `qwen_q4c2/3/4`. The head uses `headvec` (or the multi-column kernels for verification), `topk` and
 `merge` over 243 vocabulary chunks. New kernels:
 
 | kernel | work |
@@ -71,7 +72,7 @@ One command buffer per batch shape, replayed with a new position. Q4_0 projectio
 | `qwen_add_norm` | residual add and RMS norm, one workgroup per token |
 | `qwen_matf32` | f32 alpha/beta projection, one wave per row and eight tokens |
 | `qwen_conv` | width-4 causal convolution + SiLU, one thread per channel walking the batch |
-| `qwen_gdn` | DeltaNet recurrence: each wave keeps four state rows in registers across the batch |
+| `qwen_gdn` | DeltaNet recurrence: each wave keeps one state row in registers across the batch (four rows per wave until round 2 of the TP8 optimization; one row runs four times the waves and the same arithmetic per row) |
 | `qwen_gated_norm` | per-head RMS norm times `silu(z)` |
 | `qwen_qk` | per-head RMS norm, partial NeoX rotation, scale, f16 cache store |
 | `qwen_gate` | `sigmoid(gate)` on the attention output |
@@ -79,7 +80,9 @@ One command buffer per batch shape, replayed with a new position. Q4_0 projectio
 | `qwen_q4c2/3/4` | 2-4 columns of a Q4_0 projection in the decode kernels' formulation: each row's nibbles are converted once and shared, and every column keeps `matvecq4`'s bias, FMA chain and reduction, so it equals a one-column decode bit for bit |
 
 Attention uses split-K decode (`attention_partial*` + merge) for up to 8 columns and scalar `attention`
-for other batches by default. `TRASHCAN_QWEN_ATTN=tiled` selects bounded 64-query tiled prefill at 64 or more
+for other batches by default; Qwen's one-column steps take `attention_partial_p2`, which walks keys two at a time,
+and head dimensions up to 256 the 256-thread, fully unrolled `attention_merge_u`, both with the reference kernels'
+bits (`TRASHCAN_QWEN_ATTN_KERNELS=old` restores the pair). `TRASHCAN_QWEN_ATTN=tiled` selects bounded 64-query tiled prefill at 64 or more
 columns, including the 27B's six-to-one GQA ratio. Cached graphs include a visible-key bucket. Paired prefill
 measurements improve 4K by 8.6% and 8K by 22.1%, with matching generated IDs. Subsequent sustained validation
 completed without GPU resets, and an independent 8K comparison improved 110.34 to 134.43 tok/s. See
@@ -204,7 +207,12 @@ matches the CPU reference to 4.0e-4 with the same greedy tokens, and `qwen-check
 7.5 ms in exchanges. With the f16 payload it decodes at 36.2 tok/s and 47.0 with MTP, 6.6 ms in exchanges
 ([results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)). With all six cables (full mesh,
 [results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)) it decodes at 37.2 tok/s and 50.1 with
-MTP, 6.0 ms in exchanges, and prefills at 211 tok/s (204 at 2048). Prefill-sized all-reduces use
+MTP, 6.0 ms in exchanges, and prefills at 211 tok/s (204 at 2048). Round 2 of the kernel work
+([results/qwen/tp8-round2-20261009](../results/qwen/tp8-round2-20261009/README.md): two rows per wave in the decode
+projections, one state row per wave in the DeltaNet recurrence, a two-key attention partial and an unrolled merge,
+all bit for bit the old kernels) takes decode to 40.7 tok/s (17.3 ms on the GPUs) and MTP to 52.0; without rounding
+the decode totals (`TRASHCAN_TP_ROUND=0`, so a decode row and the same column of a verification batch no longer agree
+bit for bit) decode reaches 42.2. Prefill-sized all-reduces use
 reduce-scatter and all-gather (3/4 of the bytes per cable) and are limited by the cables' bandwidth, about 0.5 GB/s
 each way when a cable carries both directions.
 
@@ -254,7 +262,13 @@ The TP8 optimization round of 2026-10-08 ([tp8-optimization.md](tp8-optimization
 MTP 2.1% faster; in prefill-sized all-reduces it was 5% slower, so those stay f32. Its kernels (decode attention for
 all query heads of a KV head per wave, wave-local top-k barriers, fused FFN and DeltaNet convolution, more rows per
 wave for short rows) gave the bits they claimed on the D700s but ran slower than the kernels they replaced, and the
-fused host pass was slower too; all were removed.
+fused host pass was slower too; all were removed. Round 2 (2026-10-09) went the other way on the projections: fewer
+rows per wave, so a shard's dispatch spreads over the CUs (`qwen-matvec-bench` measures such geometries on a D700);
+its exchange instrumentation (`tg_tp_ms`: `encode`, `decode`, `wire`, `sent`, `first`) shows a decode all-reduce
+spending 10 µs issuing its three sends, 18 µs until the first byte and 34 µs on the wire, where the wait is for the
+slowest machine's segment rather than for syscalls (a worker thread per cable did not help). Verification batches
+are bound by the three-column kernels' 64 VGPRs (4 waves per SIMD, so a 2176-row shard needs a second round of
+waves): the next lever for MTP.
 
 `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
 costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded

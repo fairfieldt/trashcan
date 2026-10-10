@@ -1,0 +1,20 @@
+#version 460
+#include "common.glsl"
+// attention_merge_h with 256 threads (head dimensions up to 256) and every loop unrolled: the partition loads of one output element issued 16 at a time before they are used, instead
+// of one dependent load per partition: the same maximum, denominator and FMA order, so the same bits.
+layout(local_size_x=256) in;
+layout(constant_id=0) const uint parts=32;
+shared float hm[128],hd[128];
+void main(){uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;
+uint base=(t*p.heads+head)*parts*(p.dim+2);
+if(l<parts){hm[l]=e_f.v[base+l*(p.dim+2)];hd[l]=e_f.v[base+l*(p.dim+2)+1];}
+barrier();
+if(l>=p.dim)return;
+float mx=-1e30;[[unroll]] for(uint c=0;c<parts;c++)mx=max(mx,hm[c]);
+float den=0,acc=0;
+[[unroll]] for(uint c0=0;c0<parts;c0+=16){
+    float v[16];
+    [[unroll]] for(uint i=0;i<16;i++)if(c0+i<parts)v[i]=e_f.v[base+(c0+i)*(p.dim+2)+2+l];
+    [[unroll]] for(uint i=0;i<16;i++)if(c0+i<parts){float w=exp(hm[c0+i]-mx);den+=w*hd[c0+i];acc=fma(w,v[i],acc);}
+}
+d_f.v[(t*p.heads+head)*p.dim+l]=acc/den;}

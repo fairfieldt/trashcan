@@ -8,7 +8,7 @@
 layout(local_size_x=WAVES*64) in;
 void main() {
     uint lane=gl_SubgroupInvocationID,nb=batch(),t=gl_WorkGroupID.y*COLS;
-    uint first=gl_WorkGroupID.x*16+gl_SubgroupID*ROWS,part=lane%4,blocks=p.k/32;
+    uint first=gl_WorkGroupID.x*(ROWS*WAVES)+gl_SubgroupID*ROWS,part=lane%4,blocks=p.k/32;
     if(t>=nb)return;
     float sums[COLS][ROWS];
     uint base[COLS];

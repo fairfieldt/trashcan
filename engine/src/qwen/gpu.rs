@@ -15,7 +15,7 @@ use super::{cpu::Captures, vector, Config};
 use crate::{
     gguf::{GgmlType, Gguf},
     quant,
-    vulkan::{attention_shaders, q4_decode_shader, Buffer, Device, Push, Stamps, STAMP_CAPACITY},
+    vulkan::{q4_decode_shader, qwen_attention_shaders, Buffer, Device, Push, Stamps, STAMP_CAPACITY},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
@@ -469,6 +469,23 @@ fn gemm_reference() -> bool {
     std::env::var("TRASHCAN_QWEN_GEMM").is_ok_and(|v| v == "gemm")
 }
 
+/// The one-column Q4_0 kernel of a tensor-parallel rank's projection: two rows per wave in 256-thread workgroups
+/// (`matvecq4_r2`), with the loads of two blocks issued together for rows of at least 4096 values
+/// (`matvecq4_r2u2`). Each gives a row matvecq4's bits (its lane mapping and FMA chain) and runs 10-35% faster at
+/// the TP8 shard shapes, where matvecq4's 16-row workgroups leave CUs unevenly loaded; decode 6.4% faster end to
+/// end (results/qwen/tp8-round2-20261009).
+fn tp_decode_shader(k: usize) -> &'static str {
+    if k >= 4096 { "matvecq4_r2u2" } else { "matvecq4_r2" }
+}
+
+/// Rows per workgroup of a one-column Q4_0 kernel.
+fn rows_per_workgroup(shader: &str) -> usize {
+    match shader {
+        "matvecq4_r2" | "matvecq4_r2u2" => 8,
+        _ => 16,
+    }
+}
+
 /// Whether two tensor-parallel micro-batches run on two queues (`TRASHCAN_TP_QUEUES=1`: one queue).
 fn two_queues() -> bool {
     std::env::var("TRASHCAN_TP_QUEUES").map_or(true, |v| v != "1")
@@ -737,9 +754,9 @@ impl<'a> Rec<'a> {
         // one-column decode bit for bit, as fast as multivec or slightly faster on Qwen shapes.
         // Tensor-parallel ranks use matvecq4 at every shape: a matvecq4narrow dispatch (512-thread workgroups)
         // only starts once the previous one has finished on the D700s, so independent projections cannot overlap.
-        let decode = if self.s.tp.is_some() { "matvecq4" } else { q4_decode_shader(rows, k) };
+        let decode = if self.s.tp.is_some() { tp_decode_shader(k) } else { q4_decode_shader(rows, k) };
         let (shader, gx, gy) = match n {
-            1 => (decode, rows.div_ceil(16), 1),
+            1 => (decode, rows.div_ceil(rows_per_workgroup(decode)), 1),
             2 => ("qwen_q4c2", rows.div_ceil(16), 1),
             3 => ("qwen_q4c3", rows.div_ceil(16), 1),
             4 => ("qwen_q4c4", rows.div_ceil(16), 1),
@@ -833,11 +850,12 @@ impl<'a> Rec<'a> {
         u[5] = c.k_heads as u32;
         u[6] = c.state as u32;
         u[12] = eps;
+        // One state row per wave, four waves per workgroup.
         s.gpu.dispatch(
             self.cmd,
             "qwen_gdn",
             self.push([conv_out, ab, dl.state.address, o, dl.dt_a.address, snap], u),
-            (c.v_heads * c.state / 16) as u32,
+            (c.v_heads * c.state / 4) as u32,
             1,
         );
         self.capture(format!("attn_output-{il}"), &s.o, vd)?;
@@ -939,7 +957,7 @@ impl<'a> Rec<'a> {
                 self.n as u32,
             );
         } else {
-            let (partial, merge) = attention_shaders(parts)?;
+            let (partial, merge) = qwen_attention_shaders(parts, hd, self.n)?;
             s.gpu.dispatch(
                 self.cmd,
                 partial,

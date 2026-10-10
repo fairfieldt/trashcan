@@ -2,6 +2,32 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-09: TP8 round 2: row geometry of the decode kernels, the exchange's parts
+
+`results/qwen/tp8-round2-20261009/`: Qwen3.8-27B TP8 over the six-cable cluster, decode 37.1 → 40.7 tok/s (+9.6%,
+42.2 without rounding the decode totals) and MTP 50.5 → 52.0 (+2.9%), the same tokens as the record; validation and
+`qwen-check` gates in the README.
+
+- The TP8 shards are small for `matvecq4`'s 16-row workgroups (a 768-row projection is 48 workgroups for 32 CUs).
+  Two rows per wave in 256-thread workgroups (`matvecq4_r2`, the same bits per row) is 10-35% faster per dispatch at
+  every rank shape and 6.4% end to end; loading two blocks ahead (`matvecq4_r2u2`) helps rows of 5120 and hurts
+  rows of 768. One row per wave in the DeltaNet recurrence (`qwen_gdn`, 23 → 13 µs) is another 2.3%. This is the
+  opposite of the previous round's M1 (8 or 16 rows per wave), which lost.
+- The three-column verification kernels (`qwen_q4c3`) take twice the one-column time: 64 VGPRs allow 4 waves per
+  SIMD (512 resident waves), so a 2176-row shard runs a nearly empty second round (2048 rows 71 µs, 2176 rows 94).
+  Neither geometry nor signed-nibble extraction (no per-column bias) changes that. MTP's verification (31.5 ms of a
+  44.6 ms round) therefore barely moved; a lower-register formulation is the next step.
+- A decode all-reduce on the full mesh: about 10 µs to issue the three 10 KB sends from one thread, 18 µs until the
+  first byte, 34 µs until the last; then 7 µs to decode and round the total, 6 µs for the residual and normed rows.
+  A worker thread per cable issues the sends in 4 µs but the exchange ends no sooner: it waits for the slowest
+  machine (invite's and indite's GPUs run 3-4% longer segments). An AVX build leaves the host passes unchanged
+  (memory-bound); fusing them block by block was slower. Skipping the rounding of the decode total saves 0.6 ms of
+  host time and shortens everyone's exchange (+3.9%) at the cost of decode rows no longer matching verification
+  columns bit for bit.
+- A 256-thread, fully unrolled split-K merge is 25% faster than the 512-thread one at 64 partitions (38.5 → 28.9 µs)
+  and walking keys two at a time makes the partial 15% faster at one column (56.8 → 48.5 µs), but its 64 VGPRs make
+  it slower with three columns; both are selected for Qwen's one-column steps only where they win.
+
 ## 2026-10-07: Qwen27B TP4 prefill experiments and mixed-prompt coverage
 
 `results/qwen/improvements-20261007/`: bounded tiled attention supports GQA ratio six. Paired scalar/tiled

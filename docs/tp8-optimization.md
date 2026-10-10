@@ -14,6 +14,12 @@ K1, F1, G1, M1) produced the bits it claimed on the D700s but ran slower than th
 8000 keys; none was faster end to end, and A1 could not be measured at long context. H1 cost 0.55 ms per token.
 All of them, and `qwen-kernel-check`, are removed. X3, the sixth cable, is done: full-mesh all-reduces give 37.2 tok/s
 decode, 50.1 with MTP and 211 prefill ([results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)).
+Round 2 ([results/qwen/tp8-round2-20261009](../results/qwen/tp8-round2-20261009/README.md)) found the opposite of M1
+to be right for the one-column projections (two rows per wave, 10-35% faster per dispatch, decode +6.4%), one state
+row per wave in the recurrence (+2.3%), a two-key attention partial and an unrolled merge: 40.7 tok/s decode and 52.0
+with MTP, 42.2 decode without rounding the decode totals (`TRASHCAN_TP_ROUND=0`). The exchange's parts are now
+measured (`sent`, `first`, `wire`, `encode`, `decode` in `tg_tp_ms`); a thread per cable, an AVX build and fused host
+passes did not help. The three-column verification kernels (64 VGPRs, 4 waves per SIMD) are the next target.
 The estimates below are kept as written.
 
 ## Baseline

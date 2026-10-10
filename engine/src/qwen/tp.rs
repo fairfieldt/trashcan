@@ -26,7 +26,7 @@ use crate::{
     generation::Sampler,
     gguf::Gguf,
     gpu::Instance,
-    link::Lanes,
+    link::{Lanes, Trip},
     vulkan::{host_ns, Device},
 };
 use anyhow::{bail, ensure, Context, Result};
@@ -49,6 +49,8 @@ pub fn host_settings() -> Value {
         "TRASHCAN_QWEN_ATTN",
         "TRASHCAN_TP_WIRE",
         "TRASHCAN_TP_PARTS",
+        "TRASHCAN_TP_ROUND",
+        "TRASHCAN_QWEN_ATTN_KERNELS",
     ]
         .into_iter().map(|name| (name, std::env::var(name).ok())).collect();
     json!({"cpu_governor":governor,"cpu_affinity":affinity,"cpu_latency_us":std::env::var("TRASHCAN_CPU_LATENCY_US").ok().and_then(|v| v.parse::<u32>().ok()),"experiments":experiments})
@@ -195,6 +197,13 @@ pub struct Phases {
     /// Adding the other machine's sum and writing the total, or the next segment's normed rows, for the local GPUs.
     pub total: f64,
     pub allreduces: u64,
+    /// Inside `exchange`: converting to and from the compact payload, and the lane exchanges themselves (`wire`),
+    /// of which the time until every send was issued (`sent`) and until the first byte came back (`first`).
+    pub encode: f64,
+    pub decode: f64,
+    pub wire: f64,
+    pub sent: f64,
+    pub first: f64,
 }
 
 impl Phases {
@@ -203,7 +212,9 @@ impl Phases {
         let ms = |a: f64, b: f64| (a - b) * 1e3 / per;
         json!({"submit": ms(self.submit, earlier.submit), "wait": ms(self.wait, earlier.wait), "add": ms(self.add, earlier.add),
             "exchange": ms(self.exchange, earlier.exchange), "sum": ms(self.sum, earlier.sum), "total": ms(self.total, earlier.total),
-            "allreduces": self.allreduces - earlier.allreduces})
+            "allreduces": self.allreduces - earlier.allreduces,
+            "encode": ms(self.encode, earlier.encode), "decode": ms(self.decode, earlier.decode), "wire": ms(self.wire, earlier.wire),
+            "sent": ms(self.sent, earlier.sent), "first": ms(self.first, earlier.first)})
     }
 }
 
@@ -321,6 +332,32 @@ pub struct Mesh {
     got: Vec<Vec<u8>>,
     /// The other machines' vectors (or parts of them) received by an f32 full-mesh all-reduce, by machine.
     vecs: Vec<Vec<f32>>,
+    /// Time spent in this mesh's all-reduces, by part (`Phases`).
+    pub stats: Stats,
+}
+
+/// Seconds a `Mesh` spent converting payloads and in lane exchanges (`Trip`), since it was opened.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Stats {
+    pub encode: f64,
+    pub decode: f64,
+    pub wire: f64,
+    pub sent: f64,
+    pub first: f64,
+}
+
+impl Stats {
+    fn trip(&mut self, t: Trip) {
+        self.wire += t.total.as_secs_f64();
+        self.sent += t.sent.as_secs_f64();
+        self.first += t.first.as_secs_f64();
+    }
+}
+
+/// Whether `once` rounds its total as `direct`'s all-gather rounds it (`TRASHCAN_TP_ROUND=0`: no).
+fn round_totals() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TRASHCAN_TP_ROUND").as_deref() != Ok("0"))
 }
 
 /// The order in which a full-mesh all-reduce adds the four machines' values of an element of slice `j` (of `reduce`'s
@@ -336,7 +373,7 @@ fn pairs(j: usize) -> [usize; 4] {
 
 /// Exchange with every machine in `peers` at once over `links`: send `outs[i]` to `peers[i]` and receive as many
 /// bytes into `ins[i]`.
-fn exchange_with(links: &mut [(usize, Lanes)], me: usize, peers: &[usize], outs: &[&[u8]], ins: Vec<&mut [u8]>, stall: Duration) -> Result<()> {
+fn exchange_with(links: &mut [(usize, Lanes)], me: usize, peers: &[usize], outs: &[&[u8]], ins: Vec<&mut [u8]>, stall: Duration) -> Result<Trip> {
     let mut slots: Vec<_> = outs.iter().copied().zip(ins).map(Some).collect();
     let mut jobs = Vec::new();
     for (peer, lanes) in links.iter_mut() {
@@ -377,7 +414,7 @@ fn parent(m: usize) -> usize {
 
 impl Mesh {
     fn new(machine: usize, links: Vec<(usize, Lanes)>) -> Self {
-        Self { machine, machines: 0, links, wire: Wire::F32, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new() }
+        Self { machine, machines: 0, links, wire: Wire::F32, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new(), stats: Stats::default() }
     }
 
     /// Open the USB4STREAM lanes to every machine in `peers` (machine, devices). Lanes to lower machines wait for
@@ -496,25 +533,35 @@ impl Mesh {
                     g.resize(bytes, 0);
                 }
             }
+            let t0 = Instant::now();
             wire::encode(sum, &all, false, &mut self.sent[me]);
-            let Self { links, sent, got, .. } = self;
+            let t1 = Instant::now();
+            let Self { links, sent, got, stats, .. } = self;
             let ins: Vec<&mut [u8]> = got.iter_mut().enumerate().filter(|g| g.0 != me).map(|g| g.1.as_mut_slice()).collect();
-            exchange_with(links, me, &peers, &[&sent[me][..]; 3], ins, stall)?;
+            stats.trip(exchange_with(links, me, &peers, &[&sent[me][..]; 3], ins, stall)?);
+            let t2 = Instant::now();
             let msg = |m: usize| if m == me { &sent[me][..] } else { &got[m][..] };
+            // The total is rounded as `direct`'s all-gather rounds it, block by block as it is computed, so a
+            // decode row and the same column of a verification batch agree bit for bit; `TRASHCAN_TP_ROUND=0` keeps
+            // the exact f32 total of the four rounded contributions instead (results/qwen/tp8-round2-20261009).
             for (j, ranges) in slices.iter().enumerate() {
                 let at = if j == 0 { 0..split } else { split..bytes };
-                wire::decode_tree(pairs(j).map(|m| &msg(m)[at.clone()]), ranges, sum);
+                if round_totals() {
+                    wire::decode_tree_round(pairs(j).map(|m| &msg(m)[at.clone()]), ranges, sum);
+                } else {
+                    wire::decode_tree(pairs(j).map(|m| &msg(m)[at.clone()]), ranges, sum);
+                }
             }
-            // The bytes are not needed; only the rounding.
-            wire::encode(sum, &all, true, &mut sent[me]);
+            stats.encode += (t1 - t0).as_secs_f64();
+            stats.decode += t2.elapsed().as_secs_f64();
             return Ok(false);
         }
         self.room(n);
         {
-            let Self { links, vecs, .. } = self;
+            let Self { links, vecs, stats, .. } = self;
             let ins: Vec<&mut [u8]> = vecs.iter_mut().enumerate().filter(|v| v.0 != me).map(|v| bytemuck::cast_slice_mut(v.1.as_mut_slice())).collect();
             let out: &[u8] = bytemuck::cast_slice(&*sum);
-            exchange_with(links, me, &peers, &[out; 3], ins, stall)?;
+            stats.trip(exchange_with(links, me, &peers, &[out; 3], ins, stall)?);
         }
         // `reduce`'s slices: the halves of the vector.
         for (j, (a, b)) in [(0, n / 2), (n / 2, n)].into_iter().enumerate() {
@@ -555,27 +602,34 @@ impl Mesh {
                 g.resize(longest, 0);
             }
             // Reduce-scatter: this machine's values of part p go to machine p.
+            let t0 = Instant::now();
             for (p, s) in self.sent.iter_mut().enumerate() {
                 wire::encode(sum, &parts[p], false, s);
             }
+            let t1 = Instant::now();
             {
-                let Self { links, sent, got, .. } = self;
+                let Self { links, sent, got, stats, .. } = self;
                 let outs: Vec<&[u8]> = peers.iter().map(|&p| &sent[p][..]).collect();
                 let ins: Vec<&mut [u8]> = got.iter_mut().enumerate().filter(|g| g.0 != me).map(|g| g.1.as_mut_slice()).collect();
-                exchange_with(links, me, &peers, &outs, ins, stall)?;
+                stats.trip(exchange_with(links, me, &peers, &outs, ins, stall)?);
             }
+            let t2 = Instant::now();
             let msg = |m: usize| if m == me { &self.sent[me][..] } else { &self.got[m][..] };
             wire::decode_tree(pairs(me / 2).map(msg), &parts[me], sum);
             // All-gather: the part's total, rounded in place once, to every machine, which decodes those bytes.
             wire::encode(sum, &parts[me], true, &mut self.sent[me]);
+            let t3 = Instant::now();
             {
-                let Self { links, sent, got, .. } = self;
+                let Self { links, sent, got, stats, .. } = self;
                 let ins: Vec<&mut [u8]> = got.iter_mut().enumerate().filter(|g| g.0 != me).map(|g| g.1.as_mut_slice()).collect();
-                exchange_with(links, me, &peers, &[&sent[me][..]; 3], ins, stall)?;
+                stats.trip(exchange_with(links, me, &peers, &[&sent[me][..]; 3], ins, stall)?);
             }
+            let t4 = Instant::now();
             for &p in &peers {
                 wire::decode(&self.got[p], &parts[p], sum, false);
             }
+            self.stats.encode += (t1 - t0 + (t3 - t2)).as_secs_f64();
+            self.stats.decode += t4.elapsed().as_secs_f64();
             return Ok(true);
         }
         if !n.is_multiple_of(4) {
@@ -585,11 +639,11 @@ impl Mesh {
         let (lo, hi) = part(me);
         self.room(hi - lo);
         {
-            let Self { links, vecs, .. } = self;
+            let Self { links, vecs, stats, .. } = self;
             let src: &[u8] = bytemuck::cast_slice(&*sum);
             let outs: Vec<&[u8]> = peers.iter().map(|&p| &src[4 * part(p).0..4 * part(p).1]).collect();
             let ins: Vec<&mut [u8]> = vecs.iter_mut().enumerate().filter(|v| v.0 != me).map(|v| bytemuck::cast_slice_mut(v.1.as_mut_slice())).collect();
-            exchange_with(links, me, &peers, &outs, ins, stall)?;
+            stats.trip(exchange_with(links, me, &peers, &outs, ins, stall)?);
         }
         self.vecs[me].copy_from_slice(&sum[lo..hi]);
         let [p, q, r, s] = pairs(me / 2);
@@ -605,7 +659,7 @@ impl Mesh {
         let mut pieces: Vec<Option<&mut [u8]>> = carve(bytemuck::cast_slice_mut(sum), &ranges).into_iter().map(Some).collect();
         let mine: &[u8] = pieces[me].take().expect("this machine's part");
         let ins: Vec<&mut [u8]> = peers.iter().map(|&p| pieces[p].take().expect("one part per machine")).collect();
-        exchange_with(&mut self.links, me, &peers, &[mine; 3], ins, stall)?;
+        self.stats.trip(exchange_with(&mut self.links, me, &peers, &[mine; 3], ins, stall)?);
         Ok(true)
     }
 
@@ -625,7 +679,8 @@ impl Mesh {
         for round in 0..k {
             if k == 1 {
                 let p = self.partner(round);
-                self.lanes(p)?.exchange_within(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(remote), stall)?;
+                let t = self.lanes(p)?.exchange_within(bytemuck::cast_slice(sum), bytemuck::cast_slice_mut(remote), stall)?;
+                self.stats.trip(t);
             } else {
                 let peers: Vec<usize> = (0..k).map(|j| self.partner((round + j) % k)).collect();
                 let cuts: Vec<usize> = (0..=k).map(|j| sum.len() * j / k * 4).collect();
@@ -637,15 +692,10 @@ impl Mesh {
                     rest = tail;
                     slots.push(Some((&out[cuts[j]..cuts[j + 1]], chunk)));
                 }
-                let mut jobs = Vec::new();
-                for (peer, lanes) in self.links.iter_mut() {
-                    if let Some(j) = peers.iter().position(|p| p == peer) {
-                        let (o, i) = slots[j].take().expect("one slice per partner");
-                        jobs.push((lanes, o, i));
-                    }
-                }
-                ensure!(jobs.len() == k, "machine {} has no lanes to one of machines {peers:?}", self.machine);
-                crate::link::exchange_all(&mut jobs, stall)?;
+                let outs: Vec<&[u8]> = slots.iter().map(|s| s.as_ref().expect("one slice per partner").0).collect();
+                let ins: Vec<&mut [u8]> = slots.into_iter().map(|s| s.expect("one slice per partner").1).collect();
+                let Self { links, stats, machine, .. } = self;
+                stats.trip(exchange_with(links, *machine, &peers, &outs, ins, stall)?);
             }
             if round + 1 < k {
                 let r = &*remote;
@@ -687,7 +737,8 @@ impl Mesh {
             }
             let outs: Vec<_> = moves.iter().map(|m| m.1).collect();
             let ins: Vec<_> = moves.iter().map(|m| m.2).collect();
-            self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Split(sum, &outs, scratch, &ins), stall)?;
+            let t = self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Split(sum, &outs, scratch, &ins), stall)?;
+            self.stats.trip(t);
             for &(a, b) in &ins {
                 let r = &scratch[a..b];
                 parallel(&mut sum[a..b], threads, |at, out| {
@@ -709,7 +760,8 @@ impl Mesh {
             }
             let outs: Vec<_> = moves.iter().map(|m| m.1).collect();
             let ins: Vec<_> = moves.iter().map(|m| m.2).collect();
-            self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Within(sum, &outs, &ins), stall)?;
+            let t = self.exchange_ranges(&moves.iter().map(|m| m.0).collect::<Vec<_>>(), Ranges::Within(sum, &outs, &ins), stall)?;
+            self.stats.trip(t);
         }
         Ok(true)
     }
@@ -730,13 +782,17 @@ impl Mesh {
         for round in 0..k {
             let peers: Vec<usize> = (0..k).map(|j| self.partner((round + j) % k)).collect();
             self.stage(k);
+            let t0 = Instant::now();
             for (j, ranges) in slices.iter().enumerate() {
                 let bytes = wire::message_bytes(ranges);
                 self.sent[j].resize(bytes, 0);
                 self.got[j].resize(bytes, 0);
                 wire::encode(sum, ranges, false, &mut self.sent[j]);
             }
-            self.swap(&peers, stall)?;
+            self.stats.encode += t0.elapsed().as_secs_f64();
+            let t = self.swap(&peers, stall)?;
+            self.stats.trip(t);
+            let t2 = Instant::now();
             for (j, ranges) in slices.iter().enumerate() {
                 if round + 1 < k {
                     // Both partners add the same two rounded values.
@@ -747,6 +803,7 @@ impl Mesh {
                     wire::decode(&self.got[j], ranges, remote, false);
                 }
             }
+            self.stats.decode += t2.elapsed().as_secs_f64();
         }
         Ok(())
     }
@@ -764,7 +821,7 @@ impl Mesh {
     }
 
     /// Send `sent[j]` to `peers[j]` and receive as many bytes into `got[j]`, all partners at once.
-    fn swap(&mut self, peers: &[usize], stall: Duration) -> Result<()> {
+    fn swap(&mut self, peers: &[usize], stall: Duration) -> Result<Trip> {
         let me = self.machine;
         let Self { links, sent, got, .. } = self;
         if let ([peer], [lanes]) = (peers, links.as_mut_slice()) {
@@ -777,7 +834,7 @@ impl Mesh {
     }
 
     /// One `exchange_all` step: to `peers[i]`, send the elements `outs[i]` and receive into `ins[i]`.
-    fn exchange_ranges(&mut self, peers: &[usize], ranges: Ranges, stall: Duration) -> Result<()> {
+    fn exchange_ranges(&mut self, peers: &[usize], ranges: Ranges, stall: Duration) -> Result<Trip> {
         let bytes = |r: &[(usize, usize)]| r.iter().map(|&(a, b)| (4 * a, 4 * b)).collect::<Vec<_>>();
         let (outs, ins): (Vec<&[u8]>, Vec<&mut [u8]>) = match ranges {
             Ranges::Split(src, outs, dst, ins) => {
@@ -1172,6 +1229,13 @@ impl TpGroup {
         }
         let parts = &parts[..self.shards.len()];
         parallel(sum, threads, |at, out| {
+            if let [a, b] = parts {
+                // Two local ranks: one pass over both partials (they are cold: the GPUs wrote them).
+                for ((o, x), y) in out.iter_mut().zip(&a[at..]).zip(&b[at..]) {
+                    *o = x + y;
+                }
+                return;
+            }
             out.copy_from_slice(&parts[0][at..at + out.len()]);
             for p in &parts[1..] {
                 for (a, b) in out.iter_mut().zip(&p[at..]) {
@@ -1191,6 +1255,8 @@ impl TpGroup {
             if last {
                 remote = Some(&self.remote[..len]);
             }
+            let st = m.stats;
+            (self.seconds.encode, self.seconds.decode, self.seconds.wire, self.seconds.sent, self.seconds.first) = (st.encode, st.decode, st.wire, st.sent, st.first);
         }
         if self.shards[0].tp_hostnorm() {
             if let Some(r) = remote {

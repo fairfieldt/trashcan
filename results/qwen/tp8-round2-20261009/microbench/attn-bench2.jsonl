@@ -1,0 +1,7 @@
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge64","merge_us":38.50666651977539,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":56.847407190551756,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge_h64","merge_us":36.90666652587891,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":56.853333116455076,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge_u64","merge_us":28.885925815734865,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":56.77925904266358,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge64","merge_us":38.48888874206543,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":172.87111045166017,"parts":64,"pos":2000}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge_u64","merge_us":28.930370260009767,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":172.94518452545165,"parts":64,"pos":2000}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge16","merge_us":10.24888884979248,"mismatches":0,"n":1,"partial":"attention_partial16","partial_us":46.57777760009766,"parts":16,"pos":100}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge_u16","merge_us":10.278518479309081,"mismatches":0,"n":1,"partial":"attention_partial16","partial_us":46.554073896484375,"parts":16,"pos":100}

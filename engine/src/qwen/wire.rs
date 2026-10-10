@@ -215,6 +215,38 @@ pub fn decode_tree(m: [&[u8]; 4], ranges: &[(usize, usize)], dst: &mut [f32]) {
     }
 }
 
+/// `decode_tree`, then every block of the total rounded in place as `encode(…, true, …)` rounds it (the same
+/// blocks, counted from each range's start), without writing the bytes.
+pub fn decode_tree_round(m: [&[u8]; 4], ranges: &[(usize, usize)], dst: &mut [f32]) {
+    let mut at = 0;
+    let mut scratch = [0u8; 2 * BLOCK];
+    for &(a, b) in ranges {
+        let len = b - a;
+        let part = m.map(|bytes| bytes[at..at + range_bytes(len)].split_at(2 * len));
+        let d = &mut dst[a..b];
+        for (i, block) in d.chunks_mut(BLOCK).enumerate() {
+            let k = 2 * i * BLOCK;
+            tree_block(part.map(|(vals, shifts)| (&vals[k..k + 2 * block.len()], shifts[i])), block);
+            encode_block(block, true, &mut scratch[..2 * block.len()]);
+        }
+        at += range_bytes(len);
+    }
+}
+
+/// `tree_piece` of one block: each message's values of the block and its shift.
+fn tree_block(m: [(&[u8], u8); 4], dst: &mut [f32]) {
+    #[cfg(target_arch = "x86_64")]
+    if f16c() {
+        // SAFETY: F16C and AVX were detected above.
+        return unsafe { x86::tree_block(m, dst) };
+    }
+    let up = m.map(|(_, s)| pow2(s as i32));
+    for (j, x) in dst.iter_mut().enumerate() {
+        let v = |t: usize| half::f16::from_bits(u16::from_le_bytes([m[t].0[2 * j], m[t].0[2 * j + 1]])).to_f32() * up[t];
+        *x = (v(0) + v(1)) + (v(2) + v(3));
+    }
+}
+
 /// `decode_tree` of one range: four messages' values and shifts.
 fn tree_piece(m: [(&[u8], &[u8]); 4], dst: &mut [f32]) {
     #[cfg(target_arch = "x86_64")]
@@ -358,6 +390,32 @@ mod x86 {
         }
     }
 
+    /// `tree_piece` of one block: `dst = (a + b) + (c + d)` from four messages' values of the block and their shifts.
+    #[target_feature(enable = "avx,f16c")]
+    pub unsafe fn tree_block(m: [(&[u8], u8); 4], d: &mut [f32]) {
+        let [(av, sa), (bv, sb), (cv, sc), (dv, sd)] = m;
+        let (sa, sb, sc, sd) = (pow2(sa as i32), pow2(sb as i32), pow2(sc as i32), pow2(sd as i32));
+        let (ua, ub, uc, ud) = (_mm256_set1_ps(sa), _mm256_set1_ps(sb), _mm256_set1_ps(sc), _mm256_set1_ps(sd));
+        let n = d.len() / 8 * 8;
+        let mut j = 0;
+        while j < n {
+            let a = _mm256_mul_ps(_mm256_cvtph_ps(_mm_loadu_si128(av.as_ptr().add(2 * j) as *const __m128i)), ua);
+            let b = _mm256_mul_ps(_mm256_cvtph_ps(_mm_loadu_si128(bv.as_ptr().add(2 * j) as *const __m128i)), ub);
+            let c = _mm256_mul_ps(_mm256_cvtph_ps(_mm_loadu_si128(cv.as_ptr().add(2 * j) as *const __m128i)), uc);
+            let e = _mm256_mul_ps(_mm256_cvtph_ps(_mm_loadu_si128(dv.as_ptr().add(2 * j) as *const __m128i)), ud);
+            _mm256_storeu_ps(d.as_mut_ptr().add(j), _mm256_add_ps(_mm256_add_ps(a, b), _mm256_add_ps(c, e)));
+            j += 8;
+        }
+        for j in n..d.len() {
+            let k = 2 * j;
+            let a = _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(u16::from_le_bytes([av[k], av[k + 1]]) as i32))) * sa;
+            let b = _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(u16::from_le_bytes([bv[k], bv[k + 1]]) as i32))) * sb;
+            let c = _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(u16::from_le_bytes([cv[k], cv[k + 1]]) as i32))) * sc;
+            let e = _mm_cvtss_f32(_mm_cvtph_ps(_mm_cvtsi32_si128(u16::from_le_bytes([dv[k], dv[k + 1]]) as i32))) * sd;
+            d[j] = (a + b) + (c + e);
+        }
+    }
+
     /// `dst = h * up` (or `dst += h * up`) for the f16 values in `bytes`, eight at a time.
     #[target_feature(enable = "avx,f16c")]
     #[inline]
@@ -385,6 +443,33 @@ mod x86 {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn decode_tree_round_rounds_like_encode() {
+        let d = 5120;
+        let value = |m: usize, i: usize| {
+            let x = ((i * 7919 + m * 104729) % 1000) as f32 * 1e-3 - 0.5 + 1.0 / (m + 1) as f32;
+            if i % 1000 == 17 { x * 4.0e5 } else { x }
+        };
+        // Two slices of a row, each sent as its own range (as `Mesh::once` cuts them).
+        let ranges = [(0usize, 2560usize), (2560, 5120)];
+        let msgs: Vec<Vec<u8>> = (0..4)
+            .map(|m| {
+                let mut v: Vec<f32> = (0..d).map(|i| value(m, i)).collect();
+                let mut out = vec![0u8; super::message_bytes(&ranges)];
+                super::encode(&mut v, &ranges, false, &mut out);
+                out
+            })
+            .collect();
+        let m = [&msgs[0][..], &msgs[1][..], &msgs[2][..], &msgs[3][..]];
+        let mut a = vec![0f32; d];
+        super::decode_tree(m, &ranges, &mut a);
+        let mut scratch = vec![0u8; super::message_bytes(&ranges)];
+        super::encode(&mut a, &ranges, true, &mut scratch);
+        let mut b = vec![0f32; d];
+        super::decode_tree_round(m, &ranges, &mut b);
+        assert!(a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()));
+    }
+
     use super::*;
 
     fn samples(n: usize, seed: u32) -> Vec<f32> {

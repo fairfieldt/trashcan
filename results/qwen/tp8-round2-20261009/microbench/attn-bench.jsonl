@@ -1,0 +1,5 @@
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge64","merge_us":38.65185170440674,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":56.82370348693848,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge_h64","merge_us":36.94814800720215,"mismatches":0,"n":1,"partial":"attention_partial64","partial_us":56.83851830169678,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge64","merge_us":38.63407392669678,"mismatches":0,"n":1,"partial":"attention_partial_p2_64","partial_us":48.494814629821775,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge64","merge_us":38.52444429748535,"mismatches":0,"n":3,"partial":"attention_partial64","partial_us":57.893333112487795,"parts":64,"pos":520}
+{"gpu":0,"heads":3,"kv":1,"merge":"attention_merge64","merge_us":38.51259244567871,"mismatches":0,"n":3,"partial":"attention_partial_p2_64","partial_us":79.65925895538331,"parts":64,"pos":520}

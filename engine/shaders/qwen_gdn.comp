@@ -1,19 +1,21 @@
 #version 460
+#define ROWS 1
+#define WAVES 4
 #include "common.glsl"
 // Gated DeltaNet recurrence. Rows of a value head's state (one per value dim) evolve independently:
 //   S *= exp(g); d = (v_row - S_row.k) * beta; S_row += d k; o_row = S_row.q / sqrt(dim)
-// with q and k L2-normalized. Each wave owns ROWS rows of one head and lane l holds key dims l and l + 64
-// (dim must be 128). Tokens are processed in order with the rows in registers.
+// with q and k L2-normalized. Each wave owns ROWS rows of one head (one: four times the waves of four rows per
+// wave, the same arithmetic per row, decode 2.3% faster on TP8, results/qwen/tp8-round2-20261009) and lane l holds
+// key dims l and l + 64 (dim must be 128). Tokens are processed in order with the rows in registers.
 // a: convolved [t][q | k | v], b: raw gates [t][alpha(heads) | beta(heads)], c: state [head][row][dim]
 // (read/write), d: output [t][head][dim], e: [dt bias(heads) | A(heads)], f: optional snapshots
 // [t][head][row][dim] of the state after every token but the last (verification batches).
 // p.heads = value heads, p.kvheads = key heads (value head h reads key head h % kvheads), p.dim = 128,
 // p.n = convolved channels per token, p.r0 = eps bits. Position 0 starts from a zero state.
-#define ROWS 4
-layout(local_size_x=256) in;
+layout(local_size_x=WAVES*64) in;
 void main(){
-uint lane=gl_SubgroupInvocationID,per_head=p.dim/(4*ROWS);
-uint vh=gl_WorkGroupID.x/per_head,row0=(gl_WorkGroupID.x%per_head)*(4*ROWS)+gl_SubgroupID*ROWS;
+uint lane=gl_SubgroupInvocationID,per_head=p.dim/(WAVES*ROWS);
+uint vh=gl_WorkGroupID.x/per_head,row0=(gl_WorkGroupID.x%per_head)*(WAVES*ROWS)+gl_SubgroupID*ROWS;
 uint kh=vh%p.kvheads,kd=p.kvheads*p.dim;
 bool fresh=position()==0;
 vec2 s[ROWS];

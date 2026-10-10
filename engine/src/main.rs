@@ -248,6 +248,46 @@ enum Cmd {
         #[arg(long, default_value_t = 500)]
         warmup_ms: u64,
     },
+    /// Time Q4_0 decode and verification kernels at ROWSxK shapes (random weights), checking each against the first bit for bit.
+    QwenMatvecBench {
+        /// Shapes as ROWSxK; the default is Qwen3.8-27B's TP8 rank shapes.
+        #[arg(long, value_delimiter = ',', default_value = "2176x5120,5120x2176,1280x5120,768x5120,5120x768,1536x5120,256x5120")]
+        shapes: Vec<String>,
+        /// Columns (1: decode kernels, 2 to 4: qwen_q4cN, 5 to 8: multivec4).
+        #[arg(long, default_value_t = 1)]
+        n: usize,
+        /// Kernels to compare; the first is the reference.
+        #[arg(long, value_delimiter = ',', default_value = "matvecq4,matvecq4_r2,matvecq4_r2u2")]
+        kernels: Vec<String>,
+        /// Dispatches per barrier (a layer's independent projections).
+        #[arg(long, default_value_t = 1)]
+        group: usize,
+        #[arg(long, default_value_t = 50)]
+        iterations: u32,
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 300)]
+        warmup_ms: u64,
+    },
+    /// Time split-K decode attention at a tensor-parallel rank's shape and check merge kernels against the first bit for bit.
+    QwenDecodeAttnBench {
+        #[arg(long, default_value_t = 520)]
+        pos: usize,
+        #[arg(long, default_value_t = 1)]
+        n: usize,
+        #[arg(long, default_value_t = 3)]
+        heads: usize,
+        #[arg(long, default_value_t = 1)]
+        kv: usize,
+        #[arg(long, default_value_t = 64)]
+        parts: u32,
+        #[arg(long, value_delimiter = ',', default_value = "attention_merge64,attention_merge_u64")]
+        merges: Vec<String>,
+        #[arg(long, default_value_t = 50)]
+        iterations: u32,
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+    },
     /// Compare Qwen tiled prefill attention against scalar attention on deterministic inputs.
     QwenAttentionBench {
         #[arg(long, default_value_t = 4096)]
@@ -958,6 +998,17 @@ fn main() -> Result<()> {
                 .collect::<Result<Vec<(usize, usize)>>>()?;
             micro::gemm(&shapes, n, &kernels, iterations, gpu, warmup_ms)
         }
+        Cmd::QwenMatvecBench { shapes, n, kernels, group, iterations, gpu, warmup_ms } => {
+            let shapes = shapes
+                .iter()
+                .map(|s| {
+                    let (r, k) = s.split_once('x').ok_or_else(|| anyhow::anyhow!("shape {s} is not ROWSxK"))?;
+                    Ok((r.parse()?, k.parse()?))
+                })
+                .collect::<Result<Vec<(usize, usize)>>>()?;
+            micro::matvec(&shapes, n, &kernels, iterations, gpu, warmup_ms, group)
+        }
+        Cmd::QwenDecodeAttnBench { pos, n, heads, kv, parts, merges, iterations, gpu } => micro::decode_attention(pos, n, heads, kv, parts, &merges, iterations, gpu),
         Cmd::QwenAttentionBench { tokens, n, heads, iterations } => micro::qwen_attention(tokens, n, heads, iterations),
         Cmd::QwenSpecBench { model, run, tokens, reps } => {
             let mut chain = run.chain(&model)?;
