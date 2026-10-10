@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 8 ranks over 4 machine(s), GPUs per machine [2, 2, 2, 2], f16 all-reduce payload
+GPU0: rank 0 of 8 + MTP, 2405.2 MiB allocated
+GPU1: rank 1 of 8 + MTP, 2405.2 MiB allocated
+[clocks] 85 samples card0 (02:00.0) sclk/mclk: 850/1370 x47 450/1370 x4 300/150 x34  max 66C card1 (06:00.0) sclk/mclk: 850/1370 x47 300/1370 x1 450/1370 x3 300/150 x34  max 65C  log=results/clocks/m-mtp-ringw-1.txt

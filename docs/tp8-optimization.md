@@ -12,7 +12,9 @@ W1 is kept for all-reduces below prefill size and is the default: decode 35.0 to
 prefill-sized all-reduces it made prefill 5% slower, and its f16 reduce-scatter/all-gather is gone. Every kernel (A1,
 K1, F1, G1, M1) produced the bits it claimed on the D700s but ran slower than the kernel it replaced, except A1 at
 8000 keys; none was faster end to end, and A1 could not be measured at long context. H1 cost 0.55 ms per token.
-All of them, and `qwen-kernel-check`, are removed. The estimates below are kept as written.
+All of them, and `qwen-kernel-check`, are removed. X3, the sixth cable, is done: full-mesh all-reduces give 37.2 tok/s
+decode, 50.1 with MTP and 211 prefill ([results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)).
+The estimates below are kept as written.
 
 ## Baseline
 

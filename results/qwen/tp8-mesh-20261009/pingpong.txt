@@ -1,0 +1,12 @@
+incite   tbstream0  <-> invite   tbstream0  size 16 n 2000 rtt_us p50 50.0 p90 51.0 p99 61.4 max 246.3
+incite   tbstream1  <-> enlight  tbstream0  size 16 n 2000 rtt_us p50 36.1 p90 38.9 p99 44.4 max 74.7
+invite   tbstream1  <-> enlight  tbstream1  size 16 n 2000 rtt_us p50 49.9 p90 51.8 p99 60.5 max 91.7
+invite   tbstream2  <-> indite   tbstream0  size 16 n 2000 rtt_us p50 29.9 p90 40.9 p99 42.2 max 68.2
+enlight  tbstream2  <-> indite   tbstream1  size 16 n 2000 rtt_us p50 39.5 p90 50.7 p99 58.7 max 240.9
+incite   tbstream2  <-> indite   tbstream2  size 16 n 2000 rtt_us p50 42.2 p90 44.1 p99 51.9 max 113.8
+incite   tbstream0  <-> invite   tbstream0  size 20480 n 2000 rtt_us p50 93.4 p90 96.4 p99 109.4 max 263.0
+incite   tbstream1  <-> enlight  tbstream0  size 20480 n 2000 rtt_us p50 81.4 p90 89.7 p99 94.8 max 214.5
+invite   tbstream1  <-> enlight  tbstream1  size 20480 n 2000 rtt_us p50 91.8 p90 95.4 p99 106.9 max 257.4
+invite   tbstream2  <-> indite   tbstream0  size 20480 n 2000 rtt_us p50 84.2 p90 88.8 p99 98.0 max 158.9
+enlight  tbstream2  <-> indite   tbstream1  size 20480 n 2000 rtt_us p50 82.9 p90 102.1 p99 111.5 max 2188.9
+incite   tbstream2  <-> indite   tbstream2  size 20480 n 2000 rtt_us p50 81.5 p90 91.2 p99 241.2 max 1347.1

@@ -152,7 +152,12 @@ adds the ranks' partials and all-reduces the sum with the other machines (`link.
 `tp.rs`): two all-reduces per layer, 2 × layers + 1 segments per forward. A group is 2, 4 or 8 machines. With four,
 the all-reduce takes two rounds of recursive doubling over a ring of cables (machines 0-1, 0-2, 1-3, 2-3), each round
 sending half the vector to each of a machine's two partners; every machine adds each element in the same pairs, so
-the residuals stay bitwise identical. All-reduces below prefill size (decode, verification and draft steps) carry f16
+the residuals stay bitwise identical. When every machine reports a cable to each of the other three (six cables), the
+driver takes full-mesh all-reduces instead: a single row (decode and draft steps) in one step, every machine sending
+its whole vector to the three others, and a batch (verification, prefill) by a direct reduce-scatter and all-gather,
+two steps of a quarter of the vector per cable each way. They add every element in the ring's pairs, so in f32 their
+totals are the ring's bit for bit ([results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)).
+All-reduces below prefill size (decode, verification and draft steps) carry f16
 values with a power-of-two shift per 256 values (`wire.rs`), which every machine rounds the same way;
 `TRASHCAN_TP_WIRE=f32` on the driver keeps exact f32 sums, for comparing layouts bit for bit and for validation. The
 driver's operations reach the other machines down a binomial tree over the same cables (0 to 1 and 2, 2 to 3). Each
@@ -183,11 +188,12 @@ trashcan qwen-tp-node MODEL --mtp MTP.gguf --stream /dev/tbstream0,/dev/tbstream
 trashcan qwen-chat MODEL --mtp MTP.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 "Hello"
 trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP, one connection per link
 trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
-# four machines (TP8): start the nodes, then the driver (machine 0); --peer MACHINE=DEVICE[,DEVICE...] per cable
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 1=/dev/tbstream0 --peer 2=/dev/tbstream1   # indite
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0=/dev/tbstream0 --peer 3=/dev/tbstream2   # enlight
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0=/dev/tbstream0 --peer 3=/dev/tbstream2   # invite
-trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 "Hello"   # incite
+# four machines (TP8): start the nodes, then the driver (machine 0); --peer MACHINE=DEVICE[,DEVICE...] per cable.
+# All six cables (results/qwen/tp8-mesh-20261009); without the incite-indite and invite-enlight ones, the ring.
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 1=/dev/tbstream0 --peer 2=/dev/tbstream1 --peer 0=/dev/tbstream2   # indite
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0=/dev/tbstream0 --peer 1=/dev/tbstream1 --peer 3=/dev/tbstream2   # enlight
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0=/dev/tbstream0 --peer 2=/dev/tbstream1 --peer 3=/dev/tbstream2   # invite
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2 "Hello"   # incite
 ```
 
 Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-20261007](../results/qwen/tp8-20261007/)):
@@ -196,7 +202,9 @@ Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-2026
 matches the CPU reference to 4.0e-4 with the same greedy tokens, and `qwen-check` (with and without drafting) and
 `scripts/test-server.py` pass. Each GPU allocates 2.3 GiB. A decode step spends about 19-20 ms on the GPUs and
 7.5 ms in exchanges. With the f16 payload it decodes at 36.2 tok/s and 47.0 with MTP, 6.6 ms in exchanges
-([results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)). Prefill-sized all-reduces use
+([results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)). With all six cables (full mesh,
+[results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)) it decodes at 37.2 tok/s and 50.1 with
+MTP, 6.0 ms in exchanges, and prefills at 211 tok/s (204 at 2048). Prefill-sized all-reduces use
 reduce-scatter and all-gather (3/4 of the bytes per cable) and are limited by the cables' bandwidth, about 0.5 GB/s
 each way when a cable carries both directions.
 

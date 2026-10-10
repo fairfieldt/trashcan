@@ -301,9 +301,9 @@ fn message(v: Value) -> Result<Vec<u8>> {
 /// lanes to the machines it is cabled to. With 2^k machines the all-reduce is recursive doubling: in round i every
 /// machine exchanges its running sum with machine `m ^ 1 << i` and adds it. Both sides of a round add the same two
 /// sums, and float addition commutes, so every machine ends with the same total, ((s0 + s1) + (s2 + s3)) for four.
-/// Four machines therefore need the cables 0-1, 2-3, 0-2 and 1-3 (a ring). The driver's operations go down a
-/// binomial tree over the same cables: machine m hears from `m & (m - 1)` and passes them to the machines that
-/// hear from it.
+/// Four machines therefore need the cables 0-1, 2-3, 0-2 and 1-3 (a ring); with all six cables, `full` all-reduces
+/// add the same pairs without the rounds. The driver's operations go down a binomial tree over the ring's cables:
+/// machine m hears from `m & (m - 1)` and passes them to the machines that hear from it.
 pub struct Mesh {
     pub machine: usize,
     /// Machines in the group, once known (the driver's probe, a node's setup).
@@ -312,9 +312,41 @@ pub struct Mesh {
     /// Payload format of the all-reduces of fewer than PARALLEL_MIN values (decode, verification and draft steps;
     /// prefill stays f32): the driver's choice, passed to the others at setup (`wire`).
     wire: Wire,
-    /// Encoded slices sent and received in one step of a compact all-reduce, one per partner.
+    /// Full-mesh all-reduces: set by the driver when every machine is cabled to every other (`fully_cabled`) and passed
+    /// on at setup. A single row (decode and draft steps) takes `once`, a batch of rows (verification, prefill) `direct`.
+    full: bool,
+    /// Encoded slices sent and received in one step of a compact all-reduce, one per partner (per machine on a
+    /// full mesh).
     sent: Vec<Vec<u8>>,
     got: Vec<Vec<u8>>,
+    /// The other machines' vectors (or parts of them) received by an f32 full-mesh all-reduce, by machine.
+    vecs: Vec<Vec<f32>>,
+}
+
+/// The order in which a full-mesh all-reduce adds the four machines' values of an element of slice `j` (of `reduce`'s
+/// two slices): the pairs recursive doubling adds, (m0 + m1) + (m2 + m3) for slice 0 and (m0 + m2) + (m1 + m3) for
+/// slice 1, so f32 totals are bitwise those of the ring.
+fn pairs(j: usize) -> [usize; 4] {
+    if j == 0 {
+        [0, 1, 2, 3]
+    } else {
+        [0, 2, 1, 3]
+    }
+}
+
+/// Exchange with every machine in `peers` at once over `links`: send `outs[i]` to `peers[i]` and receive as many
+/// bytes into `ins[i]`.
+fn exchange_with(links: &mut [(usize, Lanes)], me: usize, peers: &[usize], outs: &[&[u8]], ins: Vec<&mut [u8]>, stall: Duration) -> Result<()> {
+    let mut slots: Vec<_> = outs.iter().copied().zip(ins).map(Some).collect();
+    let mut jobs = Vec::new();
+    for (peer, lanes) in links.iter_mut() {
+        if let Some(j) = peers.iter().position(|p| p == peer) {
+            let (o, i) = slots[j].take().expect("one buffer per partner");
+            jobs.push((lanes, o, i));
+        }
+    }
+    ensure!(jobs.len() == peers.len(), "machine {me} has no lanes to one of machines {peers:?}");
+    crate::link::exchange_all(&mut jobs, stall)
 }
 
 /// Element ranges of `Mesh::exchange_ranges`: sends from the first buffer and receives into the second, or both
@@ -345,7 +377,7 @@ fn parent(m: usize) -> usize {
 
 impl Mesh {
     fn new(machine: usize, links: Vec<(usize, Lanes)>) -> Self {
-        Self { machine, machines: 0, links, wire: Wire::F32, sent: Vec::new(), got: Vec::new() }
+        Self { machine, machines: 0, links, wire: Wire::F32, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new() }
     }
 
     /// Open the USB4STREAM lanes to every machine in `peers` (machine, devices). Lanes to lower machines wait for
@@ -379,7 +411,8 @@ impl Mesh {
         self.machine ^ (1 << round)
     }
 
-    /// Take part in a group of `machines`: check that this machine is cabled to its partner of every round.
+    /// Take part in a group of `machines`: check that this machine is cabled to its partner of every round, and with
+    /// full-mesh all-reduces to every other machine.
     fn join(&mut self, machines: usize) -> Result<()> {
         ensure!(machines >= 2 && machines.is_power_of_two(), "a tensor-parallel group spans 2, 4 or 8 machines, not {machines}");
         ensure!(self.machine < machines, "machine {} in a group of {machines}", self.machine);
@@ -387,7 +420,193 @@ impl Mesh {
         for round in 0..self.rounds() {
             self.lanes(self.partner(round))?;
         }
+        if self.full {
+            ensure!(machines == 4, "full-mesh all-reduces need four machines, not {machines}");
+            for m in self.others() {
+                self.lanes(m).context("full-mesh all-reduces need a cable between every two machines")?;
+            }
+        }
         Ok(())
+    }
+
+    /// All-reduce `sum` (`remote` is scratch of the same length). Returns whether `remote` then holds the last addend,
+    /// which the caller adds while it writes the total; otherwise `sum` holds the total.
+    fn all_reduce(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<bool> {
+        if self.full {
+            if sum.len() > width && self.direct(sum, stall, threads, width)? {
+                return Ok(false);
+            }
+            return self.once(sum, remote, stall, threads, width);
+        }
+        // Prefill-sized vectors: TP8 prefill 6% faster than with `reduce` (results/qwen/tp8-20261007).
+        if sum.len() >= PARALLEL_MIN && self.reduce_scatter_gather(sum, remote, stall, threads)? {
+            return Ok(false);
+        }
+        self.reduce(sum, remote, stall, threads, width)?;
+        Ok(true)
+    }
+
+    /// The machines this one has lanes to.
+    fn peers(&self) -> Vec<usize> {
+        self.links.iter().map(|l| l.0).collect()
+    }
+
+    /// The other machines of a full mesh.
+    fn others(&self) -> Vec<usize> {
+        (0..self.machines).filter(|&m| m != self.machine).collect()
+    }
+
+    /// Room for every machine's vector of `len` values in `vecs`.
+    fn room(&mut self, len: usize) {
+        self.vecs.resize_with(self.machines, Vec::new);
+        for v in self.vecs.iter_mut() {
+            v.resize(len, 0.);
+        }
+    }
+
+    /// The `reduce` slice `j` of each row of `width` values (of the vector when it is not whole rows) as element
+    /// ranges, cut on block boundaries as `reduce_compact` cuts them, or the row's block-aligned quarter `j` of four
+    /// with `quarters`.
+    fn row_cuts(len: usize, width: usize, j: usize, quarters: bool) -> Vec<(usize, usize)> {
+        let width = if width > 0 && len.is_multiple_of(width) { width } else { len };
+        let blocks = width.div_ceil(wire::BLOCK);
+        let parts = if quarters { 4 } else { 2 };
+        let cut = |j: usize| (j * blocks / parts * wire::BLOCK).min(width);
+        (0..len / width.max(1)).map(|r| (r * width + cut(j), r * width + cut(j + 1))).filter(|r| r.0 < r.1).collect()
+    }
+
+    /// All-reduce in one step on a full mesh: every machine sends its whole vector to the three others and adds the four
+    /// in `pairs` order. In f32 `remote` keeps the last addend (returns true): the totals are bitwise those of
+    /// `reduce`. With the compact payload every machine decodes the same four messages, and the total is rounded once
+    /// more, as `direct`'s all-gather rounds it, so a batch reduced by `direct` and its rows reduced one at a time here
+    /// give the same bits.
+    fn once(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<bool> {
+        let (me, peers, n) = (self.machine, self.others(), sum.len());
+        if self.compact(n) {
+            // Slice 0 of every row, then slice 1.
+            let slices = [Self::row_cuts(n, width, 0, false), Self::row_cuts(n, width, 1, false)];
+            let split = wire::message_bytes(&slices[0]);
+            let all: Vec<(usize, usize)> = slices.iter().flatten().copied().collect();
+            let bytes = wire::message_bytes(&all);
+            self.stage(self.machines);
+            for (m, (s, g)) in self.sent.iter_mut().zip(self.got.iter_mut()).enumerate() {
+                if m == me {
+                    s.resize(bytes, 0);
+                } else {
+                    g.resize(bytes, 0);
+                }
+            }
+            wire::encode(sum, &all, false, &mut self.sent[me]);
+            let Self { links, sent, got, .. } = self;
+            let ins: Vec<&mut [u8]> = got.iter_mut().enumerate().filter(|g| g.0 != me).map(|g| g.1.as_mut_slice()).collect();
+            exchange_with(links, me, &peers, &[&sent[me][..]; 3], ins, stall)?;
+            let msg = |m: usize| if m == me { &sent[me][..] } else { &got[m][..] };
+            for (j, ranges) in slices.iter().enumerate() {
+                let at = if j == 0 { 0..split } else { split..bytes };
+                wire::decode_tree(pairs(j).map(|m| &msg(m)[at.clone()]), ranges, sum);
+            }
+            // The bytes are not needed; only the rounding.
+            wire::encode(sum, &all, true, &mut sent[me]);
+            return Ok(false);
+        }
+        self.room(n);
+        {
+            let Self { links, vecs, .. } = self;
+            let ins: Vec<&mut [u8]> = vecs.iter_mut().enumerate().filter(|v| v.0 != me).map(|v| bytemuck::cast_slice_mut(v.1.as_mut_slice())).collect();
+            let out: &[u8] = bytemuck::cast_slice(&*sum);
+            exchange_with(links, me, &peers, &[out; 3], ins, stall)?;
+        }
+        // `reduce`'s slices: the halves of the vector.
+        for (j, (a, b)) in [(0, n / 2), (n / 2, n)].into_iter().enumerate() {
+            let [p, q, r, s] = pairs(j);
+            // This machine's pair stays in `sum`, the other pair goes to `remote`.
+            let (partner, (r, s)) = if me == p || me == q { (p + q - me, (r, s)) } else { (r + s - me, (p, q)) };
+            let x = &self.vecs;
+            parallel(&mut sum[a..b], threads, |at, out| {
+                for (o, v) in out.iter_mut().zip(&x[partner][a + at..]) {
+                    *o += v;
+                }
+            });
+            parallel(&mut remote[a..b], threads, |at, out| {
+                for ((o, u), v) in out.iter_mut().zip(&x[r][a + at..]).zip(&x[s][a + at..]) {
+                    *o = u + v;
+                }
+            });
+        }
+        Ok(true)
+    }
+
+    /// Direct reduce-scatter/all-gather on a full mesh: machine m owns part m of the vector (a quarter of it, or with
+    /// the compact payload a block-aligned quarter of each row), receives the three others' copies of it in one step,
+    /// adds the four in `pairs` order and sends the total to every machine in a second. Each cable carries half the
+    /// vector each way, in two steps, against the ring's three quarters in four (`reduce_scatter_gather`). Parts 0 and 1
+    /// lie in slice 0 and parts 2 and 3 in slice 1, so the totals are those of `once`: in f32 bitwise those of `reduce`;
+    /// with the compact payload each machine's contribution and the total are rounded once, on the same blocks.
+    /// Messages of unequal parts are padded to the longest, since a lane moves the same bytes both ways; in f32 a
+    /// vector that does not split in four equal parts returns false, doing nothing.
+    fn direct(&mut self, sum: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<bool> {
+        let (me, peers, n) = (self.machine, self.others(), sum.len());
+        if self.compact(n) {
+            let parts: Vec<Vec<(usize, usize)>> = (0..self.machines).map(|p| Self::row_cuts(n, width, p, true)).collect();
+            let longest = parts.iter().map(|p| wire::message_bytes(p)).max().unwrap_or(0);
+            self.stage(self.machines);
+            for (s, g) in self.sent.iter_mut().zip(self.got.iter_mut()) {
+                s.resize(longest, 0);
+                g.resize(longest, 0);
+            }
+            // Reduce-scatter: this machine's values of part p go to machine p.
+            for (p, s) in self.sent.iter_mut().enumerate() {
+                wire::encode(sum, &parts[p], false, s);
+            }
+            {
+                let Self { links, sent, got, .. } = self;
+                let outs: Vec<&[u8]> = peers.iter().map(|&p| &sent[p][..]).collect();
+                let ins: Vec<&mut [u8]> = got.iter_mut().enumerate().filter(|g| g.0 != me).map(|g| g.1.as_mut_slice()).collect();
+                exchange_with(links, me, &peers, &outs, ins, stall)?;
+            }
+            let msg = |m: usize| if m == me { &self.sent[me][..] } else { &self.got[m][..] };
+            wire::decode_tree(pairs(me / 2).map(msg), &parts[me], sum);
+            // All-gather: the part's total, rounded in place once, to every machine, which decodes those bytes.
+            wire::encode(sum, &parts[me], true, &mut self.sent[me]);
+            {
+                let Self { links, sent, got, .. } = self;
+                let ins: Vec<&mut [u8]> = got.iter_mut().enumerate().filter(|g| g.0 != me).map(|g| g.1.as_mut_slice()).collect();
+                exchange_with(links, me, &peers, &[&sent[me][..]; 3], ins, stall)?;
+            }
+            for &p in &peers {
+                wire::decode(&self.got[p], &parts[p], sum, false);
+            }
+            return Ok(true);
+        }
+        if !n.is_multiple_of(4) {
+            return Ok(false);
+        }
+        let part = |p: usize| (n * p / 4, n * (p + 1) / 4);
+        let (lo, hi) = part(me);
+        self.room(hi - lo);
+        {
+            let Self { links, vecs, .. } = self;
+            let src: &[u8] = bytemuck::cast_slice(&*sum);
+            let outs: Vec<&[u8]> = peers.iter().map(|&p| &src[4 * part(p).0..4 * part(p).1]).collect();
+            let ins: Vec<&mut [u8]> = vecs.iter_mut().enumerate().filter(|v| v.0 != me).map(|v| bytemuck::cast_slice_mut(v.1.as_mut_slice())).collect();
+            exchange_with(links, me, &peers, &outs, ins, stall)?;
+        }
+        self.vecs[me].copy_from_slice(&sum[lo..hi]);
+        let [p, q, r, s] = pairs(me / 2);
+        let x = &self.vecs;
+        parallel(&mut sum[lo..hi], threads, |at, out| {
+            for (i, o) in out.iter_mut().enumerate() {
+                let k = at + i;
+                *o = (x[p][k] + x[q][k]) + (x[r][k] + x[s][k]);
+            }
+        });
+        // All-gather: this machine's part to every machine, the others' parts into place.
+        let ranges: Vec<(usize, usize)> = (0..self.machines).map(|p| (4 * part(p).0, 4 * part(p).1)).collect();
+        let mut pieces: Vec<Option<&mut [u8]>> = carve(bytemuck::cast_slice_mut(sum), &ranges).into_iter().map(Some).collect();
+        let mine: &[u8] = pieces[me].take().expect("this machine's part");
+        let ins: Vec<&mut [u8]> = peers.iter().map(|&p| pieces[p].take().expect("one part per machine")).collect();
+        exchange_with(&mut self.links, me, &peers, &[mine; 3], ins, stall)?;
+        Ok(true)
     }
 
     /// The rounds of the all-reduce of `sum`: every round but the last adds the partners' sums into `sum`; the last
@@ -553,16 +772,8 @@ impl Mesh {
             ensure!(lanes.0 == *peer, "machine {me} has no lanes to machine {peer}");
             return lanes.1.exchange_within(&sent[0], &mut got[0], stall);
         }
-        let mut slots: Vec<_> = sent.iter().zip(got.iter_mut()).map(|(o, i)| Some((o.as_slice(), i.as_mut_slice()))).collect();
-        let mut jobs = Vec::new();
-        for (peer, lanes) in links.iter_mut() {
-            if let Some(j) = peers.iter().position(|p| p == peer) {
-                let (o, i) = slots[j].take().expect("one slice per partner");
-                jobs.push((lanes, o, i));
-            }
-        }
-        ensure!(jobs.len() == peers.len(), "machine {me} has no lanes to one of machines {peers:?}");
-        crate::link::exchange_all(&mut jobs, stall)
+        let outs: Vec<&[u8]> = sent.iter().map(Vec::as_slice).collect();
+        exchange_with(links, me, peers, &outs, got.iter_mut().map(Vec::as_mut_slice).collect(), stall)
     }
 
     /// One `exchange_all` step: to `peers[i]`, send the elements `outs[i]` and receive into `ins[i]`.
@@ -584,16 +795,7 @@ impl Mesh {
                 (outs, i.iter().map(&mut take).collect())
             }
         };
-        let mut slots: Vec<_> = outs.into_iter().zip(ins).map(Some).collect();
-        let mut jobs = Vec::new();
-        for (peer, lanes) in self.links.iter_mut() {
-            if let Some(j) = peers.iter().position(|p| p == peer) {
-                let (o, i) = slots[j].take().expect("one range per partner");
-                jobs.push((lanes, o, i));
-            }
-        }
-        ensure!(jobs.len() == peers.len(), "machine {} has no lanes to one of machines {peers:?}", self.machine);
-        crate::link::exchange_all(&mut jobs, stall)
+        exchange_with(&mut self.links, self.machine, peers, &outs, ins, stall)
     }
 
     /// Pass a message from the driver on to the machines that hear from this one.
@@ -689,10 +891,13 @@ impl TpGroup {
         let mut counts = BTreeMap::from([(0usize, gpus.len())]);
         if let Some(m) = mesh.as_mut() {
             m.tell_children(&message(json!({"probe": true}))?)?;
+            let mut cabled = BTreeMap::from([(0usize, m.peers())]);
             for reply in m.children_replies(None)? {
                 merge_counts(&mut counts, &reply)?;
+                merge_cabled(&mut cabled, &reply);
             }
             ensure!(counts.keys().copied().eq(0..counts.len()), "machines {:?} answered the probe", counts.keys().collect::<Vec<_>>());
+            m.full = fully_cabled(&cabled, counts.len());
             m.join(counts.len())?;
         }
         let firsts: Vec<usize> = counts.values().scan(0, |at, &n| { *at += n; Some(*at - n) }).collect();
@@ -701,14 +906,14 @@ impl TpGroup {
         if let Some(m) = mesh.as_mut() {
             // The driver chooses the all-reduce payload format for the whole session.
             m.wire = Wire::from_env();
-            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": max_batch, "verify": verify, "mtp": mtp.is_some(), "draft_vocab": draft_vocab, "wire": m.wire.name()});
+            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": max_batch, "verify": verify, "mtp": mtp.is_some(), "draft_vocab": draft_vocab, "wire": m.wire.name(), "full": m.full});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
         eprintln!(
             "tp: {ranks} ranks over {} machine(s), GPUs per machine {:?}{}",
             counts.len(),
             counts.values().collect::<Vec<_>>(),
-            mesh.as_ref().map_or(String::new(), |m| format!(", {} all-reduce payload", m.wire.name()))
+            mesh.as_ref().map_or(String::new(), |m| format!(", {} all-reduce payload{}", m.wire.name(), if m.full { ", full mesh" } else { "" }))
         );
         let (gguf, c, mut shards) = shards(model, gpus, 0, ranks, context, max_batch, verify, mtp)?;
         for s in shards.iter_mut() {
@@ -981,12 +1186,9 @@ impl TpGroup {
             // While a gated submission waits on the GPUs, a stalled exchange must fail (and drain them) well
             // before amdgpu's job timeout.
             let stall = if self.shards[0].tp_gated() { Duration::from_secs(2) } else { crate::link::STALL };
-            // Prefill-sized vectors: TP8 prefill 6% faster than with `reduce` (results/qwen/tp8-20261007).
-            if len >= PARALLEL_MIN && m.reduce_scatter_gather(sum, &mut self.remote[..len], stall, threads)? {
-                exchanged = Instant::now();
-            } else {
-                m.reduce(sum, &mut self.remote[..len], stall, threads, self.c.d)?;
-                exchanged = Instant::now();
+            let last = m.all_reduce(sum, &mut self.remote[..len], stall, threads, self.c.d)?;
+            exchanged = Instant::now();
+            if last {
                 remote = Some(&self.remote[..len]);
             }
         }
@@ -1133,6 +1335,22 @@ pub fn mesh(connect: &[String], stream: &[String], peers: &[String]) -> Result<O
     })
 }
 
+/// Add a probe reply's machines' cables (the machines each one has lanes to) to `cabled`; a machine that does not
+/// report them counts as cabled to no one.
+fn merge_cabled(cabled: &mut BTreeMap<usize, Vec<usize>>, reply: &Value) {
+    for (m, peers) in reply["cabled"].as_object().into_iter().flatten() {
+        if let (Ok(m), Some(peers)) = (m.parse(), peers.as_array()) {
+            cabled.insert(m, peers.iter().filter_map(Value::as_u64).map(|p| p as usize).collect());
+        }
+    }
+}
+
+/// Whether a group of `machines` takes full-mesh all-reduces: four machines, each cabled to the three others (six
+/// cables). Measured against the ring's recursive doubling in results/qwen/tp8-mesh-20261009.
+fn fully_cabled(cabled: &BTreeMap<usize, Vec<usize>>, machines: usize) -> bool {
+    machines == 4 && (0..machines).all(|a| (0..machines).all(|b| a == b || cabled.get(&a).is_some_and(|p| p.contains(&b))))
+}
+
 /// Add a probe reply's GPUs per machine to `counts`.
 fn merge_counts(counts: &mut BTreeMap<usize, usize>, reply: &Value) -> Result<()> {
     for (m, n) in reply["gpus"].as_object().context("a machine did not report its GPUs")? {
@@ -1181,10 +1399,12 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut mesh: Mesh) -> 
         if m.get("probe").is_some() {
             mesh.tell_children(&bytes)?;
             let mut counts = BTreeMap::from([(me, gpus.len())]);
+            let mut cabled = BTreeMap::from([(me, mesh.peers())]);
             for reply in mesh.children_replies(None)? {
                 merge_counts(&mut counts, &reply)?;
+                merge_cabled(&mut cabled, &reply);
             }
-            mesh.tell_parent(json!({ "gpus": counts }))?;
+            mesh.tell_parent(json!({ "gpus": counts, "cabled": cabled }))?;
             continue;
         }
         let s = m.get("setup").with_context(|| format!("unexpected request {m}"))?;
@@ -1192,6 +1412,7 @@ fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut mesh: Mesh) -> 
         let num = |k: &str| s[k].as_u64().with_context(|| format!("setup {k}")).map(|v| v as usize);
         let first = s["firsts"][me].as_u64().context("setup firsts")? as usize;
         let loaded = (|| {
+            mesh.full = s["full"].as_bool().unwrap_or(false);
             mesh.join(num("machines")?)?;
             mesh.wire = Wire::parse(s["wire"].as_str().unwrap_or("f32"))?;
             let m = match (s["mtp"].as_bool().unwrap_or(false), mtp) {
@@ -1241,6 +1462,157 @@ mod tests {
             links[b].push((a, accept.join().unwrap()));
         }
         links.into_iter().enumerate().map(|(m, l)| Mesh::new(m, l)).collect()
+    }
+
+    /// Four machines over localhost TCP with all six cables, full-mesh all-reduces on.
+    fn full_mesh() -> Vec<Mesh> {
+        let cables = [(0, 1), (2, 3), (0, 2), (1, 3), (0, 3), (1, 2)];
+        let mut links: Vec<Vec<(usize, Lanes)>> = (0..4).map(|_| Vec::new()).collect();
+        for (a, b) in cables {
+            let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = listener.local_addr().unwrap().to_string();
+            let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap());
+            links[a].push((b, Lanes::connect(&[addr.clone(), addr]).unwrap()));
+            links[b].push((a, accept.join().unwrap()));
+        }
+        links
+            .into_iter()
+            .enumerate()
+            .map(|(m, l)| {
+                let mut mesh = Mesh::new(m, l);
+                mesh.full = true;
+                mesh.join(4).unwrap();
+                mesh
+            })
+            .collect()
+    }
+
+    /// Run `f` on every machine of `meshes` at once; its results in machine order.
+    fn on_every<T: Send>(meshes: Vec<Mesh>, f: impl Fn(&mut Mesh) -> T + Sync) -> Vec<T> {
+        std::thread::scope(|s| {
+            let f = &f;
+            let threads: Vec<_> = meshes.into_iter().map(|mut mesh| s.spawn(move || f(&mut mesh))).collect();
+            threads.into_iter().map(|t| t.join().unwrap()).collect()
+        })
+    }
+
+    /// How a test all-reduces on a full mesh: `once`, `direct` (`once` when it declines), or `all_reduce`'s choice.
+    #[derive(Clone, Copy, Debug)]
+    enum Path {
+        Once,
+        Direct,
+        Chosen,
+    }
+
+    /// The total an all-reduce by `path` leaves, adding `remote` when it holds the last addend.
+    fn total(mesh: &mut Mesh, path: Path, mut sum: Vec<f32>, threads: usize, width: usize) -> Vec<f32> {
+        let mut remote = vec![0f32; sum.len()];
+        let stall = crate::link::STALL;
+        let last = match path {
+            Path::Once => mesh.once(&mut sum, &mut remote, stall, threads, width).unwrap(),
+            Path::Direct => !mesh.direct(&mut sum, stall, threads, width).unwrap() && mesh.once(&mut sum, &mut remote, stall, threads, width).unwrap(),
+            Path::Chosen => mesh.all_reduce(&mut sum, &mut remote, stall, threads, width).unwrap(),
+        };
+        if last {
+            for (a, b) in sum.iter_mut().zip(&remote) {
+                *a += b;
+            }
+        }
+        sum
+    }
+
+    #[test]
+    fn full_mesh_adds_the_rings_pairs_in_one_or_two_steps() {
+        let value = |m: usize, i: usize| ((i * 7919 + m * 104729) % 1000) as f32 * 1e-3 + 1.0 / (m + 1) as f32;
+        // A decode row, a verification batch, a prefill-sized batch, and lengths that do not split evenly.
+        let lens = [5120, 3 * 5120, 64 * 5120, 4 * 7 + 1, 5, 1];
+        for path in [Path::Once, Path::Direct, Path::Chosen] {
+            let results = on_every(full_mesh(), |mesh| {
+                lens.iter().map(|&len| total(mesh, path, (0..len).map(|i| value(mesh.machine, i)).collect(), 4, 5120)).collect::<Vec<_>>()
+            });
+            for (k, &len) in lens.iter().enumerate() {
+                // The ring's pairs: the first half (0 + 1) + (2 + 3), the second (0 + 2) + (1 + 3).
+                let v = |m, i| value(m, i);
+                let want: Vec<f32> = (0..len).map(|i| if i < len / 2 { (v(0, i) + v(1, i)) + (v(2, i) + v(3, i)) } else { (v(0, i) + v(2, i)) + (v(1, i) + v(3, i)) }).collect();
+                for (m, got) in results.iter().enumerate() {
+                    assert!(got[k].iter().zip(&want).all(|(a, b)| a.to_bits() == b.to_bits()), "machine {m}, {len} values, {path:?}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn full_mesh_compact_payload_keeps_machines_identical_and_columns_like_decode() {
+        let d = 5120;
+        let value = |m: usize, i: usize| {
+            let x = ((i * 7919 + m * 104729) % 1000) as f32 * 1e-3 - 0.5 + 1.0 / (m + 1) as f32;
+            if i % 1000 == 17 { x * 4.0e5 } else { x }
+        };
+        let big = 64 * d;
+        let results = on_every(full_mesh(), |mesh| {
+            mesh.wire = Wire::F16;
+            let m = mesh.machine;
+            let part = |start: usize, len: usize| (start..start + len).map(|i| value(m, i)).collect::<Vec<f32>>();
+            // A three-column verification batch through the direct path, the same batch in one step, and each column
+            // as a decode step.
+            let three = total(mesh, Path::Chosen, part(0, 3 * d), 1, d);
+            let ones: Vec<f32> = (0..3).flat_map(|c| total(mesh, Path::Chosen, part(c * d, d), 1, d)).collect();
+            let three_once = total(mesh, Path::Once, part(0, 3 * d), 1, d);
+            // A vector that is not whole rows, and a prefill batch, which stays f32.
+            let odd = total(mesh, Path::Direct, part(0, 7001), 1, d);
+            let prefill = total(mesh, Path::Chosen, part(0, big), 4, d);
+            (three, ones, three_once, prefill, odd)
+        });
+        let bits = |a: &[f32], b: &[f32]| a.len() == b.len() && a.iter().zip(b).all(|(x, y)| x.to_bits() == y.to_bits());
+        for (m, (three, ones, three_once, prefill, odd)) in results.iter().enumerate() {
+            assert!(bits(three, &results[0].0), "machine {m}: verification totals differ from machine 0");
+            assert!(bits(three, ones), "machine {m}: a verification column differs from its decode step");
+            assert!(bits(three, three_once), "machine {m}: the direct path and the one-step path differ");
+            assert!(bits(odd, &results[0].4), "machine {m}: totals of a partial row differ from machine 0");
+            let v = |k, i| value(k, i);
+            let f32_pairs: Vec<f32> = (0..big).map(|i| if i < big / 2 { (v(0, i) + v(1, i)) + (v(2, i) + v(3, i)) } else { (v(0, i) + v(2, i)) + (v(1, i) + v(3, i)) }).collect();
+            assert!(bits(prefill, &f32_pairs), "machine {m}: prefill totals are not the f32 sums");
+            // Each contribution and the total rounded once to 2^-11, plus the subnormal floor of a block holding a
+            // massive value.
+            let close = |got: &[f32]| {
+                got.iter().enumerate().all(|(i, &t)| {
+                    let parts: Vec<f32> = (0..4).map(|k| value(k, i)).collect();
+                    let exact: f32 = parts.iter().sum();
+                    let scale: f32 = parts.iter().map(|p| p.abs()).sum();
+                    (t - exact).abs() <= scale * 2e-3 + 1e-3 && t.is_finite()
+                })
+            };
+            assert!(close(three) && close(odd), "machine {m}: totals too far from the f32 sums");
+        }
+    }
+
+    #[test]
+    fn full_mesh_needs_every_cable_and_four_machines() {
+        let mut mesh = ring().remove(1);
+        mesh.full = true;
+        assert!(mesh.join(4).is_err());
+        let mut mesh = full_mesh().remove(2);
+        assert!(mesh.join(4).is_ok());
+        assert!(mesh.join(8).is_err());
+        // The driver's choice from the probe: six cables, or a ring, or a machine that did not say.
+        let cabled = |pairs: &[(usize, usize)]| {
+            let mut c: BTreeMap<usize, Vec<usize>> = (0..4).map(|m| (m, Vec::new())).collect();
+            for &(a, b) in pairs {
+                c.get_mut(&a).unwrap().push(b);
+                c.get_mut(&b).unwrap().push(a);
+            }
+            c
+        };
+        let six = cabled(&[(0, 1), (2, 3), (0, 2), (1, 3), (0, 3), (1, 2)]);
+        assert!(fully_cabled(&six, 4));
+        assert!(!fully_cabled(&cabled(&[(0, 1), (2, 3), (0, 2), (1, 3)]), 4));
+        assert!(!fully_cabled(&six, 8));
+        let mut silent = six.clone();
+        silent.remove(&3);
+        assert!(!fully_cabled(&silent, 4));
+        let mut probe = BTreeMap::new();
+        merge_cabled(&mut probe, &json!({"gpus": {"3": 2}, "cabled": {"3": [1, 2, 0]}}));
+        assert_eq!(probe, BTreeMap::from([(3, vec![1, 2, 0])]));
     }
 
     #[test]

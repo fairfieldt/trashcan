@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 8 ranks over 4 machine(s), GPUs per machine [2, 2, 2, 2], f32 all-reduce payload, full mesh
+GPU0: rank 0 of 8, 2307.3 MiB allocated
+GPU1: rank 1 of 8, 2307.3 MiB allocated
+[clocks] 75 samples card0 (02:00.0) sclk/mclk: 850/1370 x41 300/1370 x1 450/1370 x5 300/150 x28  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x41 450/1370 x4 300/150 x29 450/150 x1  max 59C  log=results/clocks/m-check-v3-full.txt
