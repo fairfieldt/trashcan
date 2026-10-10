@@ -217,8 +217,12 @@ A 27B decode token takes 35 ms: 29-30 ms on the GPUs (invite's run streaming ker
 same clocks, so they pace the exchanges) and 4-5.5 ms in the 128 cross-Mac exchanges. With MTP drafting (the block
 split like a trunk layer, each rank holding an equal share of the draft vocabulary's head rows) the 27B decodes at
 39.5 tok/s on the two Macs and the 9B at 66 on one, 71-72% of drafts accepted; `qwen-check` passes on TP with and
-without drafting. The 27B prefill is paced by the slower Mac's host work and varies from one session to the next
-(142-151 tok/s; run back to back, the prefill branch's binary gives the same or 1-2% less). `trashcan serve` takes
+without drafting. Over the one incite-invite cable left since the TP8 cabling, the f16 payload (the default) decodes
+at 28.5 tok/s and 39.2 with MTP, against 28.2 and 38.4 with `TRASHCAN_TP_WIRE=f32` (+1.1% and +2.1%, 0.4-0.6 ms less
+exchange per token, prefill unchanged), with the reference's greedy tokens and `qwen-check` passing
+([results/qwen/tp4-wire-20261009](../results/qwen/tp4-wire-20261009/README.md)). The 27B prefill is paced by the
+slower Mac's host work and varies from one session to the next (142-151 tok/s; run back to back, the prefill
+branch's binary gives the same or 1-2% less). `trashcan serve` takes
 the same `--tp` options and passes `scripts/test-server.py` that way; `qwen-tp-node` waits for the next request
 without a deadline and ends a session only when the driver says goodbye or closes the lanes.
 
@@ -226,6 +230,9 @@ Benchmarks hold the performance governor and a 0 µs CPU latency request (`scrip
 the node included. Without the request on the node, a decode token's cross-Mac exchanges take about 7.4 ms instead
 of 4.1 (27B decode 26.0 instead of 28.4 tok/s); the first TP4 record (16.6 tok/s, 26 with MTP) was measured that
 way, and the same binary gives 18.7 / 28.6 with the request (note in [tp-20261006](../results/qwen/tp-20261006/)).
+MTP runs back to back heat invite's first D700 past 90 °C, where it throttles and the exchanges stretch (TP4 with MTP
+fell from 39 to 31.5 tok/s over six runs); cooling every card to 55 °C before each run keeps it below 80 °C
+([results/qwen/tp4-wire-20261009](../results/qwen/tp4-wire-20261009/README.md)).
 
 Measurement switches (per process: give the node the same ones; the thread count travels with each forward).
 Prefill uses two micro-batches for batches of at least 128 tokens and one otherwise:

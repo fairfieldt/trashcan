@@ -1,0 +1,24 @@
+2026-10-09T18:07:30 w-warm trashcan  qwen-bench --pp 512 --tg 16 --reps 1 --tp-stream /dev/tbstream0 (added by hand: results/ did not exist yet when tprun.py logged it)
+2026-10-09T18:08:26 w-dec-f16-1 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --tp-stream /dev/tbstream0
+2026-10-09T18:09:09 w-dec-f32-1 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --tp-stream /dev/tbstream0
+2026-10-09T18:09:51 w-dec-f32-2 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --tp-stream /dev/tbstream0
+2026-10-09T18:10:32 w-dec-f16-2 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --tp-stream /dev/tbstream0
+2026-10-09T18:11:14 w-dec-f16-3 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --tp-stream /dev/tbstream0
+2026-10-09T18:11:55 w-dec-f32-3 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --tp-stream /dev/tbstream0
+2026-10-09T18:12:37 w-mtp-f16-1 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:13:21 w-mtp-f32-1 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:14:02 w-mtp-f32-2 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:14:42 w-mtp-f16-2 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:15:23 w-mtp-f16-3 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:16:06 w-mtp-f32-3 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:16:52 w-val-f16 trashcan  qwen-validate results/w-val-f16 --tp-stream /dev/tbstream0
+2026-10-09T18:17:18 w-check-mtp-f16 trashcan  qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:17:58 w-check-v3-f16 trashcan  qwen-check --verify 3 --tp-stream /dev/tbstream0
+2026-10-09T18:18:35 w-check-mtp-f32 trashcan TRASHCAN_TP_WIRE=f32 qwen-check --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:19:14 w-check-v3-f32 trashcan TRASHCAN_TP_WIRE=f32 qwen-check --verify 3 --tp-stream /dev/tbstream0
+2026-10-09T18:23:45 w-mtpc-f16-1 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:25:33 w-mtpc-f32-1 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:27:21 w-mtpc-f32-2 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:29:04 w-mtpc-f16-2 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:30:50 w-mtpc-f16-3 trashcan  qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0
+2026-10-09T18:32:38 w-mtpc-f32-3 trashcan TRASHCAN_TP_WIRE=f32 qwen-bench --pp 512 --tg 128 --reps 2 --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --tp-stream /dev/tbstream0

@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks over 2 machine(s), GPUs per machine [2, 2], f16 all-reduce payload
+GPU0: rank 0 of 4, 4341.7 MiB allocated
+GPU1: rank 1 of 4, 4341.7 MiB allocated
+[clocks] 69 samples card0 (02:00.0) sclk/mclk: 850/1370 x29 300/150 x38 450/150 x2  max 70C card1 (06:00.0) sclk/mclk: 850/1370 x8 300/1370 x2 450/1370 x5 300/150 x54  max 69C  log=results/clocks/w-val-f16.txt
