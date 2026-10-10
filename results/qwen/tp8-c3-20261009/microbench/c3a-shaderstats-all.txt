@@ -1,0 +1,4096 @@
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3893821969887355170
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 596
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2072726251
+Instructions: 125
+Copies: 22
+Branches: 7
+Latency: 2363
+Inverse Throughput: 367
+VMEM Clause: 5
+SMEM Clause: 5
+Pre-Sched SGPRs: 12
+Pre-Sched VGPRs: 11
+VALU: 57
+SALU: 32
+VMEM: 6
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10228173275355111412
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1868
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1974334929
+Instructions: 396
+Copies: 52
+Branches: 14
+Latency: 16259
+Inverse Throughput: 2516
+VMEM Clause: 13
+SMEM Clause: 13
+Pre-Sched SGPRs: 16
+Pre-Sched VGPRs: 12
+VALU: 193
+SALU: 90
+VMEM: 17
+SMEM: 13
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3009128168255148538
+SGPRs: 24
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1516
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1369142076
+Instructions: 318
+Copies: 55
+Branches: 26
+Latency: 8068
+Inverse Throughput: 896
+VMEM Clause: 10
+SMEM Clause: 10
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 26
+VALU: 129
+SALU: 84
+VMEM: 10
+SMEM: 11
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 18204256185779384143
+SGPRs: 32
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2328
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2419422088
+Instructions: 418
+Copies: 22
+Branches: 4
+Latency: 1939
+Inverse Throughput: 646
+VMEM Clause: 58
+SMEM Clause: 6
+Pre-Sched SGPRs: 27
+Pre-Sched VGPRs: 75
+VALU: 196
+SALU: 25
+VMEM: 120
+SMEM: 9
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17448850860625456581
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 828
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1563724180
+Instructions: 180
+Copies: 22
+Branches: 9
+Latency: 11612
+Inverse Throughput: 1656
+VMEM Clause: 7
+SMEM Clause: 10
+Pre-Sched SGPRs: 21
+Pre-Sched VGPRs: 11
+VALU: 74
+SALU: 43
+VMEM: 12
+SMEM: 11
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1384412450189976422
+SGPRs: 32
+VGPRs: 12
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 676
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2881992853
+Instructions: 147
+Copies: 16
+Branches: 6
+Latency: 1169
+Inverse Throughput: 256
+VMEM Clause: 5
+SMEM Clause: 9
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 8
+VALU: 67
+SALU: 44
+VMEM: 6
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13045461462736539762
+SGPRs: 40
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2040
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 113702565
+Instructions: 429
+Copies: 47
+Branches: 40
+Latency: 5465
+Inverse Throughput: 1010
+VMEM Clause: 33
+SMEM Clause: 15
+Pre-Sched SGPRs: 17
+Pre-Sched VGPRs: 25
+VALU: 173
+SALU: 123
+VMEM: 33
+SMEM: 16
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 7126083599363013416
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2008
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2542089557
+Instructions: 427
+Copies: 48
+Branches: 38
+Latency: 5457
+Inverse Throughput: 1005
+VMEM Clause: 33
+SMEM Clause: 16
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 25
+VALU: 162
+SALU: 134
+VMEM: 33
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8399582515914326335
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2008
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 716626641
+Instructions: 427
+Copies: 48
+Branches: 38
+Latency: 5457
+Inverse Throughput: 1005
+VMEM Clause: 33
+SMEM Clause: 16
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 25
+VALU: 162
+SALU: 134
+VMEM: 33
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 724395451829383150
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2008
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 483618689
+Instructions: 427
+Copies: 48
+Branches: 38
+Latency: 5457
+Inverse Throughput: 1005
+VMEM Clause: 33
+SMEM Clause: 16
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 25
+VALU: 162
+SALU: 134
+VMEM: 33
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17901446650636337898
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2008
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1836701203
+Instructions: 427
+Copies: 48
+Branches: 38
+Latency: 5457
+Inverse Throughput: 1005
+VMEM Clause: 33
+SMEM Clause: 16
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 25
+VALU: 162
+SALU: 134
+VMEM: 33
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 200859408872896982
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2012
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4218166296
+Instructions: 427
+Copies: 48
+Branches: 38
+Latency: 5457
+Inverse Throughput: 1005
+VMEM Clause: 33
+SMEM Clause: 16
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 25
+VALU: 162
+SALU: 134
+VMEM: 33
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2386049840377127258
+SGPRs: 56
+VGPRs: 32
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1488
+LDS size: 2048
+Scratch size: 0
+Subgroups per SIMD: 8
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3339650076
+Instructions: 316
+Copies: 32
+Branches: 16
+Latency: 9784
+Inverse Throughput: 1811
+VMEM Clause: 8
+SMEM Clause: 11
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 18
+VALU: 107
+SALU: 132
+VMEM: 11
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2543782054947538003
+SGPRs: 56
+VGPRs: 32
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1488
+LDS size: 2048
+Scratch size: 0
+Subgroups per SIMD: 8
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2942424089
+Instructions: 316
+Copies: 32
+Branches: 16
+Latency: 9784
+Inverse Throughput: 1811
+VMEM Clause: 8
+SMEM Clause: 11
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 18
+VALU: 107
+SALU: 132
+VMEM: 11
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 15842358872786148983
+SGPRs: 56
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1856
+LDS size: 4096
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1675255569
+Instructions: 384
+Copies: 40
+Branches: 24
+Latency: 10304
+Inverse Throughput: 2151
+VMEM Clause: 12
+SMEM Clause: 15
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 26
+VALU: 143
+SALU: 132
+VMEM: 19
+SMEM: 16
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8502400468854193419
+SGPRs: 56
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1856
+LDS size: 4096
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4031791329
+Instructions: 384
+Copies: 40
+Branches: 24
+Latency: 10304
+Inverse Throughput: 2151
+VMEM Clause: 12
+SMEM Clause: 15
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 26
+VALU: 143
+SALU: 132
+VMEM: 19
+SMEM: 16
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 11903470888362734943
+SGPRs: 56
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1856
+LDS size: 4096
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1770302296
+Instructions: 384
+Copies: 40
+Branches: 24
+Latency: 10304
+Inverse Throughput: 2151
+VMEM Clause: 12
+SMEM Clause: 15
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 26
+VALU: 143
+SALU: 132
+VMEM: 19
+SMEM: 16
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 15022556804403931992
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2180
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3603865623
+Instructions: 458
+Copies: 11
+Branches: 2
+Latency: 2347
+Inverse Throughput: 1061
+VMEM Clause: 5
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 40
+VALU: 251
+SALU: 81
+VMEM: 34
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 16638164504229148232
+SGPRs: 24
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 704
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4063647401
+Instructions: 149
+Copies: 11
+Branches: 2
+Latency: 1126
+Inverse Throughput: 305
+VMEM Clause: 3
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 16
+VALU: 71
+SALU: 31
+VMEM: 10
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 374758966749658668
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1216
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3649076009
+Instructions: 257
+Copies: 11
+Branches: 2
+Latency: 1582
+Inverse Throughput: 557
+VMEM Clause: 5
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 24
+VALU: 131
+SALU: 48
+VMEM: 18
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10885038948709523327
+SGPRs: 80
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3972
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3125585985
+Instructions: 857
+Copies: 31
+Branches: 3
+Latency: 4720
+Inverse Throughput: 2075
+VMEM Clause: 18
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 13
+VALU: 479
+SALU: 150
+VMEM: 66
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8806044794556930231
+SGPRs: 80
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 7964
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 613205686
+Instructions: 1664
+Copies: 64
+Branches: 3
+Latency: 8902
+Inverse Throughput: 4094
+VMEM Clause: 34
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 13
+VALU: 960
+SALU: 279
+VMEM: 130
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8230464284527057178
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2168
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3681887944
+Instructions: 455
+Copies: 11
+Branches: 2
+Latency: 2506
+Inverse Throughput: 1061
+VMEM Clause: 5
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 55
+VALU: 251
+SALU: 81
+VMEM: 34
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3179006176372613669
+SGPRs: 24
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 704
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2858027767
+Instructions: 149
+Copies: 11
+Branches: 2
+Latency: 1126
+Inverse Throughput: 305
+VMEM Clause: 3
+SMEM Clause: 3
+Pre-Sched SGPRs: 13
+Pre-Sched VGPRs: 23
+VALU: 71
+SALU: 31
+VMEM: 10
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8031087465554211006
+SGPRs: 32
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1216
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1566155726
+Instructions: 257
+Copies: 11
+Branches: 2
+Latency: 1720
+Inverse Throughput: 557
+VMEM Clause: 3
+SMEM Clause: 3
+Pre-Sched SGPRs: 13
+Pre-Sched VGPRs: 39
+VALU: 131
+SALU: 48
+VMEM: 18
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14296522029446943221
+SGPRs: 80
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4024
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 903504994
+Instructions: 839
+Copies: 11
+Branches: 2
+Latency: 4357
+Inverse Throughput: 2179
+VMEM Clause: 7
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 87
+VALU: 491
+SALU: 146
+VMEM: 66
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14913302980629445740
+SGPRs: 112
+VGPRs: 256
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 8012
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 1
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4002452933
+Instructions: 1613
+Copies: 11
+Branches: 2
+Latency: 7360
+Inverse Throughput: 7360
+VMEM Clause: 23
+SMEM Clause: 3
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 151
+VALU: 971
+SALU: 275
+VMEM: 130
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1533369568775302722
+SGPRs: 48
+VGPRs: 80
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5420
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3363563202
+Instructions: 1117
+Copies: 52
+Branches: 10
+Latency: 17346
+Inverse Throughput: 17346
+VMEM Clause: 7
+SMEM Clause: 11
+Pre-Sched SGPRs: 21
+Pre-Sched VGPRs: 61
+VALU: 768
+SALU: 112
+VMEM: 19
+SMEM: 11
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 9272020274696776427
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 868
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1422532681
+Instructions: 179
+Copies: 22
+Branches: 7
+Latency: 3931
+Inverse Throughput: 393
+VMEM Clause: 4
+SMEM Clause: 8
+Pre-Sched SGPRs: 16
+Pre-Sched VGPRs: 6
+VALU: 51
+SALU: 76
+VMEM: 4
+SMEM: 8
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13259650587316460434
+SGPRs: 56
+VGPRs: 80
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5780
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 826679570
+Instructions: 1193
+Copies: 62
+Branches: 11
+Latency: 34814
+Inverse Throughput: 34814
+VMEM Clause: 11
+SMEM Clause: 11
+Pre-Sched SGPRs: 27
+Pre-Sched VGPRs: 61
+VALU: 819
+SALU: 116
+VMEM: 23
+SMEM: 15
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 5247823543050992175
+SGPRs: 40
+VGPRs: 80
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4804
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 808709601
+Instructions: 1010
+Copies: 52
+Branches: 10
+Latency: 16972
+Inverse Throughput: 16972
+VMEM Clause: 7
+SMEM Clause: 11
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 61
+VALU: 687
+SALU: 90
+VMEM: 19
+SMEM: 11
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2204885135189260122
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 740
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2910582332
+Instructions: 153
+Copies: 22
+Branches: 7
+Latency: 3897
+Inverse Throughput: 390
+VMEM Clause: 4
+SMEM Clause: 8
+Pre-Sched SGPRs: 16
+Pre-Sched VGPRs: 6
+VALU: 42
+SALU: 59
+VMEM: 4
+SMEM: 8
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 6569445290345207125
+SGPRs: 48
+VGPRs: 80
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5184
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3517582439
+Instructions: 1084
+Copies: 61
+Branches: 11
+Latency: 34201
+Inverse Throughput: 34201
+VMEM Clause: 11
+SMEM Clause: 11
+Pre-Sched SGPRs: 25
+Pre-Sched VGPRs: 61
+VALU: 738
+SALU: 93
+VMEM: 23
+SMEM: 15
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 12292476592167540854
+SGPRs: 24
+VGPRs: 16
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 696
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2188369788
+Instructions: 143
+Copies: 19
+Branches: 22
+Latency: 7747
+Inverse Throughput: 775
+VMEM Clause: 17
+SMEM Clause: 5
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 14
+VALU: 39
+SALU: 45
+VMEM: 17
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1959548694103872848
+SGPRs: 24
+VGPRs: 8
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 260
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2867383532
+Instructions: 55
+Copies: 6
+Branches: 3
+Latency: 801
+Inverse Throughput: 98
+VMEM Clause: 3
+SMEM Clause: 3
+Pre-Sched SGPRs: 9
+Pre-Sched VGPRs: 6
+VALU: 23
+SALU: 15
+VMEM: 3
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1925420465676274839
+SGPRs: 24
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1316
+LDS size: 4352
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 374489243
+Instructions: 277
+Copies: 69
+Branches: 24
+Latency: 6305
+Inverse Throughput: 1522
+VMEM Clause: 2
+SMEM Clause: 4
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 8
+VALU: 93
+SALU: 93
+VMEM: 2
+SMEM: 4
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3137960247645413703
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1152
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4047880003
+Instructions: 243
+Copies: 55
+Branches: 17
+Latency: 5840
+Inverse Throughput: 863
+VMEM Clause: 3
+SMEM Clause: 5
+Pre-Sched SGPRs: 13
+Pre-Sched VGPRs: 11
+VALU: 75
+SALU: 73
+VMEM: 3
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8426612832061187732
+SGPRs: 24
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1404
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2088284287
+Instructions: 304
+Copies: 31
+Branches: 6
+Latency: 7835
+Inverse Throughput: 4028
+VMEM Clause: 10
+SMEM Clause: 6
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 20
+VALU: 172
+SALU: 52
+VMEM: 14
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 9270372015486537290
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 812
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 628946612
+Instructions: 174
+Copies: 22
+Branches: 4
+Latency: 5966
+Inverse Throughput: 2220
+VMEM Clause: 6
+SMEM Clause: 4
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 18
+VALU: 94
+SALU: 36
+VMEM: 8
+SMEM: 4
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 15274468111903558114
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 812
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 406131045
+Instructions: 174
+Copies: 22
+Branches: 4
+Latency: 5966
+Inverse Throughput: 2220
+VMEM Clause: 6
+SMEM Clause: 4
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 18
+VALU: 94
+SALU: 36
+VMEM: 8
+SMEM: 4
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17462306722267592188
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4052
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1258413549
+Instructions: 834
+Copies: 63
+Branches: 73
+Latency: 7716
+Inverse Throughput: 1929
+VMEM Clause: 49
+SMEM Clause: 18
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 59
+VALU: 343
+SALU: 221
+VMEM: 65
+SMEM: 19
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 16270528766866423110
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4052
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 931496305
+Instructions: 834
+Copies: 63
+Branches: 73
+Latency: 7716
+Inverse Throughput: 1929
+VMEM Clause: 49
+SMEM Clause: 18
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 59
+VALU: 343
+SALU: 221
+VMEM: 65
+SMEM: 19
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8406674487212226690
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4052
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3652036274
+Instructions: 834
+Copies: 63
+Branches: 73
+Latency: 7716
+Inverse Throughput: 1929
+VMEM Clause: 49
+SMEM Clause: 18
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 59
+VALU: 343
+SALU: 221
+VMEM: 65
+SMEM: 19
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8415463371279521740
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4052
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3268793903
+Instructions: 834
+Copies: 63
+Branches: 73
+Latency: 7716
+Inverse Throughput: 1929
+VMEM Clause: 49
+SMEM Clause: 18
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 59
+VALU: 343
+SALU: 221
+VMEM: 65
+SMEM: 19
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8054391065657306410
+SGPRs: 48
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4052
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 437566738
+Instructions: 834
+Copies: 63
+Branches: 73
+Latency: 7716
+Inverse Throughput: 1929
+VMEM Clause: 49
+SMEM Clause: 18
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 59
+VALU: 343
+SALU: 221
+VMEM: 65
+SMEM: 19
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 5408404910001267336
+SGPRs: 24
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1520
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2922672268
+Instructions: 336
+Copies: 31
+Branches: 6
+Latency: 13026
+Inverse Throughput: 6252
+VMEM Clause: 8
+SMEM Clause: 6
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 33
+VALU: 220
+SALU: 49
+VMEM: 20
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14988871129328723319
+SGPRs: 32
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3816
+LDS size: 6144
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2720210748
+Instructions: 817
+Copies: 94
+Branches: 19
+Latency: 8312
+Inverse Throughput: 3606
+VMEM Clause: 19
+SMEM Clause: 17
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 66
+VALU: 413
+SALU: 166
+VMEM: 22
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1793779989207672151
+SGPRs: 24
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2300
+LDS size: 6144
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1184532737
+Instructions: 486
+Copies: 57
+Branches: 13
+Latency: 6739
+Inverse Throughput: 2304
+VMEM Clause: 11
+SMEM Clause: 11
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 42
+VALU: 244
+SALU: 100
+VMEM: 12
+SMEM: 11
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10376213595196763864
+SGPRs: 32
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4000
+LDS size: 6144
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3992038599
+Instructions: 854
+Copies: 98
+Branches: 20
+Latency: 9752
+Inverse Throughput: 3942
+VMEM Clause: 20
+SMEM Clause: 18
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 66
+VALU: 436
+SALU: 173
+VMEM: 23
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13553678687094434529
+SGPRs: 32
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2684
+LDS size: 4096
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3801014152
+Instructions: 577
+Copies: 66
+Branches: 14
+Latency: 6054
+Inverse Throughput: 2566
+VMEM Clause: 14
+SMEM Clause: 12
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 61
+VALU: 291
+SALU: 121
+VMEM: 17
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2239602557248024235
+SGPRs: 32
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4772
+LDS size: 8192
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2375761528
+Instructions: 1020
+Copies: 118
+Branches: 23
+Latency: 9538
+Inverse Throughput: 4310
+VMEM Clause: 23
+SMEM Clause: 21
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 70
+VALU: 512
+SALU: 204
+VMEM: 26
+SMEM: 21
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3079505493362714760
+SGPRs: 24
+VGPRs: 32
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3536
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 8
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1300299733
+Instructions: 786
+Copies: 102
+Branches: 32
+Latency: 10059
+Inverse Throughput: 1282
+VMEM Clause: 27
+SMEM Clause: 28
+Pre-Sched SGPRs: 15
+Pre-Sched VGPRs: 26
+VALU: 344
+SALU: 203
+VMEM: 36
+SMEM: 28
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 15630474984293519445
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1236
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2151197994
+Instructions: 267
+Copies: 39
+Branches: 14
+Latency: 4174
+Inverse Throughput: 556
+VMEM Clause: 9
+SMEM Clause: 10
+Pre-Sched SGPRs: 15
+Pre-Sched VGPRs: 20
+VALU: 119
+SALU: 71
+VMEM: 12
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10208639343718642191
+SGPRs: 40
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5324
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2016742499
+Instructions: 1144
+Copies: 119
+Branches: 28
+Latency: 7032
+Inverse Throughput: 3570
+VMEM Clause: 20
+SMEM Clause: 22
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 69
+VALU: 614
+SALU: 222
+VMEM: 44
+SMEM: 22
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2293351411058273042
+SGPRs: 32
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3308
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1979727117
+Instructions: 702
+Copies: 71
+Branches: 20
+Latency: 5134
+Inverse Throughput: 2358
+VMEM Clause: 12
+SMEM Clause: 14
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 45
+VALU: 380
+SALU: 146
+VMEM: 30
+SMEM: 14
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 6042183217638617040
+SGPRs: 40
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4312
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2997376586
+Instructions: 922
+Copies: 95
+Branches: 24
+Latency: 6063
+Inverse Throughput: 2964
+VMEM Clause: 16
+SMEM Clause: 16
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 57
+VALU: 497
+SALU: 184
+VMEM: 37
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 12998664692318850372
+SGPRs: 24
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5616
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 486793570
+Instructions: 1211
+Copies: 131
+Branches: 36
+Latency: 9129
+Inverse Throughput: 3043
+VMEM Clause: 26
+SMEM Clause: 28
+Pre-Sched SGPRs: 17
+Pre-Sched VGPRs: 66
+VALU: 617
+SALU: 260
+VMEM: 44
+SMEM: 28
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10053137139776564874
+SGPRs: 16
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 724
+LDS size: 1024
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2000807040
+Instructions: 146
+Copies: 38
+Branches: 13
+Latency: 933
+Inverse Throughput: 93
+VMEM Clause: 3
+SMEM Clause: 5
+Pre-Sched SGPRs: 10
+Pre-Sched VGPRs: 4
+VALU: 29
+SALU: 37
+VMEM: 3
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3669247557653577650
+SGPRs: 24
+VGPRs: 72
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5068
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2857889294
+Instructions: 1078
+Copies: 103
+Branches: 28
+Latency: 40476
+Inverse Throughput: 40476
+VMEM Clause: 18
+SMEM Clause: 20
+Pre-Sched SGPRs: 15
+Pre-Sched VGPRs: 54
+VALU: 725
+SALU: 81
+VMEM: 19
+SMEM: 20
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14882548758881128052
+SGPRs: 24
+VGPRs: 80
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5640
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2793855856
+Instructions: 1179
+Copies: 140
+Branches: 32
+Latency: 29912
+Inverse Throughput: 29912
+VMEM Clause: 22
+SMEM Clause: 24
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 73
+VALU: 786
+SALU: 102
+VMEM: 24
+SMEM: 24
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13139963186186095853
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 572
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 789521511
+Instructions: 118
+Copies: 25
+Branches: 8
+Latency: 3438
+Inverse Throughput: 344
+VMEM Clause: 6
+SMEM Clause: 5
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 8
+VALU: 39
+SALU: 30
+VMEM: 6
+SMEM: 7
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10552718333890799546
+SGPRs: 24
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1720
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1756132338
+Instructions: 303
+Copies: 19
+Branches: 7
+Latency: 1346
+Inverse Throughput: 336
+VMEM Clause: 7
+SMEM Clause: 6
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 64
+VALU: 127
+SALU: 25
+VMEM: 80
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3970609617026499540
+SGPRs: 24
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2028
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3731700200
+Instructions: 348
+Copies: 19
+Branches: 7
+Latency: 1383
+Inverse Throughput: 461
+VMEM Clause: 7
+SMEM Clause: 6
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 80
+VALU: 155
+SALU: 25
+VMEM: 100
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17046372472326578895
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2456
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2537194147
+Instructions: 530
+Copies: 95
+Branches: 28
+Latency: 5829
+Inverse Throughput: 693
+VMEM Clause: 22
+SMEM Clause: 24
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 13
+VALU: 154
+SALU: 180
+VMEM: 22
+SMEM: 24
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 11300751942472311112
+SGPRs: 32
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4544
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 297260243
+Instructions: 924
+Copies: 276
+Branches: 28
+Latency: 10237
+Inverse Throughput: 5119
+VMEM Clause: 22
+SMEM Clause: 24
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 90
+VALU: 454
+SALU: 181
+VMEM: 97
+SMEM: 24
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14116619441628246564
+SGPRs: 24
+VGPRs: 16
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 456
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2371439482
+Instructions: 100
+Copies: 15
+Branches: 7
+Latency: 3763
+Inverse Throughput: 685
+VMEM Clause: 7
+SMEM Clause: 7
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 12
+VALU: 38
+SALU: 21
+VMEM: 12
+SMEM: 9
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2916057096566739257
+SGPRs: 40
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1388
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1005976619
+Instructions: 298
+Copies: 23
+Branches: 7
+Latency: 14080
+Inverse Throughput: 3700
+VMEM Clause: 5
+SMEM Clause: 12
+Pre-Sched SGPRs: 31
+Pre-Sched VGPRs: 12
+VALU: 119
+SALU: 90
+VMEM: 11
+SMEM: 15
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 11106205111933562425
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 416
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 599336603
+Instructions: 91
+Copies: 14
+Branches: 6
+Latency: 3712
+Inverse Throughput: 428
+VMEM Clause: 5
+SMEM Clause: 4
+Pre-Sched SGPRs: 11
+Pre-Sched VGPRs: 8
+VALU: 34
+SALU: 20
+VMEM: 5
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14283748858520812317
+SGPRs: 40
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1072
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3977974961
+Instructions: 219
+Copies: 25
+Branches: 13
+Latency: 6008
+Inverse Throughput: 1159
+VMEM Clause: 7
+SMEM Clause: 16
+Pre-Sched SGPRs: 28
+Pre-Sched VGPRs: 11
+VALU: 94
+SALU: 55
+VMEM: 7
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 9462433031223528548
+SGPRs: 24
+VGPRs: 12
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 332
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1267276001
+Instructions: 71
+Copies: 6
+Branches: 3
+Latency: 861
+Inverse Throughput: 170
+VMEM Clause: 3
+SMEM Clause: 3
+Pre-Sched SGPRs: 10
+Pre-Sched VGPRs: 4
+VALU: 35
+SALU: 20
+VMEM: 3
+SMEM: 4
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3663720380851850986
+SGPRs: 24
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 188
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3555583657
+Instructions: 42
+Copies: 6
+Branches: 3
+Latency: 753
+Inverse Throughput: 75
+VMEM Clause: 3
+SMEM Clause: 3
+Pre-Sched SGPRs: 9
+Pre-Sched VGPRs: 3
+VALU: 10
+SALU: 15
+VMEM: 3
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 11630133354246486089
+SGPRs: 32
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2500
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4095717863
+Instructions: 545
+Copies: 64
+Branches: 12
+Latency: 5546
+Inverse Throughput: 2996
+VMEM Clause: 15
+SMEM Clause: 11
+Pre-Sched SGPRs: 21
+Pre-Sched VGPRs: 41
+VALU: 275
+SALU: 121
+VMEM: 20
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 4161915602557806464
+SGPRs: 32
+VGPRs: 64
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3472
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1770760220
+Instructions: 750
+Copies: 88
+Branches: 16
+Latency: 6790
+Inverse Throughput: 3952
+VMEM Clause: 18
+SMEM Clause: 16
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 54
+VALU: 377
+SALU: 161
+VMEM: 26
+SMEM: 16
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 7083223182528961029
+SGPRs: 40
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4412
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3340359942
+Instructions: 955
+Copies: 112
+Branches: 20
+Latency: 8194
+Inverse Throughput: 4908
+VMEM Clause: 22
+SMEM Clause: 19
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 67
+VALU: 479
+SALU: 201
+VMEM: 32
+SMEM: 20
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3704977957941296609
+SGPRs: 24
+VGPRs: 12
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 652
+LDS size: 8192
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3212650051
+Instructions: 138
+Copies: 28
+Branches: 16
+Latency: 8984
+Inverse Throughput: 2341
+VMEM Clause: 3
+SMEM Clause: 5
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 11
+VALU: 38
+SALU: 48
+VMEM: 3
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 5871481879461308854
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1320
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 234142513
+Instructions: 280
+Copies: 57
+Branches: 21
+Latency: 16204
+Inverse Throughput: 1912
+VMEM Clause: 6
+SMEM Clause: 7
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 11
+VALU: 87
+SALU: 90
+VMEM: 6
+SMEM: 9
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3286447808615660662
+SGPRs: 24
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 276
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 541979680
+Instructions: 57
+Copies: 9
+Branches: 5
+Latency: 3111
+Inverse Throughput: 347
+VMEM Clause: 3
+SMEM Clause: 4
+Pre-Sched SGPRs: 12
+Pre-Sched VGPRs: 4
+VALU: 15
+SALU: 22
+VMEM: 3
+SMEM: 5
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 12261729930325555428
+SGPRs: 24
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 180
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 454755553
+Instructions: 41
+Copies: 6
+Branches: 3
+Latency: 747
+Inverse Throughput: 75
+VMEM Clause: 2
+SMEM Clause: 3
+Pre-Sched SGPRs: 11
+Pre-Sched VGPRs: 3
+VALU: 11
+SALU: 17
+VMEM: 2
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13526900353266298848
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 412
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 122970846
+Instructions: 90
+Copies: 14
+Branches: 6
+Latency: 3696
+Inverse Throughput: 412
+VMEM Clause: 5
+SMEM Clause: 4
+Pre-Sched SGPRs: 11
+Pre-Sched VGPRs: 8
+VALU: 33
+SALU: 20
+VMEM: 5
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17732359276067865586
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1928
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2080364573
+Instructions: 387
+Copies: 48
+Branches: 22
+Latency: 5515
+Inverse Throughput: 1487
+VMEM Clause: 14
+SMEM Clause: 14
+Pre-Sched SGPRs: 25
+Pre-Sched VGPRs: 21
+VALU: 195
+SALU: 76
+VMEM: 14
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 12445436813046548992
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3004
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4277925399
+Instructions: 658
+Copies: 30
+Branches: 8
+Latency: 8509
+Inverse Throughput: 5122
+VMEM Clause: 7
+SMEM Clause: 9
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 27
+VALU: 428
+SALU: 85
+VMEM: 22
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2989805706864040073
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3764
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1120292453
+Instructions: 726
+Copies: 33
+Branches: 9
+Latency: 9817
+Inverse Throughput: 4745
+VMEM Clause: 8
+SMEM Clause: 9
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 28
+VALU: 406
+SALU: 90
+VMEM: 23
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 6768073030204833871
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4272
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 685514435
+Instructions: 829
+Copies: 37
+Branches: 9
+Latency: 11785
+Inverse Throughput: 6329
+VMEM Clause: 14
+SMEM Clause: 9
+Pre-Sched SGPRs: 20
+Pre-Sched VGPRs: 28
+VALU: 505
+SALU: 91
+VMEM: 23
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17947991283248472474
+SGPRs: 32
+VGPRs: 32
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1732
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 8
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3206910428
+Instructions: 387
+Copies: 38
+Branches: 10
+Latency: 21640
+Inverse Throughput: 10096
+VMEM Clause: 6
+SMEM Clause: 11
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 26
+VALU: 214
+SALU: 74
+VMEM: 14
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 5233568126619294910
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2156
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4093489228
+Instructions: 427
+Copies: 41
+Branches: 11
+Latency: 23668
+Inverse Throughput: 9335
+VMEM Clause: 7
+SMEM Clause: 11
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 27
+VALU: 204
+SALU: 79
+VMEM: 15
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2345764730681364475
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2388
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 674559221
+Instructions: 477
+Copies: 42
+Branches: 11
+Latency: 27828
+Inverse Throughput: 12407
+VMEM Clause: 10
+SMEM Clause: 11
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 27
+VALU: 252
+SALU: 80
+VMEM: 15
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 4945647127414939276
+SGPRs: 32
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2624
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 678069642
+Instructions: 556
+Copies: 36
+Branches: 10
+Latency: 32458
+Inverse Throughput: 20848
+VMEM Clause: 6
+SMEM Clause: 11
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 35
+VALU: 382
+SALU: 72
+VMEM: 16
+SMEM: 12
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17045918785488764597
+SGPRs: 32
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4668
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1032165542
+Instructions: 996
+Copies: 115
+Branches: 66
+Latency: 19585
+Inverse Throughput: 3375
+VMEM Clause: 8
+SMEM Clause: 6
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 28
+VALU: 352
+SALU: 360
+VMEM: 9
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2722644951074295923
+SGPRs: 24
+VGPRs: 20
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 688
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3954698627
+Instructions: 142
+Copies: 22
+Branches: 6
+Latency: 3769
+Inverse Throughput: 749
+VMEM Clause: 7
+SMEM Clause: 7
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 18
+VALU: 67
+SALU: 23
+VMEM: 23
+SMEM: 9
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 5960178852774040194
+SGPRs: 24
+VGPRs: 8
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 552
+LDS size: 8192
+Scratch size: 0
+Subgroups per SIMD: 4
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2471520852
+Instructions: 111
+Copies: 36
+Branches: 10
+Latency: 8476
+Inverse Throughput: 2119
+VMEM Clause: 5
+SMEM Clause: 6
+Pre-Sched SGPRs: 11
+Pre-Sched VGPRs: 4
+VALU: 27
+SALU: 35
+VMEM: 5
+SMEM: 7
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13613477905634641883
+SGPRs: 64
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 8116
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2491690122
+Instructions: 1741
+Copies: 80
+Branches: 25
+Latency: 78417
+Inverse Throughput: 43514
+VMEM Clause: 24
+SMEM Clause: 22
+Pre-Sched SGPRs: 53
+Pre-Sched VGPRs: 121
+VALU: 1023
+SALU: 252
+VMEM: 40
+SMEM: 25
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2849785618685183833
+SGPRs: 64
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 8820
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 391517824
+Instructions: 1796
+Copies: 84
+Branches: 26
+Latency: 84073
+Inverse Throughput: 42049
+VMEM Clause: 26
+SMEM Clause: 22
+Pre-Sched SGPRs: 53
+Pre-Sched VGPRs: 121
+VALU: 1002
+SALU: 257
+VMEM: 41
+SMEM: 25
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3723638937949787905
+SGPRs: 64
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 9328
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1187711289
+Instructions: 1899
+Copies: 87
+Branches: 26
+Latency: 91625
+Inverse Throughput: 48321
+VMEM Clause: 25
+SMEM Clause: 22
+Pre-Sched SGPRs: 53
+Pre-Sched VGPRs: 121
+VALU: 1100
+SALU: 258
+VMEM: 41
+SMEM: 25
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1622800267937897528
+SGPRs: 40
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4476
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3381124202
+Instructions: 978
+Copies: 60
+Branches: 25
+Latency: 41402
+Inverse Throughput: 20906
+VMEM Clause: 19
+SMEM Clause: 29
+Pre-Sched SGPRs: 38
+Pre-Sched VGPRs: 68
+VALU: 496
+SALU: 175
+VMEM: 32
+SMEM: 33
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 4808386468823956924
+SGPRs: 40
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4864
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2289996317
+Instructions: 1014
+Copies: 65
+Branches: 26
+Latency: 44178
+Inverse Throughput: 20273
+VMEM Clause: 21
+SMEM Clause: 29
+Pre-Sched SGPRs: 38
+Pre-Sched VGPRs: 68
+VALU: 488
+SALU: 180
+VMEM: 33
+SMEM: 33
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 9790589884580133698
+SGPRs: 40
+VGPRs: 84
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5108
+LDS size: 256
+Scratch size: 0
+Subgroups per SIMD: 3
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2487842766
+Instructions: 1063
+Copies: 66
+Branches: 26
+Latency: 46098
+Inverse Throughput: 23345
+VMEM Clause: 22
+SMEM Clause: 30
+Pre-Sched SGPRs: 38
+Pre-Sched VGPRs: 68
+VALU: 536
+SALU: 181
+VMEM: 33
+SMEM: 33
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 4978849439766072085
+SGPRs: 40
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5884
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1055764565
+Instructions: 1277
+Copies: 60
+Branches: 25
+Latency: 61368
+Inverse Throughput: 39530
+VMEM Clause: 20
+SMEM Clause: 29
+Pre-Sched SGPRs: 37
+Pre-Sched VGPRs: 109
+VALU: 787
+SALU: 173
+VMEM: 40
+SMEM: 33
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10182482520353029194
+SGPRs: 16
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 200
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1666478822
+Instructions: 48
+Copies: 10
+Branches: 5
+Latency: 2820
+Inverse Throughput: 282
+VMEM Clause: 2
+SMEM Clause: 4
+Pre-Sched SGPRs: 10
+Pre-Sched VGPRs: 3
+VALU: 8
+SALU: 23
+VMEM: 2
+SMEM: 4
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 9407301318726557302
+SGPRs: 24
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 256
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 277500819
+Instructions: 59
+Copies: 8
+Branches: 4
+Latency: 1748
+Inverse Throughput: 175
+VMEM Clause: 2
+SMEM Clause: 5
+Pre-Sched SGPRs: 9
+Pre-Sched VGPRs: 3
+VALU: 16
+SALU: 23
+VMEM: 2
+SMEM: 6
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 6015803239792904223
+SGPRs: 32
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1384
+LDS size: 512
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2187053975
+Instructions: 291
+Copies: 34
+Branches: 14
+Latency: 2338
+Inverse Throughput: 414
+VMEM Clause: 6
+SMEM Clause: 10
+Pre-Sched SGPRs: 19
+Pre-Sched VGPRs: 10
+VALU: 123
+SALU: 109
+VMEM: 6
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2086381610225637643
+SGPRs: 24
+VGPRs: 12
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1364
+LDS size: 3328
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 622787861
+Instructions: 297
+Copies: 73
+Branches: 24
+Latency: 6931
+Inverse Throughput: 1078
+VMEM Clause: 6
+SMEM Clause: 10
+Pre-Sched SGPRs: 18
+Pre-Sched VGPRs: 12
+VALU: 90
+SALU: 123
+VMEM: 6
+SMEM: 10
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3850046100929967851
+SGPRs: 40
+VGPRs: 128
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 936
+LDS size: 16384
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4095809254
+Instructions: 208
+Copies: 20
+Branches: 12
+Latency: 5811
+Inverse Throughput: 2906
+VMEM Clause: 3
+SMEM Clause: 7
+Pre-Sched SGPRs: 21
+Pre-Sched VGPRs: 10
+VALU: 54
+SALU: 103
+VMEM: 4
+SMEM: 7
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3106159072103243854
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2200
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1455711743
+Instructions: 471
+Copies: 45
+Branches: 40
+Latency: 6159
+Inverse Throughput: 1083
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 26
+VALU: 174
+SALU: 161
+VMEM: 33
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14526012295659766869
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2200
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1408110686
+Instructions: 471
+Copies: 45
+Branches: 40
+Latency: 6159
+Inverse Throughput: 1083
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 26
+VALU: 174
+SALU: 161
+VMEM: 33
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 444170246583577077
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2200
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1927853761
+Instructions: 471
+Copies: 45
+Branches: 40
+Latency: 6159
+Inverse Throughput: 1083
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 26
+VALU: 174
+SALU: 161
+VMEM: 33
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 553314747828886882
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2200
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1572596325
+Instructions: 471
+Copies: 45
+Branches: 40
+Latency: 6159
+Inverse Throughput: 1083
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 23
+Pre-Sched VGPRs: 26
+VALU: 174
+SALU: 161
+VMEM: 33
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 1818695058024294141
+SGPRs: 48
+VGPRs: 28
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2232
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 9
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1388894367
+Instructions: 476
+Copies: 45
+Branches: 42
+Latency: 6172
+Inverse Throughput: 1088
+VMEM Clause: 33
+SMEM Clause: 17
+Pre-Sched SGPRs: 22
+Pre-Sched VGPRs: 26
+VALU: 185
+SALU: 153
+VMEM: 33
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 7277878341361908896
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3344
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1308909127
+Instructions: 713
+Copies: 47
+Branches: 40
+Latency: 6478
+Inverse Throughput: 1466
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 28
+Pre-Sched VGPRs: 34
+VALU: 378
+SALU: 167
+VMEM: 49
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 2417612749559441552
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3344
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 577335710
+Instructions: 713
+Copies: 47
+Branches: 40
+Latency: 6478
+Inverse Throughput: 1466
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 28
+Pre-Sched VGPRs: 34
+VALU: 378
+SALU: 167
+VMEM: 49
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 12260492235696678214
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3344
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1037389012
+Instructions: 713
+Copies: 47
+Branches: 40
+Latency: 6478
+Inverse Throughput: 1466
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 28
+Pre-Sched VGPRs: 34
+VALU: 378
+SALU: 167
+VMEM: 49
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14966540776620870748
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3344
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2159120139
+Instructions: 713
+Copies: 47
+Branches: 40
+Latency: 6478
+Inverse Throughput: 1466
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 28
+Pre-Sched VGPRs: 34
+VALU: 378
+SALU: 167
+VMEM: 49
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 17466643213884398657
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3384
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 4146929702
+Instructions: 717
+Copies: 46
+Branches: 42
+Latency: 6491
+Inverse Throughput: 1470
+VMEM Clause: 33
+SMEM Clause: 17
+Pre-Sched SGPRs: 27
+Pre-Sched VGPRs: 34
+VALU: 389
+SALU: 158
+VMEM: 49
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13176706401257544824
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2776
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 242599628
+Instructions: 594
+Copies: 46
+Branches: 40
+Latency: 6350
+Inverse Throughput: 1275
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 26
+Pre-Sched VGPRs: 34
+VALU: 276
+SALU: 166
+VMEM: 41
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3697944804901206992
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2776
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2171943515
+Instructions: 594
+Copies: 46
+Branches: 40
+Latency: 6350
+Inverse Throughput: 1275
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 26
+Pre-Sched VGPRs: 34
+VALU: 276
+SALU: 166
+VMEM: 41
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8131692318506872034
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2776
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 858505190
+Instructions: 594
+Copies: 46
+Branches: 40
+Latency: 6350
+Inverse Throughput: 1275
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 26
+Pre-Sched VGPRs: 34
+VALU: 276
+SALU: 166
+VMEM: 41
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13721187217594525377
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2776
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1237073256
+Instructions: 594
+Copies: 46
+Branches: 40
+Latency: 6350
+Inverse Throughput: 1275
+VMEM Clause: 33
+SMEM Clause: 18
+Pre-Sched SGPRs: 26
+Pre-Sched VGPRs: 34
+VALU: 276
+SALU: 166
+VMEM: 41
+SMEM: 18
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 11491715502270319494
+SGPRs: 48
+VGPRs: 36
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 2820
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 7
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1607127309
+Instructions: 599
+Copies: 46
+Branches: 42
+Latency: 6364
+Inverse Throughput: 1279
+VMEM Clause: 33
+SMEM Clause: 17
+Pre-Sched SGPRs: 25
+Pre-Sched VGPRs: 34
+VALU: 287
+SALU: 158
+VMEM: 41
+SMEM: 17
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 7170405410623251337
+SGPRs: 24
+VGPRs: 40
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4512
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 6
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1678250147
+Instructions: 933
+Copies: 49
+Branches: 86
+Latency: 11639
+Inverse Throughput: 1940
+VMEM Clause: 82
+SMEM Clause: 86
+Pre-Sched SGPRs: 14
+Pre-Sched VGPRs: 37
+VALU: 399
+SALU: 159
+VMEM: 82
+SMEM: 86
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 9162190211562318349
+SGPRs: 24
+VGPRs: 32
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 1472
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 8
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1475545406
+Instructions: 310
+Copies: 34
+Branches: 8
+Latency: 4062
+Inverse Throughput: 1544
+VMEM Clause: 6
+SMEM Clause: 7
+Pre-Sched SGPRs: 15
+Pre-Sched VGPRs: 22
+VALU: 142
+SALU: 79
+VMEM: 13
+SMEM: 8
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3870124971305628119
+SGPRs: 32
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 3908
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3548662360
+Instructions: 835
+Copies: 112
+Branches: 20
+Latency: 10330
+Inverse Throughput: 2956
+VMEM Clause: 21
+SMEM Clause: 19
+Pre-Sched SGPRs: 24
+Pre-Sched VGPRs: 46
+VALU: 357
+SALU: 204
+VMEM: 28
+SMEM: 20
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13040322234895295577
+SGPRs: 24
+VGPRs: 72
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5040
+LDS size: 18432
+Scratch size: 0
+Subgroups per SIMD: 2
+Combined inputs: 0
+Combined outputs: 0
+Hash: 200472963
+Instructions: 1073
+Copies: 103
+Branches: 28
+Latency: 40432
+Inverse Throughput: 40432
+VMEM Clause: 18
+SMEM Clause: 20
+Pre-Sched SGPRs: 16
+Pre-Sched VGPRs: 54
+VALU: 720
+SALU: 81
+VMEM: 19
+SMEM: 20
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 13654676309647595080
+SGPRs: 56
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4648
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3342599006
+Instructions: 923
+Copies: 63
+Branches: 23
+Latency: 30120
+Inverse Throughput: 13268
+VMEM Clause: 12
+SMEM Clause: 12
+Pre-Sched SGPRs: 47
+Pre-Sched VGPRs: 40
+VALU: 485
+SALU: 155
+VMEM: 19
+SMEM: 13
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 3920941166361888223
+SGPRs: 48
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 4272
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 601952124
+Instructions: 861
+Copies: 62
+Branches: 23
+Latency: 22920
+Inverse Throughput: 9748
+VMEM Clause: 9
+SMEM Clause: 12
+Pre-Sched SGPRs: 46
+Pre-Sched VGPRs: 35
+VALU: 428
+SALU: 154
+VMEM: 16
+SMEM: 13
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 8811156688212640483
+SGPRs: 56
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 6276
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2023118020
+Instructions: 1238
+Copies: 72
+Branches: 12
+Latency: 13864
+Inverse Throughput: 8868
+VMEM Clause: 26
+SMEM Clause: 23
+Pre-Sched SGPRs: 43
+Pre-Sched VGPRs: 35
+VALU: 800
+SALU: 147
+VMEM: 51
+SMEM: 24
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10745883609212597636
+SGPRs: 56
+VGPRs: 48
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 5308
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 5
+Combined inputs: 0
+Combined outputs: 0
+Hash: 2967286072
+Instructions: 1062
+Copies: 71
+Branches: 12
+Latency: 11080
+Inverse Throughput: 6052
+VMEM Clause: 24
+SMEM Clause: 23
+Pre-Sched SGPRs: 43
+Pre-Sched VGPRs: 30
+VALU: 624
+SALU: 146
+VMEM: 50
+SMEM: 24
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 14219120993209371087
+SGPRs: 16
+VGPRs: 4
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 112
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 771284927
+Instructions: 23
+Copies: 3
+Branches: 1
+Latency: 412
+Inverse Throughput: 59
+VMEM Clause: 1
+SMEM Clause: 1
+Pre-Sched SGPRs: 8
+Pre-Sched VGPRs: 3
+VALU: 13
+SALU: 5
+VMEM: 1
+SMEM: 1
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 10682615752360708554
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 364
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 3355309991
+Instructions: 76
+Copies: 11
+Branches: 6
+Latency: 1628
+Inverse Throughput: 452
+VMEM Clause: 5
+SMEM Clause: 3
+Pre-Sched SGPRs: 16
+Pre-Sched VGPRs: 6
+VALU: 28
+SALU: 18
+VMEM: 5
+SMEM: 3
+VOPD: 0
+********************
+
+
+
+Compute Shader:
+*** SHADER STATS ***
+Driver pipeline hash: 16588246614035650391
+SGPRs: 24
+VGPRs: 24
+Spilled SGPRs: 0
+Spilled VGPRs: 0
+Code size: 304
+LDS size: 0
+Scratch size: 0
+Subgroups per SIMD: 10
+Combined inputs: 0
+Combined outputs: 0
+Hash: 1583468733
+Instructions: 67
+Copies: 17
+Branches: 2
+Latency: 3968
+Inverse Throughput: 397
+VMEM Clause: 2
+SMEM Clause: 2
+Pre-Sched SGPRs: 11
+Pre-Sched VGPRs: 9
+VALU: 27
+SALU: 18
+VMEM: 2
+SMEM: 4
+VOPD: 0
+********************
+
+

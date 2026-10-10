@@ -19,7 +19,14 @@ to be right for the one-column projections (two rows per wave, 10-35% faster per
 row per wave in the recurrence (+2.3%), a two-key attention partial and an unrolled merge: 40.7 tok/s decode and 52.0
 with MTP, 42.2 decode without rounding the decode totals (`TRASHCAN_TP_ROUND=0`). The exchange's parts are now
 measured (`sent`, `first`, `wire`, `encode`, `decode` in `tg_tp_ms`); a thread per cable, an AVX build and fused host
-passes did not help. The three-column verification kernels (64 VGPRs, 4 waves per SIMD) are the next target.
+passes did not help. Round 3 ([results/qwen/tp8-c3-20261009](../results/qwen/tp8-c3-20261009/README.md)) went after
+the three-column verification kernel (64 VGPRs, 4 waves per SIMD) and found no faster one under the bitwise
+contract: it is bound by latency hiding (98% VALU issue at 7 waves per SIMD, about 65% at 4), and activations in
+shared memory (three designs), a weight prefetch, compiled-in row lengths, hoisted indices and a reordered
+epilogue all run slower; five rows per wave only helps the 2176-row FFN shard (-10% alone, -2% with gate and up
+concurrent) and was 0.3% of GPU time on the cluster, so it was removed. The next candidates, untried because they
+reach beyond that kernel, are a weight layout interleaving a wave's 16 blocks of four rows (every Q4_0 kernel and
+`repack_q4`) and the bias partial sums precomputed by the host pass.
 The estimates below are kept as written.
 
 ## Baseline

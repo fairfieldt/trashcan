@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 8 ranks over 4 machine(s), GPUs per machine [2, 2, 2, 2], f16 all-reduce payload, full mesh
+GPU0: rank 0 of 8 + MTP, 2405.2 MiB allocated
+GPU1: rank 1 of 8 + MTP, 2405.2 MiB allocated
+[clocks] 56 samples card0 (02:00.0) sclk/mclk: 850/1370 x18 450/1370 x4 300/150 x34  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x18 450/1370 x7 300/150 x29 450/150 x2  max 54C  log=results/clocks/c3-prof-r5.txt
