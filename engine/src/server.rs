@@ -91,6 +91,15 @@ pub struct Options {
     /// `qwen-chat --tp-peer`).
     #[arg(long)]
     tp_peer: Vec<String>,
+    /// Flash-Next: split the LM head by vocabulary rows over the last N stages (see `qwen4 bench --head-split`).
+    #[arg(long, default_value_t = 1)]
+    head_split: usize,
+    /// Flash-Next: QSA K/V cache, f16, q8 or k16v8.
+    #[arg(long, default_value = "f16")]
+    kv: String,
+    /// Flash-Next: n-gram rows from map, disk, direct, ram-q4 or ram-q8 (see `qwen4 bench --ngram`).
+    #[arg(long, default_value = "map")]
+    ngram: String,
 }
 
 /// A resident model behind the HTTP layer.
@@ -147,17 +156,22 @@ struct Qwen {
     stop: Vec<u32>,
 }
 
+/// The Qwen templates' `reasoning_effort` (xhigh, medium or low) for a requested effort.
+fn qwen_effort(request: &Request) -> Option<&'static str> {
+    match request.effort.as_deref()? {
+        "minimal" | "low" => Some("low"),
+        "medium" => Some("medium"),
+        "high" | "xhigh" | "max" => Some("xhigh"),
+        _ => None,
+    }
+}
+
 impl Backend for Qwen {
     fn native(&self) -> Native {
         Native::Qwen
     }
     fn effort(&self, request: &Request) -> Option<&'static str> {
-        match request.effort.as_deref()? {
-            "minimal" | "low" => Some("low"),
-            "medium" => Some("medium"),
-            "high" | "xhigh" | "max" => Some("xhigh"),
-            _ => None,
-        }
+        qwen_effort(request)
     }
     fn tokenizer(&self) -> &Tokenizer {
         &self.tokenizer
@@ -210,6 +224,61 @@ impl Backend for Qwen {
         let response = output.finish(ids.len(), cached, generated, native.reasoning_tokens, !stopped)?;
         e.checkpoint()?;
         Ok(response)
+    }
+    fn reset(&mut self) {
+        self.chain.forget();
+    }
+}
+
+/// Qwen3.8-Flash-Next (qwen4exp) over a chain of machines; the qwen35 tokenizer, template and output format.
+struct Qwen4 {
+    chain: crate::qwen4::net::Chain,
+    tokenizer: Tokenizer,
+    tokens: qwen::native::Tokens,
+    stop: Vec<u32>,
+}
+
+impl Backend for Qwen4 {
+    fn native(&self) -> Native {
+        Native::Qwen
+    }
+    fn effort(&self, request: &Request) -> Option<&'static str> {
+        qwen_effort(request)
+    }
+    fn tokenizer(&self) -> &Tokenizer {
+        &self.tokenizer
+    }
+    fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value> {
+        let p = request.sampling;
+        let mut sampler = Sampler::new(p.temperature, p.top_k, p.top_p, p.seed)?;
+        let e = &mut self.chain;
+        if options.no_prefix_cache {
+            e.forget();
+        }
+        let (top, cached) = e.prefill_cached(ids)?;
+        let mut native = qwen::native::QwenOutput::new(self.tokens, request.thinking);
+        let budget = p.max_tokens.min(e.context - e.pos);
+        let mut pending = sampler.sample(&top);
+        let (mut generated, mut stopped) = (0, false);
+        while generated < budget {
+            generated += 1;
+            if self.stop.contains(&pending) {
+                stopped = true;
+                break;
+            }
+            native.token(pending, &self.tokenizer.decode_bytes(pending, true), output, &request.tools)?;
+            if !request.parallel_tool_calls && native.tool_calls > 0 {
+                stopped = true;
+                break;
+            }
+            if generated == budget {
+                break;
+            }
+            let top = e.forward(&[pending], true, None)?.context("missing candidates")?;
+            pending = sampler.sample(&top);
+        }
+        native.finish(output, !stopped)?;
+        output.finish(ids.len(), cached, generated, native.reasoning_tokens, !stopped)
     }
     fn reset(&mut self) {
         self.chain.forget();
@@ -296,6 +365,31 @@ pub fn serve(mut options: Options) -> Result<()> {
         options.seed,
     )?;
     let gguf = crate::gguf::Gguf::open(&options.model)?;
+    if gguf.get_str("general.architecture")? == "qwen4exp" {
+        let name = gguf.get_str("general.name").unwrap_or("qwen").to_lowercase().replace(' ', "-");
+        options.model_id.get_or_insert(name);
+        drop(gguf);
+        ensure!(options.mtp.is_none() && !options.tp, "Flash-Next serves without --mtp or --tp");
+        let chain = crate::qwen4::net::Chain::new(
+            &options.model,
+            qwen::chat::devices(options.cpu, options.gpus.clone())?,
+            &options.nodes,
+            &options.cuts,
+            options.head_split,
+            options.context,
+            options.batch,
+            crate::qwen4::gpu::KvCache::parse(&options.kv)?,
+            crate::qwen4::net::Rows::open(&options.model, &options.ngram)?,
+        )?;
+        let tokenizer = Tokenizer::new(&chain.local.gguf)?;
+        let backend = Qwen4 {
+            tokens: qwen::native::Tokens::new(&tokenizer)?,
+            stop: qwen::chat::Specials::new(&tokenizer).stop,
+            chain,
+            tokenizer,
+        };
+        return run(options, backend);
+    }
     if gguf.get_str("general.architecture")? == "qwen35" {
         let name = gguf.get_str("general.name").unwrap_or("qwen").to_lowercase().replace(' ', "-");
         options.model_id.get_or_insert(name);

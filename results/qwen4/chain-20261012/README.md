@@ -88,9 +88,25 @@ Longer prefills were not run: all six Macs work at once (~1.7 kW).
 Single-Mac check before the chain (`stage-mac1`, incite, layers 0-7 and two head twelfths): 5814 / 5781 MiB of
 budgets 5865 / 5847; decode 1.18-1.59 ms per layer; head slice 1.1 ms.
 
+## Server
+
+`trashcan serve` as the chain's driver on incite (`tools/q4serve-test.sh`, `--head-split 12 --context 16384 --batch
+128 --ngram disk`; 16K so that test-server.py's 20,000-word prompt overflows instead of running a long prefill).
+Up 106 s after start. [incite/serve6.json](incite/serve6.json):
+
+- `tools/q4-turns.py`: turn 1, 22 prompt tokens, first token after 1.10 s, 57 tokens in 4.11 s; turn 2 (turn 1, its
+  reply and a question), 99 prompt tokens of which 78 reused, first token after 1.02 s, 64 tokens in 4.62 s (13.9
+  tok/s streamed).
+- `scripts/test-server.py`: every check passes (discovery, JSON and SSE parity, seeded sampling, token limit,
+  reasoning, invalid requests, function calls and continuation, namespaces, custom tools, tool search).
+
+A ~20-token prefill takes about 1 s through the 12 stages, against 74 ms per decode token: 16 tokens and more take the
+grouped expert path.
+
 ## Files
 
-- `tools/q4run.py`: one chain run (nodes last first, then the driver); `tools/dpm-run.sh` (the `--dpm` runs before the
+- `tools/q4run.py`: one chain run (nodes last first, then the driver; `--raw` for a whole driver command such as
+  `tools/q4serve-test.sh`, which also runs `tools/q4-turns.py` and `scripts/test-server.py`); `tools/dpm-run.sh` (the `--dpm` runs before the
   engine held the clocks itself); `tools/summary.py`.
 - `incite/`: driver outputs (`*.json`, `*.err`), `commands.log`, `clocks/`; `val6b/greedy.txt`, `index.tsv`.
 - `indite/`, `inflight/`, `alight/`, `invite/`, `enlight/`: node logs and clocks.

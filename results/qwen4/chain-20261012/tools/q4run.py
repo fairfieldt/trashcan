@@ -24,6 +24,7 @@ p.add_argument('--driver-host', default='incite')
 p.add_argument('--nodes', default='', help='node hosts in chain order')
 p.add_argument('--node-args', default='--gpus 0,1')
 p.add_argument('--driver', required=True)
+p.add_argument('--raw', action='store_true', help='--driver is a whole command run in the workspace (e.g. a server test)')
 p.add_argument('--model', default=MODEL)
 p.add_argument('--dpm', default='', help='hold the GPUs at this amdgpu DPM level during the run (tools/dpm-run.sh)')
 a = p.parse_args()
@@ -37,10 +38,10 @@ def leased(host, cmd):
     return ['ssh', host, f'gpuq run {tickets[host]} -- bash -c ' + shlex.quote(f'cd {ROOT}; mkdir -p results/clocks; {cmd}')]
 
 
-def wrapped(clock, args):
+def wrapped(clock, argv):
     dpm = ['scripts/dpm-run.sh', a.dpm, '--'] if a.dpm else []
     return shlex.join([*dpm, 'scripts/with-clocks.sh', f'results/clocks/{clock}.txt', 'sudo', '-n', 'env', *shlex.split(a.env),
-                       'python3', 'scripts/latency-run.py', f'{ROOT}/{a.binary}', *args])
+                       'python3', 'scripts/latency-run.py', *argv])
 
 
 for host in [a.driver_host] + nodes:
@@ -49,13 +50,14 @@ for host in [a.driver_host] + nodes:
 children = []
 for host in reversed(nodes):
     log = f'results/node-{a.name}-{host}.log'
-    cmd = wrapped(f'node-{a.name}-{host}', ['qwen4', 'node', a.model, '--listen', '0.0.0.0:7071',
+    cmd = wrapped(f'node-{a.name}-{host}', [f'{ROOT}/{a.binary}', 'qwen4', 'node', a.model, '--listen', '0.0.0.0:7071',
                                              *shlex.split(a.node_args)]) + f' > {log} 2>&1'
     children.append((host, subprocess.Popen(leased(host, cmd))))
 time.sleep(3)
 dcmd, *dargs = shlex.split(a.driver)
 subprocess.run(['ssh', a.driver_host, f'cd {ROOT}; mkdir -p results; echo {shlex.quote(time.strftime("%FT%T") + " " + a.name + " " + a.binary + " " + a.env + " " + a.driver)} >> results/commands.log'])
-cmd = wrapped(a.name, ['qwen4', dcmd, a.model, *dargs]) + f' > results/{a.name}.json 2> results/{a.name}.err'
+argv = [dcmd, *dargs] if a.raw else [f'{ROOT}/{a.binary}', 'qwen4', dcmd, a.model, *dargs]
+cmd = wrapped(a.name, argv) + f' > results/{a.name}.json 2> results/{a.name}.err'
 t0 = time.time()
 rc = subprocess.run(leased(a.driver_host, cmd)).returncode
 print(f'driver exited {rc} after {time.time() - t0:.0f} s', file=sys.stderr)

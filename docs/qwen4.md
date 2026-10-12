@@ -11,7 +11,8 @@ recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per 
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
 CPU reference, prefill 130 tok/s on a 512-token prompt, decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)). Not done yet: a
-faster head split, MTP and a server (see [What is left](#what-is-left)).
+faster head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
+the chain ([Serving](#serving)).
 
 | | |
 |---|---|
@@ -356,8 +357,31 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
    grouped kernel uses 10 of 16 lane groups on 640-wide rows.
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
-9. **MTP** (a 49th layer with its own experts) and the rollback snapshots speculative decoding needs; a chat
-   command and the Responses server for `qwen4exp` (today the CLI has `ref`, `validate`, `bench`, `node`).
+9. **MTP** (a 49th layer with its own experts) and the rollback snapshots speculative decoding needs.
+10. **Prefix checkpoints**: the server continues only from the live state, so a prompt that is not an extension of
+    everything processed so far starts again at position 0.
+
+## Serving
+
+`trashcan serve` on a qwen4exp GGUF runs the Responses server as the chain's driver (the qwen35 tokenizer, template,
+reasoning and tool-call parsing; see [server.md](server.md)). Start a node on every other Mac first, in chain order
+along the Thunderbolt ring, then the server on the first Mac (incite):
+
+```sh
+# indite, inflight, alight, invite, enlight
+trashcan qwen4 node G-iq4-00001-of-00006.gguf --listen 0.0.0.0:7071 --gpus 0,1
+# incite
+trashcan serve G-iq4-00001-of-00006.gguf --host 0.0.0.0 --port 8000 \
+    --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 \
+    --head-split 12 --context 32768 --batch 128 --ngram disk
+```
+
+Each `--nodes` address is resolved on the previous machine of the chain (`<peer>.tb<bus>` names from `tblink`).
+A request continues from the live state when everything processed so far (the previous prompt and its reply) is a
+prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet
+and n-gram states only run forward. `--no-prefix-cache` always starts at 0. Without `--mtp` or `--tp`.
+`scripts/test-server.py` passes against it, and a second chat turn reuses the first
+([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md#server)).
 
 ## Commands
 

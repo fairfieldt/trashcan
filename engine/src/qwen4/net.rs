@@ -244,6 +244,25 @@ pub enum Rows {
     Table(ngram::Table),
 }
 
+impl Rows {
+    /// `mode`: map (the GGUF mapping), ram-q4 or ram-q8 (a resident copy), disk (pread through the page cache) or
+    /// direct (O_DIRECT page reads).
+    pub fn open(model: &Path, mode: &str) -> Result<Self> {
+        if mode == "map" {
+            return Ok(Rows::Map);
+        }
+        let g = Gguf::open(model)?;
+        let t = g.tensor("per_layer_token_embd.weight").context("no n-gram table")?;
+        let table = ngram::Table::open(&g.paths[t.file], mode == "direct")?;
+        Ok(Rows::Table(match mode {
+            "ram-q4" => table.to_ram(crate::gguf::GgmlType::Q4_0, 16)?,
+            "ram-q8" => table.to_ram(crate::gguf::GgmlType::Q8_0, 16)?,
+            "disk" | "direct" => table,
+            other => bail!("unknown --ngram {other}"),
+        }))
+    }
+}
+
 /// The driving machine: tokens in, top candidates out.
 pub struct Chain {
     pub local: Local,
@@ -416,11 +435,35 @@ impl Chain {
     /// Prefill a prompt from position 0 in chunks; only the final chunk waits for its result.
     pub fn prefill(&mut self, ids: &[u32]) -> Result<Vec<(f32, u32)>> {
         self.pos = 0;
+        self.extend(ids)
+    }
+
+    /// Prefill `ids`, continuing from the live state when everything processed so far is a prefix of them (the
+    /// recurrent DeltaNet and n-gram states cannot go back, so any other prompt starts again from position 0).
+    /// Returns the last token's candidates and the number of reused positions.
+    pub fn prefill_cached(&mut self, ids: &[u32]) -> Result<(Vec<(f32, u32)>, usize)> {
+        ensure!(!ids.is_empty(), "empty prompt");
+        let live = self.pos > 0 && self.pos < ids.len() && self.history.len() == self.pos && ids.starts_with(&self.history);
+        if !live {
+            self.pos = 0;
+        }
+        let start = self.pos;
+        Ok((self.extend(&ids[start..])?, start))
+    }
+
+    /// Process `ids` at the current position in chunks; only the final chunk waits for its result.
+    fn extend(&mut self, ids: &[u32]) -> Result<Vec<(f32, u32)>> {
         let chunks: Vec<_> = ids.chunks(self.max_batch).collect();
         let mut top = None;
         for (i, chunk) in chunks.iter().enumerate() {
             top = self.forward(chunk, i + 1 == chunks.len(), None)?;
         }
         top.context("empty prompt")
+    }
+
+    /// Discard the live state: the next prompt starts from position 0.
+    pub fn forget(&mut self) {
+        self.pos = 0;
+        self.history.clear();
     }
 }

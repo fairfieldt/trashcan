@@ -9,7 +9,8 @@ target/release/trashcan serve ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q
 
 `server` is an alias for `serve`. The model stays loaded and requests run serially through one
 resident engine. A qwen35 GGUF (Qwen3.8-27B, Qwen3.5-9B) selects the Qwen pipeline, with its own chain,
-MTP and prefix-reuse options; see [qwen.md](qwen.md#serving). The rest of this page describes Gemma. It reuses an exact token prefix from the last successful request when that
+MTP and prefix-reuse options; see [qwen.md](qwen.md#serving). A qwen4exp GGUF (Qwen3.8-Flash-Next) serves over its
+machine chain; see [qwen4.md](qwen4.md#serving). The rest of this page describes Gemma. It reuses an exact token prefix from the last successful request when that
 prefix's sliding-window KV is still resident. Before the first ring wrap, all processed prefixes
 remain available. After wrap, the furthest KV write must be no more than `--batch` positions
 beyond the reused prefix; rejected speculative writes count too. Older or changed prefixes safely

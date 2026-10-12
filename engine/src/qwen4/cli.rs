@@ -172,20 +172,7 @@ pub struct Run {
 impl Run {
     fn chain(self, model: &Path) -> Result<super::net::Chain> {
         let devices = crate::qwen::chat::devices(self.cpu, self.gpus)?;
-        let rows = match self.ngram.as_str() {
-            "map" => super::net::Rows::Map,
-            mode => {
-                let g = crate::gguf::Gguf::open(model)?;
-                let t = g.tensor("per_layer_token_embd.weight").context("no n-gram table")?;
-                let table = super::ngram::Table::open(&g.paths[t.file], mode == "direct")?;
-                super::net::Rows::Table(match mode {
-                    "ram-q4" => table.to_ram(crate::gguf::GgmlType::Q4_0, 16)?,
-                    "ram-q8" => table.to_ram(crate::gguf::GgmlType::Q8_0, 16)?,
-                    "disk" | "direct" => table,
-                    other => anyhow::bail!("unknown --ngram {other}"),
-                })
-            }
-        };
+        let rows = super::net::Rows::open(model, &self.ngram)?;
         super::net::Chain::new(
             model,
             devices,
