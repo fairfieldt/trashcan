@@ -80,14 +80,27 @@ fn ranges(v: &Value) -> Result<Vec<(usize, usize)>> {
         .collect()
 }
 
-/// A forward reply: the candidates so far, the final hidden state (blob first) and any captures.
-fn result(top: &[(f32, u32)], h: &[f32], caps: &Captures) -> (Value, Vec<u8>) {
+// A forward reply is two frames. The final hidden state goes first and every machine passes it up before scoring
+// its head rows, so all machines score at the same time; the merged candidates of the machine and those after it
+// follow (`result`).
+
+fn send_hidden(up: &mut Conn, h: &[f32]) -> Result<()> {
+    up.send(&json!({"h": h.len()}), bytemuck::cast_slice(h))
+}
+
+fn recv_hidden(down: &mut Conn) -> Result<Vec<f32>> {
+    let (header, blob) = down.recv()?;
+    let n = header["h"].as_u64().context("missing hidden state")? as usize;
+    ensure!(blob.len() == n * 4, "hidden state length mismatch");
+    Ok(floats(&blob))
+}
+
+/// The second frame of a forward reply: the candidates so far and any captures.
+fn result(top: &[(f32, u32)], caps: &Captures) -> (Value, Vec<u8>) {
     let names: Vec<Value> = caps.iter().map(|(n, v)| json!([n, v.len()])).collect();
-    let mut blob: Vec<u8> = bytemuck::cast_slice::<f32, u8>(h).to_vec();
-    blob.extend(caps.values().flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec()));
+    let blob: Vec<u8> = caps.values().flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec()).collect();
     (
-        json!({"top": top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>(), "h": h.len(),
-            "captures": names}),
+        json!({"top": top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>(), "captures": names}),
         blob,
     )
 }
@@ -117,7 +130,7 @@ fn heads_of(v: &Value) -> Result<Vec<Option<(usize, usize)>>> {
         .collect()
 }
 
-fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<(Vec<(f32, u32)>, Vec<f32>)> {
+fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
     let top = header["top"]
         .as_array()
         .context("missing top candidates")?
@@ -129,10 +142,8 @@ fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Re
             ))
         })
         .collect::<Result<Vec<_>>>()?;
-    let hn = header["h"].as_u64().context("missing hidden state")? as usize;
-    let h = floats(&blob[..hn * 4]);
     if let Some(m) = caps {
-        let mut at = hn * 4;
+        let mut at = 0;
         for c in header["captures"].as_array().into_iter().flatten() {
             let len = c[1].as_u64().context("capture length")? as usize;
             m.insert(
@@ -142,7 +153,7 @@ fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Re
             at += len * 4;
         }
     }
-    Ok((top, h))
+    Ok(top)
 }
 
 /// Serve layers to an upstream machine, one session at a time.
@@ -212,26 +223,30 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             let dump = f["dump"].as_bool().unwrap_or(false);
             let mut caps = Captures::new();
             let out = l.forward(floats(&blob), None, pos, n, dump.then_some(&mut caps))?;
-            match (out, down.as_mut()) {
-                (Output::Top(top, h), _) => {
-                    if reply {
-                        let (hd, b) = result(&top, &h, &caps);
-                        up.send(&hd, &b)?;
-                    }
-                }
-                (Output::Hidden(x), Some(d)) => {
-                    d.send(&json!({"forward": f}), bytemuck::cast_slice(&x))?;
-                    if reply {
-                        let (hd, b) = d.recv()?;
-                        let (top, h) = decode_result(&hd, &b, Some(&mut caps))?;
-                        // On the way back, this machine's stages score their head rows.
-                        let mine = l.head_slices(&h, dump.then_some(&mut caps))?;
-                        let (hd, b) = result(&merge_top(top, mine), &h, &caps);
-                        up.send(&hd, &b)?;
-                    }
-                }
-                (Output::Hidden(_), None) => bail!("the last machine has no LM head"),
+            if let Output::Hidden(x) = &out {
+                let d = down.as_mut().context("the last machine has no LM head")?;
+                d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
             }
+            if !reply {
+                continue;
+            }
+            // The final hidden state goes on up first; then this machine's stages score their head rows, and the
+            // candidates follow, merged with those of the machines after it.
+            let (mut top, h, rest) = match out {
+                Output::Top(top, h) => (top, h, None),
+                Output::Hidden(_) => {
+                    let d = down.as_mut().context("the last machine has no LM head")?;
+                    (Vec::new(), recv_hidden(d)?, Some(d))
+                }
+            };
+            send_hidden(up, &h)?;
+            top = merge_top(top, l.head_slices(&h, dump.then_some(&mut caps))?);
+            if let Some(d) = rest {
+                let (hd, b) = d.recv()?;
+                top = merge_top(top, decode_result(&hd, &b, Some(&mut caps))?);
+            }
+            let (hd, b) = result(&top, &caps);
+            up.send(&hd, &b)?;
         } else {
             bail!("unknown request {header}");
         }
@@ -385,7 +400,7 @@ impl Chain {
         }
     }
 
-    /// Process `tokens` at the current position. Without `reply` a remote chain's result is not awaited.
+    /// Process `tokens` at the current position. Without `reply` no candidates are computed or awaited.
     pub fn forward(
         &mut self,
         tokens: &[u32],
@@ -404,32 +419,34 @@ impl Chain {
         let pos = self.pos;
         let out = self.local.forward(x, ple.as_deref(), pos, n, dump.as_deref_mut())?;
         self.pos += n;
-        let vocab = self.local.c.vocab;
-        match (out, self.next.as_mut()) {
-            (Output::Top(top, _), _) => {
-                if let Some(m) = dump {
-                    assemble_logits(m, vocab);
-                }
-                Ok(Some(top))
-            }
-            (Output::Hidden(x), Some(conn)) => {
-                conn.send(
-                    &json!({"forward": {"pos": pos, "n": n, "reply": reply, "dump": dump.is_some()}}),
-                    bytemuck::cast_slice(&x),
-                )?;
-                if !reply {
-                    return Ok(None);
-                }
-                let (hd, b) = conn.recv()?;
-                let (top, h) = decode_result(&hd, &b, dump.as_deref_mut())?;
-                let mine = self.local.head_slices(&h, dump.as_deref_mut())?;
-                if let Some(m) = dump {
-                    assemble_logits(m, vocab);
-                }
-                Ok(Some(merge_top(top, mine)))
-            }
-            (Output::Hidden(_), None) => bail!("no machine holds the LM head"),
+        if let Output::Hidden(x) = &out {
+            let conn = self.next.as_mut().context("no machine holds the LM head")?;
+            conn.send(
+                &json!({"forward": {"pos": pos, "n": n, "reply": reply, "dump": dump.is_some()}}),
+                bytemuck::cast_slice(x),
+            )?;
         }
+        if !reply {
+            return Ok(None);
+        }
+        // The final hidden state arrives first: this machine scores its head rows while the candidates of the
+        // others come up the chain.
+        let (mut top, h, rest) = match out {
+            Output::Top(top, h) => (top, h, None),
+            Output::Hidden(_) => {
+                let conn = self.next.as_mut().context("no machine holds the LM head")?;
+                (Vec::new(), recv_hidden(conn)?, Some(conn))
+            }
+        };
+        top = merge_top(top, self.local.head_slices(&h, dump.as_deref_mut())?);
+        if let Some(conn) = rest {
+            let (hd, b) = conn.recv()?;
+            top = merge_top(top, decode_result(&hd, &b, dump.as_deref_mut())?);
+        }
+        if let Some(m) = dump {
+            assemble_logits(m, self.local.c.vocab);
+        }
+        Ok(Some(top))
     }
 
     /// Prefill a prompt from position 0 in chunks; only the final chunk waits for its result.

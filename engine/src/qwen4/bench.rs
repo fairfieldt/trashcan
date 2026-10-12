@@ -51,8 +51,11 @@ pub fn stage_dump(local: &mut Local, out: &std::path::Path, tokens: &[u32], batc
     for (i, chunk) in chunks.iter().enumerate() {
         let x = super::embed(&local.gguf, &local.c, chunk)?;
         let ple = super::ple_rows(&local.gguf, &local.c, &tokens[..pos], chunk)?;
-        let dump = if i + 1 == chunks.len() { Some(&mut caps) } else { None };
-        local.forward(x, ple.as_deref(), pos, chunk.len(), dump)?;
+        let last = i + 1 == chunks.len();
+        let out = local.forward(x, ple.as_deref(), pos, chunk.len(), last.then_some(&mut caps))?;
+        if let (true, super::gpu::Output::Top(_, h)) = (last, out) {
+            local.head_slices(&h, Some(&mut caps))?;
+        }
         pos += chunk.len();
     }
     std::fs::create_dir_all(out)?;

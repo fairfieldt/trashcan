@@ -200,7 +200,8 @@ impl Local {
         Ok(top)
     }
 
-    /// Run all local stages. Returns the residual, or the top candidates when this machine ends the model.
+    /// Run all local stages. Returns the residual, or, when this machine ends the model, the final hidden state and
+    /// the candidates of the last stage's head rows (`head_slices` scores the other stages' rows).
     pub fn forward(
         &mut self,
         mut x: Vec<f32>,
@@ -245,14 +246,7 @@ impl Local {
                 }
             }
         }
-        // This machine ends the model: its other stages score their head rows on the final hidden state.
-        match end {
-            Some(Output::Top(top, h)) => {
-                let mine = self.head_slices(&h, dump)?;
-                Ok(Output::Top(merge_top(top, mine), h))
-            }
-            _ => Ok(Output::Hidden(x)),
-        }
+        Ok(end.unwrap_or(Output::Hidden(x)))
     }
 }
 
