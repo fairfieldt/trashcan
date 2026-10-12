@@ -632,8 +632,8 @@ impl GpuStage {
                 Some(Head {
                     mix: if ends { Some(mix("output_hc", false)?) } else { None },
                     w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[row0 * rb..row1 * rb]))?,
-                    logits: gpu.buffer(rows * 4, false, false, None)?,
-                    scratch: gpu.buffer(chunks * TOP_K * 8, false, false, None)?,
+                    logits: gpu.buffer(VERIFY_MAX * rows * 4, false, false, None)?,
+                    scratch: gpu.buffer(VERIFY_MAX * chunks * TOP_K * 8, false, false, None)?,
                     top: gpu.buffer(VERIFY_MAX * TOP_K * 8, true, false, None)?,
                     chunks,
                     row0,
@@ -841,28 +841,42 @@ impl GpuStage {
     }
 
     /// Score the hidden state at `input` with this stage's head rows: logits, chunk top-k, merged top-k in `hd.top`.
-    fn score_head(&self, graph: &mut Graph, cmd: vk::CommandBuffer, hd: &Head, row: usize, dump: bool) -> Result<()> {
-        let (input, top) = (hd.h.address + (row * self.c.d * 4) as u64, hd.top.address + (row * TOP_K * 8) as u64);
+    /// Score the hidden states of `cols` rows of `hd.h`: logits row by row (each exactly as a single row's), then the
+    /// chunk top-k and the merge of every row at once.
+    fn score_head(&self, graph: &mut Graph, cmd: vk::CommandBuffer, hd: &Head, cols: usize, dump: bool) -> Result<()> {
         let gpu = &self.gpu;
         let d = self.c.d;
         let push = |ptr: [u64; 6], u: [u32; 16]| Push {
             ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, 0],
             u,
         };
-        let mut u = [0; 16];
-        u[0] = hd.rows as u32;
-        u[1] = d as u32;
-        u[3] = (hd.rows * d / 16) as u32;
-        u[9] = 1;
-        u[15] = 1;
-        gpu.dispatch_matrix(
-            cmd,
-            "headvec",
-            push([0, input, hd.logits.address, 0, 0, 0], u),
-            hd.rows.div_ceil(16) as u32,
-            1,
-            &hd.w,
-        )?;
+        for row in 0..cols {
+            let mut u = [0; 16];
+            u[0] = hd.rows as u32;
+            u[1] = d as u32;
+            u[3] = (hd.rows * d / 16) as u32;
+            u[9] = 1;
+            u[15] = 1;
+            gpu.dispatch_matrix(
+                cmd,
+                "headvec",
+                push(
+                    [
+                        0,
+                        hd.h.address + (row * d * 4) as u64,
+                        hd.logits.address + (row * hd.rows * 4) as u64,
+                        0,
+                        0,
+                        0,
+                    ],
+                    u,
+                )
+                .defer_barrier(row + 1 < cols),
+                hd.rows.div_ceil(16) as u32,
+                1,
+                &hd.w,
+            )?;
+        }
         if dump {
             let host = gpu.buffer(hd.rows * 4, true, false, None)?;
             gpu.copy(cmd, &hd.logits, 0, &host, 0, hd.rows * 4);
@@ -877,24 +891,24 @@ impl GpuStage {
         u[0] = hd.rows as u32;
         u[1] = TOP_K as u32;
         u[2] = (hd.chunks * TOP_K) as u32;
-        u[15] = 1;
+        u[15] = cols as u32;
         gpu.dispatch(
             cmd,
             "topk",
             push([hd.logits.address, 0, hd.scratch.address, 0, 0, 0], u),
             hd.chunks as u32,
-            1,
+            cols as u32,
         );
         let mut u = [0; 16];
         u[0] = (hd.chunks * TOP_K) as u32;
         u[1] = TOP_K as u32;
-        u[15] = 1;
+        u[15] = cols as u32;
         gpu.dispatch(
             cmd,
             "merge",
-            push([hd.scratch.address, 0, top, 0, 0, 0], u),
+            push([hd.scratch.address, 0, hd.top.address, 0, 0, 0], u),
             1,
-            1,
+            cols as u32,
         );
         Ok(())
     }
@@ -952,12 +966,7 @@ impl GpuStage {
                 stamps: None,
             };
             self.gpu.barrier(cmd);
-            for row in 0..rows {
-                if row > 0 {
-                    self.gpu.barrier(cmd);
-                }
-                self.score_head(&mut graph, cmd, hd, row, dump)?;
-            }
+            self.score_head(&mut graph, cmd, hd, rows, dump)?;
             self.gpu.finish(cmd)?;
             self.head_graphs.insert(key, graph);
         }
