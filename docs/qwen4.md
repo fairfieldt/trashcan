@@ -262,21 +262,67 @@ mixer path up to 64 tokens (results/qwen4/prefill-batch-20261012).
 A decode layer reads about 110 MB (61 MB of DeltaNet matrices, 14 MB of mixers, 5 MB router, 29 MB of experts) in
 1.23 ms, 34% of the D700's 263 GB/s.
 
-## Projected chain performance
+## Chain performance: measured, ceilings and targets
 
-No chain longer than incite plus the Mac CPU node has run, so these are projections from the per-layer
-measurements above: decode 1.24 ms per DeltaNet layer, 1.16 ms per QSA layer (2.20 ms at 32K), 0.43 ms for the
-n-gram module, 4.6 ms for the head on one GPU or 6.7 ms split over twelve (6 Macs x 1.12 ms), 0.39 ms of host work
-per GPU stage (two stages: 8.62 ms wall against 7.84 ms of GPU time), and per machine hop 40 KiB over Thunderbolt 2
-IP (8.8 Gb/s, 128 us round trip:
-[results/kernel/tb-loopback-20261006](../results/kernel/tb-loopback-20261006/README.md)), about 0.1 ms.
+Six Macs, 12 stages (2026-10-12, [results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md),
+[results/qwen4/prefill-batch-20261012](../results/qwen4/prefill-batch-20261012/README.md)). **Ceiling**: what the
+hardware allows with this placement. **Now**: measured where marked, otherwise modeled from stage-bench times.
+**Realistic**: with good but not heroic GCN kernels and the work listed below the tables (about ±30%).
 
-| | six Macs, IQ4 experts in VRAM | four Macs, IQ4 experts in host RAM |
-|---|---|---|
-| decode, short context | 36 x 1.24 + 12 x 1.16 + 0.43 + 6.7 (head in 12 slices) + 12 stages x 0.39 + 5 hops = 71 ms: **14.1 tok/s** | the same GPU work with 8 stages, 3 hops and the head on one GPU (67 ms) + 48 x 0.53 ms of expert uploads = 93 ms: **10.8 tok/s** |
-| decode at 32K | 83 ms: **12.0 tok/s** | 105 ms: **9.5 tok/s** |
-| prefill (chunks pipelined across Macs, a Mac's two GPUs in turn) | 128-token chunks (the 32K configuration), 8 x 51-56 ms: 0.43 s per chunk per Mac, **~300 tok/s**; a 2K prompt in ~9 s; 256-token chunks: ~335 tok/s | 1.2-2.0 s per chunk per Mac (expert uploads overlapped or not): **125-210 tok/s** |
-| weight-bandwidth bound for decode | 6.0 GB per token at 263 GB/s: 23 ms, 44 tok/s | |
+Inputs: a D700 reads 263 GB/s and does 3.48 TFLOP/s FP32 (no packed FP16, no int8 dot products, so quantized weights
+are dequantized to FP32). A token uses about 6.0B parameters, 12 GFLOP, and a decode token reads about 6.0 GB:
+36 DeltaNet layers of ~110 MB (62 MB DeltaNet, 14 MB mixers, 5 MB router, 29 MB for 11 experts) plus 6.3 MB of
+recurrent state, 12 QSA layers of ~104 MB, the n-gram module (35 MB) and the head (0.8 GB at 10 bits per weight,
+spread over the 12 GPUs). QSA reads at most ~2,051 positions per token (4 MB of f16 K/V, 2.2 MB of Q8) whatever the
+context, plus 128 bytes per position of pooled indexer keys (50 MB over 12 layers at 32K, 315 MB at 200K). Contexts
+past 32K need the S-q2dn build and a Q8 K/V cache ([200K context](#200k-context-on-six-macs)).
+
+**Decode** (one stream; in the pipeline one GPU works at a time, so the ceiling is all bytes at 263 GB/s):
+
+| context | ceiling | now | realistic |
+|---|---|---|---|
+| 512 | 21.2 ms, 47 tok/s | 74 ms, **13.5 tok/s** (measured) | ~35 ms, ~28 tok/s |
+| 2K-8K | 21.3-21.4 ms, 47 tok/s | 80-81 ms, 12.3-12.5 tok/s (2K measured) | ~37 ms, ~27 tok/s |
+| 32K (G-iq4 maximum) | 21.6 ms, 46 tok/s | ~86 ms, ~11.6 tok/s | ~40 ms, ~25 tok/s |
+| 128K (S-q2dn, Q8 K/V) | 22.0 ms, 45 tok/s | ~97 ms, ~10.3 tok/s | ~43 ms, ~23 tok/s |
+| 200K | 22.2 ms, 45 tok/s | ~104 ms, ~9.6 tok/s | ~46 ms, ~22 tok/s |
+| 262K (model maximum) | 22.5 ms, 44 tok/s | ~110 ms, ~9.1 tok/s | ~48 ms, ~21 tok/s |
+
+The 74 ms of today: 63 ms of GPU layers (1.2-1.45 ms each against 0.42 ms of bytes: 34% of the bandwidth, mostly
+many small dispatches with barriers), 6.6 ms of head slices scored one Mac after another, ~4 ms of host work
+(0.39 ms per stage) and ~1 ms of Thunderbolt hops. Toward ~28 tok/s: fused decode kernels at 60-70% of the bandwidth
+(~28 ms), the head slices scored at the same time (~5 ms), less host work per stage (~3 ms); at long contexts a
+multi-workgroup block selection (0.6 ms per QSA layer at 32K, 1.9 ms at 200K today).
+
+**Prefill** (whole prompt; the ceiling is the FP32 roofline of all 12 GPUs, ~3,300 tok/s in steady state, and for
+short prompts the time to fill 12 stages):
+
+| prompt | ceiling | now | realistic |
+|---|---|---|---|
+| 512 | ~0.25 s | 3.9 s, **132 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 9.8 s, **208 tok/s** (measured) | ~3 s, ~660 tok/s |
+| 4K | ~1.5 s, 2,800 tok/s | ~15 s, ~265 tok/s | ~5 s, ~820 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | ~29 s, ~280 tok/s | ~9 s, ~920 tok/s |
+| 32K | ~11 s, 3,150 tok/s | ~2 min, ~270 tok/s | ~35 s, ~950 tok/s |
+| 128K | ~42 s | ~10 min, ~225 tok/s | ~2.5 min, ~900 tok/s |
+| 200K | ~65 s | ~16 min, ~210 tok/s | ~4 min, ~850 tok/s |
+| 262K | ~83 s | ~22 min, ~200 tok/s | ~5.5 min, ~820 tok/s |
+
+Today: kernels reach ~18% of FP32 peak, a Mac's two GPUs work in turn (half the throughput), and the per-slot expert
+kernels re-read each token's 11 experts (~15 GB per GPU per 128-token chunk, about half of a chunk's time: bandwidth
+bound). Toward the realistic column: the two GPUs of a Mac on different chunks (up to 2x), the prefill mixer path above
+64 tokens (~12%), an expert kernel that reuses weights across the tokens routed to an expert (~2x on experts), chunked
+DeltaNet, faster block selection and sparse attention at long contexts, and smaller chunks for short prompts (less
+pipeline fill).
+
+**Beyond these ceilings.** MTP speculative decoding: with 2 drafts accepted ~70-80% of the time, a verification step
+costs ~1.4-1.5x a decode step for ~2.4 tokens, ~1.6-1.7x effective (~45 tok/s on top of the realistic decode); the MTP
+layer (~1.4 GB) has no room in VRAM, so its experts would live in host RAM or it runs on the driver's CPU. Tensor or
+expert parallelism over all 12 GPUs at once: ~2 ms of bytes per token, but ~96 cross-Mac all-reduces per token at
+>= 100 us each over the ring bound it near 50-80 tok/s, at a large cost in engineering.
+
+Four Macs (not built: each Mac's experts in host RAM with ~63% of each layer's experts cached in VRAM) were projected
+at ~10.8 tok/s decode and 125-210 tok/s prefill.
 
 ## 200K context on six Macs
 
