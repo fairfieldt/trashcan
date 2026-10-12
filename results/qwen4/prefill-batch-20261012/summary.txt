@@ -1,0 +1,11 @@
+1 prefill wall 11.0 ms, per token 11.01 layers [1.2, 1.6, 1.2, 1.3, 1.2, 1.2, 1.2, 1.3] {'mixer': 2.7, 'deltanet': 2.9, 'router': 0.8, 'experts': 2.3, 'ngram': 0.4, 'qkv': 0.4, 'index': 0.3, 'attention': 0.4}
+4 prefill wall 21.4 ms, per token 5.36 layers [2.5, 3.0, 2.5, 2.6, 2.5, 2.5, 2.5, 2.6] {'mixer': 4.9, 'deltanet': 4.8, 'router': 0.9, 'experts': 7.5, 'ngram': 0.6, 'qkv': 0.7, 'index': 0.4, 'attention': 0.6}
+8 prefill wall 40.8 ms, per token 5.1 layers [4.8, 5.6, 4.8, 5.1, 4.8, 4.8, 4.8, 5.0] {'mixer': 8.6, 'deltanet': 9.4, 'router': 2.6, 'experts': 14.4, 'ngram': 0.8, 'qkv': 1.3, 'index': 1.1, 'attention': 0.9}
+15 prefill wall 124.5 ms, per token 8.3 layers [15.0, 17.4, 14.9, 15.2, 15.1, 15.0, 14.9, 15.4] {'mixer': 51.7, 'deltanet': 28.4, 'router': 3.6, 'experts': 26.7, 'ngram': 2.4, 'qkv': 4.3, 'index': 1.3, 'attention': 3.8}
+16 prefill wall 157.5 ms, per token 9.85 layers [19.7, 21.9, 18.8, 19.4, 18.7, 18.7, 19.3, 19.1] {'mixer': 51.8, 'deltanet': 28.6, 'router': 4.0, 'experts': 58.4, 'ngram': 2.4, 'qkv': 4.3, 'index': 1.5, 'attention': 3.9}
+24 prefill wall 179.6 ms, per token 7.48 layers [22.7, 24.5, 21.9, 22.0, 21.3, 21.0, 22.0, 21.8] {'mixer': 52.1, 'deltanet': 30.4, 'router': 4.8, 'experts': 76.4, 'ngram': 2.4, 'qkv': 4.4, 'index': 1.7, 'attention': 4.0}
+32 prefill wall 200.8 ms, per token 6.28 layers [25.1, 26.8, 24.4, 24.7, 23.8, 23.5, 25.0, 25.0] {'mixer': 52.7, 'deltanet': 32.0, 'router': 6.0, 'experts': 93.2, 'ngram': 2.4, 'qkv': 4.4, 'index': 2.0, 'attention': 4.1}
+64 prefill wall 278.8 ms, per token 4.36 layers [34.1, 36.2, 33.4, 34.9, 33.2, 33.3, 33.9, 35.4] {'mixer': 56.4, 'deltanet': 39.4, 'router': 10.1, 'experts': 149.8, 'ngram': 2.6, 'qkv': 4.7, 'index': 3.3, 'attention': 4.8}
+128 prefill wall 453.1 ms, per token 3.54 layers [54.5, 58.2, 53.0, 55.8, 53.8, 53.5, 54.4, 56.4] {'mixer': 61.8, 'deltanet': 69.4, 'router': 17.0, 'experts': 259.0, 'ngram': 4.5, 'qkv': 8.2, 'index': 5.5, 'attention': 7.5}
+
+[exited with code 0]
