@@ -59,8 +59,20 @@ fn work(job: &Job) {
 /// How long idle workers spin before sleeping.
 const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
 
-/// Pin the calling thread to one logical CPU (Linux numbers each core's first thread before the second ones, so
-/// CPUs 0..cores are distinct cores): spinning workers never share a core with each other or the caller.
+/// One logical CPU per physical core (the first of each `thread_siblings_list`), so that spinning workers never share
+/// a core with each other or the caller; empty where unknown.
+fn cores() -> Vec<usize> {
+    let mut firsts = std::collections::BTreeSet::new();
+    for cpu in 0.. {
+        let path = format!("/sys/devices/system/cpu/cpu{cpu}/topology/thread_siblings_list");
+        let Ok(list) = std::fs::read_to_string(path) else { break };
+        let first = list.trim().split([',', '-']).next().and_then(|v| v.parse::<usize>().ok());
+        firsts.extend(first);
+    }
+    firsts.into_iter().collect()
+}
+
+/// Pin the calling thread to one logical CPU (Linux).
 fn pin(cpu: usize) {
     #[cfg(target_os = "linux")]
     unsafe {
@@ -83,12 +95,18 @@ impl Pool {
             lock: Mutex::new(()),
             wake: Condvar::new(),
         });
-        pin(0);
+        let cores = cores();
+        if let Some(&c) = cores.first() {
+            pin(c);
+        }
         let workers = (1..threads.max(1))
             .map(|i| {
                 let s = shared.clone();
+                let cpu = (!cores.is_empty()).then(|| cores[i % cores.len()]);
                 std::thread::spawn(move || {
-                    pin(i);
+                    if let Some(c) = cpu {
+                        pin(c);
+                    }
                     let mut seen = s.epoch.load(Ordering::SeqCst);
                     loop {
                         let mut idle = std::time::Instant::now();
@@ -360,6 +378,28 @@ impl Mat {
 
     /// `out[t * stride + dst0 + r - r0] = W[r] . x[t]` for the rows `r0..r1` and every token of `x`.
     fn rows_into(&self, x: &Act, r0: usize, r1: usize, out: Out, stride: usize, dst0: usize) {
+        // Several tokens: each weight block is decoded once for all of them.
+        #[cfg(target_arch = "x86_64")]
+        if x.n > 1 && std::is_x86_feature_detected!("ssse3") {
+            if let Mat::Q8 { .. } | Mat::Iq4 { .. } = self {
+                let mut v = vec![0f32; x.n];
+                for r in r0..r1 {
+                    unsafe {
+                        match self {
+                            Mat::Q8 { k, q, d, .. } => simd::dot_q8_multi(&q[r * k..(r + 1) * k], &d[r * k / 32..(r + 1) * k / 32], x, &mut v),
+                            Mat::Iq4 { k, q, d, .. } => {
+                                simd::dot_iq4_multi(&q[r * k / 2..(r + 1) * k / 2], &d[r * k / 32..(r + 1) * k / 32], x, &mut v)
+                            }
+                            Mat::F32 { .. } => unreachable!(),
+                        }
+                    }
+                    for (t, val) in v.iter().enumerate() {
+                        unsafe { out.set(t * stride + dst0 + r - r0, *val) };
+                    }
+                }
+                return;
+            }
+        }
         for r in r0..r1 {
             for t in 0..x.n {
                 let v = match self {
@@ -538,6 +578,52 @@ mod simd {
             acc = _mm_add_ps(acc, _mm_mul_ps(_mm_cvtepi32_ps(s), _mm_set1_ps(wd[b] * d[b])));
         }
         hsum(acc)
+    }
+
+    /// `dot_q8` for every token of `x` (outputs in `out`), decoding each block once.
+    #[target_feature(enable = "ssse3,sse3")]
+    pub unsafe fn dot_q8_multi(w: &[i8], wd: &[f32], x: &super::Act, out: &mut [f32]) {
+        for t0 in (0..x.n).step_by(4) {
+            let m = (x.n - t0).min(4);
+            let mut acc = [_mm_setzero_ps(); 4];
+            for b in 0..wd.len() {
+                let wp = w.as_ptr().add(b * 32);
+                let w0 = _mm_loadu_si128(wp as *const __m128i);
+                let w1 = _mm_loadu_si128(wp.add(16) as *const __m128i);
+                for (j, a) in acc.iter_mut().enumerate().take(m) {
+                    let t = t0 + j;
+                    let s = block(w0, w1, x.q.as_ptr().add(t * x.k + b * 32));
+                    *a = _mm_add_ps(*a, _mm_mul_ps(_mm_cvtepi32_ps(s), _mm_set1_ps(wd[b] * x.d[t * x.k / 32 + b])));
+                }
+            }
+            for (j, a) in acc.iter().enumerate().take(m) {
+                out[t0 + j] = hsum(*a);
+            }
+        }
+    }
+
+    /// `dot_iq4` for every token of `x` (outputs in `out`), decoding each block once.
+    #[target_feature(enable = "ssse3,sse3")]
+    pub unsafe fn dot_iq4_multi(w: &[u8], wd: &[f32], x: &super::Act, out: &mut [f32]) {
+        let table = _mm_loadu_si128(super::IQ4_VALUES.as_ptr() as *const __m128i);
+        let m4 = _mm_set1_epi8(15);
+        for t0 in (0..x.n).step_by(4) {
+            let m = (x.n - t0).min(4);
+            let mut acc = [_mm_setzero_ps(); 4];
+            for b in 0..wd.len() {
+                let c = _mm_loadu_si128(w.as_ptr().add(b * 16) as *const __m128i);
+                let w0 = _mm_shuffle_epi8(table, _mm_and_si128(c, m4));
+                let w1 = _mm_shuffle_epi8(table, _mm_and_si128(_mm_srli_epi16(c, 4), m4));
+                for (j, a) in acc.iter_mut().enumerate().take(m) {
+                    let t = t0 + j;
+                    let s = block(w0, w1, x.q.as_ptr().add(t * x.k + b * 32));
+                    *a = _mm_add_ps(*a, _mm_mul_ps(_mm_cvtepi32_ps(s), _mm_set1_ps(wd[b] * x.d[t * x.k / 32 + b])));
+                }
+            }
+            for (j, a) in acc.iter().enumerate().take(m) {
+                out[t0 + j] = hsum(*a);
+            }
+        }
     }
 
     #[target_feature(enable = "ssse3,sse3")]
