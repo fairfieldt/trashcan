@@ -57,7 +57,11 @@ fn work(job: &Job) {
 }
 
 /// How long idle workers spin before sleeping.
-const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
+fn spin() -> std::time::Duration {
+    // Experiment: TRASHCAN_DRAFT_SPIN_US.
+    let us = std::env::var("TRASHCAN_DRAFT_SPIN_US").ok().and_then(|v| v.parse().ok()).unwrap_or(2000);
+    std::time::Duration::from_micros(us)
+}
 
 /// One logical CPU per physical core (the first of each `thread_siblings_list`), so that spinning workers never share
 /// a core with each other or the caller; empty where unknown.
@@ -95,7 +99,9 @@ impl Pool {
             lock: Mutex::new(()),
             wake: Condvar::new(),
         });
-        let cores = cores();
+        // Experiment: TRASHCAN_DRAFT_PIN=0.
+        let cores = if std::env::var("TRASHCAN_DRAFT_PIN").is_ok_and(|v| v == "0") { Vec::new() } else { cores() };
+        let spin = spin();
         if let Some(&c) = cores.first() {
             pin(c);
         }
@@ -121,7 +127,7 @@ impl Pool {
                                 break;
                             }
                             spins += 1;
-                            if spins % 1024 != 0 || idle.elapsed() < SPIN {
+                            if spins % 1024 != 0 || idle.elapsed() < spin {
                                 std::hint::spin_loop();
                                 continue;
                             }
@@ -644,10 +650,31 @@ mod simd {
         _mm_cvtss_f32(_mm_hadd_ps(s, s))
     }
 
+    /// The sums of four blocks' lanes, and the four products of their scales.
+    #[inline]
+    #[target_feature(enable = "ssse3")]
+    unsafe fn four(s: [__m128i; 4], wd: *const f32, d: *const f32) -> __m128 {
+        let t = _mm_hadd_epi32(_mm_hadd_epi32(s[0], s[1]), _mm_hadd_epi32(s[2], s[3]));
+        _mm_mul_ps(_mm_cvtepi32_ps(t), _mm_mul_ps(_mm_loadu_ps(wd), _mm_loadu_ps(d)))
+    }
+
     #[target_feature(enable = "ssse3,sse3")]
     pub unsafe fn dot_q8(w: &[i8], wd: &[f32], q: &[i8], d: &[f32]) -> f32 {
+        let nb = wd.len();
         let mut acc = _mm_setzero_ps();
-        for b in 0..wd.len() {
+        let mut b = 0;
+        while b + 4 <= nb {
+            let mut s = [_mm_setzero_si128(); 4];
+            for (j, sj) in s.iter_mut().enumerate() {
+                let wp = w.as_ptr().add((b + j) * 32);
+                let w0 = _mm_loadu_si128(wp as *const __m128i);
+                let w1 = _mm_loadu_si128(wp.add(16) as *const __m128i);
+                *sj = block(w0, w1, q.as_ptr().add((b + j) * 32));
+            }
+            acc = _mm_add_ps(acc, four(s, wd.as_ptr().add(b), d.as_ptr().add(b)));
+            b += 4;
+        }
+        for b in b..nb {
             let wp = w.as_ptr().add(b * 32);
             let w0 = _mm_loadu_si128(wp as *const __m128i);
             let w1 = _mm_loadu_si128(wp.add(16) as *const __m128i);
@@ -728,8 +755,21 @@ mod simd {
     pub unsafe fn dot_iq4(w: &[u8], wd: &[f32], q: &[i8], d: &[f32]) -> f32 {
         let table = _mm_loadu_si128(super::IQ4_VALUES.as_ptr() as *const __m128i);
         let m4 = _mm_set1_epi8(15);
+        let nb = wd.len();
         let mut acc = _mm_setzero_ps();
-        for b in 0..wd.len() {
+        let mut b = 0;
+        while b + 4 <= nb {
+            let mut s = [_mm_setzero_si128(); 4];
+            for (j, sj) in s.iter_mut().enumerate() {
+                let c = _mm_loadu_si128(w.as_ptr().add((b + j) * 16) as *const __m128i);
+                let w0 = _mm_shuffle_epi8(table, _mm_and_si128(c, m4));
+                let w1 = _mm_shuffle_epi8(table, _mm_and_si128(_mm_srli_epi16(c, 4), m4));
+                *sj = block(w0, w1, q.as_ptr().add((b + j) * 32));
+            }
+            acc = _mm_add_ps(acc, four(s, wd.as_ptr().add(b), d.as_ptr().add(b)));
+            b += 4;
+        }
+        for b in b..nb {
             let c = _mm_loadu_si128(w.as_ptr().add(b * 16) as *const __m128i);
             let w0 = _mm_shuffle_epi8(table, _mm_and_si128(c, m4));
             let w1 = _mm_shuffle_epi8(table, _mm_and_si128(_mm_srli_epi16(c, 4), m4));
