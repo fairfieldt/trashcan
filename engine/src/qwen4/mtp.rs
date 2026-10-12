@@ -497,7 +497,11 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let mut out = Vec::new();
             for &b in &batch {
                 let mut times = Vec::new();
+                fast.prof = [0.; 6];
                 for s in 0..steps + 1 {
+                    if s == 1 {
+                        fast.prof = [0.; 6];
+                    }
                     let ids: Vec<u32> = (pos..pos + b).map(toks).collect();
                     let h: Vec<f32> = (0..b * w).map(|_| rnd()).collect();
                     let t1 = std::time::Instant::now();
@@ -508,8 +512,11 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 }
                 times.sort_by(f64::total_cmp);
                 let mean = times.iter().sum::<f64>() / times.len() as f64;
+                let phases: Vec<f64> = fast.prof.iter().map(|v| v / steps as f64).collect();
                 out.push(serde_json::json!({"batch": b, "mean_ms": mean, "p50_ms": times[times.len() / 2],
-                    "min_ms": times[0], "max_ms": times[times.len() - 1]}));
+                    "min_ms": times[0], "max_ms": times[times.len() - 1],
+                    "phases_ms": {"input": phases[0], "mixer1": phases[1], "attention": phases[2], "mixer2": phases[3],
+                        "experts": phases[4], "head": phases[5]}}));
             }
             let (step_bytes, all_bytes) = fast.bytes();
             println!(

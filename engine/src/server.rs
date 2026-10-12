@@ -236,6 +236,8 @@ struct Qwen4 {
     tokenizer: Tokenizer,
     tokens: qwen::native::Tokens,
     stop: Vec<u32>,
+    /// MTP speculative decoding (`--mtp`): the block drafts on this machine's CPU.
+    spec: Option<crate::qwen4::spec::Speculator>,
 }
 
 impl Backend for Qwen4 {
@@ -255,12 +257,16 @@ impl Backend for Qwen4 {
         if options.no_prefix_cache {
             e.forget();
         }
-        let (top, cached) = e.prefill_cached(ids)?;
+        let (top, cached) = match self.spec.as_mut() {
+            Some(s) => s.prefill(e, ids)?,
+            None => e.prefill_cached(ids)?,
+        };
         let mut native = qwen::native::QwenOutput::new(self.tokens, request.thinking);
         let budget = p.max_tokens.min(e.context - e.pos);
-        let mut pending = sampler.sample(&top);
+        let mut queue = std::collections::VecDeque::from([sampler.sample(&top)]);
         let (mut generated, mut stopped) = (0, false);
         while generated < budget {
+            let pending = queue.pop_front().context("no pending token")?;
             generated += 1;
             if self.stop.contains(&pending) {
                 stopped = true;
@@ -274,8 +280,21 @@ impl Backend for Qwen4 {
             if generated == budget {
                 break;
             }
-            let top = e.forward(&[pending], true, None)?.context("missing candidates")?;
-            pending = sampler.sample(&top);
+            if !queue.is_empty() {
+                continue;
+            }
+            match self.spec.as_mut() {
+                // A round's tokens were all processed but its last, as in decoding them one at a time.
+                Some(s) => {
+                    let k = s.k.min(budget - generated - 1);
+                    let (toks, _) = s.round(e, pending, k, &mut |t| sampler.sample(t), &self.stop)?;
+                    queue.extend(toks);
+                }
+                None => {
+                    let top = e.forward(&[pending], true, None)?.context("missing candidates")?;
+                    queue.push_back(sampler.sample(&top));
+                }
+            }
         }
         native.finish(output, !stopped)?;
         output.finish(ids.len(), cached, generated, native.reasoning_tokens, !stopped)
@@ -369,8 +388,8 @@ pub fn serve(mut options: Options) -> Result<()> {
         let name = gguf.get_str("general.name").unwrap_or("qwen").to_lowercase().replace(' ', "-");
         options.model_id.get_or_insert(name);
         drop(gguf);
-        ensure!(options.mtp.is_none() && !options.tp, "Flash-Next serves without --mtp or --tp");
-        let chain = crate::qwen4::net::Chain::new(
+        ensure!(!options.tp, "Flash-Next serves without --tp");
+        let mut chain = crate::qwen4::net::Chain::new(
             &options.model,
             qwen::chat::devices(options.cpu, options.gpus.clone())?,
             &options.nodes,
@@ -382,11 +401,23 @@ pub fn serve(mut options: Options) -> Result<()> {
             crate::qwen4::net::Rows::open(&options.model, &options.ngram)?,
         )?;
         let tokenizer = Tokenizer::new(&chain.local.gguf)?;
+        let spec = match &options.mtp {
+            Some(mtp) => {
+                let k = options.draft_tokens.unwrap_or(3);
+                chain.enable_verify(k + 1)?;
+                let vocab = if options.draft_vocab == 0 { usize::MAX } else { options.draft_vocab };
+                let threads = std::thread::available_parallelism().map_or(8, |n| n.get());
+                let draft = crate::qwen4::draft::Draft::new(&options.model, mtp, options.context, vocab, threads)?;
+                Some(crate::qwen4::spec::Speculator::new(draft, k))
+            }
+            None => None,
+        };
         let backend = Qwen4 {
             tokens: qwen::native::Tokens::new(&tokenizer)?,
             stop: qwen::chat::Specials::new(&tokenizer).stop,
             chain,
             tokenizer,
+            spec,
         };
         return run(options, backend);
     }

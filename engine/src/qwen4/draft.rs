@@ -12,7 +12,7 @@ use super::{
 use crate::gguf::{GgmlType, Gguf, TensorInfo};
 use anyhow::{bail, ensure, Context, Result};
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicBool, AtomicPtr, AtomicU64, AtomicUsize, Ordering},
     Arc, Condvar, Mutex,
 };
 
@@ -23,16 +23,22 @@ struct Job {
     next: AtomicUsize,
     done: AtomicUsize,
 }
-unsafe impl Send for Job {}
-unsafe impl Sync for Job {}
 
+/// The pool's shared state. A job is published as a pointer with a new epoch; workers spin on the epoch for a while
+/// after their last job (a draft step runs a dozen parallel loops in a few milliseconds, and waking sleeping
+/// threads for each costs more than the loops) and then sleep until the next.
 struct Shared {
-    slot: Mutex<(u64, Option<Arc<Job>>)>,
+    epoch: AtomicU64,
+    job: AtomicPtr<Job>,
+    /// Workers between noticing an epoch and finishing its job: the caller waits for none before the job goes away.
+    active: AtomicUsize,
+    sleepers: AtomicUsize,
+    stop: AtomicBool,
+    lock: Mutex<()>,
     wake: Condvar,
 }
 
-/// Worker threads that run the parallel loops of a draft step (spawning threads for every product would cost more
-/// than the products).
+/// Worker threads that run the parallel loops of a draft step.
 pub struct Pool {
     shared: Arc<Shared>,
     workers: Vec<std::thread::JoinHandle<()>>,
@@ -50,30 +56,58 @@ fn work(job: &Job) {
     }
 }
 
+/// How long idle workers spin before sleeping.
+const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
+
 impl Pool {
     pub fn new(threads: usize) -> Self {
         let shared = Arc::new(Shared {
-            slot: Mutex::new((0, None)),
+            epoch: AtomicU64::new(0),
+            job: AtomicPtr::new(std::ptr::null_mut()),
+            active: AtomicUsize::new(0),
+            sleepers: AtomicUsize::new(0),
+            stop: AtomicBool::new(false),
+            lock: Mutex::new(()),
             wake: Condvar::new(),
         });
         let workers = (1..threads.max(1))
             .map(|_| {
                 let s = shared.clone();
                 std::thread::spawn(move || {
-                    let mut seen = 0u64;
+                    let mut seen = s.epoch.load(Ordering::SeqCst);
                     loop {
-                        let job = {
-                            let mut g = s.slot.lock().unwrap();
-                            while g.0 == seen {
-                                g = s.wake.wait(g).unwrap();
+                        let mut idle = std::time::Instant::now();
+                        let mut spins = 0u32;
+                        loop {
+                            if s.stop.load(Ordering::SeqCst) {
+                                return;
                             }
-                            seen = g.0;
-                            match &g.1 {
-                                Some(j) => j.clone(),
-                                None => return,
+                            let e = s.epoch.load(Ordering::SeqCst);
+                            if e != seen {
+                                seen = e;
+                                break;
                             }
-                        };
-                        work(&job);
+                            spins += 1;
+                            if spins % 1024 != 0 || idle.elapsed() < SPIN {
+                                std::hint::spin_loop();
+                                continue;
+                            }
+                            let g = s.lock.lock().unwrap();
+                            s.sleepers.fetch_add(1, Ordering::SeqCst);
+                            if s.epoch.load(Ordering::SeqCst) == seen && !s.stop.load(Ordering::SeqCst) {
+                                let _ = s.wake.wait_timeout(g, std::time::Duration::from_millis(50)).unwrap();
+                            }
+                            s.sleepers.fetch_sub(1, Ordering::SeqCst);
+                            idle = std::time::Instant::now();
+                        }
+                        s.active.fetch_add(1, Ordering::SeqCst);
+                        if s.epoch.load(Ordering::SeqCst) == seen {
+                            let j = s.job.load(Ordering::SeqCst);
+                            if !j.is_null() {
+                                work(unsafe { &*j });
+                            }
+                        }
+                        s.active.fetch_sub(1, Ordering::SeqCst);
                     }
                 })
             })
@@ -90,33 +124,43 @@ impl Pool {
         if tasks == 0 {
             return;
         }
-        // Lifetime erased: `run` waits for every task before returning.
+        // Lifetime erased: `run` waits for every task, and for every worker that saw the job, before returning.
         let f: *const (dyn Fn(usize) + Sync) = unsafe { std::mem::transmute(f) };
-        let job = Arc::new(Job {
+        let job = Job {
             f,
             tasks,
             next: AtomicUsize::new(0),
             done: AtomicUsize::new(0),
-        });
-        if tasks > 1 && !self.workers.is_empty() {
-            let mut g = self.shared.slot.lock().unwrap();
-            g.0 += 1;
-            g.1 = Some(job.clone());
-            self.shared.wake.notify_all();
+        };
+        let s = &self.shared;
+        let shared = tasks > 1 && !self.workers.is_empty();
+        if shared {
+            s.job.store(&job as *const Job as *mut Job, Ordering::SeqCst);
+            s.epoch.fetch_add(1, Ordering::SeqCst);
+            if s.sleepers.load(Ordering::SeqCst) > 0 {
+                let _g = s.lock.lock().unwrap();
+                s.wake.notify_all();
+            }
         }
         work(&job);
         while job.done.load(Ordering::Acquire) < tasks {
             std::hint::spin_loop();
+        }
+        if shared {
+            s.job.store(std::ptr::null_mut(), Ordering::SeqCst);
+            s.epoch.fetch_add(1, Ordering::SeqCst);
+            while s.active.load(Ordering::SeqCst) > 0 {
+                std::hint::spin_loop();
+            }
         }
     }
 }
 
 impl Drop for Pool {
     fn drop(&mut self) {
+        self.shared.stop.store(true, Ordering::SeqCst);
         {
-            let mut g = self.shared.slot.lock().unwrap();
-            g.0 += 1;
-            g.1 = None;
+            let _g = self.shared.lock.lock().unwrap();
             self.shared.wake.notify_all();
         }
         for w in self.workers.drain(..) {
@@ -251,6 +295,34 @@ impl Mat {
             }
         });
         Mat::Iq4 { k, rows, q, d }
+    }
+
+    /// Columns `0..k0` and `k0..k` as two matrices (`k0` a multiple of 32).
+    fn split_cols(&self, k0: usize) -> (Mat, Mat) {
+        let rows = self.rows();
+        let k = self.k();
+        let part = |a: usize, b: usize| -> Mat {
+            match self {
+                Mat::Q8 { q, d, .. } => Mat::Q8 {
+                    k: b - a,
+                    rows,
+                    q: (0..rows).flat_map(|r| q[r * k + a..r * k + b].to_vec()).collect(),
+                    d: (0..rows).flat_map(|r| d[(r * k + a) / 32..(r * k + b) / 32].to_vec()).collect(),
+                },
+                Mat::Iq4 { q, d, .. } => Mat::Iq4 {
+                    k: b - a,
+                    rows,
+                    q: (0..rows).flat_map(|r| q[(r * k + a) / 2..(r * k + b) / 2].to_vec()).collect(),
+                    d: (0..rows).flat_map(|r| d[(r * k + a) / 32..(r * k + b) / 32].to_vec()).collect(),
+                },
+                Mat::F32 { w, .. } => Mat::F32 {
+                    k: b - a,
+                    rows,
+                    w: (0..rows).flat_map(|r| w[r * k + a..r * k + b].to_vec()).collect(),
+                },
+            }
+        };
+        (part(0, k0), part(k0, k))
     }
 
     /// The weights as f32 rows.
@@ -483,17 +555,24 @@ fn matvec(pool: &Pool, w: &Mat, x: &Act, chunk: usize) -> Vec<f32> {
 
 /// Products of several matrices with the same input in one parallel loop; returns each output.
 fn matvecs(pool: &Pool, ws: &[&Mat], x: &Act, chunk: usize) -> Vec<Vec<f32>> {
-    let mut outs: Vec<Vec<f32>> = ws.iter().map(|w| vec![0f32; x.n * w.rows()]).collect();
+    let pairs: Vec<(&Mat, &Act)> = ws.iter().map(|w| (*w, x)).collect();
+    matvecs_of(pool, &pairs, chunk)
+}
+
+/// Products of several matrices, each with its own input, in one parallel loop; returns each output.
+fn matvecs_of(pool: &Pool, ws: &[(&Mat, &Act)], chunk: usize) -> Vec<Vec<f32>> {
+    let mut outs: Vec<Vec<f32>> = ws.iter().map(|(w, x)| vec![0f32; x.n * w.rows()]).collect();
     let ptrs: Vec<Out> = outs.iter_mut().map(|o| Out::new(o)).collect();
     let mut tasks = Vec::new();
-    for (m, w) in ws.iter().enumerate() {
+    for (m, (w, _)) in ws.iter().enumerate() {
         for r0 in (0..w.rows()).step_by(chunk) {
             tasks.push((m, r0, (r0 + chunk).min(w.rows())));
         }
     }
     pool.run(tasks.len(), &|i| {
         let (m, r0, r1) = tasks[i];
-        ws[m].rows_into(x, r0, r1, ptrs[m], ws[m].rows(), r0)
+        let (w, x) = ws[m];
+        w.rows_into(x, r0, r1, ptrs[m], w.rows(), r0)
     });
     outs
 }
@@ -524,7 +603,9 @@ pub struct Draft {
     pub pool: Pool,
     enorm: Vec<f32>,
     hnorm: Vec<f32>,
-    eh: Mat,
+    /// `eh_proj` split by input: the embedding half (once per token) and the hidden half (per stream).
+    eh_e: Mat,
+    eh_h: Mat,
     attn_mix: Mix,
     ffn_mix: Mix,
     head_mix: Mix,
@@ -550,6 +631,9 @@ pub struct Draft {
     pub context: usize,
     /// The first position the block holds keys for (prompts fill it from their last chunk only).
     pub first: usize,
+    /// Milliseconds per phase over the forwards since the last reset: input projection, first mixer, attention,
+    /// second mixer, experts, head.
+    pub prof: [f64; 6],
 }
 
 
@@ -607,7 +691,8 @@ impl Draft {
         let mut draft = Self {
             enorm: v("nextn.enorm.weight")?,
             hnorm: v("nextn.hnorm.weight")?,
-            eh: m("nextn.eh_proj.weight")?,
+            eh_e: Mat::F32 { k: 0, rows: 0, w: Vec::new() },
+            eh_h: m("nextn.eh_proj.weight")?,
             attn_mix: mix(&format!("blk.{il}.hc_attn"), true)?,
             ffn_mix: mix(&format!("blk.{il}.hc_ffn"), true)?,
             head_mix: mix(&format!("blk.{il}.nextn.hc_head"), false)?,
@@ -639,6 +724,7 @@ impl Draft {
             pooled: vec![0.; context.div_ceil(c.kpool) * c.idx_dim],
             context,
             first: 0,
+            prof: [0.; 6],
             pool,
             c,
         };
@@ -649,7 +735,7 @@ impl Draft {
         let p = &draft.pool;
         let r = |m: &mut Mat| *m = Mat::quantize_iq4(p, m.k(), &m.to_f32());
         if q4.contains("dense") || q4.contains("attn") {
-            for m in [&mut draft.eh, &mut draft.q, &mut draft.k, &mut draft.v, &mut draft.o] {
+            for m in [&mut draft.eh_h, &mut draft.q, &mut draft.k, &mut draft.v, &mut draft.o] {
                 r(m);
             }
         }
@@ -662,12 +748,15 @@ impl Draft {
                 }
             }
         }
+        let (e, h) = draft.eh_h.split_cols(draft.c.d);
+        draft.eh_e = e;
+        draft.eh_h = h;
         Ok(draft)
     }
 
     /// Bytes of the weights a draft step reads (dense matrices, 11 experts and the head) and of all weights held.
     pub fn bytes(&self) -> (usize, usize) {
-        let dense = [&self.eh, &self.q, &self.k, &self.v, &self.o, &self.iq, &self.ik, &self.moe.router]
+        let dense = [&self.eh_e, &self.eh_h, &self.q, &self.k, &self.v, &self.o, &self.iq, &self.ik, &self.moe.router]
             .iter()
             .map(|m| m.bytes())
             .sum::<usize>()
@@ -910,26 +999,43 @@ impl Draft {
         ensure!(n > 0 && h.len() == n * w, "draft input length mismatch");
         ensure!(pos + n <= self.context, "draft context exhausted");
         let et = self.emb.tensor("token_embd.weight").context("missing token_embd")?;
-        let mut cat = vec![0f32; n * hc * 2 * d];
-        let mut e = vec![0f32; d];
+        // x_s = W_e RMS(e) enorm + W_h RMS(h_s) hnorm_s: the embedding half once per token.
+        let mut en = vec![0f32; n * d];
+        let mut hn = h.to_vec();
         for (i, &id) in tokens.iter().enumerate() {
             ensure!((id as u64) < et.dims[1], "invalid token {id}");
-            crate::qwen::dequant_row(&self.emb, et, id as usize, &mut e)?;
-            rms_norm(&mut e, Some(&self.enorm), c.eps);
+            let e = &mut en[i * d..(i + 1) * d];
+            crate::qwen::dequant_row(&self.emb, et, id as usize, e)?;
+            rms_norm(e, Some(&self.enorm), c.eps);
             for s in 0..hc {
-                let row = &mut cat[(i * hc + s) * 2 * d..(i * hc + s + 1) * 2 * d];
-                row[..d].copy_from_slice(&e);
-                row[d..].copy_from_slice(&h[(i * hc + s) * d..(i * hc + s + 1) * d]);
-                rms_norm(&mut row[d..], Some(&self.hnorm[s * d..(s + 1) * d]), c.eps);
+                let row = &mut hn[(i * hc + s) * d..(i * hc + s + 1) * d];
+                rms_norm(row, Some(&self.hnorm[s * d..(s + 1) * d]), c.eps);
             }
         }
-        let mut x = matvec(&self.pool, &self.eh, &Act::new(&cat, 2 * d), 32);
+        let mut t = std::time::Instant::now();
+        let mut lap = |prof: &mut [f64; 6], i: usize| {
+            prof[i] += t.elapsed().as_secs_f64() * 1e3;
+            t = std::time::Instant::now();
+        };
+        let (ea, ha) = (Act::new(&en, d), Act::new(&hn, d));
+        let outs = matvecs_of(&self.pool, &[(&self.eh_e, &ea), (&self.eh_h, &ha)], 32);
+        let mut x = outs[1].clone();
+        for (r, row) in x.chunks_exact_mut(d).enumerate() {
+            for (a, b) in row.iter_mut().zip(&outs[0][r / hc * d..(r / hc + 1) * d]) {
+                *a += b;
+            }
+        }
+        lap(&mut self.prof, 0);
         let (u, write) = self.mix(&self.attn_mix, &x, n);
+        lap(&mut self.prof, 1);
         let y = self.attention(&u, pos, n);
         CpuStage::combine(&c, &mut x, &y, write.as_deref().unwrap(), n);
+        lap(&mut self.prof, 2);
         let (u, write) = self.mix(&self.ffn_mix, &x, n);
+        lap(&mut self.prof, 3);
         let y = self.moe(&u, n);
         CpuStage::combine(&c, &mut x, &y, write.as_deref().unwrap(), n);
+        lap(&mut self.prof, 4);
         let best = if head {
             let (hn, _) = self.mix(&self.head_mix, &x[(n - 1) * w..], 1);
             let logits = matvec(&self.pool, &self.head, &Act::new(&hn, d), 256);
@@ -938,6 +1044,7 @@ impl Draft {
         } else {
             None
         };
+        lap(&mut self.prof, 5);
         Ok((x, best))
     }
 
