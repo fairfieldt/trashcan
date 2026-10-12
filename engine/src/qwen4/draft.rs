@@ -59,6 +59,19 @@ fn work(job: &Job) {
 /// How long idle workers spin before sleeping.
 const SPIN: std::time::Duration = std::time::Duration::from_millis(2);
 
+/// Pin the calling thread to one logical CPU (Linux numbers each core's first thread before the second ones, so
+/// CPUs 0..cores are distinct cores): spinning workers never share a core with each other or the caller.
+fn pin(cpu: usize) {
+    #[cfg(target_os = "linux")]
+    unsafe {
+        let mut set: libc::cpu_set_t = std::mem::zeroed();
+        libc::CPU_SET(cpu, &mut set);
+        libc::sched_setaffinity(0, std::mem::size_of::<libc::cpu_set_t>(), &set);
+    }
+    #[cfg(not(target_os = "linux"))]
+    let _ = cpu;
+}
+
 impl Pool {
     pub fn new(threads: usize) -> Self {
         let shared = Arc::new(Shared {
@@ -70,10 +83,12 @@ impl Pool {
             lock: Mutex::new(()),
             wake: Condvar::new(),
         });
+        pin(0);
         let workers = (1..threads.max(1))
-            .map(|_| {
+            .map(|i| {
                 let s = shared.clone();
                 std::thread::spawn(move || {
+                    pin(i);
                     let mut seen = s.epoch.load(Ordering::SeqCst);
                     loop {
                         let mut idle = std::time::Instant::now();

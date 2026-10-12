@@ -253,6 +253,10 @@ pub enum Cmd {
         reference: bool,
         #[arg(long, default_value_t = 0)]
         threads: usize,
+        /// Simulate speculative rounds of `depth` drafts (fast draft) in which the block's rows at accepted drafts
+        /// keep the chained drafts' values (no rewrite with the trunk's rows); prints tokens per round.
+        #[arg(long)]
+        rounds: bool,
     },
     /// Greedy decoding on the CPU reference, drafting `depth` tokens with the MTP block before every step; writes
     /// the generated ids and each step's drafts as JSON (acceptance of greedy drafts).
@@ -348,6 +352,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             vocab,
             reference,
             threads: th,
+            rounds,
         } => {
             let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&run)?)?;
             let ids = |v: &serde_json::Value| -> Vec<u32> {
@@ -383,6 +388,30 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 None => {
                     block.forward(&mg, &g, &prompt[first..], &hin, first, &mut None)?;
                 }
+            }
+            if rounds {
+                let f = fast.as_mut().context("rounds need the fast draft")?;
+                let (mut i, mut count) = (0, 0);
+                while i + 1 < gen.len() {
+                    let pos = n + i;
+                    let (mut h, mut tok) = (row(pos - 1).to_vec(), gen[i]);
+                    let mut a = 0;
+                    let mut ok = true;
+                    for j in 0..depth {
+                        let (y, b) = f.forward(&[tok], &h, pos + j, true)?;
+                        tok = b.context("head")?.0;
+                        ok = ok && gen.get(i + 1 + j) == Some(&tok);
+                        a += ok as usize;
+                        h = y;
+                    }
+                    count += 1;
+                    i += (a + 1).min(gen.len() - 1 - i);
+                }
+                let o = serde_json::json!({"depth": depth, "vocab": vocab, "window": window, "rounds": count,
+                    "tokens": gen.len() - 1, "tokens_per_round": (gen.len() - 1) as f64 / count as f64});
+                std::fs::write(&out, o.to_string())?;
+                println!("{o}");
+                return Ok(());
             }
             let t0 = std::time::Instant::now();
             let mut drafts = Vec::new();

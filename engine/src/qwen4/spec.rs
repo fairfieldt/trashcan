@@ -215,9 +215,11 @@ impl Speculator {
         batch.extend_from_slice(&drafts);
         let draft = &mut self.draft;
         let mut early_ms = 0.;
+        // Experiment: TRASHCAN_MTP_REDO=0 keeps the chained drafts' rows at accepted positions.
+        let redo = std::env::var("TRASHCAN_MTP_REDO").map_or(true, |v| v != "0");
         let (tops, rows) = chain.verify(&batch, &mut |rows: &[f32]| {
             let t = std::time::Instant::now();
-            if !drafts.is_empty() {
+            if redo && !drafts.is_empty() {
                 draft.forward(&drafts, &rows[..drafts.len() * w], pos + 1, false)?;
             }
             early_ms = t.elapsed().as_secs_f64() * 1e3;
