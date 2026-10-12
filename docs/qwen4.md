@@ -284,18 +284,18 @@ past 32K need the S-q2dn build and a Q8 K/V cache ([200K context](#200k-context-
 
 | context | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | 21.2 ms, 47 tok/s | 74 ms, **13.5 tok/s** (measured) | ~35 ms, ~28 tok/s |
-| 2K-8K | 21.3-21.4 ms, 47 tok/s | 80-81 ms, 12.3-12.5 tok/s (2K measured) | ~37 ms, ~27 tok/s |
-| 32K (G-iq4 maximum) | 21.6 ms, 46 tok/s | ~86 ms, ~11.6 tok/s | ~40 ms, ~25 tok/s |
-| 128K (S-q2dn, Q8 K/V) | 22.0 ms, 45 tok/s | ~97 ms, ~10.3 tok/s | ~43 ms, ~23 tok/s |
-| 200K | 22.2 ms, 45 tok/s | ~104 ms, ~9.6 tok/s | ~46 ms, ~22 tok/s |
-| 262K (model maximum) | 22.5 ms, 44 tok/s | ~110 ms, ~9.1 tok/s | ~48 ms, ~21 tok/s |
+| 512 | 21.2 ms, 47 tok/s | 68 ms, **14.7 tok/s** (measured) | ~35 ms, ~28 tok/s |
+| 2K-8K | 21.3-21.4 ms, 47 tok/s | ~74-75 ms, ~13.4 tok/s (80-81 ms measured at 2K before the parallel head) | ~37 ms, ~27 tok/s |
+| 32K (G-iq4 maximum) | 21.6 ms, 46 tok/s | ~80 ms, ~12.5 tok/s | ~40 ms, ~25 tok/s |
+| 128K (S-q2dn, Q8 K/V) | 22.0 ms, 45 tok/s | ~91 ms, ~11.0 tok/s | ~43 ms, ~23 tok/s |
+| 200K | 22.2 ms, 45 tok/s | ~98 ms, ~10.2 tok/s | ~46 ms, ~22 tok/s |
+| 262K (model maximum) | 22.5 ms, 44 tok/s | ~104 ms, ~9.6 tok/s | ~48 ms, ~21 tok/s |
 
-The 74 ms of today: 63 ms of GPU layers (1.2-1.45 ms each against 0.42 ms of bytes: 34% of the bandwidth, mostly
-many small dispatches with barriers), 6.6 ms of head slices scored one Mac after another, ~4 ms of host work
-(0.39 ms per stage) and ~1 ms of Thunderbolt hops. Toward ~28 tok/s: fused decode kernels at 60-70% of the bandwidth
-(~28 ms), the head slices scored at the same time (~5 ms), less host work per stage (~3 ms); at long contexts a
-multi-workgroup block selection (0.6 ms per QSA layer at 32K, 1.9 ms at 200K today).
+The 68 ms of today: 63 ms of GPU layers (1.2-1.45 ms each against 0.42 ms of bytes: 34% of the bandwidth, mostly
+many small dispatches with barriers), ~1 ms of head slices (all Macs at once since 2026-10-12, which saved 5.9 ms),
+~3-4 ms of host work (0.39 ms per stage) and ~1 ms of Thunderbolt hops. Toward ~28 tok/s: fused decode kernels at
+60-70% of the bandwidth (~28 ms), less host work per stage (~3 ms); at long contexts a multi-workgroup block selection
+(0.6 ms per QSA layer at 32K, 1.9 ms at 200K today).
 
 **Prefill** (whole prompt; the ceiling is the FP32 roofline of all 12 GPUs, ~3,300 tok/s in steady state, and for
 short prompts the time to fill 12 stages):
