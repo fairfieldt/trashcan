@@ -7,8 +7,3 @@ L=${LLAMA:-$HOME/llama.cpp}
 B=${BUILD:-$L/build/bin}
 ${CXX:-g++} -O2 -std=c++17 -I"$L/include" -I"$L/ggml/include" dump.cpp -L"$B" -lllama -lggml -lggml-base \
     -Wl,-rpath,"$B" -o dump
-# The MTP reference needs a build with draft-mtp (llama.cpp b8e9ce8) and its internal llama-ext.h.
-if [ -f "$L/src/llama-ext.h" ]; then
-    ${CXX:-g++} -O2 -std=c++17 -I"$L/include" -I"$L/src" -I"$L/ggml/include" mtp.cpp -L"$B" -lllama -lggml \
-        -lggml-base -Wl,-rpath,"$B" -o mtp
-fi
