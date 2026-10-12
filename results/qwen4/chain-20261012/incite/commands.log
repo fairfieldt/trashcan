@@ -1,0 +1,6 @@
+2026-10-12T12:17:58 val6 trashcan  validate results/val6 --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 --head-split 12 --context 32768 --batch 128 --ngram disk --greedy 10
+2026-10-12T12:23:03 val6b trashcan  validate results/val6b --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 --head-split 12 --context 32768 --batch 128 --ngram disk --greedy 10
+2026-10-12T12:25:57 bench6-pp512 trashcan  bench --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 --head-split 12 --context 32768 --batch 128 --ngram disk --pp 512 --tg 64
+2026-10-12T12:28:59 bench6-pp512-high trashcan  bench --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 --head-split 12 --context 32768 --batch 128 --ngram disk --pp 512 --tg 64
+2026-10-12T12:31:46 bench6-pp512-auto-2 trashcan  bench --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 --head-split 12 --context 32768 --batch 128 --ngram disk --pp 512 --tg 64
+2026-10-12T12:33:58 bench6-pp512-high-2 trashcan  bench --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071 --head-split 12 --context 32768 --batch 128 --ngram disk --pp 512 --tg 64

@@ -6,11 +6,12 @@ table placement, quantization and VRAM for six and four Mac Pros, the GPU stages
 changes for 200K context. Code: `engine/src/qwen4/`, shaders `engine/shaders/qwen4_*.comp`. The dense Qwen models
 are in [qwen.md](qwen.md).
 
-Status: the CPU reference matches llama.cpp; GPU stages for every layer type run on incite's D700s and match the
-reference with the six-Mac recipe's formats; a full six-Mac GPU stage (4 layers, 32K context) loads and runs on one
-D700 together with its twelfth of the LM head, which can be split over stages; with Q8 K/V caches and Q2_0 down
-projections on one layer per GPU the same stage runs at 204,800 positions. Not done yet: a chain of real Mac Pros,
-a faster head split, MTP and a chat command (see [What is left](#what-is-left)).
+Status: the CPU reference matches llama.cpp; GPU stages for every layer type match the reference with the six-Mac
+recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
+positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
+CPU reference, prefill 130 tok/s on a 512-token prompt, decode 13.5 tok/s with the GPUs held at amdgpu's high clock
+level and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)). Not done yet: a
+faster head split, MTP and a server (see [What is left](#what-is-left)).
 
 | | |
 |---|---|
@@ -344,7 +345,8 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
    compactly (Q6_K is 6.6 bits, the repack 10), or keep the head on the last Mac in halves and free the room by
    leaving that Mac's least-used ~10% of experts in host RAM (the other 90% cover 98% of activations).
 2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks.
-3. **A real chain**: only one Mac Pro (incite) was available, so multi-Mac decode and prefill are projections.
+3. **Clock levels**: in decode each GPU idles ~90% of a token and drops to its lowest clocks on `auto`; the chain
+   runs at 13.5 tok/s only with the GPUs held high, which costs ~35 W per idle GPU.
 4. **Prefill**: an LDS-tiled grouped expert GEMM (58 ms of a 94 ms layer), chunked DeltaNet (19 ms), grouping
    the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K), the f32 router (3.8 ms),
    and the two GPUs of a Mac working on different chunks.

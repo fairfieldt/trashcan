@@ -22,6 +22,8 @@ use ash::vk;
 use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = 64;
+/// State rows per `qwen_gdn` workgroup (`ROWS * WAVES` in the shader: one row per wave, four waves).
+pub const GDN_ROWS_PER_GROUP: usize = 4;
 const GRAPH_CACHE_CAPACITY: usize = 24;
 
 impl Tp {
@@ -850,12 +852,11 @@ impl<'a> Rec<'a> {
         u[5] = c.k_heads as u32;
         u[6] = c.state as u32;
         u[12] = eps;
-        // One state row per wave, four waves per workgroup.
         s.gpu.dispatch(
             self.cmd,
             "qwen_gdn",
             self.push([conv_out, ab, dl.state.address, o, dl.dt_a.address, snap], u),
-            (c.v_heads * c.state / 4) as u32,
+            (c.v_heads * c.state / GDN_ROWS_PER_GROUP) as u32,
             1,
         );
         self.capture(format!("attn_output-{il}"), &s.o, vd)?;

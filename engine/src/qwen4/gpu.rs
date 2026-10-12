@@ -1251,7 +1251,7 @@ impl GpuStage {
                             ],
                             u,
                         ),
-                        (c.v_heads * c.state / 16) as u32,
+                        (c.v_heads * c.state / crate::qwen::gpu::GDN_ROWS_PER_GROUP) as u32,
                         1,
                     );
                     capture(&mut graph, format!("attn_output-{il}"), &self.o, vd)?;
