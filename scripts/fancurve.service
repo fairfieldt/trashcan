@@ -1,5 +1,5 @@
 [Unit]
-Description=Keep the Mac Pro main fan at the live SMC maximum
+Description=Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher
 ConditionPathExists=/sys/devices/platform/applesmc.768/fan1_manual
 
 [Service]

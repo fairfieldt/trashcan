@@ -71,9 +71,29 @@ class FanPolicyTest(unittest.TestCase):
 
     def test_follows_live_limit_increase_and_decrease(self):
         (self.smc / 'fan1_max').write_text('1900\n')
-        result, rows = self.run_policy([{'fan1_max': 2360}, {'fan1_max': 2200}, {'stop': True}])
+        result, rows = self.run_policy([{'fan1_max': 2360}, {'fan1_max': 2200}, {'stop': True}], FAN_RPM='0')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([r['fan1_output'] for r in rows], ['1900', '2360', '2200'])
+
+    def test_floor_applies_below_the_live_limit_and_yields_above_it(self):
+        (self.smc / 'fan1_max').write_text('1900\n')
+        result, rows = self.run_policy([{'fan1_max': 2382}, {'fan1_max': 2200}, {'stop': True}])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([r['fan1_output'] for r in rows], ['2350', '2382', '2350'])
+        self.assertIn('fan target 2350 rpm (live SMC maximum 1900)', result.stdout)
+
+    def test_floor_is_configurable(self):
+        (self.smc / 'fan1_max').write_text('1900\n')
+        result, rows = self.run_policy(FAN_RPM='2300')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(rows[0]['fan1_output'], '2300')
+
+    def test_floor_above_cap_is_rejected(self):
+        for value in ['2401', '-1', '23x0', '02350']:
+            result, rows = self.run_policy(FAN_RPM=value)
+            self.assertEqual(result.returncode, 1, value)
+            self.assertFalse(rows)
+            self.assertIn('FAN_RPM must be 0..2400', result.stderr)
 
     def test_reasserts_manual_mode_and_target_independently(self):
         result, rows = self.run_policy([{'fan1_manual': 0, 'fan1_output': 900}, {'fan1_output': 1900}, {'stop': True}])

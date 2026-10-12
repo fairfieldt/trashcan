@@ -115,16 +115,19 @@ lanes where resetting one Mac after another left links stale; a link still down 
 ## Fan control
 
 One SMC fan (`applesmc`) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing.
-`fancurve.service` (`scripts/fancurve.sh`, installed in `/usr/local/sbin`) now keeps the fan at the
-**current SMC-reported maximum at every temperature**, as requested on 2026-10-07. It reads
-`fan1_max` every two seconds, follows increases and decreases, and reasserts manual mode and
-the exact target if the SMC changes either. It does not force a hardcoded RPM above the reported limit.
+`fancurve.service` (`scripts/fancurve.sh`, installed in `/usr/local/sbin`) keeps the fan at
+**2350 RPM or the live SMC maximum, whichever is higher, at every temperature** (since 2026-10-12;
+`FAN_RPM` in the unit's environment changes the floor, `FAN_RPM=0` follows the SMC maximum alone). It reads
+`fan1_max` every two seconds and reasserts manual mode and the exact target if the SMC changes either.
 
-The former curve cached 1900 RPM during boot even after `fan1_max` rose to roughly 2355–2363 RPM.
-The October 7 probe's initial snapshots show output/input still near 1900 RPM with those higher live limits.
-A bounded test then reached 2362 RPM on incite (target 2363) and 2356 RPM on invite (target 2357)
-after 30 seconds. These are fan-speed measurements, not airflow or throughput measurements.
-Evidence is under `results/qwen/hardware-20261007/fans/`.
+The SMC's maximum is not fixed. It reads 1900 RPM at boot; on 2026-10-09 it then rose in 50 RPM steps to
+2359 (incite) and 2382 (indite) within 40 minutes and drifted back to about 1910 over the next six hours.
+After the 2026-10-12 boots it stayed at 1900 for over an hour on both Macs, through 95 °C GPU load. The
+input that drives it is unknown. A target above it works: on indite with `fan1_max` at 1900, a manual target
+of 2350 reached 2349 RPM within 30 s. Following the maximum alone (2026-10-07 to 10-12) therefore left the
+fan anywhere between 1900 and ~2380 RPM. At 1900 RPM, a warm 80K-context prefill settles at about 96/94 °C
+on incite and 92/93 °C on indite. These are fan-speed measurements, not airflow. The 2026-10-07 probe
+evidence is under `results/qwen/hardware-20261007/fans/`.
 
 Two transient maximum-read failures may retain the last valid limit; the third failure returns control
 to automatic SMC and exits for systemd to retry. At startup, an unavailable/invalid limit has no fallback.
