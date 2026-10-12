@@ -1,0 +1,3 @@
+CPU latency request: 0 us, scoped to this command
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+[clocks] 20 samples card0 (02:00.0) sclk/mclk: 850/1370 x4 300/150 x16  max 47C card1 (06:00.0) sclk/mclk: 850/1370 x4 300/150 x16  max 46C  log=results/clocks/node-real512-trashcan-2-enlight.txt

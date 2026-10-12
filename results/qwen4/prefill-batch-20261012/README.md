@@ -39,3 +39,50 @@ summed over layers ([summary.txt](summary.txt), `sb-batchB.json`):
   recurrence).
 
 A 21-token chat turn is one chunk of 21 through 48 layers: ~6 x 170 ms, which is the ~1 s to first token measured.
+
+## The change: fused mixers to 64 tokens, per-slot experts at every size
+
+Same stage-bench with two temporary switches (`thresholds/`, `thr-ab.sh`, binary of 0802e42 plus the switches),
+8 layers, GPU ms per chunk:
+
+| chunk | baseline | fused mixers to any size | per-slot experts | both | mixers: GEMM / fused | experts: grouped / per-slot |
+|---|---|---|---|---|---|---|
+| 16 | 157.4 | 120.2 | 127.3 | 89.5 | 51.8 / 14.8 | 58.6 / 28.4 |
+| 32 | 200.7 | 175.4 | 163.5 | 138.1 | 52.6 / 27.4 | 92.9 / 55.9 |
+| 48 | 241.7 | 225.5 | 203.6 | 186.8 | 55.5 / 39.8 | 121.9 / 83.5 |
+| 64 | 278.4 | 274.8 | 240.6 | 235.8 | 56.4 / 52.2 | 149.5 / 111.0 |
+| 96 | 380.1 | 398.3 | 342.4 | 360.2 | 59.3 / 77.4 | 205.0 / 166.1 |
+| 128 | 456.4 | 496.8 | 416.2 | 458.8 | 61.9 / 102.4 | 259.2 / 221.2 |
+| 256 (context 8192, twice) | 805.3, 798.7 | | 778.5, 780.7 | | | 463.4, 463.2 / 441.6, 441.7 |
+
+The per-slot expert kernels beat the grouped ones at every chunk size and need 28 MiB less VRAM per GPU (no per-slot
+output buffer), so the grouped path (`qwen4_moe_route`, `qwen4_moe_{gu,down}_grouped`, `qwen4_moe_sum`) is removed.
+The fused mixers win up to 48 tokens and tie at 64; `FUSED_MAX` = 64.
+
+### Correctness (six Macs, `ab1.sh`)
+
+| check | result |
+|---|---|
+| 14-token reference prompt (one fused chunk now), against the CPU reference | the same 10 greedy tokens, logits rel 2.84e-4 ([compare-val6-new-vs-cpu.txt](compare-val6-new-vs-cpu.txt)) |
+| 100-token prompt (`p100.ids`, the first 100 tokens of a document; one chunk: GEMM mixers, per-slot experts), new against old binary | the same 10 greedy tokens, logits rel 1.3e-5, residual after layer 47 rel 1.5e-5 ([compare-val100-new-vs-old.txt](compare-val100-new-vs-old.txt)) |
+| the same, against the CPU reference (`qwen4 ref` on the M3 Ultra, 48 s) | the same 10 greedy tokens and top-10; logits rel 3.5e-2, cos 0.9994, for the old binary alike ([compare-val100-new-vs-cpu.txt](compare-val100-new-vs-cpu.txt)) |
+
+Against the CPU reference the residual stays within rel 2.5e-4 through layer 23 (the f16 K/V attention layers at
+~6e-4) and jumps at layers 24-27 and 40-43, the pattern of near-tied expert choices flipping (see docs/qwen4.md, Reference
+validation); old and new binaries agree there to 1.5e-5.
+
+### End to end (six Macs, real text)
+
+`qwen4 bench --tokens-file long.ids` (a 3061-token document prompt), `--head-split 12 --context 32768 --batch 128
+--ngram disk`, alternating; baseline = 0802e42 plus `bench --tokens-file` (`ab2.sh`). Driver outputs in
+results/qwen4/chain-20261012/incite/ (`real*`, `turns-*`):
+
+| run | prefill tok/s | decode tok/s |
+|---|---|---|
+| baseline, pp512 | 123.8, 122.6 | 13.43, 13.46 |
+| new, pp512 | 131.4, 132.5, 131.9 | 13.44, 13.54, 13.53 |
+| baseline, pp2048 | 197.1 | 12.41 |
+| new, pp2048 | 207.9 | 12.33 |
+
+Time to first token through `trashcan serve` (`tools/q4-turns.py`): a 22-token first turn 1.09 -> 0.76 s, a second
+turn of 21 new tokens (78 reused) 1.02 -> 0.66 s, with the same replies.

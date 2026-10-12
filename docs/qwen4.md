@@ -195,14 +195,14 @@ that the next mixer, the head or the stage output resolves.
 
 | part | kernels |
 |---|---|
-| mixer, up to 8 tokens | `qwen4_mix_down` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
+| mixer, up to 64 tokens | `qwen4_mix_down` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
 | mixer, prefill | `qwen4_hc_norm`, the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
 | dense matrices | Q8_0: `qwen4_q8_mv` (1-8 tokens), `qwen4_q8_gemm` (64 x 64 tiles), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw) |
 | n-gram module | key/value projections, `qwen4_ple_gate`, `qwen4_ple_conv` (dilated convolution, 9-step history) |
 | DeltaNet | qwen35's `qwen_conv` and `qwen_gdn`, `qwen4_gated_norm` (sigmoid gate) |
 | QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
 | QSA, longer contexts | `qwen4_idx_store`/`qwen4_idx_pool` (raw and pooled block keys), `qwen_qk` on the indexer queries, `qwen4_idx_score` (block scores, one wave per block for 8 tokens), `qwen4_idx_select` (exact radix top-512, ties to the earlier block), `qwen4_attention_sparse[_full]` |
-| MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; decode: `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot); prefill (16+ tokens): `qwen4_moe_route` groups slots by expert, `qwen4_moe_{gu,down}_grouped` decode each expert's rows once per 4 slots, `qwen4_moe_sum` |
+| MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot) at every batch size (grouping the slots by expert was slower at 16-256 tokens, results/qwen4/prefill-batch-20261012) |
 | experts | IQ4_XS (4.25 bpw), IQ4_NL or Q4_0 (f16 scale per 32, 4.5 bpw), at their GGUF size; the shared expert is stacked as expert 512 and must share the routed format |
 | head | final mixer, qwen35's Q6 `headvec` (int8 with f32 scales per 16), top-64; any range of vocabulary rows (`--head-split`) |
 
@@ -222,7 +222,7 @@ node on the M3 Ultra (`--cuts 3,6 --nodes MAC:7071`), compared with the CPU refe
 | Q8_0 dense, Q4_0 experts | identical | rel 2.5e-5 | rel ~1e-6 | rel 5.1e-4 |
 | Q8_0 dense, IQ4_XS/IQ4_NL experts | identical | rel 1.7e-5 | rel 5e-7 to 1.1e-6 | rel 4.4e-4 |
 
-On a 3061-token prompt in 256-token chunks (sparse QSA, grouped experts), the last chunk's QSA output is within
+On a 3061-token prompt in 256-token chunks (sparse QSA, with the grouped expert kernels of the time), the last chunk's QSA output is within
 rel 6.6e-4 of the CPU reference and the indexer queries within 2.4e-5; moving block scoring into
 `qwen4_idx_score` left all 111 captured tensors bit-identical.
 
@@ -256,7 +256,9 @@ Formats compared on layers 0-5 (decode GPU time per DeltaNet layer; experts per 
 Fusing the mixers into two dispatches each took decode from 9.05 to 6.65 ms for six layers: the mixers were half
 of a decode layer and almost none of its bytes. Moving block scoring out of the single-workgroup select took the
 QSA layer at 32K from 13.25 to 2.16 ms per decode token and the 256-token chunk there from 272 to 190 ms (G-q8d). In
-prefill the grouped experts take 60% of a layer (0.5 TFLOP/s); 2 or 8 slots per pass instead of 4 were slower.
+prefill the experts take 50-60% of a layer; the per-(token, slot) kernels beat kernels that grouped the slots by
+expert at every chunk size (221 against 259 ms for 8 layers at 128 tokens), and the fused mixers beat the prefill
+mixer path up to 64 tokens (results/qwen4/prefill-batch-20261012).
 A decode layer reads about 110 MB (61 MB of DeltaNet matrices, 14 MB of mixers, 5 MB router, 29 MB of experts) in
 1.23 ms, 34% of the D700's 263 GB/s.
 
@@ -316,8 +318,8 @@ cache for 204,800 positions and 128-token chunks allocate 5780 of 5888 MiB (budg
 850/1370 MHz. Decode at position 204,672: 1.23-1.24 ms per DeltaNet layer, 3.65 ms for the QSA layer (projections
 0.26, block selection 1.92, attention 0.66), 1.0 ms for the head slice. A 128-token chunk takes 51-62 ms per layer at
 position 0 and 202 ms for the QSA layer at 204,544 (selection 101, attention 54). The Q2_0 down projections cost the
-same 0.29 ms per decode token as IQ4_NL and 6 ms more per chunk (38 against 32 ms), since 640-wide rows give the
-grouped kernel only 10 of its 16 lanes' blocks.
+same 0.29 ms per decode token as IQ4_NL and 6 ms more per chunk (38 against 32 ms, measured with the grouped expert
+kernels since removed), since 640-wide rows gave that kernel only 10 of its 16 lanes' blocks.
 
 Projected six-Mac decode at 200K: 36 x 1.24 + 12 x 3.65 + 0.43 + 6.7 + 12 x 0.39 + 0.5 = 101 ms, **9.9 tok/s**
 (14.1 at short context). Prefill of a 200K prompt averages about 0.57 s per 128-token chunk per Mac (6 DeltaNet
@@ -348,13 +350,14 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
 2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks.
 3. **Clock levels** (done): in decode each GPU idles ~90% of a token and drops to its lowest clocks on `auto`;
    stages now hold the high level while work arrives and return to `auto` after 1 s idle (~35 W per idle GPU).
-4. **Prefill**: an LDS-tiled grouped expert GEMM (58 ms of a 94 ms layer), chunked DeltaNet (19 ms), grouping
+4. **Prefill**: an expert kernel that reuses weights across the tokens routed to an expert without losing to the
+   per-slot kernels (28-32 ms of a 52 ms layer at 128 tokens), the prefill mixer path above 64 tokens (~3.2 ms per
+   mixer whatever the batch: its 10240 -> 320 GEMM runs on 5 workgroups), chunked DeltaNet (19 ms), grouping
    the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K), the f32 router (3.8 ms),
    and the two GPUs of a Mac working on different chunks.
 5. **Decode**: fewer dispatches per layer (34% of bandwidth now) and a multi-workgroup radix select (block selection
    takes 0.6 ms of a QSA layer at 32K and 1.9 ms at 200K).
-6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K; the Q2_0
-   grouped kernel uses 10 of 16 lane groups on 640-wide rows.
+6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
 9. **MTP** (a 49th layer with its own experts) and the rollback snapshots speculative decoding needs.

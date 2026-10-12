@@ -137,6 +137,10 @@ pub enum Cmd {
         pp: usize,
         #[arg(long, default_value_t = 64)]
         tg: usize,
+        /// Prefill the first `pp` of these token ids (whitespace separated) instead of one token repeated; real text
+        /// routes its tokens to many more experts.
+        #[arg(long)]
+        tokens_file: Option<PathBuf>,
     },
 }
 
@@ -352,9 +356,20 @@ pub fn run(cmd: Cmd) -> Result<()> {
             println!("greedy: {ids:?}");
             Ok(())
         }
-        Cmd::Bench { model, run, pp, tg } => {
+        Cmd::Bench {
+            model,
+            run,
+            pp,
+            tg,
+            tokens_file,
+        } => {
+            let prompt: Vec<u32> = match tokens_file {
+                Some(f) => prompt(Some(&f), &[])?.into_iter().take(pp).collect(),
+                None => vec![9419; pp],
+            };
+            ensure!(!prompt.is_empty(), "empty prompt");
             let mut chain = run.chain(&model)?;
-            println!("{}", bench(&mut chain, pp, tg)?);
+            println!("{}", bench(&mut chain, &prompt, tg)?);
             Ok(())
         }
         Cmd::TokenizeChat { model, file } => {
@@ -472,11 +487,11 @@ fn validate(e: &mut super::net::Chain, out: &Path, tokens: &[u32], greedy: usize
     Ok(ids)
 }
 
-/// Prefill `pp` copies of one token, then decode `tg` tokens greedily.
-fn bench(e: &mut super::net::Chain, pp: usize, tg: usize) -> Result<serde_json::Value> {
-    let hello = 9419;
+/// Prefill `prompt`, then decode `tg` tokens greedily.
+fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_json::Value> {
+    let pp = prompt.len();
     let start = std::time::Instant::now();
-    let mut top = e.prefill(&vec![hello; pp])?;
+    let mut top = e.prefill(prompt)?;
     let pp_s = start.elapsed().as_secs_f64();
     // Per-layer GPU milliseconds of the local stages: the last prefill chunk, then the mean over decode tokens.
     let profile = |e: &super::net::Chain| -> Vec<Vec<f64>> {
