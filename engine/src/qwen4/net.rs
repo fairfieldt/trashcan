@@ -253,6 +253,23 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
                 d.recv()?;
             }
             up.send(&json!({"ok": true}), &[])?;
+        } else if let Some(max) = header.get("enable_verify") {
+            let l = local.as_mut().context("enable_verify before setup")?;
+            l.enable_verify(max.as_u64().context("verification size")? as usize)?;
+            if let Some(d) = down.as_mut() {
+                d.send(&header, &[])?;
+                d.recv()?;
+            }
+            up.send(&json!({"ok": true}), &[])?;
+        } else if let Some(keep) = header.get("rollback") {
+            let l = local.as_mut().context("rollback before setup")?;
+            l.rollback(keep.as_u64().context("rollback")? as usize)?;
+            if let Some(d) = down.as_mut() {
+                d.send(&header, &[])?;
+            }
+        } else if let Some(f) = header.get("forward").filter(|f| f.get("keep").is_some()) {
+            let l = local.as_mut().context("forward before setup")?;
+            kept_node(l, down.as_mut(), up, f, &blob)?;
         } else if let Some(f) = header.get("forward") {
             let l = local.as_mut().context("forward before setup")?;
             let pos = f["pos"].as_u64().context("pos")? as usize;
@@ -304,6 +321,70 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
     }
 }
 
+// A batch that keeps rows (`"keep": "verify"` or `"rows"`): every machine passes the final hidden states up (all
+// rows of a verification batch, the last row otherwise), scores them with its head rows, and the candidates of every
+// row follow with the residual rows of the batch from the machine that ends the model.
+
+fn kept_result(tops: &[Vec<(f32, u32)>], rows: &[f32]) -> (Value, Vec<u8>) {
+    let tops: Vec<Value> = tops.iter().map(|t| json!(t.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>())).collect();
+    (json!({"tops": tops, "rows": rows.len()}), bytemuck::cast_slice(rows).to_vec())
+}
+
+fn decode_kept(header: &Value, blob: &[u8]) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
+    let tops = header["tops"]
+        .as_array()
+        .context("missing candidates")?
+        .iter()
+        .map(|t| {
+            t.as_array()
+                .context("candidates")?
+                .iter()
+                .map(|p| Ok((p[0].as_f64().context("score")? as f32, p[1].as_u64().context("id")? as u32)))
+                .collect::<Result<Vec<_>>>()
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let n = header["rows"].as_u64().context("missing rows")? as usize;
+    ensure!(blob.len() == n * 4, "rows length mismatch");
+    Ok((tops, floats(blob)))
+}
+
+fn merge_rows(a: Vec<Vec<(f32, u32)>>, b: Vec<Vec<(f32, u32)>>) -> Result<Vec<Vec<(f32, u32)>>> {
+    ensure!(a.len() == b.len(), "candidate rows mismatch");
+    Ok(a.into_iter().zip(b).map(|(x, y)| merge_top(x, y)).collect())
+}
+
+fn kept_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value, blob: &[u8]) -> Result<()> {
+    let pos = f["pos"].as_u64().context("pos")? as usize;
+    let n = f["n"].as_u64().context("n")? as usize;
+    let verify = f["keep"].as_str() == Some("verify");
+    let out = l.forward_kept(floats(blob), None, pos, n, verify)?;
+    let mut down = down;
+    if let Output::Hidden(x) = &out {
+        let d = down.as_mut().context("the last machine has no LM head")?;
+        d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
+    }
+    let h = match out {
+        Output::Final(h) => {
+            down = None;
+            h
+        }
+        Output::Hidden(_) => recv_hidden(down.as_mut().context("the last machine has no LM head")?)?,
+    };
+    send_hidden(up, &h)?;
+    let mut tops = l.head_rows(&h)?;
+    let rows = match down {
+        Some(d) => {
+            let (hd, b) = d.recv()?;
+            let (t, rows) = decode_kept(&hd, &b)?;
+            tops = merge_rows(tops, t)?;
+            rows
+        }
+        None => std::mem::take(&mut l.rows),
+    };
+    let (hd, b) = kept_result(&tops, &rows);
+    up.send(&hd, &b)
+}
+
 /// Where the driver reads n-gram rows: through the GGUF map, or a `ngram::Table` (resident or from disk).
 pub enum Rows {
     Map,
@@ -341,6 +422,8 @@ pub struct Chain {
     pub history: Vec<u32>,
     rows: Rows,
     pub threads: usize,
+    /// Tokens of the latest verification batch (for `rollback`).
+    verified: usize,
 }
 
 impl Chain {
@@ -434,6 +517,7 @@ impl Chain {
             history: Vec::new(),
             rows,
             threads: 16,
+            verified: 0,
         })
     }
 
@@ -557,5 +641,93 @@ impl Chain {
         let _ = self.local.drain(|_| Ok(()));
         self.pos = 0;
         self.history.clear();
+    }
+
+    /// Make every stage of the chain ready for verification batches of up to `max` tokens.
+    pub fn enable_verify(&mut self, max: usize) -> Result<()> {
+        self.local.enable_verify(max)?;
+        if let Some(conn) = self.next.as_mut() {
+            conn.send(&json!({"enable_verify": max}), &[])?;
+            conn.recv()?;
+        }
+        Ok(())
+    }
+
+    /// Run `tokens` as one batch that keeps rows: a verification batch (`verify`: rollback possible, candidates of
+    /// every row) or the end of a prompt (candidates of the last row). Returns the candidates per row and the
+    /// residual rows of the batch at the end of the model (`n x hc x d`), the MTP block's input.
+    pub fn forward_kept(&mut self, tokens: &[u32], verify: bool) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
+        let n = tokens.len();
+        ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
+        ensure!(self.pos + n <= self.context, "context exhausted");
+        if self.pos == 0 {
+            self.history.clear();
+        }
+        ensure!(!verify || self.pos > 0, "a verification batch continues a sequence");
+        let x = embed(&self.local.gguf, &self.local.c, tokens)?;
+        let ple = self.ple(tokens)?;
+        self.history.extend_from_slice(tokens);
+        let pos = self.pos;
+        let out = self.local.forward_kept(x, ple.as_deref(), pos, n, verify)?;
+        self.pos += n;
+        self.verified = if verify { n } else { 0 };
+        if let Output::Hidden(x) = &out {
+            let conn = self.next.as_mut().context("no machine holds the LM head")?;
+            let keep = if verify { "verify" } else { "rows" };
+            conn.send(&json!({"forward": {"pos": pos, "n": n, "reply": true, "keep": keep}}), bytemuck::cast_slice(x))?;
+        }
+        let (h, remote) = match out {
+            Output::Final(h) => (h, false),
+            Output::Hidden(_) => (recv_hidden(self.next.as_mut().unwrap())?, true),
+        };
+        let mut tops = self.local.head_rows(&h)?;
+        let rows = if remote {
+            let (hd, b) = self.next.as_mut().unwrap().recv()?;
+            let (t, rows) = decode_kept(&hd, &b)?;
+            tops = merge_rows(tops, t)?;
+            rows
+        } else {
+            std::mem::take(&mut self.local.rows)
+        };
+        Ok((tops, rows))
+    }
+
+    /// Verify `tokens` (the pending token and its drafts): candidates of every row and the residual rows.
+    pub fn verify(&mut self, tokens: &[u32]) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
+        self.forward_kept(tokens, true)
+    }
+
+    /// Keep tokens `0..keep` of the latest verification batch on every machine.
+    pub fn rollback(&mut self, keep: usize) -> Result<()> {
+        let n = self.verified;
+        ensure!(keep >= 1 && keep <= n, "rollback to {keep} of a {n}-token verification batch");
+        if keep < n {
+            self.local.rollback(keep)?;
+            if let Some(conn) = self.next.as_mut() {
+                conn.send(&json!({"rollback": keep}), &[])?;
+            }
+            self.pos -= n - keep;
+            self.history.truncate(self.history.len() - (n - keep));
+        }
+        self.verified = keep;
+        Ok(())
+    }
+
+    /// `prefill_cached` whose last chunk (up to `max_batch` tokens: the prompt is cut from its end) also returns
+    /// its residual rows. Returns the last token's candidates, the reused positions and the rows.
+    pub fn prefill_rows(&mut self, ids: &[u32]) -> Result<(Vec<(f32, u32)>, usize, Vec<f32>)> {
+        ensure!(!ids.is_empty(), "empty prompt");
+        let live = self.pos > 0 && self.pos < ids.len() && self.history.len() == self.pos && ids.starts_with(&self.history);
+        if !live {
+            self.pos = 0;
+        }
+        let start = self.pos;
+        let rest = &ids[start..];
+        let chunks: Vec<_> = rest.rchunks(self.max_batch).rev().collect();
+        for chunk in &chunks[..chunks.len() - 1] {
+            self.forward(chunk, false, None)?;
+        }
+        let (mut tops, rows) = self.forward_kept(chunks[chunks.len() - 1], false)?;
+        Ok((tops.pop().context("missing candidates")?, start, rows))
     }
 }

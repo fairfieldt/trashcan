@@ -164,6 +164,17 @@ pub struct CpuStage {
     /// the PLE layer).
     ple_conv: Vec<f32>,
     pub head: bool,
+    /// The latest verification batch: the recurrent states before it, its input rows, n-gram rows and position,
+    /// and its output rows (speculative decoding; `rollback` replays the kept tokens).
+    verified: Option<Verified>,
+}
+
+struct Verified {
+    states: Vec<Vec<f32>>,
+    x: Vec<f32>,
+    ple: Option<Vec<f32>>,
+    pos: usize,
+    n: usize,
 }
 
 pub(crate) fn dot(a: &[f32], b: &[f32]) -> f32 {
@@ -271,7 +282,64 @@ impl CpuStage {
             states,
             ple_conv,
             head,
+            verified: None,
         }
+    }
+
+    fn recurrent(&self) -> Vec<Vec<f32>> {
+        let mut v = vec![self.ple_conv.clone()];
+        for st in &self.states {
+            if let State::Recurrent { conv, s } = st {
+                v.push(conv.clone());
+                v.push(s.clone());
+            }
+        }
+        v
+    }
+
+    fn set_recurrent(&mut self, saved: &[Vec<f32>]) {
+        self.ple_conv.copy_from_slice(&saved[0]);
+        let mut it = saved[1..].iter();
+        for st in &mut self.states {
+            if let State::Recurrent { conv, s } = st {
+                conv.copy_from_slice(it.next().unwrap());
+                s.copy_from_slice(it.next().unwrap());
+            }
+        }
+    }
+
+    /// `forward` for a verification batch: keeps what `rollback` needs.
+    pub fn verify(&mut self, g: &Gguf, x: &mut [f32], ple: Option<&[f32]>, pos: usize, n: usize) -> Result<()> {
+        ensure!(pos > 0, "a verification batch continues a sequence");
+        let states = self.recurrent();
+        let input = x.to_vec();
+        self.forward(g, x, ple, pos, n, &mut None)?;
+        self.verified = Some(Verified { states, x: input, ple: ple.map(|p| p.to_vec()), pos, n });
+        Ok(())
+    }
+
+    /// Keep tokens `0..keep` of the latest verification batch: restore the states before it and replay them.
+    pub fn rollback(&mut self, g: &Gguf, keep: usize) -> Result<()> {
+        let v = self.verified.take().ok_or_else(|| anyhow::anyhow!("rollback without a verification batch"))?;
+        ensure!(keep >= 1 && keep <= v.n, "rollback to {keep} of a {}-token batch", v.n);
+        if keep < v.n {
+            self.set_recurrent(&v.states);
+            let w = self.c.width();
+            let mut x = v.x[..keep * w].to_vec();
+            let ple = v.ple.as_ref().map(|p| &p[..keep * self.c.d]);
+            self.forward(g, &mut x, ple, v.pos, keep, &mut None)?;
+        }
+        Ok(())
+    }
+
+    /// The final mixer's output for every row of `x` (a verification batch's final hidden states).
+    pub fn final_rows(&self, g: &Gguf, x: &[f32]) -> Result<Vec<f32>> {
+        let w = self.c.width();
+        let mut out = Vec::with_capacity(x.len() / w * self.c.d);
+        for row in x.chunks_exact(w) {
+            out.extend(self.final_hidden(g, row, &mut None)?);
+        }
+        Ok(out)
     }
 
     /// Run the layers over `n` tokens at `pos` in place on the `n x hc x d` residual. `ple` holds the gathered
@@ -321,7 +389,7 @@ impl CpuStage {
             let y = match &mut self.states[il - self.first] {
                 State::Recurrent { conv, s } => Self::delta_net(g, &c, il, &m.input, n, conv, s, &mut record)?,
                 State::Attention { k, v, kraw, pooled } => {
-                    Self::attention(g, &c, il, &m.input, pos, n, k, v, kraw, pooled, &mut record)?
+                    Self::attention(g, &c, il, &m.input, pos, n, k, v, kraw, pooled, 0, &mut record)?
                 }
             };
             Self::combine(&c, x, &y, m.write.as_deref().unwrap(), n);
@@ -645,6 +713,7 @@ impl CpuStage {
         vc: &mut [f32],
         kraw: &mut [f32],
         pooled: &mut [f32],
+        kv_first: usize,
         record: &mut impl FnMut(String, &[f32], usize),
     ) -> Result<Vec<f32>> {
         let t = |name: &str| c.layer_tensor(g, il, name);
@@ -732,7 +801,9 @@ impl CpuStage {
                     let first = part * n.div_ceil(threads);
                     for (i, row) in rows.chunks_exact_mut(nh * hd).enumerate() {
                         let tok = first + i;
-                        let visible = Self::select(c, &iq[tok * ih * id..(tok + 1) * ih * id], pooled, pos + tok);
+                        let mut visible = Self::select(c, &iq[tok * ih * id..(tok + 1) * ih * id], pooled, pos + tok);
+                        // Positions before `kv_first` hold no keys (an MTP block filled from a later position).
+                        visible.retain(|&j| j >= kv_first);
                         for (head, dst) in row.chunks_exact_mut(hd).enumerate() {
                             let kh = head / (nh / nkv);
                             let mut qv = q[(tok * nh + head) * hd..][..hd].to_vec();

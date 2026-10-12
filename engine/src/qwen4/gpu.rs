@@ -48,6 +48,8 @@ fn max_tiles(slots: usize, experts: usize) -> usize {
 }
 /// Residual chunk of a qwen4_mix_down_sk workgroup (40 blocks of 32, two per stream of 2560).
 const SPLIT: usize = 1280;
+/// Rows of a verification batch the head stage can score (speculative decoding: the pending token and its drafts).
+pub const VERIFY_MAX: usize = 4;
 
 /// A dense matrix: Q4_0 repacked with f32 scales (the Gemma kernels) or Q8_0 with f16 scales (`qwen4_q8_*`, the
 /// word offset of its blocks).
@@ -236,6 +238,15 @@ impl KvCache {
     }
 }
 
+/// What a batch keeps besides its output: nothing, the per-token states for a rollback (a verification batch), or the
+/// residual rows on the stage that ends the model.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum Mode {
+    Plain,
+    Verify,
+    Rows,
+}
+
 pub enum Output {
     Hidden(Vec<f32>),
     /// The final hidden state of the last token (this stage ends the model); every stage holding head rows scores
@@ -313,11 +324,21 @@ pub struct GpuStage {
     gv: Buffer,
     pn: Buffer,
     fence: vk::Fence,
-    graphs: HashMap<(usize, u32, bool), Graph>,
+    graphs: HashMap<(usize, u32, bool, Mode), Graph>,
     /// The graph and batch of a submitted forward that `collect` has not waited for yet.
-    pending: Option<((usize, u32, bool), usize)>,
-    /// Command buffers scoring a given hidden state with this stage's head rows (by dump).
-    head_graphs: HashMap<bool, Graph>,
+    pending: Option<((usize, u32, bool, Mode), usize)>,
+    /// Command buffers scoring given hidden states with this stage's head rows (by dump and row count).
+    head_graphs: HashMap<(bool, usize), Graph>,
+    /// Rows scored by the last `head_submit`.
+    head_n: usize,
+    /// Verification batches (speculative decoding, `enable_verify`): per DeltaNet layer the states and convolution
+    /// windows after every token but the last, the n-gram convolution history before the batch, and the latest batch.
+    snaps: Vec<Option<(Buffer, Buffer)>>,
+    ple_hist0: Option<Buffer>,
+    verify_max: usize,
+    last_verify: Option<usize>,
+    /// Rows of the latest batch whose residual the stage that ends the model kept (`residual`).
+    last_rows: Option<usize>,
     queries: vk::QueryPool,
     /// GPU milliseconds of each layer's submission in the last forward (the last includes the head or output).
     pub profile: Vec<f64>,
@@ -613,11 +634,11 @@ impl GpuStage {
                     w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[row0 * rb..row1 * rb]))?,
                     logits: gpu.buffer(rows * 4, false, false, None)?,
                     scratch: gpu.buffer(chunks * TOP_K * 8, false, false, None)?,
-                    top: gpu.buffer(TOP_K * 8, true, false, None)?,
+                    top: gpu.buffer(VERIFY_MAX * TOP_K * 8, true, false, None)?,
                     chunks,
                     row0,
                     rows,
-                    h: gpu.buffer(d * 4, true, false, None)?,
+                    h: gpu.buffer(VERIFY_MAX * d * 4, true, false, None)?,
                 })
             }
             None => None,
@@ -707,6 +728,12 @@ impl GpuStage {
             graphs: HashMap::new(),
             pending: None,
             head_graphs: HashMap::new(),
+            head_n: 1,
+            snaps: Vec::new(),
+            ple_hist0: None,
+            verify_max: 0,
+            last_verify: None,
+            last_rows: None,
             queries,
             profile: Vec::new(),
             phases: Vec::new(),
@@ -814,7 +841,8 @@ impl GpuStage {
     }
 
     /// Score the hidden state at `input` with this stage's head rows: logits, chunk top-k, merged top-k in `hd.top`.
-    fn score_head(&self, graph: &mut Graph, cmd: vk::CommandBuffer, hd: &Head, input: u64, dump: bool) -> Result<()> {
+    fn score_head(&self, graph: &mut Graph, cmd: vk::CommandBuffer, hd: &Head, row: usize, dump: bool) -> Result<()> {
+        let (input, top) = (hd.h.address + (row * self.c.d * 4) as u64, hd.top.address + (row * TOP_K * 8) as u64);
         let gpu = &self.gpu;
         let d = self.c.d;
         let push = |ptr: [u64; 6], u: [u32; 16]| Push {
@@ -864,7 +892,7 @@ impl GpuStage {
         gpu.dispatch(
             cmd,
             "merge",
-            push([hd.scratch.address, 0, hd.top.address, 0, 0, 0], u),
+            push([hd.scratch.address, 0, top, 0, 0, 0], u),
             1,
             1,
         );
@@ -872,9 +900,9 @@ impl GpuStage {
     }
 
     /// The merged candidates of a head (ids offset to the vocabulary).
-    fn read_top(hd: &Head) -> Result<Vec<(f32, u32)>> {
-        let bytes = hd.top.read(TOP_K * 8)?;
-        let mut top: Vec<(f32, u32)> = bytes
+    fn read_top(hd: &Head, row: usize) -> Result<Vec<(f32, u32)>> {
+        let bytes = hd.top.read((row + 1) * TOP_K * 8)?;
+        let mut top: Vec<(f32, u32)> = bytes[row * TOP_K * 8..]
             .chunks_exact(8)
             .map(|s| {
                 (
@@ -905,9 +933,16 @@ impl GpuStage {
             return Ok(false);
         };
         ensure!(self.pending.is_none(), "the stage is still working on a forward");
-        ensure!(h.len() == d, "hidden state length mismatch");
+        // Several rows (a verification batch) are scored one after another.
+        let rows = h.len() / d;
+        ensure!(
+            h.len() == rows * d && (1..=VERIFY_MAX).contains(&rows) && (rows == 1 || !dump),
+            "hidden state length mismatch"
+        );
         hd.h.write(bytemuck::cast_slice(h))?;
-        if !self.head_graphs.contains_key(&dump) {
+        self.head_n = rows;
+        let key = (dump, rows);
+        if !self.head_graphs.contains_key(&key) {
             let cmd = self.gpu.begin()?;
             let mut graph = Graph {
                 gpu: self.gpu.clone(),
@@ -917,14 +952,19 @@ impl GpuStage {
                 stamps: None,
             };
             self.gpu.barrier(cmd);
-            self.score_head(&mut graph, cmd, hd, hd.h.address, dump)?;
+            for row in 0..rows {
+                if row > 0 {
+                    self.gpu.barrier(cmd);
+                }
+                self.score_head(&mut graph, cmd, hd, row, dump)?;
+            }
             self.gpu.finish(cmd)?;
-            self.head_graphs.insert(dump, graph);
+            self.head_graphs.insert(key, graph);
         }
         unsafe {
             self.gpu.dev.reset_fences(&[self.fence])?;
         }
-        self.gpu.submit(self.head_graphs[&dump].cmds[0], None, None, self.fence)?;
+        self.gpu.submit(self.head_graphs[&key].cmds[0], None, None, self.fence)?;
         Ok(true)
     }
 
@@ -934,18 +974,28 @@ impl GpuStage {
             self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
         }
         if let Some(m) = dump {
-            for (name, host, width) in &self.head_graphs[&true].captures {
+            for (name, host, width) in &self.head_graphs[&(true, 1)].captures {
                 m.insert(name.clone(), bytemuck::cast_slice(&host.read(width * 4)?).to_vec());
             }
         }
-        Ok(Some(Self::read_top(self.head.as_ref().context("no head rows")?)?))
+        Ok(Some(Self::read_top(self.head.as_ref().context("no head rows")?, 0)?))
+    }
+
+    /// Wait for `head_submit` and return the candidates of every row it scored.
+    pub fn head_collect_rows(&mut self) -> Result<Vec<Vec<(f32, u32)>>> {
+        unsafe {
+            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+        }
+        let hd = self.head.as_ref().context("no head rows")?;
+        (0..self.head_n).map(|r| Self::read_top(hd, r)).collect()
     }
 
     pub fn device_mib(&self) -> f64 {
         self.gpu.device_bytes.get() as f64 / 1048576.
     }
 
-    fn record(&self, n: usize, parts: u32, dump: bool) -> Result<Graph> {
+    fn record(&self, n: usize, parts: u32, dump: bool, mode: Mode) -> Result<Graph> {
+        let verify = mode == Mode::Verify;
         let gpu = &self.gpu;
         let c = &self.c;
         let (d, w, hc) = (c.d, c.width(), c.hc);
@@ -1348,6 +1398,9 @@ impl GpuStage {
                     );
                 }
                 capture(&mut graph, format!("ple_gated_value-{il}"), &self.gv, w)?;
+                if let (true, Some(h0)) = (verify, &self.ple_hist0) {
+                    gpu.copy(current.get(), &p.hist, 0, h0, 0, h0.size);
+                }
                 let mut u = [0; 16];
                 u[0] = w as u32;
                 gpu.dispatch(
@@ -1387,6 +1440,10 @@ impl GpuStage {
                     out,
                 } => {
                     let (cd, vd) = (c.conv_dim(), c.value_dim());
+                    let (snap, snap_conv) = match (verify, self.snaps.get(il - self.first)) {
+                        (true, Some(Some((s, w)))) => (s.address, w.address),
+                        _ => (0, 0),
+                    };
                     // Decode puts the small projections first: the last dispatch of a group starts its waves last.
                     if n <= 8 {
                         matf32(ab, &self.u, &self.ab, d, 2 * c.v_heads, true)?;
@@ -1410,7 +1467,7 @@ impl GpuStage {
                                 conv_w.address,
                                 conv.address,
                                 self.conv_out.address,
-                                0,
+                                snap_conv,
                                 0,
                             ],
                             u,
@@ -1441,7 +1498,7 @@ impl GpuStage {
                                 state.address,
                                 self.o.address,
                                 dt_a.address,
-                                0,
+                                snap,
                             ],
                             u,
                         ),
@@ -1842,7 +1899,14 @@ impl GpuStage {
             mixer(&mut graph, m, pending, "")?;
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
             capture(&mut graph, "result_norm".into(), &self.u, d)?;
-            gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
+            if verify {
+                gpu.copy(current.get(), &self.u, 0, &hd.h, 0, n * d * 4);
+            } else {
+                gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
+            }
+            if mode != Mode::Plain {
+                gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
+            }
         } else {
             if pending {
                 combine();
@@ -1905,8 +1969,103 @@ impl GpuStage {
         self.collect(dump)
     }
 
+    /// `forward` for a verification batch (speculative decoding): the DeltaNet and n-gram states after every token
+    /// are kept for `rollback`, and the stage that ends the model returns the final hidden state of every token and
+    /// keeps their residual rows (`residual`). Needs `enable_verify`.
+    pub fn verify(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize) -> Result<Output> {
+        ensure!(n <= self.verify_max, "verification batch of {n} exceeds the enabled {}", self.verify_max);
+        self.submit_mode(x, ple, pos, n, false, Mode::Verify)?;
+        self.collect(None)
+    }
+
+    /// `forward` that also keeps the residual rows of the batch on the stage that ends the model (`residual`): the
+    /// MTP block's input for the end of a prompt.
+    pub fn forward_rows(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize) -> Result<Output> {
+        self.submit_mode(x, ple, pos, n, false, Mode::Rows)?;
+        self.collect(None)
+    }
+
+    /// Keep tokens `0..keep` of the latest verification batch: restore the recurrent states after token `keep - 1`.
+    /// The K/V and indexer caches are addressed by position and need nothing.
+    pub fn rollback(&mut self, keep: usize) -> Result<()> {
+        let n = self.last_verify.context("rollback without a verification batch")?;
+        ensure!(keep >= 1 && keep <= n, "rollback to {keep} of a {n}-token batch");
+        if keep == n {
+            return Ok(());
+        }
+        let c = &self.c;
+        let (state, conv) = (c.v_heads * c.state * c.state * 4, (c.conv - 1) * c.conv_dim() * 4);
+        let cmd = self.gpu.begin()?;
+        self.gpu.barrier(cmd);
+        for (l, snap) in self.layers.iter().zip(&self.snaps) {
+            if let (Mixer::Delta { conv: cw, state: st, .. }, Some((s, w))) = (&l.mixer, snap) {
+                self.gpu.copy(cmd, s, (keep - 1) * state, st, 0, state);
+                self.gpu.copy(cmd, w, (keep - 1) * conv, cw, 0, conv);
+            }
+        }
+        // The n-gram convolution keeps its last 9 inputs: those before the batch, then the batch's first `keep`.
+        if let (Some(p), Some(h0)) = (&self.ple, &self.ple_hist0) {
+            let row = c.width() * 4;
+            let rows = h0.size / row;
+            self.gpu.copy(cmd, h0, keep * row, &p.hist, 0, (rows - keep) * row);
+            self.gpu.copy(cmd, &self.pn, 0, &p.hist, (rows - keep) * row, keep * row);
+        }
+        self.gpu.finish(cmd)?;
+        unsafe {
+            self.gpu.dev.reset_fences(&[self.fence])?;
+        }
+        self.gpu.submit(cmd, None, None, self.fence)?;
+        unsafe {
+            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]);
+        }
+        self.last_verify = Some(keep);
+        self.last_rows = self.last_rows.map(|r| r.min(keep));
+        Ok(())
+    }
+
+    /// Allocate what verification batches of up to `max` tokens need (`max - 1` state copies per DeltaNet layer).
+    pub fn enable_verify(&mut self, max: usize) -> Result<()> {
+        ensure!(max <= VERIFY_MAX, "verification batches are limited to {VERIFY_MAX} tokens");
+        ensure!(max <= self.max_batch, "verification batches exceed the stage's batch size");
+        if max <= self.verify_max {
+            return Ok(());
+        }
+        let c = &self.c;
+        let (state, conv) = (c.v_heads * c.state * c.state * 4, (c.conv - 1) * c.conv_dim() * 4);
+        let snaps = max.saturating_sub(1).max(1);
+        self.snaps = self
+            .layers
+            .iter()
+            .map(|l| match l.mixer {
+                Mixer::Delta { .. } => Ok(Some((
+                    self.gpu.buffer(snaps * state, false, false, None)?,
+                    self.gpu.buffer(snaps * conv, false, false, None)?,
+                ))),
+                Mixer::Attention { .. } => Ok(None),
+            })
+            .collect::<Result<_>>()?;
+        if let (Some(_), Some(ng)) = (&self.ple, &c.ngram) {
+            self.ple_hist0 = Some(self.gpu.buffer((ng.conv - 1) * ng.ngram * c.width() * 4, false, false, None)?);
+        }
+        self.verify_max = max;
+        self.graphs.retain(|k, _| k.3 != Mode::Verify);
+        Ok(())
+    }
+
+    /// The residual rows (`n x hc x d`) of the latest verification batch on the stage that ends the model: the MTP
+    /// block's input.
+    pub fn residual(&self, n: usize) -> Result<Vec<f32>> {
+        ensure!(self.last_rows.is_some_and(|v| n <= v), "no residual rows of the latest batch");
+        Ok(bytemuck::cast_slice(&self.output.read(n * self.c.width() * 4)?).to_vec())
+    }
+
     /// Start `forward` without waiting for it; `collect` waits and returns the output.
     pub fn submit(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize, dump: bool) -> Result<()> {
+        self.submit_mode(x, ple, pos, n, dump, Mode::Plain)
+    }
+
+    fn submit_mode(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize, dump: bool, mode: Mode) -> Result<()> {
         let (d, w) = (self.c.d, self.c.width());
         ensure!(self.pending.is_none(), "the stage is still working on a forward");
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
@@ -1920,7 +2079,7 @@ impl GpuStage {
         }
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump);
+        let key = (n, partitions(pos, n), dump, mode);
         if !self.graphs.contains_key(&key) {
             if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
                 let victim = *self
@@ -1930,7 +2089,7 @@ impl GpuStage {
                     .unwrap_or(self.graphs.keys().next().unwrap());
                 self.graphs.remove(&victim);
             }
-            let graph = self.record(n, key.1, key.2)?;
+            let graph = self.record(n, key.1, key.2, key.3)?;
             self.graphs.insert(key, graph);
         }
         let graph = &self.graphs[&key];
@@ -1990,8 +2149,12 @@ impl GpuStage {
                 m.insert(name.clone(), v);
             }
         }
+        let verify = key.3 == Mode::Verify;
+        self.last_verify = verify.then_some(n);
+        self.last_rows = (key.3 != Mode::Plain).then_some(n);
+        let rows = if verify { n } else { 1 };
         Ok(match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
-            Some(hd) => Output::Final(bytemuck::cast_slice(&hd.h.read(d * 4)?).to_vec()),
+            Some(hd) => Output::Final(bytemuck::cast_slice(&hd.h.read(rows * d * 4)?).to_vec()),
             None => Output::Hidden(bytemuck::cast_slice(&self.output.read(n * w * 4)?).to_vec()),
         })
     }

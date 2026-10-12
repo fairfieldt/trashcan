@@ -113,9 +113,12 @@ pub struct Local {
     /// The LM head rows each stage scores (the stage that ends the model always has some).
     pub heads: Vec<Option<(usize, usize)>>,
     /// Holds the GPUs' clocks up while work arrives (GPU stages only).
-    clocks: Option<crate::clocks::Clocks>,
+    pub(crate) clocks: Option<crate::clocks::Clocks>,
     /// The chunk each stage is working on (`push`).
     flight: Vec<Option<Flight>>,
+    /// The residual rows the stage that ends the model kept from the latest verification or `forward_rows` batch
+    /// (speculative decoding, `spec.rs`).
+    pub rows: Vec<f32>,
 }
 
 impl Local {
@@ -181,6 +184,7 @@ impl Local {
             stages,
             heads: heads.to_vec(),
             clocks,
+            rows: Vec::new(),
         })
     }
 

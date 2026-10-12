@@ -21,6 +21,8 @@ pub struct CpuMtp {
     v: Vec<f32>,
     kraw: Vec<f32>,
     pooled: Vec<f32>,
+    /// The first position the block has keys for (it attends to nothing before).
+    pub first: usize,
 }
 
 impl CpuMtp {
@@ -33,6 +35,7 @@ impl CpuMtp {
             v: vec![0.; kv],
             kraw: vec![0.; context * c.idx_dim],
             pooled: vec![0.; context.div_ceil(c.kpool) * c.idx_dim],
+            first: 0,
         }
     }
 
@@ -94,6 +97,7 @@ impl CpuMtp {
             &mut self.v,
             &mut self.kraw,
             &mut self.pooled,
+            self.first,
             &mut record,
         )?;
         CpuStage::combine(&c, &mut x, &y, m.write.as_deref().unwrap(), n);
@@ -176,6 +180,80 @@ pub enum Cmd {
         #[arg(long)]
         head_from_mtp: bool,
     },
+    /// Compare the fast CPU draft (`draft::Draft`) with the reference block on the same inputs: the prompt, then
+    /// `chain` chained steps; prints the relative error and cosine of the draft logits (head rows below `vocab`).
+    DraftCheck {
+        model: std::path::PathBuf,
+        mtp: std::path::PathBuf,
+        #[arg(long)]
+        tokens_file: Option<std::path::PathBuf>,
+        #[arg(long, default_value_t = 3)]
+        chain: usize,
+        #[arg(long, default_value_t = 65536)]
+        vocab: usize,
+        #[arg(long, default_value_t = 0)]
+        threads: usize,
+    },
+    /// Time draft steps of the fast CPU draft after `start` positions (random tokens and residuals): batches of
+    /// each size in `batch` with the head on the last row, `steps` times each.
+    DraftBench {
+        model: std::path::PathBuf,
+        mtp: std::path::PathBuf,
+        #[arg(long, default_value_t = 4096)]
+        context: usize,
+        #[arg(long, default_value_t = 512)]
+        start: usize,
+        #[arg(long, default_value_t = 16)]
+        steps: usize,
+        #[arg(long, value_delimiter = ',', default_value = "1,2,3,4")]
+        batch: Vec<usize>,
+        #[arg(long, default_value_t = 65536)]
+        vocab: usize,
+        #[arg(long, default_value_t = 0)]
+        threads: usize,
+    },
+    /// Speculative decoding on the chain: for every prompt, greedy decoding without and with MTP drafts, `runs` times
+    /// alternating; the outputs must be identical. Prints one JSON line per run.
+    Spec {
+        model: std::path::PathBuf,
+        #[command(flatten)]
+        run: super::cli::Run,
+        /// The MTP GGUF (blk.{layers}); the driver drafts on its CPU.
+        #[arg(long)]
+        mtp: std::path::PathBuf,
+        /// Drafts per round.
+        #[arg(long, default_value_t = 3)]
+        draft_tokens: usize,
+        /// Draft head rows: tokens below this id.
+        #[arg(long, default_value_t = 65536)]
+        draft_vocab: usize,
+        #[arg(long, default_value_t = 0)]
+        draft_threads: usize,
+        #[arg(long, default_value_t = 128)]
+        tg: usize,
+        #[arg(long, default_value_t = 1)]
+        runs: usize,
+        /// Prompts (token id files); default the 14-token reference prompt.
+        prompts: Vec<std::path::PathBuf>,
+    },
+    /// Draft again along a greedy run saved by `accept` (its tokens and trunk residual rows), with the fast CPU
+    /// draft (`--vocab` head rows, `--window` prompt tokens) or the reference block; writes the same JSON.
+    Replay {
+        model: std::path::PathBuf,
+        mtp: std::path::PathBuf,
+        run: std::path::PathBuf,
+        out: std::path::PathBuf,
+        #[arg(long, default_value_t = 3)]
+        depth: usize,
+        #[arg(long, default_value_t = 128)]
+        window: usize,
+        #[arg(long, default_value_t = 65536)]
+        vocab: usize,
+        #[arg(long)]
+        reference: bool,
+        #[arg(long, default_value_t = 0)]
+        threads: usize,
+    },
     /// Greedy decoding on the CPU reference, drafting `depth` tokens with the MTP block before every step; writes
     /// the generated ids and each step's drafts as JSON (acceptance of greedy drafts).
     Accept {
@@ -188,11 +266,261 @@ pub enum Cmd {
         steps: usize,
         #[arg(long, default_value_t = 3)]
         depth: usize,
+        /// Run the block over only the last `window` prompt tokens (it attends to nothing before them).
+        #[arg(long)]
+        window: Option<usize>,
     },
+}
+
+/// Prompt rows `accept` saves before the generated ones (enough for a `replay` window of 128 tokens).
+const SAVED_ROWS: usize = 129;
+
+fn threads(n: usize) -> usize {
+    if n > 0 {
+        n
+    } else {
+        std::thread::available_parallelism().map_or(8, |n| n.get())
+    }
 }
 
 pub fn run(cmd: Cmd) -> Result<()> {
     match cmd {
+        Cmd::Spec {
+            model,
+            run,
+            mtp,
+            draft_tokens,
+            draft_vocab,
+            draft_threads,
+            tg,
+            runs,
+            prompts,
+        } => {
+            let mut chain = run.chain(&model)?;
+            chain.enable_verify(draft_tokens + 1)?;
+            let t0 = std::time::Instant::now();
+            let draft = super::draft::Draft::new(&model, &mtp, chain.context, draft_vocab, threads(draft_threads))?;
+            eprintln!("draft block loaded in {:.1} s", t0.elapsed().as_secs_f64());
+            let mut spec = super::spec::Speculator::new(draft, draft_tokens);
+            let prompts: Vec<(String, Vec<u32>)> = if prompts.is_empty() {
+                vec![("reference".into(), super::cli::REFERENCE.to_vec())]
+            } else {
+                prompts
+                    .iter()
+                    .map(|p| Ok((p.file_name().unwrap_or_default().to_string_lossy().into_owned(), read_ids(p)?)))
+                    .collect::<Result<_>>()?
+            };
+            let mut failed = false;
+            for i in 0..runs {
+                for (name, ids) in &prompts {
+                    let (plain, pre0, dec0) = super::spec::greedy(&mut chain, None, ids, tg)?;
+                    let (fast, pre1, dec1) = super::spec::greedy(&mut chain, Some(&mut spec), ids, tg)?;
+                    let same = plain == fast;
+                    failed |= !same;
+                    let first_diff = plain.iter().zip(&fast).position(|(a, b)| a != b);
+                    let st = &spec.stats;
+                    println!(
+                        "{}",
+                        serde_json::json!({"run": i, "prompt": name, "prompt_tokens": ids.len(), "tg": tg,
+                            "identical": same, "first_difference": first_diff,
+                            "plain_tok_s": (tg - 1) as f64 / dec0, "mtp_tok_s": (tg - 1) as f64 / dec1,
+                            "plain_prefill_s": pre0, "mtp_prefill_s": pre1, "draft_tokens": draft_tokens,
+                            "draft_vocab": spec.draft.vocab(), "stats": st,
+                            "tokens_per_round": (tg - 1) as f64 / st.rounds.max(1) as f64,
+                            "accepted_per_draft": st.accepted as f64 / st.drafted.max(1) as f64,
+                            "ms_per_round": {"draft": st.draft_ms / st.rounds.max(1) as f64,
+                                "verify": st.verify_ms / st.rounds.max(1) as f64,
+                                "rollback": st.rollback_ms / st.rounds.max(1) as f64},
+                            "plain_ids": plain, "mtp_ids": fast})
+                    );
+                }
+            }
+            ensure!(!failed, "speculative output differs from greedy decoding");
+            Ok(())
+        }
+        Cmd::Replay {
+            model,
+            mtp,
+            run,
+            out,
+            depth,
+            window,
+            vocab,
+            reference,
+            threads: th,
+        } => {
+            let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&run)?)?;
+            let ids = |v: &serde_json::Value| -> Vec<u32> {
+                v.as_array().map(|a| a.iter().filter_map(|x| x.as_u64()).map(|x| x as u32).collect()).unwrap_or_default()
+            };
+            let (prompt, gen) = (ids(&r["prompt"]), ids(&r["tokens"]));
+            let from = r["rows_from"].as_u64().context("run without rows")? as usize;
+            let g = Gguf::open(&model)?;
+            let mg = Gguf::open(&mtp)?;
+            let c = Config::new(&g)?;
+            let w = c.width();
+            let rows: Vec<f32> = std::fs::read(run.with_extension("rows.f32"))?
+                .chunks_exact(4)
+                .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
+                .collect();
+            let n = prompt.len();
+            let row = |p: usize| &rows[(p - from) * w..(p - from + 1) * w];
+            let first = n - window.clamp(2, n.min(SAVED_ROWS)) + 1;
+            let ctx = n + gen.len() + depth + 2;
+            let mut fast = if reference {
+                None
+            } else {
+                Some(super::draft::Draft::new(&model, &mtp, ctx, vocab, threads(th))?)
+            };
+            let mut block = CpuMtp::new(&c, ctx);
+            block.first = first;
+            let hin: Vec<f32> = (first..n).flat_map(|p| row(p - 1).to_vec()).collect();
+            match fast.as_mut() {
+                Some(f) => {
+                    f.first = first;
+                    f.forward(&prompt[first..], &hin, first, false)?;
+                }
+                None => {
+                    block.forward(&mg, &g, &prompt[first..], &hin, first, &mut None)?;
+                }
+            }
+            let t0 = std::time::Instant::now();
+            let mut drafts = Vec::new();
+            for i in 0..gen.len() - 1 {
+                let pos = n + i;
+                let (mut h, mut tok, mut ds): (Vec<f32>, u32, Vec<u32>) = (row(pos - 1).to_vec(), gen[i], Vec::new());
+                for j in 0..depth {
+                    let (y, best) = match fast.as_mut() {
+                        Some(f) => {
+                            let (y, b) = f.forward(&[tok], &h, pos + j, true)?;
+                            (y, b.context("head")?.0)
+                        }
+                        None => {
+                            let y = block.forward(&mg, &g, &[tok], &h, pos + j, &mut None)?;
+                            let l = block.logits(&mg, &g, &y, &mut None)?;
+                            let best = argmax(&l[..vocab.min(l.len())]);
+                            (y, best)
+                        }
+                    };
+                    ds.push(best);
+                    tok = best;
+                    h = y;
+                }
+                drafts.push(ds);
+            }
+            let draft_s = t0.elapsed().as_secs_f64();
+            let o = serde_json::json!({"prompt_tokens": n, "depth": depth, "window": window, "vocab": vocab,
+                "reference": reference, "tokens": gen, "drafts": drafts, "draft_s": draft_s});
+            std::fs::write(&out, serde_json::to_string(&o)?)?;
+            println!("{} steps replayed, {:.3} s per draft step", drafts.len(), draft_s / (drafts.len() * depth).max(1) as f64);
+            Ok(())
+        }
+        Cmd::DraftCheck {
+            model,
+            mtp,
+            tokens_file,
+            chain,
+            vocab,
+            threads: th,
+        } => {
+            let g = Gguf::open(&model)?;
+            let mg = Gguf::open(&mtp)?;
+            let c = Config::new(&g)?;
+            let w = c.width();
+            let tokens = match tokens_file {
+                Some(f) => read_ids(&f)?,
+                None => super::cli::REFERENCE.to_vec(),
+            };
+            let n = tokens.len();
+            let ctx = n + chain + 2;
+            let mut stage = CpuStage::new(&c, 0, c.layers, ctx, true);
+            let (x, logits) = trunk_prompt(&g, &c, &mut stage, &tokens)?;
+            let mut block = CpuMtp::new(&c, ctx);
+            let mut fast = super::draft::Draft::new(&model, &mtp, ctx, vocab, threads(th))?;
+            let vocab = fast.vocab();
+            let report = |what: &str, r: &[f32], f: &[f32]| {
+                let (rel, cos) = super::cli::metrics(f, &r[..vocab]);
+                let (ar, af) = (argmax(&r[..vocab]), argmax(f));
+                println!("{what}: draft logits rel {rel:.3e} cos {cos:.6}, argmax {ar} / {af}");
+            };
+            let hin = shifted(&x, w);
+            let y = block.forward(&mg, &g, &tokens, &hin, 0, &mut None)?;
+            let (yf, _) = fast.forward(&tokens, &hin, 0, false)?;
+            let (rr, _) = super::cli::metrics(&yf, &y);
+            println!("prompt ({n} tokens): output residual rel {rr:.3e}");
+            report("prompt", &block.logits(&mg, &g, &y, &mut None)?, &fast.logits(&yf));
+            let mut h = x[(n - 1) * w..].to_vec();
+            let mut tok = argmax(&logits);
+            for i in 0..chain {
+                let y = block.forward(&mg, &g, &[tok], &h, n + i, &mut None)?;
+                let (yf, best) = fast.forward(&[tok], &h, n + i, true)?;
+                let r = block.logits(&mg, &g, &y, &mut None)?;
+                report(&format!("step {i}"), &r, &fast.logits(&yf));
+                ensure!(best.map(|b| b.0) == Some(argmax(&fast.logits(&yf))), "head argmax mismatch");
+                tok = argmax(&r);
+                h = y;
+            }
+            Ok(())
+        }
+        Cmd::DraftBench {
+            model,
+            mtp,
+            context,
+            start,
+            steps,
+            batch,
+            vocab,
+            threads: th,
+        } => {
+            let t0 = std::time::Instant::now();
+            let mut fast = super::draft::Draft::new(&model, &mtp, context, vocab, threads(th))?;
+            let load_s = t0.elapsed().as_secs_f64();
+            let g = Gguf::open(&model)?;
+            let c = Config::new(&g)?;
+            let w = c.width();
+            let mut seed = 12345u64;
+            let mut rnd = || {
+                seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                ((seed >> 33) as f32 / (1u64 << 31) as f32 - 0.5) * 2.
+            };
+            let toks = |p: usize| (1000 + (p as u32 * 7919) % 50000) as u32;
+            let mut pos = 0;
+            let t0 = std::time::Instant::now();
+            while pos < start {
+                let m = 64.min(start - pos);
+                let ids: Vec<u32> = (pos..pos + m).map(toks).collect();
+                let h: Vec<f32> = (0..m * w).map(|_| rnd()).collect();
+                fast.forward(&ids, &h, pos, false)?;
+                pos += m;
+            }
+            let prefill_s = t0.elapsed().as_secs_f64();
+            let mut out = Vec::new();
+            for &b in &batch {
+                let mut times = Vec::new();
+                for s in 0..steps + 1 {
+                    let ids: Vec<u32> = (pos..pos + b).map(toks).collect();
+                    let h: Vec<f32> = (0..b * w).map(|_| rnd()).collect();
+                    let t1 = std::time::Instant::now();
+                    fast.forward(&ids, &h, pos, true)?;
+                    if s > 0 {
+                        times.push(t1.elapsed().as_secs_f64() * 1e3);
+                    }
+                }
+                times.sort_by(f64::total_cmp);
+                let mean = times.iter().sum::<f64>() / times.len() as f64;
+                out.push(serde_json::json!({"batch": b, "mean_ms": mean, "p50_ms": times[times.len() / 2],
+                    "min_ms": times[0], "max_ms": times[times.len() - 1]}));
+            }
+            let (step_bytes, all_bytes) = fast.bytes();
+            println!(
+                "{}",
+                serde_json::json!({"threads": fast.pool.threads(), "vocab": fast.vocab(), "context": context,
+                    "start": start, "load_s": load_s, "prefill_s": prefill_s, "prefill_tok_s": start as f64 / prefill_s,
+                    "step_mib": step_bytes as f64 / 1048576., "weights_mib": all_bytes as f64 / 1048576.,
+                    "steps": out})
+            );
+            Ok(())
+        }
         Cmd::Ref {
             model,
             mtp,
@@ -258,6 +586,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             tokens_file,
             steps,
             depth,
+            window,
         } => {
             let g = Gguf::open(&model)?;
             let mg = Gguf::open(&mtp)?;
@@ -270,12 +599,17 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let mut block = CpuMtp::new(&c, ctx);
             let t0 = std::time::Instant::now();
             let (x, logits) = trunk_prompt(&g, &c, &mut stage, &tokens)?;
-            block.forward(&mg, &g, &tokens, &shifted(&x, w), 0, &mut None)?;
+            let first = n - window.unwrap_or(n).clamp(1, n);
+            block.first = first;
+            block.forward(&mg, &g, &tokens[first..], &shifted(&x, w)[first * w..], first, &mut None)?;
             let prefill_s = t0.elapsed().as_secs_f64();
             eprintln!("prompt: {n} tokens, {prefill_s:.1} s");
             let mut h = x[(n - 1) * w..].to_vec();
             let mut tok = argmax(&logits);
             let mut history = tokens.clone();
+            // The trunk's residual rows from position n - SAVED_ROWS on, for `replay`.
+            let from = n.saturating_sub(SAVED_ROWS);
+            let mut rows = x[from * w..].to_vec();
             let (mut gen, mut drafts) = (Vec::new(), Vec::new());
             let (mut target_s, mut draft_s) = (0f64, 0f64);
             let eos = [248044u32, 248046];
@@ -299,6 +633,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 gen.push(tok);
                 drafts.push(ds);
                 history.push(tok);
+                rows.extend_from_slice(&x1);
                 h = x1;
                 tok = next;
                 if eos.contains(&gen[gen.len() - 1]) {
@@ -306,9 +641,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 }
             }
             gen.push(tok);
-            let r = serde_json::json!({"prompt_tokens": n, "depth": depth, "tokens": gen, "drafts": drafts,
-                "prefill_s": prefill_s, "target_s": target_s, "draft_s": draft_s});
+            let r = serde_json::json!({"prompt_tokens": n, "depth": depth, "window": window, "tokens": gen, "drafts": drafts,
+                "prefill_s": prefill_s, "target_s": target_s, "draft_s": draft_s, "prompt": tokens, "rows_from": from});
             std::fs::write(&out, serde_json::to_string(&r)?)?;
+            std::fs::write(out.with_extension("rows.f32"), bytemuck::cast_slice(&rows))?;
             let ok = (0..drafts.len()).filter(|&i| gen.get(i + 1) == Some(&drafts[i][0])).count();
             println!(
                 "{} steps, first draft right {ok}/{} ({:.3}); {:.2} s per target step, {:.3} s per draft step",

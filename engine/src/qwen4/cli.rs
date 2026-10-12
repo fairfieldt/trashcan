@@ -177,7 +177,7 @@ pub struct Run {
 }
 
 impl Run {
-    fn chain(self, model: &Path) -> Result<super::net::Chain> {
+    pub(crate) fn chain(self, model: &Path) -> Result<super::net::Chain> {
         let devices = crate::qwen::chat::devices(self.cpu, self.gpus)?;
         let rows = super::net::Rows::open(model, &self.ngram)?;
         super::net::Chain::new(
