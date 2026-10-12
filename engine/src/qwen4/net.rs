@@ -7,7 +7,7 @@ use super::{
     embed,
     gpu::{merge_top, KvCache, Output},
     ngram,
-    pipeline::{assemble_logits, head_rows, plan, Local},
+    pipeline::{assemble_logits, head_rows, plan, Done, Local},
     Config,
 };
 use crate::{gguf::Gguf, qwen::pipeline::Devices};
@@ -15,8 +15,9 @@ use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
     io::{BufReader, BufWriter, Read, Write},
-    net::{TcpListener, TcpStream},
+    net::{Shutdown, TcpListener, TcpStream},
     path::Path,
+    sync::mpsc,
 };
 
 struct Conn {
@@ -45,19 +46,53 @@ impl Conn {
         Ok(())
     }
     fn recv(&mut self) -> Result<(Value, Vec<u8>)> {
-        let mut len = [0u8; 12];
-        self.r.read_exact(&mut len)?;
-        let h = u32::from_le_bytes(len[..4].try_into()?) as usize;
-        let b = u64::from_le_bytes(len[4..].try_into()?) as usize;
-        let mut header = vec![0u8; h];
-        self.r.read_exact(&mut header)?;
-        let mut blob = vec![0u8; b];
-        self.r.read_exact(&mut blob)?;
-        let header: Value = serde_json::from_slice(&header)?;
-        if let Some(e) = header.get("error") {
-            bail!("remote: {}", e.as_str().unwrap_or("error"));
+        read_frame(&mut self.r)
+    }
+}
+
+fn read_frame(r: &mut impl Read) -> Result<(Value, Vec<u8>)> {
+    let mut len = [0u8; 12];
+    r.read_exact(&mut len)?;
+    let h = u32::from_le_bytes(len[..4].try_into()?) as usize;
+    let b = u64::from_le_bytes(len[4..].try_into()?) as usize;
+    let mut header = vec![0u8; h];
+    r.read_exact(&mut header)?;
+    let mut blob = vec![0u8; b];
+    r.read_exact(&mut blob)?;
+    let header: Value = serde_json::from_slice(&header)?;
+    if let Some(e) = header.get("error") {
+        bail!("remote: {}", e.as_str().unwrap_or("error"));
+    }
+    Ok((header, blob))
+}
+
+type Requests = mpsc::Receiver<Result<(Value, Vec<u8>)>>;
+
+/// Read the previous machine's requests on a thread of their own, so that it can send the next prompt chunk (MiBs,
+/// more than the socket buffers take) while this machine's GPUs work.
+fn requests(s: &TcpStream) -> Result<Requests> {
+    let mut r = BufReader::with_capacity(1 << 20, s.try_clone()?);
+    let (tx, rx) = mpsc::sync_channel(4);
+    std::thread::spawn(move || loop {
+        let m = read_frame(&mut r);
+        let end = m.is_err();
+        if tx.send(m).is_err() || end {
+            break;
         }
-        Ok((header, blob))
+    });
+    Ok(rx)
+}
+
+/// Send a prompt chunk that left this machine's stages on to the next machine. On the machine that ends the model it
+/// is done: nobody waits for its candidates.
+fn pass_on(next: Option<&mut Conn>, d: Done) -> Result<()> {
+    match (d.out, next) {
+        (Output::Hidden(x), Some(conn)) => conn.send(
+            &json!({"forward": {"pos": d.pos, "n": d.n, "reply": false, "dump": false}}),
+            bytemuck::cast_slice(&x),
+        ),
+        (Output::Hidden(_), None) => bail!("no machine holds the LM head"),
+        (Output::Final(_), _) => Ok(()),
     }
 }
 
@@ -163,23 +198,26 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
     for stream in listener.incoming() {
         let stream = stream?;
         eprintln!("qwen4 node: session from {}", stream.peer_addr()?);
+        let requests = requests(&stream)?;
         let mut up = Conn::new(stream)?;
-        if let Err(e) = session(model, &devices, &mut up) {
+        if let Err(e) = session(model, &devices, &mut up, &requests) {
             eprintln!("qwen4 node: session ended: {e:#}");
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
         }
+        // The reader thread holds the socket too: close it as dropping `up` alone did.
+        let _ = up.w.get_ref().shutdown(Shutdown::Both);
     }
     Ok(())
 }
 
-fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
+fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) -> Result<()> {
     let mut down: Option<Conn> = None;
     let mut local: Option<Local> = None;
     loop {
-        let (header, blob) = match up.recv() {
-            Ok(m) => m,
-            Err(e) if e.downcast_ref::<std::io::Error>().is_some() => return Ok(()),
-            Err(e) => return Err(e),
+        let (header, blob) = match requests.recv() {
+            Ok(Ok(m)) => m,
+            Ok(Err(e)) if e.downcast_ref::<std::io::Error>().is_none() => return Err(e),
+            _ => return Ok(()),
         };
         if let Some(chain) = header.get("probe") {
             let chain: Vec<String> = serde_json::from_value(chain.clone())?;
@@ -222,7 +260,20 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             let reply = f["reply"].as_bool().unwrap_or(true);
             let dump = f["dump"].as_bool().unwrap_or(false);
             let mut caps = Captures::new();
-            let out = l.forward(floats(&blob), None, pos, n, dump.then_some(&mut caps))?;
+            let x = floats(&blob);
+            // Prompt chunks without a reply stream through this machine's stages, which work on consecutive chunks at
+            // the same time; a chunk with a reply waits for all of them.
+            let out = if dump {
+                l.drain(|d| pass_on(down.as_mut(), d))?;
+                l.forward(x, None, pos, n, Some(&mut caps))?
+            } else if !reply {
+                if let Some(d) = l.push(x, None, pos, n)? {
+                    pass_on(down.as_mut(), d)?;
+                }
+                continue;
+            } else {
+                l.finish(x, None, pos, n, |d| pass_on(down.as_mut(), d))?
+            };
             if let Output::Hidden(x) = &out {
                 let d = down.as_mut().context("the last machine has no LM head")?;
                 d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
@@ -400,7 +451,8 @@ impl Chain {
         }
     }
 
-    /// Process `tokens` at the current position. Without `reply` no candidates are computed or awaited.
+    /// Process `tokens` at the current position. Without `reply` the tokens are only started (prompt chunks stream
+    /// through the stages of every machine): no candidates are computed or awaited.
     pub fn forward(
         &mut self,
         tokens: &[u32],
@@ -417,7 +469,18 @@ impl Chain {
         let ple = self.ple(tokens)?;
         self.history.extend_from_slice(tokens);
         let pos = self.pos;
-        let out = self.local.forward(x, ple.as_deref(), pos, n, dump.as_deref_mut())?;
+        let out = if dump.is_some() {
+            self.local.drain(|d| pass_on(self.next.as_mut(), d))?;
+            self.local.forward(x, ple.as_deref(), pos, n, dump.as_deref_mut())?
+        } else if !reply {
+            if let Some(d) = self.local.push(x, ple, pos, n)? {
+                pass_on(self.next.as_mut(), d)?;
+            }
+            self.pos += n;
+            return Ok(None);
+        } else {
+            self.local.finish(x, ple, pos, n, |d| pass_on(self.next.as_mut(), d))?
+        };
         self.pos += n;
         if let Output::Hidden(x) = &out {
             let conn = self.next.as_mut().context("no machine holds the LM head")?;
@@ -480,6 +543,8 @@ impl Chain {
 
     /// Discard the live state: the next prompt starts from position 0.
     pub fn forget(&mut self) {
+        // Chunks still in flight after an error are dropped with the rest of the state.
+        let _ = self.local.drain(|_| Ok(()));
         self.pos = 0;
         self.history.clear();
     }

@@ -9,7 +9,8 @@ are in [qwen.md](qwen.md).
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type match the reference with the six-Mac
 recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
-CPU reference, prefill 130 tok/s on a 512-token prompt, decode 13.5 tok/s with the GPUs held at amdgpu's high clock
+CPU reference, prefill 158 tok/s on a 512-token prompt and 324 on 2048 tokens with the two GPUs of a Mac on
+consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), and 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)). Not done yet: a
 cheaper head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
@@ -268,7 +269,8 @@ A decode layer reads about 110 MB (61 MB of DeltaNet matrices, 14 MB of mixers, 
 ## Chain performance: measured, ceilings and targets
 
 Six Macs, 12 stages (2026-10-12, [results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md),
-[results/qwen4/prefill-batch-20261012](../results/qwen4/prefill-batch-20261012/README.md)). **Ceiling**: what the
+[results/qwen4/prefill-batch-20261012](../results/qwen4/prefill-batch-20261012/README.md),
+[results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)). **Ceiling**: what the
 hardware allows with this placement. **Now**: measured where marked, otherwise modeled from stage-bench times.
 **Realistic**: with good but not heroic GCN kernels and the work listed below the tables (about ±30%).
 
@@ -302,21 +304,22 @@ short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 3.9 s, **132 tok/s** (measured) | ~1.2 s, ~430 tok/s |
-| 2048 | ~0.8 s | 9.8 s, **208 tok/s** (measured) | ~3 s, ~660 tok/s |
-| 4K | ~1.5 s, 2,800 tok/s | ~15 s, ~265 tok/s | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | ~29 s, ~280 tok/s | ~9 s, ~920 tok/s |
-| 32K | ~11 s, 3,150 tok/s | ~2 min, ~270 tok/s | ~35 s, ~950 tok/s |
-| 128K | ~42 s | ~10 min, ~225 tok/s | ~2.5 min, ~900 tok/s |
-| 200K | ~65 s | ~16 min, ~210 tok/s | ~4 min, ~850 tok/s |
-| 262K | ~83 s | ~22 min, ~200 tok/s | ~5.5 min, ~820 tok/s |
+| 512 | ~0.25 s | 3.25 s, **158 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 6.3 s, **324 tok/s** (measured; 364 tok/s on 3000) | ~3 s, ~660 tok/s |
+| 4K | ~1.5 s, 2,800 tok/s | ~10 s, ~400 tok/s | ~5 s, ~820 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | ~17 s, ~475 tok/s | ~9 s, ~920 tok/s |
+| 32K | ~11 s, 3,150 tok/s | ~1 min, ~520 tok/s | ~35 s, ~950 tok/s |
+| 128K | ~42 s | ~5 min, ~445 tok/s | ~2.5 min, ~900 tok/s |
+| 200K | ~65 s | ~8 min, ~415 tok/s | ~4 min, ~850 tok/s |
+| 262K | ~83 s | ~11 min, ~400 tok/s | ~5.5 min, ~820 tok/s |
 
-Today: kernels reach ~18% of FP32 peak, a Mac's two GPUs work in turn (half the throughput), and the per-slot expert
-kernels re-read each token's 11 experts (~15 GB per GPU per 128-token chunk, about half of a chunk's time: bandwidth
-bound). Toward the realistic column: the two GPUs of a Mac on different chunks (up to 2x), the prefill mixer path above
-64 tokens (~12%), an expert kernel that reuses weights across the tokens routed to an expert (~2x on experts), chunked
-DeltaNet, faster block selection and sparse attention at long contexts, and smaller chunks for short prompts (less
-pipeline fill).
+Today: kernels reach ~18% of FP32 peak and the per-slot expert kernels re-read each token's 11 experts (~15 GB per GPU
+per 128-token chunk, about half of a chunk's time: bandwidth bound). Every GPU is a pipeline stage (a Mac's two GPUs
+work on consecutive chunks), so a prompt takes about the sum of its chunks' stage times (~0.21-0.3 s per 128-token
+chunk) plus 11 times the largest: the ~2.5 s pipeline fill is most of a 512-token prompt. Toward the realistic column:
+the prefill mixer path above 64 tokens (~12%), an expert kernel that reuses weights across the tokens routed to an
+expert (~2x on experts), chunked DeltaNet, faster block selection and sparse attention at long contexts, and smaller
+chunks for short prompts (less pipeline fill: 512 tokens in an estimated ~2.2 s with 64-token chunks).
 
 **Beyond these ceilings.** MTP speculative decoding: with 2 drafts accepted ~70-80% of the time, a verification step
 costs ~1.4-1.5x a decode step for ~2.4 tokens, ~1.6-1.7x effective (~45 tok/s on top of the realistic decode); the MTP
@@ -403,7 +406,8 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
    per-slot kernels (28-32 ms of a 52 ms layer at 128 tokens), the prefill mixer path above 64 tokens (~3.2 ms per
    mixer whatever the batch: its 10240 -> 320 GEMM runs on 5 workgroups), chunked DeltaNet (19 ms), grouping
    the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K), the f32 router (3.8 ms),
-   and the two GPUs of a Mac working on different chunks.
+   and smaller chunks for short prompts, whose time is mostly the 12-stage pipeline fill since the two GPUs of a Mac
+   work on consecutive chunks (done: 2048 tokens 210 -> 324 tok/s, results/qwen4/prefill-overlap-20261012).
 5. **Decode**: fewer dispatches per layer (34% of bandwidth now) and a multi-workgroup radix select (block selection
    takes 0.6 ms of a QSA layer at 32K and 1.9 ms at 200K).
 6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.

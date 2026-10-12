@@ -280,6 +280,8 @@ pub struct GpuStage {
     pn: Buffer,
     fence: vk::Fence,
     graphs: HashMap<(usize, u32, bool), Graph>,
+    /// The graph and batch of a submitted forward that `collect` has not waited for yet.
+    pending: Option<((usize, u32, bool), usize)>,
     /// Command buffers scoring a given hidden state with this stage's head rows (by dump).
     head_graphs: HashMap<bool, Graph>,
     queries: vk::QueryPool,
@@ -642,6 +644,7 @@ impl GpuStage {
             pn: alloc(w)?,
             fence,
             graphs: HashMap::new(),
+            pending: None,
             head_graphs: HashMap::new(),
             queries,
             profile: Vec::new(),
@@ -840,6 +843,7 @@ impl GpuStage {
         let Some(hd) = self.head.as_ref() else {
             return Ok(false);
         };
+        ensure!(self.pending.is_none(), "the stage is still working on a forward");
         ensure!(h.len() == d, "hidden state length mismatch");
         hd.h.write(bytemuck::cast_slice(h))?;
         if !self.head_graphs.contains_key(&dump) {
@@ -1567,7 +1571,14 @@ impl GpuStage {
         n: usize,
         dump: Option<&mut Captures>,
     ) -> Result<Output> {
+        self.submit(x, ple, pos, n, dump.is_some())?;
+        self.collect(dump)
+    }
+
+    /// Start `forward` without waiting for it; `collect` waits and returns the output.
+    pub fn submit(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize, dump: bool) -> Result<()> {
         let (d, w) = (self.c.d, self.c.width());
+        ensure!(self.pending.is_none(), "the stage is still working on a forward");
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(pos + n <= self.context, "context exhausted");
         ensure!(x.len() == n * w, "residual length mismatch");
@@ -1579,7 +1590,7 @@ impl GpuStage {
         }
         self.params_host
             .write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump.is_some());
+        let key = (n, partitions(pos, n), dump);
         if !self.graphs.contains_key(&key) {
             if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
                 let victim = *self
@@ -1601,6 +1612,15 @@ impl GpuStage {
             self.gpu
                 .submit(cmd, None, None, if last { self.fence } else { vk::Fence::null() })?;
         }
+        self.pending = Some((key, n));
+        Ok(())
+    }
+
+    /// Wait for the forward started by `submit`; its output (with the captures when it was submitted with `dump`).
+    pub fn collect(&mut self, dump: Option<&mut Captures>) -> Result<Output> {
+        let (d, w) = (self.c.d, self.c.width());
+        let (key, n) = self.pending.take().context("no forward submitted")?;
+        let graph = &self.graphs[&key];
         unsafe {
             self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
         }
