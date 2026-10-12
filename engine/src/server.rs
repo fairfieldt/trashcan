@@ -408,7 +408,9 @@ pub fn serve(mut options: Options) -> Result<()> {
                 let vocab = if options.draft_vocab == 0 { usize::MAX } else { options.draft_vocab };
                 let threads = std::thread::available_parallelism().map_or(8, |n| n.get());
                 let draft = crate::qwen4::draft::Draft::new(&options.model, mtp, options.context, vocab, threads)?;
-                Some(crate::qwen4::spec::Speculator::new(draft, k))
+                let mut spec = crate::qwen4::spec::Speculator::new(draft, k);
+                spec.use_local_head(&chain);
+                Some(spec)
             }
             None => None,
         };

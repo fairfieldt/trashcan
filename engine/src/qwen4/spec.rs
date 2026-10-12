@@ -140,8 +140,6 @@ pub struct Stats {
     pub draft_ms: f64,
     pub verify_ms: f64,
     pub rollback_ms: f64,
-    /// Rerunning the drafts on the trunk's rows while the head rows are scored (inside `verify_ms`).
-    pub early_ms: f64,
 }
 
 /// The driver's drafting state over a chain: the MTP block on the CPU and the pending token's inputs.
@@ -152,11 +150,55 @@ pub struct Speculator {
     pub stats: Stats,
     /// The residual row of the token before the pending one (the block's `h` for the pending token).
     last: Vec<f32>,
+    /// Head rows `0..gpu_rows` are scored by the driver's GPU head slices (at the same time as the CPU scores the
+    /// rest of the draft vocabulary).
+    gpu_rows: usize,
 }
 
 impl Speculator {
     pub fn new(draft: super::draft::Draft, k: usize) -> Self {
-        Self { draft, k, stats: Stats::default(), last: Vec::new() }
+        Self { draft, k, stats: Stats::default(), last: Vec::new(), gpu_rows: 0 }
+    }
+
+    /// Score the first draft head rows with the driver's GPU head slices when they hold the vocabulary's first rows:
+    /// the CPU then ranks only the rows after them.
+    pub fn use_local_head(&mut self, chain: &Chain) {
+        let mut end = 0;
+        let mut ranges: Vec<(usize, usize)> = chain
+            .local
+            .stages
+            .iter()
+            .zip(&chain.local.heads)
+            .filter_map(|(s, r)| matches!(s, Stage::Gpu(_)).then_some(*r).flatten())
+            .collect();
+        ranges.sort();
+        for (a, b) in ranges {
+            if a == end {
+                end = b;
+            }
+        }
+        let end = end.min(self.draft.vocab());
+        self.draft.skip_head_rows(end);
+        self.gpu_rows = end;
+    }
+
+    /// One draft step: the block on `tok` at `pos` with input row `h`; the best draft token and the output residual.
+    fn step(&mut self, chain: &mut Chain, tok: u32, h: &[f32], pos: usize) -> Result<(u32, Vec<f32>)> {
+        if self.gpu_rows == 0 {
+            let (y, best) = self.draft.forward(&[tok], h, pos, true)?;
+            return Ok((best.context("draft head")?.0, y));
+        }
+        let (y, _) = self.draft.forward(&[tok], h, pos, false)?;
+        let hn = self.draft.final_hidden(&y);
+        let started = chain.local.head_rows_submit(&hn)?;
+        let cpu = self.draft.head_best(&hn);
+        let gpu = chain.local.head_rows_collect(&hn, &started)?;
+        let gpu = gpu.first().and_then(|t| t.first()).map(|(s, id)| (*id, *s));
+        let best = match (cpu, gpu) {
+            (Some(c), Some(g)) => if g.1 >= c.1 { g } else { c },
+            (c, g) => c.or(g).context("draft head")?,
+        };
+        Ok((best.0, y))
     }
 
     /// Prefill `ids` on the chain (continuing from the live state when it is a prefix, as `Chain::prefill_cached`),
@@ -186,9 +228,8 @@ impl Speculator {
     /// round. Returns the tokens the round produced (the kept drafts and the next pending token) and the
     /// candidates of the next pending token.
     ///
-    /// The block keeps its own rows in step with the chain: once the verification batch's residual rows arrive, and
-    /// while the head rows are still being scored, it reruns the drafts on the trunk's rows (right for every draft
-    /// that is accepted; later rows are rewritten before they are read). So drafting costs `k` single-token steps.
+    /// The block's rows at accepted drafts keep the chained drafts' values: rewriting them with the trunk's rows
+    /// raised acceptance by about 3% at k = 3 but cost a 3-token step per round (results/qwen4/mtp-20261012).
     pub fn round(
         &mut self,
         chain: &mut Chain,
@@ -205,28 +246,16 @@ impl Speculator {
         let mut h = std::mem::take(&mut self.last);
         while drafts.len() < k {
             let tok = drafts.last().copied().unwrap_or(pending);
-            let (y, best) = self.draft.forward(&[tok], &h, pos + drafts.len(), true)?;
-            drafts.push(best.context("draft head")?.0);
+            let (best, y) = self.step(chain, tok, &h, pos + drafts.len())?;
+            drafts.push(best);
             h = y;
         }
         self.stats.draft_ms += t0.elapsed().as_secs_f64() * 1e3;
         let t0 = std::time::Instant::now();
         let mut batch = vec![pending];
         batch.extend_from_slice(&drafts);
-        let draft = &mut self.draft;
-        let mut early_ms = 0.;
-        // Experiment: TRASHCAN_MTP_REDO=0 keeps the chained drafts' rows at accepted positions.
-        let redo = std::env::var("TRASHCAN_MTP_REDO").map_or(true, |v| v != "0");
-        let (tops, rows) = chain.verify(&batch, &mut |rows: &[f32]| {
-            let t = std::time::Instant::now();
-            if redo && !drafts.is_empty() {
-                draft.forward(&drafts, &rows[..drafts.len() * w], pos + 1, false)?;
-            }
-            early_ms = t.elapsed().as_secs_f64() * 1e3;
-            Ok(())
-        })?;
+        let (tops, rows) = chain.verify(&batch)?;
         self.stats.verify_ms += t0.elapsed().as_secs_f64() * 1e3;
-        self.stats.early_ms += early_ms;
         ensure!(tops.len() == batch.len() && rows.len() == batch.len() * w, "verification reply size");
         let mut a = 0;
         let mut next = pick(&tops[0]);

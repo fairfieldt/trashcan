@@ -211,6 +211,9 @@ pub enum Cmd {
         vocab: usize,
         #[arg(long, default_value_t = 0)]
         threads: usize,
+        /// Leave the first head rows to the GPUs (`Speculator::use_local_head`): time the CPU's share only.
+        #[arg(long, default_value_t = 0)]
+        skip_head_rows: usize,
     },
     /// Speculative decoding on the chain: for every prompt, greedy decoding without and with MTP drafts, `runs` times
     /// alternating; the outputs must be identical. Prints one JSON line per run.
@@ -306,6 +309,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let draft = super::draft::Draft::new(&model, &mtp, chain.context, draft_vocab, threads(draft_threads))?;
             eprintln!("draft block loaded in {:.1} s", t0.elapsed().as_secs_f64());
             let mut spec = super::spec::Speculator::new(draft, draft_tokens);
+            spec.use_local_head(&chain);
             let prompts: Vec<(String, Vec<u32>)> = if prompts.is_empty() {
                 vec![("reference".into(), super::cli::REFERENCE.to_vec())]
             } else {
@@ -500,9 +504,11 @@ pub fn run(cmd: Cmd) -> Result<()> {
             batch,
             vocab,
             threads: th,
+            skip_head_rows,
         } => {
             let t0 = std::time::Instant::now();
             let mut fast = super::draft::Draft::new(&model, &mtp, context, vocab, threads(th))?;
+            fast.skip_head_rows(skip_head_rows);
             let load_s = t0.elapsed().as_secs_f64();
             let g = Gguf::open(&model)?;
             let c = Config::new(&g)?;

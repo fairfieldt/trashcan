@@ -710,12 +710,8 @@ impl Chain {
     }
 
     /// Verify `tokens` (the pending token and its drafts): candidates of every row and the residual rows.
-    pub fn verify(
-        &mut self,
-        tokens: &[u32],
-        early: &mut dyn FnMut(&[f32]) -> Result<()>,
-    ) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
-        self.forward_kept(tokens, true, early)
+    pub fn verify(&mut self, tokens: &[u32]) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
+        self.forward_kept(tokens, true, &mut |_| Ok(()))
     }
 
     /// Keep tokens `0..keep` of the latest verification batch on every machine.
