@@ -14,6 +14,7 @@
 # rust
 /target/
 /tools/dump-activations/dump
+/tools/dump-activations/mtp
 
 # Python validation tools
 __pycache__/
