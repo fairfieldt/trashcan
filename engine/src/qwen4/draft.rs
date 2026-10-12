@@ -222,24 +222,29 @@ impl Out {
 pub enum Mat {
     Q8 { k: usize, rows: usize, q: Vec<i8>, d: Vec<f32> },
     Iq4 { k: usize, rows: usize, q: Vec<u8>, d: Vec<f32> },
+    /// 2-bit codes of `Q2_LEVELS`, 8 bytes per 32 (element e in byte e % 8, bits 2 (e / 8)).
+    Q2 { k: usize, rows: usize, q: Vec<u8>, d: Vec<f32> },
     F32 { k: usize, rows: usize, w: Vec<f32> },
 }
+
+/// The levels of the 2-bit draft head codes.
+const Q2_LEVELS: [i8; 4] = [-96, -32, 32, 96];
 
 impl Mat {
     fn k(&self) -> usize {
         match self {
-            Mat::Q8 { k, .. } | Mat::Iq4 { k, .. } | Mat::F32 { k, .. } => *k,
+            Mat::Q8 { k, .. } | Mat::Iq4 { k, .. } | Mat::Q2 { k, .. } | Mat::F32 { k, .. } => *k,
         }
     }
     pub fn rows(&self) -> usize {
         match self {
-            Mat::Q8 { rows, .. } | Mat::Iq4 { rows, .. } | Mat::F32 { rows, .. } => *rows,
+            Mat::Q8 { rows, .. } | Mat::Iq4 { rows, .. } | Mat::Q2 { rows, .. } | Mat::F32 { rows, .. } => *rows,
         }
     }
     pub fn bytes(&self) -> usize {
         match self {
             Mat::Q8 { q, d, .. } => q.len() + d.len() * 4,
-            Mat::Iq4 { q, d, .. } => q.len() + d.len() * 4,
+            Mat::Iq4 { q, d, .. } | Mat::Q2 { q, d, .. } => q.len() + d.len() * 4,
             Mat::F32 { w, .. } => w.len() * 4,
         }
     }
@@ -330,6 +335,48 @@ impl Mat {
         Mat::Iq4 { k, rows, q, d }
     }
 
+    /// 2-bit codes of f32 rows (the draft head): per 32 the scale of 12 candidates with the least squared error.
+    fn quantize_q2(pool: &Pool, k: usize, w: &[f32]) -> Self {
+        let rows = w.len() / k;
+        let blocks = w.len() / 32;
+        let mut q = vec![0u8; w.len() / 4];
+        let mut d = vec![0f32; blocks];
+        let (qo, dout) = (OutU8(q.as_mut_ptr()), Out::new(&mut d));
+        pool.run(blocks.div_ceil(4096), &|i| {
+            for b in i * 4096..((i + 1) * 4096).min(blocks) {
+                let x = &w[b * 32..(b + 1) * 32];
+                let amax = x.iter().fold(0f32, |m, v| m.max(v.abs()));
+                let (mut best, mut best_d, mut codes) = (f32::INFINITY, 0f32, [0u8; 32]);
+                for t in 0..12 {
+                    let step = amax / 96. * (0.45 + 0.05 * t as f32);
+                    if step <= 0. {
+                        break;
+                    }
+                    let mut c = [0u8; 32];
+                    let mut err = 0f32;
+                    for (j, v) in x.iter().enumerate() {
+                        let l = (0..4)
+                            .min_by(|a, b| {
+                                (v - step * Q2_LEVELS[*a] as f32).abs().total_cmp(&(v - step * Q2_LEVELS[*b] as f32).abs())
+                            })
+                            .unwrap();
+                        c[j] = l as u8;
+                        err += (v - step * Q2_LEVELS[l] as f32).powi(2);
+                    }
+                    if err < best {
+                        (best, best_d, codes) = (err, step, c);
+                    }
+                }
+                unsafe { dout.set(b, best_d) };
+                for byte in 0..8 {
+                    let v = codes[byte] | codes[byte + 8] << 2 | codes[byte + 16] << 4 | codes[byte + 24] << 6;
+                    unsafe { qo.set(b * 8 + byte, v) };
+                }
+            }
+        });
+        Mat::Q2 { k, rows, q, d }
+    }
+
     /// Columns `0..k0` and `k0..k` as two matrices (`k0` a multiple of 32).
     fn split_cols(&self, k0: usize) -> (Mat, Mat) {
         let rows = self.rows();
@@ -353,6 +400,7 @@ impl Mat {
                     rows,
                     w: (0..rows).flat_map(|r| w[r * k + a..r * k + b].to_vec()).collect(),
                 },
+                Mat::Q2 { .. } => unreachable!("2-bit codes are only used for the head"),
             }
         };
         (part(0, k0), part(k0, k))
@@ -362,6 +410,15 @@ impl Mat {
     fn to_f32(&self) -> Vec<f32> {
         match self {
             Mat::F32 { w, .. } => w.clone(),
+            Mat::Q2 { q, d, .. } => {
+                let mut out = vec![0f32; q.len() * 4];
+                for (b, blk) in q.chunks_exact(8).enumerate() {
+                    for e in 0..32 {
+                        out[b * 32 + e] = Q2_LEVELS[((blk[e % 8] >> (2 * (e / 8))) & 3) as usize] as f32 * d[b];
+                    }
+                }
+                out
+            }
             Mat::Q8 { q, d, .. } => q.iter().enumerate().map(|(i, v)| *v as f32 * d[i / 32]).collect(),
             Mat::Iq4 { q, d, .. } => {
                 let mut out = vec![0f32; q.len() * 2];
@@ -390,7 +447,7 @@ impl Mat {
                             Mat::Iq4 { k, q, d, .. } => {
                                 simd::dot_iq4_multi(&q[r * k / 2..(r + 1) * k / 2], &d[r * k / 32..(r + 1) * k / 32], x, &mut v)
                             }
-                            Mat::F32 { .. } => unreachable!(),
+                            _ => unreachable!(),
                         }
                     }
                     for (t, val) in v.iter().enumerate() {
@@ -408,6 +465,9 @@ impl Mat {
                         dot_iq4(&q[r * k / 2..(r + 1) * k / 2], &d[r * k / 32..(r + 1) * k / 32], x, t)
                     }
                     Mat::F32 { k, w, .. } => dot_f32(&w[r * k..(r + 1) * k], &x.f[t * k..(t + 1) * k]),
+                    Mat::Q2 { k, q, d, .. } => {
+                        dot_q2(&q[r * k / 4..(r + 1) * k / 4], &d[r * k / 32..(r + 1) * k / 32], x, t)
+                    }
                 };
                 unsafe { out.set(t * stride + dst0 + r - r0, v) };
             }
@@ -541,6 +601,23 @@ fn dot_iq4(w: &[u8], wd: &[f32], x: &Act, t: usize) -> f32 {
     sum
 }
 
+fn dot_q2(w: &[u8], wd: &[f32], x: &Act, t: usize) -> f32 {
+    let (q, d) = (&x.q[t * x.k..(t + 1) * x.k], &x.d[t * x.k / 32..(t + 1) * x.k / 32]);
+    #[cfg(target_arch = "x86_64")]
+    if std::is_x86_feature_detected!("ssse3") {
+        return unsafe { simd::dot_q2(w, wd, q, d) };
+    }
+    let mut sum = 0f32;
+    for b in 0..wd.len() {
+        let mut s = 0i32;
+        for e in 0..32 {
+            s += Q2_LEVELS[((w[b * 8 + e % 8] >> (2 * (e / 8))) & 3) as usize] as i32 * q[b * 32 + e] as i32;
+        }
+        sum += s as f32 * wd[b] * d[b];
+    }
+    sum
+}
+
 fn dot_f32(a: &[f32], b: &[f32]) -> f32 {
     super::cpu::dot(a, b)
 }
@@ -624,6 +701,27 @@ mod simd {
                 out[t0 + j] = hsum(*a);
             }
         }
+    }
+
+    #[target_feature(enable = "ssse3,sse3")]
+    pub unsafe fn dot_q2(w: &[u8], wd: &[f32], q: &[i8], d: &[f32]) -> f32 {
+        let mut lv = [0i8; 16];
+        lv[..4].copy_from_slice(&super::Q2_LEVELS);
+        let table = _mm_loadu_si128(lv.as_ptr() as *const __m128i);
+        let m3 = _mm_set1_epi8(3);
+        let mut acc = _mm_setzero_ps();
+        for b in 0..wd.len() {
+            let c = _mm_loadl_epi64(w.as_ptr().add(b * 8) as *const __m128i);
+            let c0 = _mm_and_si128(c, m3);
+            let c1 = _mm_and_si128(_mm_srli_epi16(c, 2), m3);
+            let c2 = _mm_and_si128(_mm_srli_epi16(c, 4), m3);
+            let c3 = _mm_and_si128(_mm_srli_epi16(c, 6), m3);
+            let w0 = _mm_shuffle_epi8(table, _mm_unpacklo_epi64(c0, c1));
+            let w1 = _mm_shuffle_epi8(table, _mm_unpacklo_epi64(c2, c3));
+            let s = block(w0, w1, q.as_ptr().add(b * 32));
+            acc = _mm_add_ps(acc, _mm_mul_ps(_mm_cvtepi32_ps(s), _mm_set1_ps(wd[b] * d[b])));
+        }
+        hsum(acc)
     }
 
     #[target_feature(enable = "ssse3,sse3")]
@@ -725,6 +823,8 @@ pub struct Draft {
     emb: Gguf,
     /// The first rows of the LM head, Q8_0.
     head: Mat,
+    /// Experiment (head2): the head rows the coarse head's best candidates are rescored with.
+    head_exact: Option<Mat>,
     kc: Vec<f32>,
     vc: Vec<f32>,
     kraw: Vec<f32>,
@@ -734,7 +834,7 @@ pub struct Draft {
     pub first: usize,
     /// Milliseconds per phase over the forwards since the last reset: input projection, first mixer, attention,
     /// second mixer, experts, head.
-    pub prof: [f64; 6],
+    pub prof: [f64; 8],
 }
 
 
@@ -785,7 +885,14 @@ impl Draft {
         }
         // Experiment (TRASHCAN_DRAFT_Q4=head,dense): 4-bit draft head and dense matrices.
         let q4 = std::env::var("TRASHCAN_DRAFT_Q4").unwrap_or_default();
-        let head = if q4.contains("head") { Mat::quantize_iq4(&pool, d, &hw) } else { Mat::quantize(d, &hw) };
+        let head_exact = q4.contains("head2").then(|| Mat::quantize(d, &hw));
+        let head = if q4.contains("head2") {
+            Mat::quantize_q2(&pool, d, &hw)
+        } else if q4.contains("head") {
+            Mat::quantize_iq4(&pool, d, &hw)
+        } else {
+            Mat::quantize(d, &hw)
+        };
         drop(hw);
         let shared_gate = v("ffn_gate_inp_shexp.weight")?;
         let kv = context * c.kv_heads * c.head_dim;
@@ -819,13 +926,14 @@ impl Draft {
             },
             emb: g,
             head,
+            head_exact,
             kc: vec![0.; kv],
             vc: vec![0.; kv],
             kraw: vec![0.; context * c.idx_dim],
             pooled: vec![0.; context.div_ceil(c.kpool) * c.idx_dim],
             context,
             first: 0,
-            prof: [0.; 6],
+            prof: [0.; 8],
             pool,
             c,
         };
@@ -927,7 +1035,9 @@ impl Draft {
         } else {
             vec![&self.q, &self.k, &self.v, &self.ik]
         };
+        let t0 = std::time::Instant::now();
         let outs = matvecs(&self.pool, &mats, &ua, 64);
+        self.prof[6] += t0.elapsed().as_secs_f64() * 1e3;
         let (qg, k, v, kr) = (&outs[0], &outs[1], &outs[2], &outs[3]);
         let mut iq = if sparse { outs[4].clone() } else { vec![0f32; n * ih * id] };
         self.kraw[pos * id..(pos + n) * id].copy_from_slice(kr);
@@ -1011,6 +1121,7 @@ impl Draft {
                 unsafe { out.set((t * nh + h) * hd + e, a / sum) };
             }
         });
+        self.prof[7] += t0.elapsed().as_secs_f64() * 1e3;
         for (x, g) in o.iter_mut().zip(&gate) {
             *x *= sigmoid(*g);
         }
@@ -1114,7 +1225,7 @@ impl Draft {
             }
         }
         let mut t = std::time::Instant::now();
-        let mut lap = |prof: &mut [f64; 6], i: usize| {
+        let mut lap = |prof: &mut [f64; 8], i: usize| {
             prof[i] += t.elapsed().as_secs_f64() * 1e3;
             t = std::time::Instant::now();
         };
@@ -1139,9 +1250,28 @@ impl Draft {
         lap(&mut self.prof, 4);
         let best = if head {
             let (hn, _) = self.mix(&self.head_mix, &x[(n - 1) * w..], 1);
-            let logits = matvec(&self.pool, &self.head, &Act::new(&hn, d), 256);
-            let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
-            Some((b as u32, logits[b]))
+            let ha = Act::new(&hn, d);
+            let logits = matvec(&self.pool, &self.head, &ha, 256);
+            match &self.head_exact {
+                // The coarse head's best 32 rows, rescored exactly.
+                Some(exact) => {
+                    let mut idx: Vec<u32> = (0..logits.len() as u32).collect();
+                    idx.select_nth_unstable_by(31, |a, b| logits[*b as usize].total_cmp(&logits[*a as usize]));
+                    let mut best = (0u32, f32::NEG_INFINITY);
+                    let mut one = [0f32];
+                    for &r in &idx[..32] {
+                        exact.rows_into(&ha, r as usize, r as usize + 1, Out::new(&mut one), 0, 0);
+                        if one[0] > best.1 || (one[0] == best.1 && r < best.0) {
+                            best = (r, one[0]);
+                        }
+                    }
+                    Some(best)
+                }
+                None => {
+                    let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
+                    Some((b as u32, logits[b]))
+                }
+            }
         } else {
             None
         };

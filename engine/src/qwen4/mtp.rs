@@ -526,10 +526,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let mut out = Vec::new();
             for &b in &batch {
                 let mut times = Vec::new();
-                fast.prof = [0.; 6];
+                fast.prof = [0.; 8];
                 for s in 0..steps + 1 {
                     if s == 1 {
-                        fast.prof = [0.; 6];
+                        fast.prof = [0.; 8];
                     }
                     let ids: Vec<u32> = (pos..pos + b).map(toks).collect();
                     let h: Vec<f32> = (0..b * w).map(|_| rnd()).collect();
@@ -545,7 +545,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 out.push(serde_json::json!({"batch": b, "mean_ms": mean, "p50_ms": times[times.len() / 2],
                     "min_ms": times[0], "max_ms": times[times.len() - 1],
                     "phases_ms": {"input": phases[0], "mixer1": phases[1], "attention": phases[2], "mixer2": phases[3],
-                        "experts": phases[4], "head": phases[5]}}));
+                        "experts": phases[4], "head": phases[5], "attn_proj": phases[6], "attn_until_o": phases[7]}}));
             }
             let (step_bytes, all_bytes) = fast.bytes();
             println!(
