@@ -99,7 +99,7 @@ fn round_activations(ty: GgmlType, x: &[f32]) -> Option<Vec<f32>> {
 
 /// y[t][row] = W[row] . x[t] over a whole tensor, rows split across threads. When emulating, a product with at
 /// least 32 rows, 32 columns and 32 tokens runs unrounded in f32, as ggml's BLAS backend takes those over.
-fn matmul(g: &Gguf, t: &TensorInfo, x: &[f32], n: usize) -> Vec<f32> {
+pub(crate) fn matmul(g: &Gguf, t: &TensorInfo, x: &[f32], n: usize) -> Vec<f32> {
     let blas = n >= 32 && t.dims[0] >= 32 && t.dims[1] >= 32;
     match round_activations(t.ty, x).filter(|_| !blas) {
         Some(xr) => matmul_rows(g, t, &xr, n),
@@ -234,9 +234,9 @@ fn rotate(c: &Config, x: &mut [f32], pos: usize) {
 
 /// Output of a hyper-connection mixer: the sublayer input `n x d` and, unless it is the final mixer, the per-stream
 /// write weights `n x hc`.
-struct Mixed {
-    input: Vec<f32>,
-    write: Option<Vec<f32>>,
+pub(crate) struct Mixed {
+    pub input: Vec<f32>,
+    pub write: Option<Vec<f32>>,
 }
 
 impl CpuStage {
@@ -344,7 +344,7 @@ impl CpuStage {
     }
 
     /// x_s += w_s * y for every stream s.
-    fn combine(c: &Config, x: &mut [f32], y: &[f32], write: &[f32], n: usize) {
+    pub(crate) fn combine(c: &Config, x: &mut [f32], y: &[f32], write: &[f32], n: usize) {
         for t in 0..n {
             for s in 0..c.hc {
                 let ws = write[t * c.hc + s];
@@ -358,7 +358,7 @@ impl CpuStage {
 
     /// Hyper-connection mixer `prefix_{norm,down,up,inject}`: RMS-norm each stream with its gamma, a read gate
     /// through the rank bottleneck, the mean of the gated streams, and the write weights `2 sigmoid(inject / hc)`.
-    fn hc_mix(
+    pub(crate) fn hc_mix(
         g: &Gguf,
         c: &Config,
         prefix: &str,
@@ -634,7 +634,7 @@ impl CpuStage {
     /// Qwen Sparse Attention: gated GQA over the complete 4-token blocks the indexer ranks highest (all of them
     /// while at most `idx_budget / kpool` are complete) plus the incomplete tail.
     #[allow(clippy::too_many_arguments)]
-    fn attention(
+    pub(crate) fn attention(
         g: &Gguf,
         c: &Config,
         il: usize,
@@ -798,7 +798,7 @@ impl CpuStage {
 
     /// Softmax router over the experts, top `used` renormalized, SwiGLU experts, plus the sigmoid-gated shared
     /// expert. Experts run in parallel; each token sums its experts in rank order.
-    fn moe(
+    pub(crate) fn moe(
         g: &Gguf,
         c: &Config,
         il: usize,

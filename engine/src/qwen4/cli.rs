@@ -142,6 +142,9 @@ pub enum Cmd {
         #[arg(long)]
         tokens_file: Option<PathBuf>,
     },
+    /// The MTP block: CPU reference and acceptance of greedy drafts.
+    #[command(subcommand)]
+    Mtp(super::mtp::Cmd),
 }
 
 /// This machine's devices and the rest of the chain.
@@ -372,6 +375,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             println!("{}", bench(&mut chain, &prompt, tg)?);
             Ok(())
         }
+        Cmd::Mtp(cmd) => super::mtp::run(cmd),
         Cmd::TokenizeChat { model, file } => {
             let g = crate::gguf::Gguf::open(&model)?;
             let t = crate::tokenizer::Tokenizer::new(&g)?;
