@@ -369,8 +369,10 @@ fn kept_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value, b
     let pos = f["pos"].as_u64().context("pos")? as usize;
     let n = f["n"].as_u64().context("n")? as usize;
     let verify = f["keep"].as_str() == Some("verify");
-    let out = l.forward_kept(floats(blob), None, pos, n, verify)?;
     let mut down = down;
+    // Prompt chunks still in flight go on first.
+    l.drain(|d| pass_on(down.as_deref_mut(), d))?;
+    let out = l.forward_kept(floats(blob), None, pos, n, verify)?;
     if let Output::Hidden(x) = &out {
         let d = down.as_mut().context("the last machine has no LM head")?;
         d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
@@ -681,6 +683,7 @@ impl Chain {
         let ple = self.ple(tokens)?;
         self.history.extend_from_slice(tokens);
         let pos = self.pos;
+        self.local.drain(|d| pass_on(self.next.as_mut(), d))?;
         let out = self.local.forward_kept(x, ple.as_deref(), pos, n, verify)?;
         self.pos += n;
         self.verified = if verify { n } else { 0 };
