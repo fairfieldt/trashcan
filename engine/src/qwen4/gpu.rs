@@ -140,8 +140,8 @@ struct Ple {
     hist: Buffer,
 }
 
-/// Rows `row0..row0 + rows` of the LM head. The stage that ends the model also runs the final mixer (`mix`); other
-/// stages score the final hidden state they are given (`head_slice`).
+/// Rows `row0..row0 + rows` of the LM head. The stage that ends the model also runs the final mixer (`mix`) and
+/// leaves the final hidden state in `h`; every stage scores the final hidden state it is given (`head_slice`).
 struct Head {
     mix: Option<Mix>,
     w: Buffer,
@@ -212,8 +212,9 @@ impl KvCache {
 
 pub enum Output {
     Hidden(Vec<f32>),
-    /// The best candidates of this stage's head rows and the final hidden state of the last token.
-    Top(Vec<(f32, u32)>, Vec<f32>),
+    /// The final hidden state of the last token (this stage ends the model); every stage holding head rows scores
+    /// it with `head_submit`.
+    Final(Vec<f32>),
 }
 
 /// Merge candidate lists from head slices: best first, ties to the lower id, at most `TOP_K`.
@@ -823,7 +824,7 @@ impl GpuStage {
     }
 
     /// Score a final hidden state (from the stage that ends the model) with this stage's head rows. `None` when the
-    /// stage holds no rows or ends the model itself (its rows were scored in `forward`).
+    /// stage holds no rows.
     pub fn head_slice(&mut self, h: &[f32], dump: Option<&mut Captures>) -> Result<Option<Vec<(f32, u32)>>> {
         let dumping = dump.is_some();
         if !self.head_submit(h, dumping)? {
@@ -836,7 +837,7 @@ impl GpuStage {
     /// Stages on different GPUs can score at the same time; `head_collect` waits for the result.
     pub fn head_submit(&mut self, h: &[f32], dump: bool) -> Result<bool> {
         let d = self.c.d;
-        let Some(hd) = self.head.as_ref().filter(|hd| hd.mix.is_none()) else {
+        let Some(hd) = self.head.as_ref() else {
             return Ok(false);
         };
         ensure!(h.len() == d, "hidden state length mismatch");
@@ -890,7 +891,7 @@ impl GpuStage {
             marks: Vec::new(),
         };
         let cmd = current.get();
-        // Timestamps around every layer's submission (the last one includes the head or the output copy).
+        // Timestamps around every layer's submission (the last one includes the final mixer or the output copy).
         let stamp = |cmd: vk::CommandBuffer, index: usize, end: bool| unsafe {
             let stage = if end {
                 vk::PipelineStageFlags::BOTTOM_OF_PIPE
@@ -1544,7 +1545,6 @@ impl GpuStage {
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
             capture(&mut graph, "result_norm".into(), &self.u, d)?;
             gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
-            self.score_head(&mut graph, current.get(), hd, self.u.address + ((n - 1) * d * 4) as u64, dump)?;
         } else {
             if pending {
                 hc_norm(true, None);
@@ -1641,7 +1641,7 @@ impl GpuStage {
             }
         }
         Ok(match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
-            Some(hd) => Output::Top(Self::read_top(hd)?, bytemuck::cast_slice(&hd.h.read(d * 4)?).to_vec()),
+            Some(hd) => Output::Final(bytemuck::cast_slice(&hd.h.read(d * 4)?).to_vec()),
             None => Output::Hidden(bytemuck::cast_slice(&self.output.read(n * w * 4)?).to_vec()),
         })
     }

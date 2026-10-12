@@ -1,0 +1,12 @@
+head-tg128-a-1         tg128  14.53 tok/s  68.83 ms/token  pp512  133.0 tok/s  decode-window GPU samples: 850/1370 x398
+head-tg128-a-2         tg128  14.50 tok/s  68.95 ms/token  pp512  131.8 tok/s  decode-window GPU samples: 850/1370 x400
+head-tg128-a-3         tg128  14.53 tok/s  68.83 ms/token  pp512  132.9 tok/s  decode-window GPU samples: 850/1370 x396
+head-tg128-b-1         tg128  14.71 tok/s  68.00 ms/token  pp512  132.3 tok/s  decode-window GPU samples: 850/1370 x396
+head-tg128-b-2         tg128  14.60 tok/s  68.49 ms/token  pp512  132.7 tok/s  decode-window GPU samples: 850/1370 x394
+head-tg128-b-3         tg128  14.78 tok/s  67.64 ms/token  pp512  131.6 tok/s  decode-window GPU samples: 850/1370 x390
+head-tg128-base-1      tg128  13.52 tok/s  73.96 ms/token  pp512  131.6 tok/s  decode-window GPU samples: 850/1370 x422
+head-tg128-base-2      tg128  13.52 tok/s  73.99 ms/token  pp512  132.3 tok/s  decode-window GPU samples: 850/1370 x430
+head-tg128-base-3      tg128  13.55 tok/s  73.82 ms/token  pp512  131.9 tok/s  decode-window GPU samples: 850/1370 x428
+a     n=3 tg mean 14.520 tok/s (68.87 ms/token) range 14.50-14.53; pp mean 132.6
+b     n=3 tg mean 14.697 tok/s (68.04 ms/token) range 14.60-14.78; pp mean 132.2
+base  n=3 tg mean 13.528 tok/s (73.92 ms/token) range 13.52-13.55; pp mean 131.9

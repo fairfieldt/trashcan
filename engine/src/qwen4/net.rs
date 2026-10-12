@@ -232,15 +232,15 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn) -> Result<()> {
             }
             // The final hidden state goes on up first; then this machine's stages score their head rows, and the
             // candidates follow, merged with those of the machines after it.
-            let (mut top, h, rest) = match out {
-                Output::Top(top, h) => (top, h, None),
+            let (h, rest) = match out {
+                Output::Final(h) => (h, None),
                 Output::Hidden(_) => {
                     let d = down.as_mut().context("the last machine has no LM head")?;
-                    (Vec::new(), recv_hidden(d)?, Some(d))
+                    (recv_hidden(d)?, Some(d))
                 }
             };
             send_hidden(up, &h)?;
-            top = merge_top(top, l.head_slices(&h, dump.then_some(&mut caps))?);
+            let mut top = l.head_slices(&h, dump.then_some(&mut caps))?;
             if let Some(d) = rest {
                 let (hd, b) = d.recv()?;
                 top = merge_top(top, decode_result(&hd, &b, Some(&mut caps))?);
@@ -431,14 +431,14 @@ impl Chain {
         }
         // The final hidden state arrives first: this machine scores its head rows while the candidates of the
         // others come up the chain.
-        let (mut top, h, rest) = match out {
-            Output::Top(top, h) => (top, h, None),
+        let (h, rest) = match out {
+            Output::Final(h) => (h, None),
             Output::Hidden(_) => {
                 let conn = self.next.as_mut().context("no machine holds the LM head")?;
-                (Vec::new(), recv_hidden(conn)?, Some(conn))
+                (recv_hidden(conn)?, Some(conn))
             }
         };
-        top = merge_top(top, self.local.head_slices(&h, dump.as_deref_mut())?);
+        let mut top = self.local.head_slices(&h, dump.as_deref_mut())?;
         if let Some(conn) = rest {
             let (hd, b) = conn.recv()?;
             top = merge_top(top, decode_result(&hd, &b, dump.as_deref_mut())?);

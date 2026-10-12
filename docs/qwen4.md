@@ -10,8 +10,9 @@ Status: the CPU reference matches llama.cpp; GPU stages for every layer type mat
 recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
 CPU reference, prefill 130 tok/s on a 512-token prompt, decode 13.5 tok/s with the GPUs held at amdgpu's high clock
-level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)). Not done yet: a
-faster head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
+level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), and 14.7 with
+every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)). Not done yet: a
+cheaper head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
 the chain ([Serving](#serving)).
 
 | | |
@@ -167,14 +168,16 @@ IQ3_XXS gate/up with IQ4_NL down is 106 MiB over (`--lean`, 128-token chunks). F
 | IQ2_XXS gate/up, MXFP4 down | 5802 MiB: fits by 86 | KLD 0.21 or worse; no GPU kernels for either format yet |
 | IQ4 experts in host RAM, ~63% of each layer's experts cached in VRAM (not implemented) | fits by construction | KLD 0.036 |
 
-`--head-split N` splits the head by vocabulary rows over the last N stages. The stage that ends the model scores its
-rows and returns the final hidden state with its candidates; every other stage scores its rows on that state as the
-result travels back, and the candidates are merged. Two CPU processes with the head in two halves reproduce the
+`--head-split N` splits the head by vocabulary rows over the last N stages. The machine that ends the model sends the
+final hidden state up the chain first; every machine passes it on and then scores its stages' rows, and the merged
+candidates follow up the chain. Two CPU processes with the head in two halves reproduce the
 reference's logits exactly; incite's two GPUs and the Mac node with the head in three give the same tokens and
 logits within rel 3.4e-7 of the unsplit run. Scoring a slice on one D700 takes 1.12 ms for 1/12 of the vocabulary,
 2.03 ms for 1/3, 2.62 ms for 1/2 and 4.60 ms for all of it (1,024 rows: 0.79 ms, so about 0.75 ms is fixed per
-slice). A Mac's GPUs score at the same time (two twelfths: 1.12 ms together), so twelve slices over six Macs cost
-about 6.7 ms per token against 4.6 ms for one GPU holding the whole head.
+slice). A Mac's GPUs score at the same time (two twelfths: 1.12 ms together), and so do all six Macs: about 1.1 ms
+plus the hops per token, against 4.6 ms for one GPU holding the whole head and 6.7 ms for twelve slices scored Mac
+after Mac as the result travelled back, as before (decode 13.5 -> 14.7 tok/s,
+[results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)).
 
 **Recommendation.** Six Macs: IQ4_XS gate/up and IQ4_NL down for routed and shared experts, Q8_0 dense matrices,
 Q6_K head split over the GPUs, n-gram table at Q8_0 on the driver's SSD (the `G-iq4` recipe: 116 GiB, 51 GiB of it
@@ -390,9 +393,9 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
 
 ## What is left
 
-1. **A cheaper head split**: cut the 0.75 ms fixed cost per slice (single-workgroup top-k passes), store the head
-   compactly (Q6_K is 6.6 bits, the repack 10), or keep the head on the last Mac in halves and free the room by
-   leaving that Mac's least-used ~10% of experts in host RAM (the other 90% cover 98% of activations).
+1. **A cheaper head split**: the Macs score their slices at once, so about 1.1 ms per token follows the last layer;
+   cutting the 0.75 ms fixed cost per slice (single-workgroup top-k passes) would shorten it, and storing the head
+   compactly (Q6_K is 6.6 bits, the repack 10) would free VRAM.
 2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks.
 3. **Clock levels** (done): in decode each GPU idles ~90% of a token and drops to its lowest clocks on `auto`;
    stages now hold the high level while work arrives and return to `auto` after 1 s idle (~35 W per idle GPU).

@@ -53,7 +53,7 @@ pub fn stage_dump(local: &mut Local, out: &std::path::Path, tokens: &[u32], batc
         let ple = super::ple_rows(&local.gguf, &local.c, &tokens[..pos], chunk)?;
         let last = i + 1 == chunks.len();
         let out = local.forward(x, ple.as_deref(), pos, chunk.len(), last.then_some(&mut caps))?;
-        if let (true, super::gpu::Output::Top(_, h)) = (last, out) {
+        if let (true, super::gpu::Output::Final(h)) = (last, out) {
             local.head_slices(&h, Some(&mut caps))?;
         }
         pos += chunk.len();

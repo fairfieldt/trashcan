@@ -7,7 +7,7 @@ use super::{
     Config,
 };
 use crate::{gguf::Gguf, gpu::Instance, qwen::pipeline::Devices, vulkan::Device};
-use anyhow::{ensure, Context, Result};
+use anyhow::{ensure, Result};
 use std::{path::Path, rc::Rc};
 
 /// Bytes a layer occupies on a GPU: Q4_0 repacks 18-byte blocks into 20 bytes, the f32 matrices stay f32.
@@ -122,6 +122,7 @@ impl Local {
             Devices::Cpu => {
                 ensure!(ranges.len() == 1, "the CPU runs a single stage");
                 let (first, last) = ranges[0];
+                ensure!(last < c.layers || heads[0].is_some(), "the stage that ends the model needs head rows");
                 stages.push(Stage::Cpu(CpuStage::new(&c, first, last, context, last == c.layers)));
             }
             Devices::Gpus(indices) => {
@@ -165,8 +166,8 @@ impl Local {
         })
     }
 
-    /// Score a final hidden state with the head rows of the stages that do not end the model; merged candidates.
-    /// GPU stages score at the same time.
+    /// Score a final hidden state with the head rows of every stage; merged candidates. GPU stages score at the
+    /// same time.
     pub fn head_slices(&mut self, h: &[f32], mut dump: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
         if let Some(c) = &self.clocks {
             c.busy();
@@ -182,11 +183,16 @@ impl Local {
             let mine = match stage {
                 Stage::Gpu(g) if started => g.head_collect(dump.as_deref_mut())?,
                 Stage::Gpu(_) => None,
-                Stage::Cpu(s) => match rows {
-                    Some((a, b)) if !s.head => {
+                Stage::Cpu(_) => match rows {
+                    Some((a, b)) => {
                         let logits = CpuStage::head_logits(&self.gguf, h, *a, *b);
                         if let Some(m) = dump.as_deref_mut() {
-                            m.insert(format!("result_output@{a}"), logits.clone());
+                            let name = if b - a == self.c.vocab {
+                                "result_output".to_string()
+                            } else {
+                                format!("result_output@{a}")
+                            };
+                            m.insert(name, logits.clone());
                         }
                         Some(offset(crate::qwen::pipeline::top_k(&logits), *a))
                     }
@@ -200,8 +206,8 @@ impl Local {
         Ok(top)
     }
 
-    /// Run all local stages. Returns the residual, or, when this machine ends the model, the final hidden state and
-    /// the candidates of the last stage's head rows (`head_slices` scores the other stages' rows).
+    /// Run all local stages. Returns the residual, or the final hidden state when this machine ends the model
+    /// (`head_slices` scores it).
     pub fn forward(
         &mut self,
         mut x: Vec<f32>,
@@ -214,25 +220,14 @@ impl Local {
             c.busy();
         }
         let mut end = None;
-        for (stage, rows) in self.stages.iter_mut().zip(&self.heads) {
+        for stage in self.stages.iter_mut() {
             let out = match stage {
                 Stage::Gpu(s) => s.forward(&x, ple, pos, n, dump.as_deref_mut())?,
                 Stage::Cpu(s) => {
                     let mut cap = dump.as_deref_mut();
                     s.forward(&self.gguf, &mut x, ple, pos, n, &mut cap)?;
                     if s.head {
-                        let (a, b) = rows.context("the stage that ends the model needs head rows")?;
-                        let h = s.final_hidden(&self.gguf, &x, &mut cap)?;
-                        let logits = CpuStage::head_logits(&self.gguf, &h, a, b);
-                        if let Some(m) = cap {
-                            let name = if b - a == self.c.vocab {
-                                "result_output".to_string()
-                            } else {
-                                format!("result_output@{a}")
-                            };
-                            m.insert(name, logits.clone());
-                        }
-                        Output::Top(offset(crate::qwen::pipeline::top_k(&logits), a), h)
+                        Output::Final(s.final_hidden(&self.gguf, &x, &mut cap)?)
                     } else {
                         Output::Hidden(std::mem::take(&mut x))
                     }
@@ -240,8 +235,8 @@ impl Local {
             };
             match out {
                 Output::Hidden(h) => x = h,
-                top => {
-                    end = Some(top);
+                fin => {
+                    end = Some(fin);
                     break;
                 }
             }
