@@ -65,6 +65,14 @@ run and restores `auto`. Runs alternated:
 | bench6-pp512-auto-2 | auto | 125.7 | 8.24 | 121.4 | 12.93 |
 | bench6-pp512-high-2 | high | 129.8 | 13.51 | 74.0 | 10.56 |
 
+| bench6-pp512-engine | engine (`clocks.rs`) | 129.5 | 13.51 | 74.0 | 10.57 |
+
+The engine now does this itself (`engine/src/clocks.rs`, used by every qwen4 stage): the first work after idle raises
+the level on a background thread (`sudo -n tee`, ~20 ms, clocks at 850/1370 when it returns) and the level returns to
+`auto` after 1 s without work, so the GPUs stay at 300/150 MHz while loading (clock log of `bench6-pp512-engine`) and
+between requests. Measured switch on incite (`sudo -n tee`): 20 ms to high, 17 ms back to auto, and the clocks stay
+up for more than 0.5 s after `auto`.
+
 In decode each GPU works about 5 ms of every token, and on `auto` it drops to 300/150 MHz in between (clock logs:
 mostly 300/150 samples), so every layer starts slow. Held at high: 850/1370 MHz throughout, and the layers take the
 stage benchmark's times (1.2 ms per DeltaNet layer, 1.45 for QSA, 1.62 for layer 1 with the n-gram module).
@@ -82,7 +90,8 @@ budgets 5865 / 5847; decode 1.18-1.59 ms per layer; head slice 1.1 ms.
 
 ## Files
 
-- `tools/q4run.py`: one chain run (nodes last first, then the driver); `tools/dpm-run.sh`; `tools/summary.py`.
+- `tools/q4run.py`: one chain run (nodes last first, then the driver); `tools/dpm-run.sh` (the `--dpm` runs before the
+  engine held the clocks itself); `tools/summary.py`.
 - `incite/`: driver outputs (`*.json`, `*.err`), `commands.log`, `clocks/`; `val6b/greedy.txt`, `index.tsv`.
 - `indite/`, `inflight/`, `alight/`, `invite/`, `enlight/`: node logs and clocks.
 - `val6`: the run before the fix (wrong tokens from layer 0).

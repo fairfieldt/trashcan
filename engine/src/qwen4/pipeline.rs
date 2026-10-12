@@ -97,6 +97,8 @@ pub struct Local {
     pub stages: Vec<Stage>,
     /// The LM head rows each stage scores (the stage that ends the model always has some).
     pub heads: Vec<Option<(usize, usize)>>,
+    /// Holds the GPUs' clocks up while work arrives (GPU stages only).
+    clocks: Option<crate::clocks::Clocks>,
 }
 
 impl Local {
@@ -115,6 +117,7 @@ impl Local {
         ensure!(ranges.len() <= devices.count(), "more stages than devices");
         ensure!(heads.len() == ranges.len(), "one head entry per stage");
         let mut stages = Vec::new();
+        let mut clocks = None;
         match devices {
             Devices::Cpu => {
                 ensure!(ranges.len() == 1, "the CPU runs a single stage");
@@ -122,6 +125,7 @@ impl Local {
                 stages.push(Stage::Cpu(CpuStage::new(&c, first, last, context, last == c.layers)));
             }
             Devices::Gpus(indices) => {
+                clocks = crate::clocks::Clocks::new();
                 let inst = Rc::new(Instance::new()?);
                 let all = inst.amd_gpus()?;
                 for (i, &(first, last)) in ranges.iter().enumerate() {
@@ -157,12 +161,16 @@ impl Local {
             c,
             stages,
             heads: heads.to_vec(),
+            clocks,
         })
     }
 
     /// Score a final hidden state with the head rows of the stages that do not end the model; merged candidates.
     /// GPU stages score at the same time.
     pub fn head_slices(&mut self, h: &[f32], mut dump: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
+        if let Some(c) = &self.clocks {
+            c.busy();
+        }
         let mut top = Vec::new();
         let mut started = vec![false; self.stages.len()];
         for (stage, s) in self.stages.iter_mut().zip(started.iter_mut()) {
@@ -201,6 +209,9 @@ impl Local {
         n: usize,
         mut dump: Option<&mut Captures>,
     ) -> Result<Output> {
+        if let Some(c) = &self.clocks {
+            c.busy();
+        }
         let mut end = None;
         for (stage, rows) in self.stages.iter_mut().zip(&self.heads) {
             let out = match stage {

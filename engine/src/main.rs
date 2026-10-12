@@ -1,5 +1,6 @@
 mod allreduce;
 mod assistant;
+mod clocks;
 mod generation;
 mod gguf;
 mod gpu;
