@@ -1,0 +1,74 @@
+diff --git a/engine/src/qwen4/gpu.rs b/engine/src/qwen4/gpu.rs
+index c9a930c..899e5f8 100644
+--- a/engine/src/qwen4/gpu.rs
++++ b/engine/src/qwen4/gpu.rs
+@@ -164,6 +164,7 @@ struct Graph {
+     captures: Vec<(String, Buffer, usize)>,
+     /// Phase timestamps after the layer stamps: (layer index in the stage, phase name).
+     marks: Vec<(usize, &'static str)>,
++    dstamps: Option<(vk::QueryPool, Vec<String>)>,
+ }
+ impl Drop for Graph {
+     fn drop(&mut self) {
+@@ -856,6 +857,7 @@ impl GpuStage {
+                 cmds: vec![cmd],
+                 captures: Vec::new(),
+                 marks: Vec::new(),
++                dstamps: None,
+             };
+             self.gpu.barrier(cmd);
+             self.score_head(&mut graph, cmd, hd, hd.h.address, dump)?;
+@@ -896,8 +898,19 @@ impl GpuStage {
+             cmds: vec![current.get()],
+             captures: Vec::new(),
+             marks: Vec::new(),
++            dstamps: None,
+         };
+         let cmd = current.get();
++        if std::env::var_os("Q4_DISPATCH_PROFILE").is_some() {
++            let pool = unsafe {
++                gpu.dev.create_query_pool(
++                    &vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(crate::vulkan::STAMP_CAPACITY),
++                    None,
++                )?
++            };
++            unsafe { gpu.dev.cmd_reset_query_pool(cmd, pool, 0, crate::vulkan::STAMP_CAPACITY) };
++            *gpu.stamps.borrow_mut() = Some(crate::vulkan::Stamps { pool, labels: Vec::new(), dispatches: true });
++        }
+         // Timestamps around every layer's submission (the last one includes the final mixer or the output copy).
+         let stamp = |cmd: vk::CommandBuffer, index: usize, end: bool| unsafe {
+             let stage = if end {
+@@ -1614,6 +1627,7 @@ impl GpuStage {
+         }
+         stamp(current.get(), 2 * self.layers.len() - 1, true);
+         gpu.finish(current.get())?;
++        graph.dstamps = gpu.stamps.borrow_mut().take().map(|s| (s.pool, s.labels));
+         Ok(graph)
+     }
+ 
+@@ -1690,6 +1704,25 @@ impl GpuStage {
+             )?;
+         }
+         let period = self.gpu.period as f64 / 1e6;
++        if let Some((pool, labels)) = &graph.dstamps {
++            let pos = bytemuck::cast_slice::<u8, u32>(&self.params_host.read(4)?)[0];
++            let mut t = vec![0u64; labels.len()];
++            unsafe {
++                self.gpu.dev.get_query_pool_results(*pool, 0, &mut t, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)?;
++            }
++            let mut agg: Vec<(String, usize, f64)> = Vec::new();
++            for i in (0..labels.len()).step_by(2) {
++                let ms = t[i + 1].wrapping_sub(t[i]) as f64 * period;
++                match agg.iter_mut().find(|a| a.0 == labels[i]) {
++                    Some(a) => { a.1 += 1; a.2 += ms; }
++                    None => agg.push((labels[i].clone(), 1, ms)),
++                }
++            }
++            agg.sort_by(|a, b| b.2.total_cmp(&a.2));
++            for (l, c, ms) in agg {
++                eprintln!("DISP gpu{}-{} n={n} pos={pos} {l} x{c} {ms:.4}", self.first, self.last);
++            }
++        }
+         let layers = self.layers.len();
+         self.profile = times[..2 * layers]
+             .chunks_exact(2)

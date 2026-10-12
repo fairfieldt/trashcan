@@ -26,9 +26,14 @@ const GRAPH_CACHE_CAPACITY: usize = 6;
 /// attention), router, experts).
 const MARKS: usize = 8;
 /// Batches of up to this many tokens use the fused mixer kernels, which read the mixer matrices once per token; larger
-/// ones the Q8_0 GEMM path, whose cost hardly depends on the batch (results/qwen4/prefill-batch-20261012: fused 39.8
-/// against 55.5 ms for 16 mixers at 48 tokens, 52.2 against 56.4 at 64, 77.4 against 59.3 at 96).
-const FUSED_MAX: usize = 64;
+/// ones the prefill path, whose cost hardly depends on the batch up to 64 tokens (results/qwen4/prefill-mixer-20261012:
+/// 16 Q8_0 mixers fused 8.7 against 9.4 ms at 8 tokens, 11.5 against 9.5 at 12). Q4_0 mixers keep the older prefill
+/// path, which the fused kernels beat up to 64 tokens (results/qwen4/prefill-batch-20261012).
+const FUSED_MAX: usize = 8;
+const FUSED_MAX_Q4: usize = 64;
+/// K splits of the Q8_0 prefill mixer's bottleneck GEMM (10240 -> 324 rows, 6 row tiles of 64 alone, 96 workgroups
+/// per 64 tokens with the splits; 8 and 32 measured the same).
+const MIX_SPLITS: usize = 16;
 
 /// A dense matrix: Q4_0 repacked with f32 scales (the Gemma kernels) or Q8_0 with f16 scales (`qwen4_q8_*`, the
 /// word offset of its blocks).
@@ -1004,7 +1009,11 @@ impl GpuStage {
         // Where the pending write weights are: (buffer address, row stride, offset).
         let wloc = std::cell::Cell::new((self.w.address, hc as u32, 0u32));
         let mo_cur = std::cell::Cell::new(0usize);
-        let fused = n <= FUSED_MAX
+        let q8_mixers = self
+            .layers
+            .iter()
+            .all(|l| matches!((&l.attn_mix.up, &l.ffn_mix.up), (Dense::Q8(..), Dense::Q8(..))));
+        let fused = n <= if q8_mixers { FUSED_MAX } else { FUSED_MAX_Q4 }
             && self
                 .layers
                 .iter()
@@ -1104,6 +1113,61 @@ impl GpuStage {
             }
             hc_norm(pending, Some(&m.norm));
             capture(graph, format!("hc_norm{tag}"), &self.xn, w)?;
+            // Q8_0 above FUSED_MAX tokens: the bottleneck and write rows (the fused matrix; the final mixer has no
+            // write rows) as a split-K GEMM, its partial sums (in hgate) reduced with the activations, then the up
+            // projection with the read gates folded into the sublayer input. Fewer tokens (the final mixer) take the
+            // matrix-vector kernels below.
+            let q8 = match (&m.fused, &m.down, &m.up) {
+                _ if n <= FUSED_MAX => None,
+                (Some(Dense::Q8(b, st)), _, Dense::Q8(ub, ust)) => Some((b, *st, c.hc_rank + hc, ub, *ust)),
+                (None, Dense::Q8(b, st), Dense::Q8(ub, ust)) if m.inject.is_none() && hc == 4 => {
+                    Some((b, *st, c.hc_rank, ub, *ust))
+                }
+                _ => None,
+            };
+            if let Some((b, stride, rows, ub, ustride)) = q8 {
+                let mut u = [0; 16];
+                u[0] = rows as u32;
+                u[1] = w as u32;
+                u[2] = MIX_SPLITS as u32;
+                u[3] = stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_q8_gemm",
+                    push([0, self.xn.address, self.hgate.address, 0, 0, 0], u),
+                    (rows.div_ceil(64) * MIX_SPLITS) as u32,
+                    n.div_ceil(64) as u32,
+                    b,
+                )?;
+                let mut u = [0; 16];
+                u[0] = rows as u32;
+                u[1] = MIX_SPLITS as u32;
+                u[2] = c.hc_rank as u32;
+                gpu.dispatch(
+                    current.get(),
+                    "qwen4_mix_act",
+                    push([self.hgate.address, 0, self.lo.address, self.w.address, 0, 0], u),
+                    rows.div_ceil(64) as u32,
+                    n as u32,
+                );
+                let mut u = [0; 16];
+                u[0] = w as u32;
+                u[1] = c.hc_rank as u32;
+                u[3] = ustride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_q8_gemm_mix",
+                    push([0, self.lo.address, self.u.address, self.xn.address, 0, 0], u),
+                    (w / 64) as u32,
+                    n.div_ceil(64) as u32,
+                    ub,
+                )?;
+                capture(graph, format!("hc_mixed{tag}"), &self.u, d)?;
+                if m.inject.is_some() {
+                    wloc.set((self.w.address, hc as u32, 0));
+                }
+                return Ok(());
+            }
             matrix(&m.down, &self.xn, &self.lo, w, c.hc_rank, false)?;
             act(&self.lo, c.hc_rank, 0, 1. / hc as f32);
             matrix(&m.up, &self.lo, &self.hgate, c.hc_rank, w, false)?;

@@ -1,0 +1,10 @@
+#version 460
+#include "common.glsl"
+// Prefill mixer bottleneck and write weights from the split-K partial sums of the down projection (with the write
+// rows appended, the fused matrix): v = sum of the p.k parts, then silu(v / 4) for rows below p.m (into c: lo [t][m])
+// and 2 sigmoid(v / 4) for the rest (into d: w [t][n - m]). a: partials [part][t][n]. p.n rows.
+layout(local_size_x=64) in;
+void main(){uint row=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y,nb=batch();if(row>=p.n||t>=nb)return;
+float v=0;for(uint s=0;s<p.k;s++)v+=a_f.v[(s*nb+t)*p.n+row];
+float z=v*0.25;
+if(row<p.m)c_f.v[t*p.m+row]=z/(1.0+exp(-z));else d_f.v[t*(p.n-p.m)+row-p.m]=2.0/(1.0+exp(-z));}

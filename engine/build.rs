@@ -81,6 +81,7 @@ fn main() {
         "qwen4_q8_gemm",
         "qwen4_mix_down",
         "qwen4_mix_up",
+        "qwen4_mix_act",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",

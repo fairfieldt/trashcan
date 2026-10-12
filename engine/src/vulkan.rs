@@ -498,6 +498,7 @@ impl Device {
             ("qwen4_q8_gemm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_gemm.spv")).as_slice()),
             ("qwen4_mix_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down.spv")).as_slice()),
             ("qwen4_mix_up", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_up.spv")).as_slice()),
+            ("qwen4_mix_act", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_act.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -549,6 +550,7 @@ impl Device {
                     ("qwen4_moe_down_iq4xs", Some(2)),
                     ("qwen4_moe_down_q2", Some(3)),
                 ],
+                "qwen4_q8_gemm" => &[("qwen4_q8_gemm", Some(0)), ("qwen4_q8_gemm_mix", Some(1))],
                 "qwen4_mix_down" => &[("qwen4_mix_down", Some(0)), ("qwen4_mix_down_q8", Some(1))],
                 "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],
                 "qwen4_attention_sparse" => &[

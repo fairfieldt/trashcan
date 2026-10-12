@@ -9,9 +9,10 @@ are in [qwen.md](qwen.md).
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type match the reference with the six-Mac
 recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
-CPU reference, prefill 261 tok/s on a 512-token prompt, 364 on 2048 and 447 on 8192 with the two GPUs of a Mac on
-consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)) and
-the chunk size chosen by prompt length ([results/qwen4/prefill-chunks-20261012](../results/qwen4/prefill-chunks-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
+CPU reference, prefill 298 tok/s on a 512-token prompt and 415-434 on 2048 with the two GPUs of a Mac on
+consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)),
+the chunk size chosen by prompt length ([results/qwen4/prefill-chunks-20261012](../results/qwen4/prefill-chunks-20261012/README.md))
+and split-K prefill mixers ([results/qwen4/prefill-mixer-20261012](../results/qwen4/prefill-mixer-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), and 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)). Not done yet: a
 cheaper head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
@@ -200,9 +201,9 @@ that the next mixer, the head or the stage output resolves.
 
 | part | kernels |
 |---|---|
-| mixer, up to 64 tokens | `qwen4_mix_down` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
-| mixer, prefill | `qwen4_hc_norm`, the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
-| dense matrices | Q8_0: `qwen4_q8_mv` (1-8 tokens), `qwen4_q8_gemm` (64 x 64 tiles), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw) |
+| mixer, up to 8 tokens | `qwen4_mix_down` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
+| mixer, prefill | `qwen4_hc_norm`; Q8_0: the 320 bottleneck and 4 write rows (the fused matrix) as one `qwen4_q8_gemm` split 16 ways along K, `qwen4_mix_act` (sums the parts, activations), `qwen4_q8_gemm_mix` (the up projection with the read gates folded into the sublayer input); Q4_0: the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
+| dense matrices | Q8_0: `qwen4_q8_mv` (1-8 tokens), `qwen4_q8_gemm` (64 x 64 tiles, optionally split along K), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw) |
 | n-gram module | key/value projections, `qwen4_ple_gate`, `qwen4_ple_conv` (dilated convolution, 9-step history) |
 | DeltaNet | qwen35's `qwen_conv` and `qwen_gdn`, `qwen4_gated_norm` (sigmoid gate) |
 | QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
@@ -237,7 +238,7 @@ Six-Mac recipe (Q8_0 dense, IQ4_XS/IQ4_NL experts), per layer:
 
 | phase | decode, 64 tokens of context | decode at 32K | prefill, 256-token chunk at 0 | chunk at 32K |
 |---|---|---|---|---|
-| mixer (each of two) | 0.14-0.17 ms | 0.17 ms | 4.3-5.7 ms | 4.3-5.6 ms |
+| mixer (each of two) | 0.14-0.17 ms | 0.17 ms | 2.4 ms | 2.4 ms |
 | DeltaNet | 0.49-0.50 ms | 0.49-0.50 ms | 19.2-19.4 ms | 19.3-19.4 ms |
 | QSA | 0.43 ms | 1.40 ms (projections 0.22, block selection 0.61, attention 0.57) | 16.1 ms | 119.8 ms (selection 35.9, attention 75.9) |
 | router and top-k | 0.10 ms | 0.10 ms | 3.7-3.9 ms | 3.8 ms |
@@ -247,7 +248,9 @@ Six-Mac recipe (Q8_0 dense, IQ4_XS/IQ4_NL experts), per layer:
 | QSA layer | 1.16 ms | 2.20 ms | 88-99 ms | 196 ms |
 | head (final mixer, 248,320 rows, top-64) | 4.6 ms | | | |
 
-Layer 1 adds the n-gram module to its DeltaNet layer (0.43 ms per decode token, 8.4 ms per chunk).
+Layer 1 adds the n-gram module to its DeltaNet layer (0.43 ms per decode token, 8.4 ms per chunk). The prefill mixer
+time is from results/qwen4/prefill-mixer-20261012 (4.3-5.7 ms before the split-K bottleneck; it does not depend on the
+position).
 
 Formats compared on layers 0-5 (decode GPU time per DeltaNet layer; experts per decode token / per prefill chunk):
 
@@ -262,8 +265,10 @@ Fusing the mixers into two dispatches each took decode from 9.05 to 6.65 ms for 
 of a decode layer and almost none of its bytes. Moving block scoring out of the single-workgroup select took the
 QSA layer at 32K from 13.25 to 2.16 ms per decode token and the 256-token chunk there from 272 to 190 ms (G-q8d). In
 prefill the experts take 50-60% of a layer; the per-(token, slot) kernels beat kernels that grouped the slots by
-expert at every chunk size (221 against 259 ms for 8 layers at 128 tokens), and the fused mixers beat the prefill
-mixer path up to 64 tokens (results/qwen4/prefill-batch-20261012).
+expert at every chunk size (221 against 259 ms for 8 layers at 128 tokens; results/qwen4/prefill-batch-20261012).
+Splitting the mixer bottleneck GEMM along K (its 324 rows gave 5-6 workgroups) took 16 prefill mixers from 63 to
+20 ms per 128-token chunk and from 77 to 38 ms per 256-token chunk; the fused mixers now win only up to 8 tokens
+(64-token chunks: 53 -> 11 ms; results/qwen4/prefill-mixer-20261012).
 A decode layer reads about 110 MB (61 MB of DeltaNet matrices, 14 MB of mixers, 5 MB router, 29 MB of experts) in
 1.23 ms, 34% of the D700's 263 GB/s.
 
@@ -305,10 +310,10 @@ short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 1.96 s, **261 tok/s** (measured) | ~1.2 s, ~430 tok/s |
-| 2048 | ~0.8 s | 5.6 s, **364 tok/s** (measured; 379 tok/s on 3000) | ~3 s, ~660 tok/s |
+| 512 | ~0.25 s | 1.72 s, **298 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 4.7-4.9 s, **415-434 tok/s** (measured) | ~3 s, ~660 tok/s |
 | 4K | ~1.5 s, 2,800 tok/s | ~10 s, ~400 tok/s | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | 18.3 s, **447 tok/s** (measured) | ~9 s, ~920 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | 18.3 s, **447 tok/s** (measured before the split-K mixers) | ~9 s, ~920 tok/s |
 | 32K | ~11 s, 3,150 tok/s | ~1 min, ~520 tok/s | ~35 s, ~950 tok/s |
 | 128K | ~42 s | ~5 min, ~445 tok/s | ~2.5 min, ~900 tok/s |
 | 200K | ~65 s | ~8 min, ~415 tok/s | ~4 min, ~850 tok/s |
@@ -318,9 +323,9 @@ Today: kernels reach ~18% of FP32 peak and the per-slot expert kernels re-read e
 per 128-token chunk, about half of a chunk's time: bandwidth bound). Every GPU is a pipeline stage (a Mac's two GPUs
 work on consecutive chunks), so a prompt takes about the sum of its chunks' stage times (~0.21-0.3 s per 128-token
 chunk) plus 11 times the largest: the ~2.5 s pipeline fill is most of a 512-token prompt. Toward the realistic column:
-the prefill mixer path above 64 tokens (~12%), an expert kernel that reuses weights across the tokens routed to an
-expert (~2x on experts), chunked DeltaNet, faster block selection and sparse attention at long contexts, and smaller
-chunks for short prompts (less pipeline fill: 512 tokens in an estimated ~2.2 s with 64-token chunks).
+an expert kernel that reuses weights across the tokens routed to an expert (~2x on experts), chunked DeltaNet, faster
+block selection and sparse attention at long contexts, and smaller chunks for short prompts (less pipeline fill: 512
+tokens in an estimated ~2.2 s with 64-token chunks).
 
 **Beyond these ceilings.** MTP speculative decoding: with 2 drafts accepted ~70-80% of the time, a verification step
 costs ~1.4-1.5x a decode step for ~2.4 tokens, ~1.6-1.7x effective (~45 tok/s on top of the realistic decode); the MTP
@@ -400,15 +405,18 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
 1. **A cheaper head split**: the Macs score their slices at once, so about 1.1 ms per token follows the last layer;
    cutting the 0.75 ms fixed cost per slice (single-workgroup top-k passes) would shorten it, and storing the head
    compactly (Q6_K is 6.6 bits, the repack 10) would free VRAM.
-2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks.
+2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks. Q8_0
+   mixers with write rows no longer read their separate down copy or f32 write rows (prefill uses the fused
+   matrix too), so those uploads can go (~28 MiB per GPU).
 3. **Clock levels** (done): in decode each GPU idles ~90% of a token and drops to its lowest clocks on `auto`;
    stages now hold the high level while work arrives and return to `auto` after 1 s idle (~35 W per idle GPU).
 4. **Prefill**: an expert kernel that reuses weights across the tokens routed to an expert without losing to the
-   per-slot kernels (28-32 ms of a 52 ms layer at 128 tokens), the prefill mixer path above 64 tokens (~3.2 ms per
-   mixer whatever the batch: its 10240 -> 320 GEMM runs on 5 workgroups), chunked DeltaNet (19 ms), grouping
-   the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K), the f32 router (3.8 ms),
-   and smaller chunks for short prompts, whose time is mostly the 12-stage pipeline fill since the two GPUs of a Mac
-   work on consecutive chunks (done: 2048 tokens 210 -> 324 tok/s, results/qwen4/prefill-overlap-20261012).
+   per-slot kernels (28-32 ms of a 52 ms layer at 128 tokens), the Q8_0 GEMM tile kernel (64 x 64, ~55% of the FMA
+   peak; most of the 1.2 ms per mixer per 128-token chunk and of the DeltaNet and QSA projections), chunked
+   DeltaNet (19 ms), grouping the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K),
+   the f32 router (3.8 ms), and smaller chunks for short prompts, whose time is mostly the 12-stage pipeline fill
+   since the two GPUs of a Mac work on consecutive chunks (done: 2048 tokens 210 -> 324 tok/s,
+   results/qwen4/prefill-overlap-20261012).
 5. **Decode**: fewer dispatches per layer (34% of bandwidth now) and a multi-workgroup radix select (block selection
    takes 0.6 ms of a QSA layer at 32K and 1.9 ms at 200K).
 6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.
