@@ -16,13 +16,15 @@ split-K prefill mixers ([results/qwen4/prefill-mixer-20261012](../results/qwen4/
 and experts that decode each expert's rows once per tile of its tokens ([results/qwen4/prefill-experts-20261012](../results/qwen4/prefill-experts-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)), and 17.9 with
-the decode kernels of [results/qwen4/decode-kernels-20261012](../results/qwen4/decode-kernels-20261012/README.md). Not done yet: a
-cheaper head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
-the chain ([Serving](#serving)).
+the decode kernels of [results/qwen4/decode-kernels-20261012](../results/qwen4/decode-kernels-20261012/README.md). MTP speculative
+decoding (the block drafting on the driver's CPU, the chain verifying the pending token and its drafts in one batch)
+took greedy decoding of chat replies from 14.85 to 20.9 tok/s (+40%) with identical output before the decode kernels
+([results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)). Not done yet: a cheaper head split and prefix
+checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain ([Serving](#serving)).
 
 | | |
 |---|---|
-| layers | 48: 36 Gated DeltaNet, 12 Qwen Sparse Attention (every fourth), plus one MTP layer (not used yet) |
+| layers | 48: 36 Gated DeltaNet, 12 Qwen Sparse Attention (every fourth), plus one MTP block (a QSA layer with its own experts; drafts for speculative decoding) |
 | residual | 4 hyper-connection streams of 2560 (`hc`), mixed before and written after every sublayer; no norms |
 | DeltaNet | 16 key heads, 48 value heads of 128, sigmoid output gate |
 | attention | 24 Q / 2 KV heads of 256, RoPE on 64 dims (base 1e7); indexer of 4 heads x 128 over 4-token blocks |
@@ -332,9 +334,12 @@ so a prompt takes about the sum of its chunks' stage times plus 11 times the lar
 a short prompt's time. Toward the realistic column: chunked DeltaNet, faster block selection and sparse attention at
 long contexts, and the Q8_0 GEMM tile kernel.
 
-**Beyond these ceilings.** MTP speculative decoding: with 2 drafts accepted ~70-80% of the time, a verification step
-costs ~1.4-1.5x a decode step for ~2.4 tokens, ~1.6-1.7x effective (~45 tok/s on top of the realistic decode); the MTP
-layer (~1.4 GB) has no room in VRAM, so its experts would live in host RAM or it runs on the driver's CPU. Tensor or
+**Beyond these ceilings.** MTP speculative decoding (measured, [results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)):
+the block (1.49 GB) runs on the driver's CPU (5.7 ms per draft step with the draft head's first rows on the driver's
+GPU head slices); greedy drafts are accepted 90%, 85% and 84% of the time (first, second given the first, third given
+both), so a round of 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verification (1.98 decode steps
+today): 20.9 tok/s on chat replies against 14.85, and ~39-41 tok/s projected with ~35 ms decode steps and verification
+of 3 tokens at 1.4x, 4 at ~1.65x. Tensor or
 expert parallelism over all 12 GPUs at once: ~2 ms of bytes per token, but ~96 cross-Mac all-reduces per token at
 >= 100 us each over the ring bound it near 50-80 tok/s, at a large cost in engineering.
 
@@ -399,11 +404,10 @@ positions, 67 ms at 6.5 GB/s, overlappable with the chunk's 200-400 ms of QSA wo
 per position per QSA layer (2.2 GB per Mac at 1M). Without Q2_0 this would also free the 212 MiB per GPU that the Q8
 K/V cache takes at 200K.
 
-**MTP at 200K (estimate).** The MTP layer is a full QSA layer with its own 512 experts: 1.4 GB at IQ4 plus 212 MiB of
-Q8 K/V at 200K, and no GPU has that room. With its experts in host RAM, a draft token reads 10 routed experts (27 MB)
-over PCIe, about 4 ms, plus about 1.5 ms of dense work and K/V; its dense matrices (about 0.1 GB) and K/V still need a
-home, so the K/V would go to host RAM too. About 6 ms per draft token against roughly 100 ms per decode token at 200K:
-worth it at the acceptance rates speculative decoding usually sees, but not built.
+**MTP at long contexts.** The block runs on the driver's CPU with its K/V in host RAM (f32, 4 KiB per position,
+0.8 GB at 200K). Its sparse attention reads at most ~2,051 positions per draft, but the attention part of a draft step
+grows from ~1.6 ms at position 512 to ~5 ms at 2048-4096 (`draft-bench`; block scoring and selection run on one
+thread per token), so long contexts need that threaded. Not measured past 8K.
 
 ## What is left
 
@@ -430,7 +434,10 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
 6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
-9. **MTP** (a 49th layer with its own experts) and the rollback snapshots speculative decoding needs.
+9. **MTP** (done: chat replies 14.85 -> 20.9 tok/s, results/qwen4/mtp-20261012): faster 2-4 token verification
+   batches (a 4-token batch costs 1.98 decode steps), a shorter CPU draft step (its dense half runs well below the
+   CPU's bandwidth), and more of the prompt for the block (it reads the last 64 tokens: 11% fewer tokens per round on
+   a 3K-token document, where drafting does not pay yet).
 10. **Prefix checkpoints**: the server continues only from the live state, so a prompt that is not an extension of
     everything processed so far starts again at position 0.
 
@@ -452,7 +459,9 @@ trashcan serve G-iq4-00001-of-00006.gguf --host 0.0.0.0 --port 8000 \
 Each `--nodes` address is resolved on the previous machine of the chain (`<peer>.tb<bus>` names from `tblink`).
 A request continues from the live state when everything processed so far (the previous prompt and its reply) is a
 prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet
-and n-gram states only run forward. `--no-prefix-cache` always starts at 0. Without `--mtp` or `--tp`.
+and n-gram states only run forward. `--no-prefix-cache` always starts at 0. `--mtp mtp-G-iq4.gguf [--draft-tokens 3]
+[--draft-vocab 65536]` drafts with the MTP block on the driver's CPU (above temperature 0 a draft is kept when the
+sampled token equals it, so sampling follows the target distribution with the same draws). No `--tp`.
 `scripts/test-server.py` passes against it, and a second chat turn reuses the first
 ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md#server)).
 
@@ -466,6 +475,12 @@ trashcan qwen4 layer-check MODEL LLAMA_DUMP [--emulate-ggml]
 trashcan qwen4 node MODEL --listen 0.0.0.0:7071 [--cpu | --gpus 0,1]
 trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] [--kv q8] --greedy 10
 trashcan qwen4 bench MODEL --gpus 0,1 --nodes ... --pp 256 --tg 32
+# MTP: CPU reference, acceptance, the CPU drafter, speculative decoding on the chain (greedy with and without drafts)
+trashcan qwen4 mtp ref MODEL MTP OUT --chain 3
+trashcan qwen4 mtp accept MODEL MTP OUT.json --tokens-file IDS --steps 256 --depth 3
+trashcan qwen4 mtp replay MODEL MTP RUN.json OUT.json --vocab 65536 [--rounds]
+trashcan qwen4 mtp draft-check MODEL MTP; trashcan qwen4 mtp draft-bench MODEL MTP --start 512 --threads 12
+trashcan qwen4 mtp spec MODEL --gpus 0,1 --nodes ... --mtp MTP --draft-tokens 3 --tg 192 --runs 3 PROMPT.ids...
 # six Macs (not run yet: every other Mac runs `qwen4 node MODEL --listen 0.0.0.0:7071 --gpus 0,1`), 32K with G-iq4,
 # 200K with the Q2_0 build and Q8 K/V
 trashcan qwen4 bench G-iq4.gguf --gpus 0,1 --nodes MAC2:7071,MAC3:7071,MAC4:7071,MAC5:7071,MAC6:7071 \

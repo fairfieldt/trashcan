@@ -11,9 +11,9 @@ usage: project.py
 # rewriting accepted rows: 1.84 / 2.50 / 2.95; with the rewrite 1.84 / 2.53 / 3.05), pooled over the four prompts.
 ROUNDS = {1: 1.84, 2: 2.50, 3: 2.95}
 SCENARIOS = {
-    # Measured on the chain (mtp spec, session 1): 68.6 ms per plain token, 114 ms for 3 tokens, 135 ms for 4;
+    # Measured on the chain (mtp spec, session 2): 67.3 ms per plain token, 112.6 ms for 3 tokens, 133.3 ms for 4;
     # 2 tokens from stage-bench's 1.38x on the GPU share.
-    'today': {1: 68.6, 2: 92.0, 3: 114.0, 4: 135.0},
+    'today': {1: 67.3, 2: 90.0, 3: 112.6, 4: 133.3},
     # Fused decode kernels: 35 ms per token, 3 tokens at 1.4x and 4 at ~1.65x.
     '35 ms decode, 3 tokens 1.4x': {1: 35.0, 2: 42.0, 3: 49.0, 4: 58.0},
 }
