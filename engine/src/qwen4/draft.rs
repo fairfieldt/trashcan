@@ -581,6 +581,8 @@ pub struct Draft {
     /// Rows `head_row0..vocab` of the LM head, Q8_0 (the driver's GPUs score the rows before, `skip_head_rows`).
     head: Mat,
     head_row0: usize,
+    /// Rows `0..head_row0`, for drafts while the driver's GPUs are busy (`best_all`).
+    head_lo: Option<Mat>,
     kc: Vec<f32>,
     vc: Vec<f32>,
     kraw: Vec<f32>,
@@ -674,6 +676,7 @@ impl Draft {
             emb: g,
             head,
             head_row0: 0,
+            head_lo: None,
             kc: vec![0.; kv],
             vc: vec![0.; kv],
             kraw: vec![0.; context * c.idx_dim],
@@ -728,31 +731,29 @@ impl Draft {
         self.head_row0 + self.head.rows()
     }
 
-    /// Leave the first `rows` head rows to another scorer (the driver's GPU head slices): the CPU head keeps the
-    /// rest, and `head_best` ranks only those.
+    /// Leave the first `rows` head rows to another scorer (the driver's GPU head slices): `head_best` ranks only
+    /// the rest, `best_all` all of them.
     pub fn skip_head_rows(&mut self, rows: usize) {
-        let rows = rows.min(self.vocab()).saturating_sub(self.head_row0);
-        if rows == 0 {
+        let rows = rows.min(self.vocab());
+        if self.head_row0 > 0 || rows == 0 {
             return;
         }
-        let keep = |m: &mut Mat| match m {
+        let lo = match &mut self.head {
             Mat::Q8 { k, rows: n, q, d } => {
-                q.drain(..rows * *k);
-                d.drain(..rows * *k / 32);
                 *n -= rows;
+                Mat::Q8 { k: *k, rows, q: q.drain(..rows * *k).collect(), d: d.drain(..rows * *k / 32).collect() }
             }
             Mat::Iq4 { k, rows: n, q, d } => {
-                q.drain(..rows * *k / 2);
-                d.drain(..rows * *k / 32);
                 *n -= rows;
+                Mat::Iq4 { k: *k, rows, q: q.drain(..rows * *k / 2).collect(), d: d.drain(..rows * *k / 32).collect() }
             }
             Mat::F32 { k, rows: n, w } => {
-                w.drain(..rows * *k);
                 *n -= rows;
+                Mat::F32 { k: *k, rows, w: w.drain(..rows * *k).collect() }
             }
         };
-        keep(&mut self.head);
-        self.head_row0 += rows;
+        self.head_lo = Some(lo);
+        self.head_row0 = rows;
     }
 
     /// The block's final mixer on the last row of its output residual: the head's input.
@@ -770,6 +771,19 @@ impl Draft {
         let logits = matvec(&self.pool, &self.head, &ha, 256);
         let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
         Some((b as u32 + self.head_row0 as u32, logits[b]))
+    }
+
+    /// The best of all draft head rows (token id and logit), on the CPU.
+    pub fn best_all(&self, hn: &[f32]) -> Option<(u32, f32)> {
+        let lo = self.head_lo.as_ref().map(|m| {
+            let logits = matvec(&self.pool, m, &Act::new(hn, self.c.d), 256);
+            let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
+            (b as u32, logits[b])
+        });
+        match (lo, self.head_best(hn)) {
+            (Some(l), Some(h)) => Some(if l.1 >= h.1 { l } else { h }),
+            (l, h) => l.or(h),
+        }
     }
 
     fn mix(&self, m: &Mix, x: &[f32], n: usize) -> (Vec<f32>, Option<Vec<f32>>) {

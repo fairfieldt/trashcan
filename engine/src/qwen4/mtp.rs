@@ -319,28 +319,37 @@ pub fn run(cmd: Cmd) -> Result<()> {
                     .collect::<Result<_>>()?
             };
             let mut failed = false;
+            // Experiment: also rounds of always `draft_tokens` drafts.
+            let fixed = std::env::var_os("TRASHCAN_MTP_FIXED").is_some();
             for i in 0..runs {
                 for (name, ids) in &prompts {
                     let (plain, pre0, dec0) = super::spec::greedy(&mut chain, None, ids, tg)?;
-                    let (fast, pre1, dec1) = super::spec::greedy(&mut chain, Some(&mut spec), ids, tg)?;
-                    let same = plain == fast;
-                    failed |= !same;
-                    let first_diff = plain.iter().zip(&fast).position(|(a, b)| a != b);
-                    let st = &spec.stats;
-                    println!(
-                        "{}",
-                        serde_json::json!({"run": i, "prompt": name, "prompt_tokens": ids.len(), "tg": tg,
-                            "identical": same, "first_difference": first_diff,
-                            "plain_tok_s": (tg - 1) as f64 / dec0, "mtp_tok_s": (tg - 1) as f64 / dec1,
-                            "plain_prefill_s": pre0, "mtp_prefill_s": pre1, "draft_tokens": draft_tokens,
-                            "draft_vocab": spec.draft.vocab(), "stats": st,
-                            "tokens_per_round": (tg - 1) as f64 / st.rounds.max(1) as f64,
+                    let mut row = serde_json::json!({"run": i, "prompt": name, "prompt_tokens": ids.len(), "tg": tg,
+                        "plain_tok_s": (tg - 1) as f64 / dec0, "plain_prefill_s": pre0,
+                        "draft_tokens": draft_tokens, "draft_vocab": spec.draft.vocab()});
+                    for (label, f) in [("mtp", false), ("fixed", true)] {
+                        if f && !fixed {
+                            continue;
+                        }
+                        spec.fixed = f;
+                        let (fast, pre1, dec1) = super::spec::greedy(&mut chain, Some(&mut spec), ids, tg)?;
+                        let same = plain == fast;
+                        failed |= !same;
+                        let st = &spec.stats;
+                        let r = st.rounds.max(1) as f64;
+                        row[label] = serde_json::json!({"identical": same,
+                            "first_difference": plain.iter().zip(&fast).position(|(a, b)| a != b),
+                            "tok_s": (tg - 1) as f64 / dec1, "prefill_s": pre1, "stats": st,
+                            "tokens_per_round": (tg - 1) as f64 / r,
                             "accepted_per_draft": st.accepted as f64 / st.drafted.max(1) as f64,
-                            "ms_per_round": {"draft": st.draft_ms / st.rounds.max(1) as f64,
-                                "verify": st.verify_ms / st.rounds.max(1) as f64,
-                                "rollback": st.rollback_ms / st.rounds.max(1) as f64},
-                            "plain_ids": plain, "mtp_ids": fast})
-                    );
+                            "shadow_accepted": st.shadow_hits as f64 / st.by_k[0].max(1) as f64,
+                            "ms_per_round": {"draft": st.draft_ms / r, "verify": st.verify_ms / r,
+                                "rollback": st.rollback_ms / r},
+                            "ids": fast});
+                    }
+                    spec.fixed = false;
+                    row["plain_ids"] = serde_json::json!(plain);
+                    println!("{row}");
                 }
             }
             ensure!(!failed, "speculative output differs from greedy decoding");

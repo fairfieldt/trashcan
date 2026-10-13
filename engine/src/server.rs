@@ -286,8 +286,8 @@ impl Backend for Qwen4 {
             match self.spec.as_mut() {
                 // A round's tokens were all processed but its last, as in decoding them one at a time.
                 Some(s) => {
-                    let k = s.k.min(budget - generated - 1);
-                    let (toks, _) = s.round(e, pending, k, &mut |t| sampler.sample(t), &self.stop)?;
+                    let max = budget - generated - 1;
+                    let (toks, _) = s.round(e, pending, max, &mut |t| sampler.sample(t), &self.stop)?;
                     queue.extend(toks);
                 }
                 None => {

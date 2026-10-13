@@ -6,7 +6,7 @@ use super::{
     net::Chain,
     pipeline::{Local, Stage},
 };
-use anyhow::{ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 
 impl Local {
     /// Allocate the state copies verification batches of up to `max` tokens need.
@@ -153,14 +153,90 @@ pub struct Stats {
     pub draft_ms: f64,
     pub verify_ms: f64,
     pub rollback_ms: f64,
+    /// Rounds by the number of drafts (index 0: plain steps with a shadow draft).
+    pub by_k: [usize; super::gpu::VERIFY_MAX],
+    /// Shadow drafts that matched the next token.
+    pub shadow_hits: usize,
+}
+
+/// Verification cost of a batch of n tokens relative to one token, for batch sizes not measured yet (the six-Mac
+/// chain: 67.3 ms per token, 112.6 for 3 tokens and 133.3 for 4 in session 2; 2 tokens from stage-bench's 1.38x).
+const VERIFY_RATIO: [f64; super::gpu::VERIFY_MAX] = [1.0, 1.36, 1.67, 1.98];
+/// Weight older drafts keep at each new one: the acceptance of about the last 16 drafts.
+const ACCEPT_DECAY: f64 = 0.94;
+/// Weight of the newest round in the running costs.
+const COST_WEIGHT: f64 = 0.2;
+
+/// How many drafts the next round makes: the count with the most expected tokens per millisecond, from the recent
+/// acceptance of drafts (`a`, all depths pooled: a round of k drafts yields 1 + a + ... + a^k tokens on average)
+/// and the running costs of a draft step and of each verification batch size. With no drafts the round is a plain
+/// step (a 1-token verification batch) while the block drafts the next token on the CPU anyway (a shadow draft), so
+/// the acceptance stays measured at no cost to the chain and drafting resumes once it pays again.
+#[derive(Clone, Debug)]
+struct Policy {
+    hits: f64,
+    tests: f64,
+    draft_ms: Option<f64>,
+    verify_ms: [Option<f64>; super::gpu::VERIFY_MAX],
+}
+
+impl Policy {
+    fn new() -> Self {
+        Self { hits: 0., tests: 0., draft_ms: None, verify_ms: [None; super::gpu::VERIFY_MAX] }.restart()
+    }
+
+    /// A new sequence: acceptance back to its prior (0.8, worth 4 drafts); the costs stay.
+    fn restart(mut self) -> Self {
+        (self.hits, self.tests) = (3.2, 4.);
+        self
+    }
+
+    fn tested(&mut self, hit: bool) {
+        self.hits = self.hits * ACCEPT_DECAY + hit as u8 as f64;
+        self.tests = self.tests * ACCEPT_DECAY + 1.;
+    }
+
+    fn update(v: &mut Option<f64>, ms: f64) {
+        *v = Some(v.map_or(ms, |v| v + COST_WEIGHT * (ms - v)));
+    }
+
+    /// Running cost of an `n`-token verification batch, else the nearest measured size's scaled by `VERIFY_RATIO`.
+    fn verify(&self, n: usize) -> Option<f64> {
+        self.verify_ms[n - 1].or_else(|| {
+            (1..=self.verify_ms.len())
+                .filter_map(|m| self.verify_ms[m - 1].map(|v| (m.abs_diff(n), v / VERIFY_RATIO[m - 1])))
+                .min_by_key(|x| x.0)
+                .map(|(_, unit)| unit * VERIFY_RATIO[n - 1])
+        })
+    }
+
+    /// Drafts for the next round, at most `max` (`max` until the costs are measured).
+    fn choose(&self, max: usize) -> usize {
+        let a = self.hits / self.tests;
+        let Some(d) = self.draft_ms else { return max };
+        let (mut best, mut rate, mut tokens, mut p) = (max, f64::MIN, 0., 1.);
+        for k in 0..=max {
+            tokens += p;
+            p *= a;
+            let Some(v) = self.verify(k + 1) else { return max };
+            let r = tokens / (k as f64 * d + v);
+            if r > rate {
+                (best, rate) = (k, r);
+            }
+        }
+        best
+    }
 }
 
 /// The driver's drafting state over a chain: the MTP block on the CPU and the pending token's inputs.
 pub struct Speculator {
     pub draft: super::draft::Draft,
-    /// Drafts per round.
+    /// Drafts per round at most.
     pub k: usize,
     pub stats: Stats,
+    policy: Policy,
+    /// Always `k` drafts (experiment: adaptive against fixed rounds).
+    pub fixed: bool,
     /// The residual row of the token before the pending one (the block's `h` for the pending token).
     last: Vec<f32>,
     /// Head rows `0..gpu_rows` are scored by the driver's GPU head slices (at the same time as the CPU scores the
@@ -170,7 +246,7 @@ pub struct Speculator {
 
 impl Speculator {
     pub fn new(draft: super::draft::Draft, k: usize) -> Self {
-        Self { draft, k, stats: Stats::default(), last: Vec::new(), gpu_rows: 0 }
+        Self { draft, k, stats: Stats::default(), policy: Policy::new(), fixed: false, last: Vec::new(), gpu_rows: 0 }
     }
 
     /// Score the first draft head rows with the driver's GPU head slices when they hold the vocabulary's first rows:
@@ -230,11 +306,12 @@ impl Speculator {
             self.draft.forward(&chain.history[first..end], &rows[..(m - 1) * w], first, false)?;
         }
         self.last = rows[(m - 1) * w..].to_vec();
+        self.policy = self.policy.clone().restart();
         Ok((top, start))
     }
 
-    /// One round after the chain has processed every token but `pending`: draft up to `k` tokens, verify them with
-    /// `pending` in one batch, keep the matching prefix. `pick` chooses the token at each row from its candidates
+    /// One round after the chain has processed every token but `pending`: draft up to `max` tokens (as many as
+    /// `Policy` expects to pay, up to `self.k`), verify them with `pending` in one batch, keep the matching prefix. `pick` chooses the token at each row from its candidates
     /// in order (the greedy top, or a sample: a draft is kept when the pick equals it, so sampled output follows the
     /// target's distribution, and with the same draws as decoding one token at a time); a pick in `stop` ends the
     /// round. Returns the tokens the round produced (the kept drafts and the next pending token) and the
@@ -246,13 +323,17 @@ impl Speculator {
         &mut self,
         chain: &mut Chain,
         pending: u32,
-        k: usize,
+        max: usize,
         pick: &mut dyn FnMut(&[(f32, u32)]) -> u32,
         stop: &[u32],
     ) -> Result<(Vec<u32>, Vec<(f32, u32)>)> {
         let w = chain.local.c.width();
         let pos = chain.pos;
-        let k = k.min(chain.context.saturating_sub(pos + 1)).min(super::gpu::VERIFY_MAX - 1);
+        let k = self.k.min(max).min(chain.context.saturating_sub(pos + 1)).min(super::gpu::VERIFY_MAX - 1);
+        let k = if self.fixed { k } else { self.policy.choose(k) };
+        if k == 0 {
+            return self.shadow_round(chain, pending, pick);
+        }
         let t0 = std::time::Instant::now();
         let mut drafts: Vec<u32> = Vec::with_capacity(k);
         let mut h = std::mem::take(&mut self.last);
@@ -262,12 +343,14 @@ impl Speculator {
             drafts.push(best);
             h = y;
         }
-        self.stats.draft_ms += t0.elapsed().as_secs_f64() * 1e3;
+        let draft_ms = t0.elapsed().as_secs_f64() * 1e3;
+        self.stats.draft_ms += draft_ms;
         let t0 = std::time::Instant::now();
         let mut batch = vec![pending];
         batch.extend_from_slice(&drafts);
         let (tops, rows) = chain.verify(&batch)?;
-        self.stats.verify_ms += t0.elapsed().as_secs_f64() * 1e3;
+        let verify_ms = t0.elapsed().as_secs_f64() * 1e3;
+        self.stats.verify_ms += verify_ms;
         ensure!(tops.len() == batch.len() && rows.len() == batch.len() * w, "verification reply size");
         let mut a = 0;
         let mut next = pick(&tops[0]);
@@ -281,14 +364,63 @@ impl Speculator {
         if a < drafts.len() {
             chain.rollback(a + 1)?;
         }
-        self.stats.rollback_ms += t0.elapsed().as_secs_f64() * 1e3;
+        let rollback_ms = t0.elapsed().as_secs_f64() * 1e3;
+        self.stats.rollback_ms += rollback_ms;
         self.stats.rounds += 1;
+        self.stats.by_k[k] += 1;
         self.stats.drafted += drafts.len();
         self.stats.accepted += a;
+        for _ in 0..a {
+            self.policy.tested(true);
+        }
+        if a < drafts.len() {
+            // A draft equal to a stop token was right; the round only ended there.
+            self.policy.tested(next == drafts[a]);
+        }
+        Policy::update(&mut self.policy.draft_ms, draft_ms / k as f64);
+        Policy::update(&mut self.policy.verify_ms[k], verify_ms + rollback_ms);
         self.last = rows[a * w..(a + 1) * w].to_vec();
         let mut out = drafts[..a].to_vec();
         out.push(next);
         Ok((out, tops[a].clone()))
+    }
+
+    /// A round without drafts: `pending` alone through the chain while the block drafts the token after it on the
+    /// CPU (its whole draft vocabulary there, the driver's GPU being busy), which keeps the block's keys complete and
+    /// measures the acceptance.
+    fn shadow_round(
+        &mut self,
+        chain: &mut Chain,
+        pending: u32,
+        pick: &mut dyn FnMut(&[(f32, u32)]) -> u32,
+    ) -> Result<(Vec<u32>, Vec<(f32, u32)>)> {
+        let w = chain.local.c.width();
+        let pos = chain.pos;
+        let t0 = std::time::Instant::now();
+        let (h, draft) = (std::mem::take(&mut self.last), &mut self.draft);
+        let (shadow, verified) = std::thread::scope(|s| {
+            let t = s.spawn(|| -> Result<Option<u32>> {
+                let (y, _) = draft.forward(&[pending], &h, pos, false)?;
+                Ok(draft.best_all(&draft.final_hidden(&y)).map(|b| b.0))
+            });
+            let v = chain.verify(&[pending]);
+            (t.join(), v)
+        });
+        let (tops, rows) = verified?;
+        let shadow = shadow.map_err(|_| anyhow!("shadow draft panicked"))??;
+        let ms = t0.elapsed().as_secs_f64() * 1e3;
+        ensure!(tops.len() == 1 && rows.len() == w, "verification reply size");
+        self.stats.verify_ms += ms;
+        self.stats.rounds += 1;
+        self.stats.by_k[0] += 1;
+        Policy::update(&mut self.policy.verify_ms[0], ms);
+        let next = pick(&tops[0]);
+        if let Some(d) = shadow {
+            self.policy.tested(d == next);
+            self.stats.shadow_hits += (d == next) as usize;
+        }
+        self.last = rows;
+        Ok((vec![next], tops[0].clone()))
     }
 }
 
@@ -317,8 +449,7 @@ pub fn greedy(chain: &mut Chain, spec: Option<&mut Speculator>, prompt: &[u32], 
             let t0 = std::time::Instant::now();
             out.push(top[0].1);
             while out.len() < n {
-                let k = s.k.min(n - out.len());
-                let (toks, _) = s.round(chain, *out.last().unwrap(), k, &mut |t| t[0].1, &[])?;
+                let (toks, _) = s.round(chain, *out.last().unwrap(), n - out.len(), &mut |t| t[0].1, &[])?;
                 out.extend(toks);
             }
             out.truncate(n);
