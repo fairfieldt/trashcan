@@ -5,10 +5,10 @@
 use super::{
     cpu::Captures,
     embed,
-    gpu::{merge_top, KvCache, Output},
+    gpu::{merge_top, KvCache, Mode, Output, GATED_MAX},
     ngram,
     pipeline::{assemble_logits, head_rows, plan, Done, Local},
-    Config,
+    trace, Config,
 };
 use crate::{gguf::Gguf, qwen::pipeline::Devices};
 use anyhow::{bail, ensure, Context, Result};
@@ -23,14 +23,17 @@ use std::{
 struct Conn {
     r: BufReader<TcpStream>,
     w: BufWriter<TcpStream>,
+    /// Toward the driver (trace marks only).
+    up: bool,
 }
 
 impl Conn {
-    fn new(s: TcpStream) -> Result<Self> {
+    fn new(s: TcpStream, up: bool) -> Result<Self> {
         s.set_nodelay(true)?;
         Ok(Self {
             r: BufReader::with_capacity(1 << 20, s.try_clone()?),
             w: BufWriter::with_capacity(1 << 20, s),
+            up,
         })
     }
     /// Connect to the next machine, retrying for up to a minute while it is still starting (its port refuses).
@@ -38,7 +41,7 @@ impl Conn {
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
         loop {
             match TcpStream::connect(addr) {
-                Ok(s) => return Self::new(s),
+                Ok(s) => return Self::new(s, false),
                 Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused && std::time::Instant::now() < deadline => {
                     std::thread::sleep(std::time::Duration::from_millis(100))
                 }
@@ -47,36 +50,43 @@ impl Conn {
         }
     }
     fn send(&mut self, header: &Value, blob: &[u8]) -> Result<()> {
+        trace::mark(if self.up { "tx_up0" } else { "tx_dn0" }, blob.len() as u64);
         let h = serde_json::to_vec(header)?;
         self.w.write_all(&(h.len() as u32).to_le_bytes())?;
         self.w.write_all(&(blob.len() as u64).to_le_bytes())?;
         self.w.write_all(&h)?;
         self.w.write_all(blob)?;
         self.w.flush()?;
+        trace::mark(if self.up { "tx_up1" } else { "tx_dn1" }, blob.len() as u64);
         Ok(())
     }
     fn recv(&mut self) -> Result<(Value, Vec<u8>)> {
-        read_frame(&mut self.r)
+        read_frame(&mut self.r, !self.up).map(|(h, b, _)| (h, b))
     }
 }
 
-fn read_frame(r: &mut impl Read) -> Result<(Value, Vec<u8>)> {
+/// A frame and the host time it had arrived completely. `down`: from the next machine (trace marks only).
+fn read_frame(r: &mut impl Read, down: bool) -> Result<(Value, Vec<u8>, u64)> {
     let mut len = [0u8; 12];
     r.read_exact(&mut len)?;
+    let t0 = trace::now();
     let h = u32::from_le_bytes(len[..4].try_into()?) as usize;
     let b = u64::from_le_bytes(len[4..].try_into()?) as usize;
     let mut header = vec![0u8; h];
     r.read_exact(&mut header)?;
     let mut blob = vec![0u8; b];
     r.read_exact(&mut blob)?;
+    let t1 = trace::now();
+    trace::mark_at(if down { "rx_dn0" } else { "rx_up0" }, b as u64, t0);
+    trace::mark_at(if down { "rx_dn1" } else { "rx_up1" }, b as u64, t1);
     let header: Value = serde_json::from_slice(&header)?;
     if let Some(e) = header.get("error") {
         bail!("remote: {}", e.as_str().unwrap_or("error"));
     }
-    Ok((header, blob))
+    Ok((header, blob, t1))
 }
 
-type Requests = mpsc::Receiver<Result<(Value, Vec<u8>)>>;
+type Requests = mpsc::Receiver<Result<(Value, Vec<u8>, u64)>>;
 
 /// Read the previous machine's requests on a thread of their own, so that it can send the next prompt chunk (MiBs,
 /// more than the socket buffers take) while this machine's GPUs work.
@@ -84,13 +94,45 @@ fn requests(s: &TcpStream) -> Result<Requests> {
     let mut r = BufReader::with_capacity(1 << 20, s.try_clone()?);
     let (tx, rx) = mpsc::sync_channel(4);
     std::thread::spawn(move || loop {
-        let m = read_frame(&mut r);
+        let m = read_frame(&mut r, false);
         let end = m.is_err();
         if tx.send(m).is_err() || end {
             break;
         }
     });
     Ok(rx)
+}
+
+/// Offset of the next machine's clock from this machine's (ns) and the round trip, from the fastest of `k`
+/// ping-pongs (`TRASHCAN_Q4_TRACE`).
+fn ping(d: &mut Conn, k: usize) -> Result<(i64, i64)> {
+    let mut best = (0i64, i64::MAX);
+    for _ in 0..k {
+        let t1 = trace::now() as i64;
+        d.send(&json!({"ping": true}), &[])?;
+        let (pong, _) = d.recv()?;
+        let t4 = trace::now() as i64;
+        let t = |i: usize| pong["pong"][i].as_u64().map(|v| v as i64).context("pong");
+        let (t2, t3) = (t(0)?, t(1)?);
+        let rtt = (t4 - t1) - (t3 - t2);
+        if rtt < best.1 {
+            best = (((t2 - t1) + (t3 - t4)) / 2, rtt);
+        }
+    }
+    Ok(best)
+}
+
+/// Clock offsets of the machines after this one (relative to this machine's clock) and their ping round trips.
+fn clocks(down: Option<&mut Conn>, k: usize) -> Result<Vec<(i64, i64)>> {
+    let Some(d) = down else { return Ok(Vec::new()) };
+    let (off, rtt) = ping(d, k)?;
+    d.send(&json!({"clocks": k}), &[])?;
+    let (reply, _) = d.recv()?;
+    let mut all = vec![(off, rtt)];
+    for o in reply["offsets"].as_array().context("missing offsets")? {
+        all.push((off + o[0].as_i64().context("offset")?, o[1].as_i64().context("round trip")?));
+    }
+    Ok(all)
 }
 
 /// Send a prompt chunk that left this machine's stages on to the next machine. On the machine that ends the model it
@@ -209,13 +251,14 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
         let stream = stream?;
         eprintln!("qwen4 node: session from {}", stream.peer_addr()?);
         let requests = requests(&stream)?;
-        let mut up = Conn::new(stream)?;
+        let mut up = Conn::new(stream, true)?;
         if let Err(e) = session(model, &devices, &mut up, &requests) {
             eprintln!("qwen4 node: session ended: {e:#}");
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
         }
         // The reader thread holds the socket too: close it as dropping `up` alone did.
         let _ = up.w.get_ref().shutdown(Shutdown::Both);
+        trace::write("node", Value::Null);
     }
     Ok(())
 }
@@ -224,12 +267,26 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
     let mut down: Option<Conn> = None;
     let mut local: Option<Local> = None;
     loop {
-        let (header, blob) = match requests.recv() {
+        let (header, blob, arrived) = match requests.recv() {
             Ok(Ok(m)) => m,
             Ok(Err(e)) if e.downcast_ref::<std::io::Error>().is_none() => return Err(e),
             _ => return Ok(()),
         };
-        if let Some(chain) = header.get("probe") {
+        if header.get("ping").is_some() {
+            up.send(&json!({"pong": [arrived, trace::now()]}), &[])?;
+        } else if let Some(f) = header.get("next") {
+            // A forward follows: pass the notice on, then submit this machine's stages ahead of the input.
+            if let Some(d) = down.as_mut() {
+                d.send(&header, &[])?;
+            }
+            let l = local.as_mut().context("forward before setup")?;
+            let pos = f["pos"].as_u64().context("pos")? as usize;
+            let n = f["n"].as_u64().context("n")? as usize;
+            l.presubmit(pos, n, Mode::Plain)?;
+        } else if let Some(k) = header.get("clocks") {
+            let all = clocks(down.as_mut(), k.as_u64().context("clocks")? as usize)?;
+            up.send(&json!({"offsets": all.iter().map(|(o, r)| json!([o, r])).collect::<Vec<_>>()}), &[])?;
+        } else if let Some(chain) = header.get("probe") {
             let chain: Vec<String> = serde_json::from_value(chain.clone())?;
             let mut counts = vec![devices.count()];
             if let Some((next, rest)) = chain.split_first() {
@@ -299,6 +356,7 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
             let n = f["n"].as_u64().context("n")? as usize;
             let reply = f["reply"].as_bool().unwrap_or(true);
             let dump = f["dump"].as_bool().unwrap_or(false);
+            trace::mark("fwd", pos as u64);
             let mut caps = Captures::new();
             let x = floats(&blob);
             // Prompt chunks without a reply stream through this machine's stages, which work on consecutive chunks at
@@ -322,10 +380,14 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
                 continue;
             }
             // The final hidden state goes on up first; then this machine's stages score their head rows, and the
-            // candidates follow, merged with those of the machines after it.
+            // candidates follow, merged with those of the machines after it. While the machines after this one
+            // work, the scoring is submitted ahead.
             let (h, rest) = match out {
                 Output::Final(h) => (h, None),
                 Output::Hidden(_) => {
+                    if !dump && n <= GATED_MAX {
+                        l.presubmit_heads(1)?;
+                    }
                     let d = down.as_mut().context("the last machine has no LM head")?;
                     (recv_hidden(d)?, Some(d))
                 }
@@ -391,6 +453,7 @@ fn merge_rows(a: Vec<Vec<(f32, u32)>>, b: Vec<Vec<(f32, u32)>>) -> Result<Vec<Ve
 fn verify_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value, blob: &[u8]) -> Result<()> {
     let pos = f["pos"].as_u64().context("pos")? as usize;
     let n = f["n"].as_u64().context("n")? as usize;
+    trace::mark("vfy", pos as u64);
     let mut down = down;
     // Prompt chunks still in flight go on first.
     l.drain(|d| pass_on(down.as_deref_mut(), d))?;
@@ -556,6 +619,12 @@ impl Chain {
     }
 
     /// The n-gram rows of `tokens` following the history.
+    /// Every other machine's clock offset from this one's (ns) and the ping round trip, measured along the chain with
+    /// `k` ping-pongs per link (`TRASHCAN_Q4_TRACE`).
+    pub fn sync_clocks(&mut self, k: usize) -> Result<Vec<(i64, i64)>> {
+        clocks(self.next.as_mut(), k)
+    }
+
     fn ple(&self, tokens: &[u32]) -> Result<Option<Vec<f32>>> {
         let Some(p) = &self.local.c.ngram else { return Ok(None) };
         match &self.rows {
@@ -583,8 +652,15 @@ impl Chain {
         if self.pos == 0 {
             self.history.clear();
         }
+        trace::mark("fwd", self.pos as u64);
+        // A decode step: the other machines submit their stages ahead while this one works (`Local::presubmit`).
+        let ahead = reply && dump.is_none() && n <= GATED_MAX;
+        if let (true, Some(conn)) = (ahead, self.next.as_mut()) {
+            conn.send(&json!({"next": {"pos": self.pos, "n": n}}), &[])?;
+        }
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let ple = self.ple(tokens)?;
+        trace::mark("ple", self.pos as u64);
         self.history.extend_from_slice(tokens);
         let pos = self.pos;
         let out = if dump.is_some() {
@@ -611,10 +687,13 @@ impl Chain {
             return Ok(None);
         }
         // The final hidden state arrives first: this machine scores its head rows while the candidates of the
-        // others come up the chain.
+        // others come up the chain. The scoring is submitted ahead while the other machines work.
         let (h, rest) = match out {
             Output::Final(h) => (h, None),
             Output::Hidden(_) => {
+                if ahead {
+                    self.local.presubmit_heads(1)?;
+                }
                 let conn = self.next.as_mut().context("no machine holds the LM head")?;
                 (recv_hidden(conn)?, Some(conn))
             }
@@ -627,6 +706,7 @@ impl Chain {
         if let Some(m) = dump {
             assemble_logits(m, self.local.c.vocab);
         }
+        trace::mark("done", pos as u64);
         Ok(Some(top))
     }
 
@@ -676,8 +756,10 @@ impl Chain {
 
     /// Discard the live state: the next prompt starts from position 0.
     pub fn forget(&mut self) {
-        // Chunks still in flight after an error are dropped with the rest of the state.
+        // Chunks still in flight after an error are dropped with the rest of the state, and so is work submitted
+        // ahead.
         let _ = self.local.drain(|_| Ok(()));
+        self.local.abandon();
         self.pos = 0;
         self.history.clear();
     }
@@ -707,8 +789,10 @@ impl Chain {
             self.history.clear();
         }
         ensure!(self.pos > 0, "a verification batch continues a sequence");
+        trace::mark("vfy", self.pos as u64);
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let ple = self.ple(tokens)?;
+        trace::mark("ple", self.pos as u64);
         self.history.extend_from_slice(tokens);
         let pos = self.pos;
         self.local.drain(|d| pass_on(self.next.as_mut(), d))?;
@@ -732,6 +816,7 @@ impl Chain {
             let (hd, _) = self.next.as_mut().unwrap().recv()?;
             tops = merge_rows(tops, decode_kept(&hd)?)?;
         }
+        trace::mark("done", pos as u64);
         Ok((tops, rows))
     }
 

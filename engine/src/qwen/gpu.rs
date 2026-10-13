@@ -94,7 +94,7 @@ extern "C" fn release_gates(sig: libc::c_int) {
     }
 }
 
-fn register_gate(gpu: &Device, release: vk::Event) {
+pub(crate) fn register_gate(gpu: &Device, release: vk::Event) {
     static HANDLERS: std::sync::Once = std::sync::Once::new();
     HANDLERS.call_once(|| unsafe {
         for sig in [libc::SIGINT, libc::SIGTERM, libc::SIGHUP] {
@@ -105,7 +105,7 @@ fn register_gate(gpu: &Device, release: vk::Event) {
     GATES.lock().unwrap().push((gpu.dev.handle(), set, release));
 }
 
-fn unregister_gates(gpu: &Device) {
+pub(crate) fn unregister_gates(gpu: &Device) {
     GATES.lock().unwrap().retain(|g| g.0 != gpu.dev.handle());
 }
 

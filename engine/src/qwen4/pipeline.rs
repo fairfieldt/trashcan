@@ -3,7 +3,7 @@
 //! driver's; the last stage of the last machine owns the final mixer and the LM head.
 use super::{
     cpu::{Captures, CpuStage},
-    gpu::{merge_top, GpuStage, KvCache, Output},
+    gpu::{merge_top, GpuStage, KvCache, Mode, Output, GATED_MAX},
     Config,
 };
 use crate::{gguf::Gguf, gpu::Instance, qwen::pipeline::Devices, vulkan::Device};
@@ -306,6 +306,7 @@ impl Local {
                 top = merge_top(top, m);
             }
         }
+        super::trace::mark("top", 0);
         Ok(top)
     }
 
@@ -321,6 +322,9 @@ impl Local {
     ) -> Result<Output> {
         if let Some(c) = &self.clocks {
             c.busy();
+        }
+        if dump.is_none() && self.gated(n) {
+            return self.forward_gated(x, ple, pos, n, Mode::Plain);
         }
         let mut end = None;
         for stage in self.stages.iter_mut() {
@@ -345,6 +349,96 @@ impl Local {
             }
         }
         Ok(end.unwrap_or(Output::Hidden(x)))
+    }
+
+    /// Whether `n`-token forwards run gated (`forward_gated`): GPU stages only, nothing in flight.
+    fn gated(&self, n: usize) -> bool {
+        n <= GATED_MAX
+            && self.stages.iter().all(|s| matches!(s, Stage::Gpu(_)))
+            && self.flight.iter().all(Option::is_none)
+    }
+
+    /// Run a forward of up to `GATED_MAX` tokens on GPU stages that wait for their input on the GPU
+    /// (`GpuStage::presubmit`): the first stage starts at once (or was submitted ahead), every later one is submitted
+    /// while the stages before it work and starts as soon as the previous stage's output is in. In verification mode
+    /// the stage that ends the model also leaves the batch's residual rows in `rows`.
+    pub(crate) fn forward_gated(&mut self, x: Vec<f32>, ple: Option<&[f32]>, pos: usize, n: usize, mode: Mode) -> Result<Output> {
+        let r = self.run_gated(x, ple, pos, n, mode);
+        if r.is_err() {
+            self.abandon();
+        }
+        r
+    }
+
+    fn run_gated(&mut self, x: Vec<f32>, ple: Option<&[f32]>, pos: usize, n: usize, mode: Mode) -> Result<Output> {
+        fn gpu(s: &mut Stage) -> Result<&mut GpuStage> {
+            match s {
+                Stage::Gpu(g) => Ok(g),
+                Stage::Cpu(_) => bail!("gated forwards run on GPU stages only"),
+            }
+        }
+        let k = self.stages.len();
+        gpu(&mut self.stages[0])?.submit_mode(&x, ple, pos, n, false, mode)?;
+        for s in &mut self.stages[1..] {
+            let g = gpu(s)?;
+            if !g.presubmitted() {
+                g.presubmit(pos, n, mode)?;
+            }
+        }
+        for i in 0..k {
+            let g = gpu(&mut self.stages[i])?;
+            let out = g.collect(None)?;
+            if let (Mode::Verify, Output::Final(_)) = (mode, &out) {
+                self.rows = g.residual(n)?;
+            }
+            match out {
+                Output::Hidden(h) if i + 1 < k => gpu(&mut self.stages[i + 1])?.submit_mode(&h, None, pos, n, false, mode)?,
+                Output::Final(_) if i + 1 < k => bail!("a stage before the last ends the model"),
+                out => return Ok(out),
+            }
+        }
+        bail!("no local stages")
+    }
+
+    /// Submit an `n`-token forward at `pos` ahead on every GPU stage (`GpuStage::presubmit`); the forward that follows
+    /// starts each stage without the submission's cost. Only when its input is on the way (see `gate`); nothing
+    /// happens when such forwards do not run gated.
+    pub fn presubmit(&mut self, pos: usize, n: usize, mode: Mode) -> Result<()> {
+        if !self.gated(n) {
+            return Ok(());
+        }
+        let r = self.stages.iter_mut().try_for_each(|s| match s {
+            Stage::Gpu(g) if !g.presubmitted() => g.presubmit(pos, n, mode),
+            _ => Ok(()),
+        });
+        if r.is_err() {
+            self.abandon();
+        }
+        r
+    }
+
+    /// Submit the scoring of `rows` final hidden states ahead on every GPU stage with head rows; `head_slices` or
+    /// `head_rows` releases it. Only when the hidden states are on the way.
+    pub fn presubmit_heads(&mut self, rows: usize) -> Result<()> {
+        let r = self.stages.iter_mut().try_for_each(|s| match s {
+            Stage::Gpu(g) => g.head_presubmit(rows).map(|_| ()),
+            Stage::Cpu(_) => Ok(()),
+        });
+        if r.is_err() {
+            self.abandon();
+        }
+        r
+    }
+
+    /// Let work submitted ahead run without its input and wait for every GPU stage to go idle (after an error).
+    pub fn abandon(&mut self) {
+        for s in &mut self.stages {
+            if let Stage::Gpu(g) = s {
+                if let Err(e) = g.abandon() {
+                    eprintln!("qwen4: {e:#}");
+                }
+            }
+        }
     }
 }
 

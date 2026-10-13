@@ -9,12 +9,14 @@ pub mod bench;
 pub mod cli;
 pub mod cpu;
 pub mod draft;
+pub mod gate;
 pub mod gpu;
 pub mod mtp;
 pub mod net;
 pub mod ngram;
 pub mod pipeline;
 pub mod spec;
+pub mod trace;
 
 use crate::gguf::{Gguf, TensorInfo, Value};
 use anyhow::{ensure, Context, Result};

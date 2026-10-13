@@ -514,6 +514,16 @@ fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_j
     };
     let prefill_ms = profile(e);
     let mut decode_ms: Vec<Vec<f64>> = prefill_ms.iter().map(|p| vec![0.; p.len()]).collect();
+    // With TRASHCAN_Q4_TRACE: every machine's clock offset before and after the decode steps.
+    let mut clocks = Vec::new();
+    let mut sync = |e: &mut super::net::Chain| -> Result<()> {
+        if super::trace::on() {
+            let t = super::trace::now();
+            clocks.push(serde_json::json!({"t": t, "offsets": e.sync_clocks(64)?}));
+        }
+        Ok(())
+    };
+    sync(e)?;
     let start = std::time::Instant::now();
     for _ in 0..tg {
         top = e.forward(&[top[0].1], true, None)?.context("missing candidates")?;
@@ -524,6 +534,8 @@ fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_j
         }
     }
     let tg_s = start.elapsed().as_secs_f64();
+    sync(e)?;
+    super::trace::write("driver", serde_json::json!({"clocks": clocks, "plans": e.plans}));
     let mib: Vec<f64> = e
         .local
         .stages
