@@ -244,8 +244,6 @@ pub struct Speculator {
     pub k: usize,
     pub stats: Stats,
     policy: Policy,
-    /// Always `k` drafts (experiment: adaptive against fixed rounds).
-    pub fixed: bool,
     /// The residual row of the token before the pending one (the block's `h` for the pending token).
     last: Vec<f32>,
     /// Head rows `0..gpu_rows` are scored by the driver's GPU head slices (at the same time as the CPU scores the
@@ -255,7 +253,7 @@ pub struct Speculator {
 
 impl Speculator {
     pub fn new(draft: super::draft::Draft, k: usize) -> Self {
-        Self { draft, k, stats: Stats::default(), policy: Policy::new(), fixed: false, last: Vec::new(), gpu_rows: 0 }
+        Self { draft, k, stats: Stats::default(), policy: Policy::new(), last: Vec::new(), gpu_rows: 0 }
     }
 
     /// Score the first draft head rows with the driver's GPU head slices when they hold the vocabulary's first rows:
@@ -339,7 +337,7 @@ impl Speculator {
         let w = chain.local.c.width();
         let pos = chain.pos;
         let k = self.k.min(max).min(chain.context.saturating_sub(pos + 1)).min(super::gpu::VERIFY_MAX - 1);
-        let k = if self.fixed { k } else { self.policy.choose(k) };
+        let k = self.policy.choose(k);
         if k == 0 {
             return self.shadow_round(chain, pending, pick);
         }

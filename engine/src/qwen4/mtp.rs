@@ -224,7 +224,7 @@ pub enum Cmd {
         /// The MTP GGUF (blk.{layers}); the driver drafts on its CPU.
         #[arg(long)]
         mtp: std::path::PathBuf,
-        /// Drafts per round.
+        /// Drafts per round at most (each round drafts as many as the recent acceptance pays for).
         #[arg(long, default_value_t = 3)]
         draft_tokens: usize,
         /// Draft head rows: tokens below this id.
@@ -319,35 +319,26 @@ pub fn run(cmd: Cmd) -> Result<()> {
                     .collect::<Result<_>>()?
             };
             let mut failed = false;
-            // Experiment: also rounds of always `draft_tokens` drafts.
-            let fixed = std::env::var_os("TRASHCAN_MTP_FIXED").is_some();
             for i in 0..runs {
                 for (name, ids) in &prompts {
                     let (plain, pre0, dec0) = super::spec::greedy(&mut chain, None, ids, tg)?;
                     let mut row = serde_json::json!({"run": i, "prompt": name, "prompt_tokens": ids.len(), "tg": tg,
                         "plain_tok_s": (tg - 1) as f64 / dec0, "plain_prefill_s": pre0,
                         "draft_tokens": draft_tokens, "draft_vocab": spec.draft.vocab()});
-                    for (label, f) in [("mtp", false), ("fixed", true)] {
-                        if f && !fixed {
-                            continue;
-                        }
-                        spec.fixed = f;
-                        let (fast, pre1, dec1) = super::spec::greedy(&mut chain, Some(&mut spec), ids, tg)?;
-                        let same = plain == fast;
-                        failed |= !same;
-                        let st = &spec.stats;
-                        let r = st.rounds.max(1) as f64;
-                        row[label] = serde_json::json!({"identical": same,
-                            "first_difference": plain.iter().zip(&fast).position(|(a, b)| a != b),
-                            "tok_s": (tg - 1) as f64 / dec1, "prefill_s": pre1, "stats": st,
-                            "tokens_per_round": (tg - 1) as f64 / r,
-                            "accepted_per_draft": st.accepted as f64 / st.drafted.max(1) as f64,
-                            "shadow_accepted": st.shadow_hits as f64 / st.by_k[0].max(1) as f64,
-                            "ms_per_round": {"draft": st.draft_ms / r, "verify": st.verify_ms / r,
-                                "rollback": st.rollback_ms / r},
-                            "ids": fast});
-                    }
-                    spec.fixed = false;
+                    let (fast, pre1, dec1) = super::spec::greedy(&mut chain, Some(&mut spec), ids, tg)?;
+                    let same = plain == fast;
+                    failed |= !same;
+                    let st = &spec.stats;
+                    let r = st.rounds.max(1) as f64;
+                    row["mtp"] = serde_json::json!({"identical": same,
+                        "first_difference": plain.iter().zip(&fast).position(|(a, b)| a != b),
+                        "tok_s": (tg - 1) as f64 / dec1, "prefill_s": pre1, "stats": st,
+                        "tokens_per_round": (tg - 1) as f64 / r,
+                        "accepted_per_draft": st.accepted as f64 / st.drafted.max(1) as f64,
+                        "shadow_accepted": st.shadow_hits as f64 / st.by_k[0].max(1) as f64,
+                        "ms_per_round": {"draft": st.draft_ms / r, "verify": st.verify_ms / r,
+                            "rollback": st.rollback_ms / r},
+                        "ids": fast});
                     row["plain_ids"] = serde_json::json!(plain);
                     println!("{row}");
                 }

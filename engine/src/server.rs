@@ -51,7 +51,8 @@ pub struct Options {
     cpu_reduce: bool,
     #[arg(long)]
     draft: Option<PathBuf>,
-    /// Drafted tokens per round (default: 3 for Gemma's assistant, 2 for Qwen's MTP layer).
+    /// Drafted tokens per round (default: 3 for Gemma's assistant, 2 for Qwen's MTP layer; Flash-Next's MTP block: at
+    /// most 3, each round drafts as many as its recent acceptance pays for).
     #[arg(long)]
     draft_tokens: Option<usize>,
     /// Qwen: draft only among the first N token ids (0: the whole vocabulary).
