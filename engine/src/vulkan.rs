@@ -520,6 +520,10 @@ impl Device {
             ("qwen4_mix_act", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_act.spv")).as_slice()),
             ("qwen4_mix_down_sk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk.spv")).as_slice()),
             ("qwen4_mix_down_sk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk4.spv")).as_slice()),
+            ("qwen4_mix_down_skw", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_skw.spv")).as_slice()),
+            ("qwen4_mix_rows_up", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_rows_up.spv")).as_slice()),
+            ("qwen4_q8_mvk2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mvk2.spv")).as_slice()),
+            ("qwen4_q8_mvk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mvk4.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -559,8 +563,18 @@ impl Device {
                     ("attention_partial_heads8_16", Some(16)),
                     ("attention_partial_heads8_64", Some(64)),
                 ],
-                "qwen4_q8_mvw4_r4" => &[("qwen4_q8_mvw4_r4", Some(1)), ("qwen4_q8_mvw4_r4_c4", Some(4))],
-                "qwen4_q8_mvw4_r2" => &[("qwen4_q8_mvw4_r2", Some(1)), ("qwen4_q8_mvw4_r2_c4", Some(4))],
+                "qwen4_q8_mvw4_r4" => &[
+                    ("qwen4_q8_mvw4_r4", Some(1)),
+                    ("qwen4_q8_mvw4_r4_c2", Some(2)),
+                    ("qwen4_q8_mvw4_r4_c3", Some(3)),
+                    ("qwen4_q8_mvw4_r4_c4", Some(4)),
+                ],
+                "qwen4_q8_mvw4_r2" => &[
+                    ("qwen4_q8_mvw4_r2", Some(1)),
+                    ("qwen4_q8_mvw4_r2_c2", Some(2)),
+                    ("qwen4_q8_mvw4_r2_c3", Some(3)),
+                    ("qwen4_q8_mvw4_r2_c4", Some(4)),
+                ],
                 "qwen4_moe_gu" => &[
                     ("qwen4_moe_gu", Some(0)),
                     ("qwen4_moe_gu_iq4nl", Some(1)),
@@ -594,6 +608,24 @@ impl Device {
                 "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],
                 "qwen4_mix_down_sk" => &[("qwen4_mix_down_sk", Some(0)), ("qwen4_mix_down_sk_q8", Some(1))],
                 "qwen4_mix_down_sk4" => &[("qwen4_mix_down_sk4", Some(0)), ("qwen4_mix_down_sk4_q8", Some(1))],
+                "qwen4_mix_down_skw" => &[
+                    ("qwen4_mix_down_skw_c1", Some(1)),
+                    ("qwen4_mix_down_skw_c2", Some(2)),
+                    ("qwen4_mix_down_skw_c3", Some(3)),
+                    ("qwen4_mix_down_skw_c4", Some(4)),
+                ],
+                "qwen4_q8_mvk2" => &[("qwen4_q8_mvk2_c1", Some(1))],
+                "qwen4_q8_mvk4" => &[
+                    ("qwen4_q8_mvk4_c2", Some(2)),
+                    ("qwen4_q8_mvk4_c3", Some(3)),
+                    ("qwen4_q8_mvk4_c4", Some(4)),
+                ],
+                "qwen4_mix_rows_up" => &[
+                    ("qwen4_mix_rows_up_c1", Some(1)),
+                    ("qwen4_mix_rows_up_c2", Some(2)),
+                    ("qwen4_mix_rows_up_c3", Some(3)),
+                    ("qwen4_mix_rows_up_c4", Some(4)),
+                ],
                 "qwen4_attention_sparse" => &[
                     ("qwen4_attention_sparse", None),
                     ("qwen4_attention_sparse8", Some(8)),

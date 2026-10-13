@@ -379,15 +379,35 @@ fn q8_gemm(rows: usize, n: usize, parts: usize) -> (&'static str, usize, usize) 
     }
 }
 
-/// Q8_0 kernels for 1 and 2-8 tokens and the rows per workgroup: wide loads (a uvec2 per lane), 4 rows per wave for
-/// tall matrices and 2 for shorter ones, which then get more waves (results/qwen4/decode-kernels-20261012).
-fn q8_decode_shaders(rows: usize) -> (&'static str, &'static str, usize) {
-    if rows >= 4096 {
-        ("qwen4_q8_mvw4_r4", "qwen4_q8_mvw4_r4_c4", 16)
-    } else {
-        ("qwen4_q8_mvw4_r2", "qwen4_q8_mvw4_r2_c4", 8)
+/// The Q8_0 matrix-vector kernel for `n` tokens (1-8) of a `rows` x `k` matrix, and its rows per workgroup: wide loads
+/// (a uvec2 per lane, results/qwen4/decode-kernels-20261012), exactly min(n, 4) columns per workgroup (the 4-column
+/// kernel computed 4 for 2 or 3 tokens). 4 rows per wave for tall matrices and 2 for shorter ones, which then get more
+/// waves; the out projections (2560 rows of 6144) split each row's K over two waves (`qwen4_q8_mvk`: twice the waves,
+/// half as long; 4 rows per wave from 2 tokens, whose input loads grow with the columns), the same sums at every batch
+/// size (results/qwen4/verify-batches-20261012).
+fn q8_decode_shader(rows: usize, k: usize, n: usize) -> (&'static str, usize) {
+    if (2048..4096).contains(&rows) && k >= 4096 && k % 1024 == 0 {
+        return if n == 1 {
+            ("qwen4_q8_mvk2_c1", 4)
+        } else {
+            (["qwen4_q8_mvk4_c2", "qwen4_q8_mvk4_c3", "qwen4_q8_mvk4_c4"][n.min(4) - 2], 8)
+        };
     }
+    let wide = rows >= 4096;
+    let names = if wide {
+        ["qwen4_q8_mvw4_r4", "qwen4_q8_mvw4_r4_c2", "qwen4_q8_mvw4_r4_c3", "qwen4_q8_mvw4_r4_c4"]
+    } else {
+        ["qwen4_q8_mvw4_r2", "qwen4_q8_mvw4_r2_c2", "qwen4_q8_mvw4_r2_c3", "qwen4_q8_mvw4_r2_c4"]
+    };
+    (names[n.min(4) - 1], if wide { 16 } else { 8 })
 }
+
+/// The Q8_0 mixer kernels for batches of 1-8 tokens by tokens per workgroup (1-4): the first half split by stream and
+/// the second half with a lane per row of the up projection (results/qwen4/verify-batches-20261012).
+const MIX_DOWN_SKW: [&str; 4] =
+    ["qwen4_mix_down_skw_c1", "qwen4_mix_down_skw_c2", "qwen4_mix_down_skw_c3", "qwen4_mix_down_skw_c4"];
+const MIX_ROWS_UP: [&str; 4] =
+    ["qwen4_mix_rows_up_c1", "qwen4_mix_rows_up_c2", "qwen4_mix_rows_up_c3", "qwen4_mix_rows_up_c4"];
 
 /// The f32 projection kernel: up to four tokens issue all their loads at once (qwen4_matf32).
 fn matf32_shader(n: usize) -> &'static str {
@@ -1106,13 +1126,13 @@ impl GpuStage {
                 }
                 Dense::Q8(b, stride) => {
                     u[3] = *stride;
-                    let (one, four, per) = q8_decode_shaders(rows);
                     (
                         b,
-                        match n {
-                            1 => (one, rows.div_ceil(per), 1),
-                            2..=8 => (four, rows.div_ceil(per), n.div_ceil(4)),
-                            _ => q8_gemm(rows, n, 1),
+                        if n <= 8 {
+                            let (shader, per) = q8_decode_shader(rows, k, n);
+                            (shader, rows.div_ceil(per), n.div_ceil(4))
+                        } else {
+                            q8_gemm(rows, n, 1)
                         },
                     )
                 }
@@ -1252,16 +1272,19 @@ impl GpuStage {
                 if d == 2 * SPLIT && w % SPLIT == 0 && n <= 8 {
                     // Split over the residual (qwen4_mix_down has 21 workgroups for one token): one token, or four
                     // per workgroup reading the weights once (measured up to 8 tokens; prefill chunks keep
-                    // qwen4_mix_down).
+                    // qwen4_mix_down). Q8_0 is split by stream with 8-byte loads and the exact column count per
+                    // workgroup (qwen4_mix_down_skw), the same sums at every batch size.
                     let groups = if n == 1 { 1 } else { n.div_ceil(4) };
+                    let (shader, chunks) = match (q8, n) {
+                        (true, _) if hc == 4 => (MIX_DOWN_SKW[n.min(4) - 1], hc),
+                        (true, 1) => ("qwen4_mix_down_sk_q8", w / SPLIT),
+                        (false, 1) => ("qwen4_mix_down_sk", w / SPLIT),
+                        (true, _) => ("qwen4_mix_down_sk4_q8", w / SPLIT),
+                        (false, _) => ("qwen4_mix_down_sk4", w / SPLIT),
+                    };
                     gpu.dispatch_matrix(
                         current.get(),
-                        match (q8, n) {
-                            (true, 1) => "qwen4_mix_down_sk_q8",
-                            (false, 1) => "qwen4_mix_down_sk",
-                            (true, _) => "qwen4_mix_down_sk4_q8",
-                            (false, _) => "qwen4_mix_down_sk4",
-                        },
+                        shader,
                         push(
                             [
                                 self.x.address,
@@ -1275,7 +1298,7 @@ impl GpuStage {
                         )
                         .with_extra(self.mcount.address),
                         (c.hc_rank + 4).div_ceil(16) as u32,
-                        (groups * (w / SPLIT)) as u32,
+                        (groups * chunks) as u32,
                         wb,
                     )?;
                 } else {
@@ -1307,9 +1330,16 @@ impl GpuStage {
                 u[2] = c.hc_rank as u32;
                 u[3] = ustride;
                 u[11] = u32::from(pending);
+                // Q8_0 with a bottleneck of 320: a lane per row, the workgroup reading 64 whole rows once for up to
+                // four tokens (qwen4_mix_rows_up).
+                let (shader, gy) = if uq8 && hc == 4 && c.hc_rank == 320 {
+                    (MIX_ROWS_UP[n.min(4) - 1], n.div_ceil(4))
+                } else {
+                    (if uq8 { "qwen4_mix_up_q8" } else { "qwen4_mix_up" }, n)
+                };
                 gpu.dispatch_matrix(
                     current.get(),
-                    if uq8 { "qwen4_mix_up_q8" } else { "qwen4_mix_up" },
+                    shader,
                     push(
                         [
                             self.x.address,
@@ -1322,7 +1352,7 @@ impl GpuStage {
                         u,
                     ),
                     d.div_ceil(16) as u32,
-                    n as u32,
+                    gy as u32,
                     ub,
                 )?;
                 capture(graph, format!("hc_mixed{tag}"), &self.u, d)?;
