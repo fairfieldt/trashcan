@@ -22,7 +22,7 @@ for f in sys.argv[1:]:
     same = all(p['identical'] for r in rows for p in passes(r).values())
     print(f"== {f.split('/')[-1]}: k up to {rows[0]['draft_tokens']}, draft vocabulary {rows[0]['draft_vocab']}, "
           f"{len({r['run'] for r in rows})} runs, all identical: {same}")
-    print("prompt\tpass\tplain tok/s\tMTP tok/s\tgain\ttokens/round\tdraft ms\tverify ms\trollback ms\trounds by k\tshadow acc")
+    print("prompt\tpass\tplain tok/s\tMTP tok/s\tgain\ttokens/round\tdraft ms\tverify ms\trollback ms\trounds by k\tshadow acc\tverify ms by k")
     means = {l: ([], []) for l in labels}
     for p in dict.fromkeys(r['prompt'] for r in rows):
         rs = [r for r in rows if r['prompt'] == p]
@@ -36,8 +36,9 @@ for f in sys.argv[1:]:
             ms = {k: statistics.mean(x['ms_per_round'][k] for x in ps) for k in ('draft', 'verify', 'rollback')}
             byk = [sum(x['stats'].get('by_k', [0, 0, 0, 0])[i] for x in ps) for i in range(4)]
             sh = sum(x['stats'].get('shadow_hits', 0) for x in ps) / max(byk[0], 1)
+            vk = [sum(x['stats'].get('verify_ms_by_k', [0] * 4)[i] for x in ps) / max(byk[i], 1) for i in range(4)]
             print(f"{p}\t{l}\t{pl:.2f}\t{mt:.2f}\t{mt / pl - 1:+.1%}\t{tpr:.2f}\t{ms['draft']:.1f}\t{ms['verify']:.1f}"
-                  f"\t{ms['rollback']:.2f}\t{'/'.join(map(str, byk))}\t{sh:.2f}")
+                  f"\t{ms['rollback']:.2f}\t{'/'.join(map(str, byk))}\t{sh:.2f}\t{'/'.join(f'{v:.0f}' for v in vk)}")
     for l, (a, b) in means.items():
         pl, mt = statistics.mean(a), statistics.mean(b)
         print(f"mean\t{l}\t{pl:.2f}\t{mt:.2f}\t{mt / pl - 1:+.1%}")

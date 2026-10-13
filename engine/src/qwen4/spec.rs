@@ -153,36 +153,42 @@ pub struct Stats {
     pub draft_ms: f64,
     pub verify_ms: f64,
     pub rollback_ms: f64,
-    /// Rounds by the number of drafts (index 0: plain steps with a shadow draft).
+    /// Rounds by the number of drafts (index 0: plain steps with a shadow draft) and their verification and
+    /// rollback milliseconds.
     pub by_k: [usize; super::gpu::VERIFY_MAX],
+    pub verify_ms_by_k: [f64; super::gpu::VERIFY_MAX],
     /// Shadow drafts that matched the next token.
     pub shadow_hits: usize,
 }
 
-/// Verification cost of a batch of n tokens relative to one token, for batch sizes not measured yet (the six-Mac
-/// chain: 67.3 ms per token, 112.6 for 3 tokens and 133.3 for 4 in session 2; 2 tokens from stage-bench's 1.38x).
-const VERIFY_RATIO: [f64; super::gpu::VERIFY_MAX] = [1.0, 1.36, 1.67, 1.98];
 /// Weight older drafts keep at each new one: the acceptance of about the last 16 drafts.
 const ACCEPT_DECAY: f64 = 0.94;
 /// Weight of the newest round in the running costs.
 const COST_WEIGHT: f64 = 0.2;
+/// Rounds after which a batch size's cost is measured again (one round of that size), so that sizes the choice
+/// avoids keep a current cost (e.g. a shorter context in the next request).
+const REFRESH: usize = 256;
 
 /// How many drafts the next round makes: the count with the most expected tokens per millisecond, from the recent
 /// acceptance of drafts (`a`, all depths pooled: a round of k drafts yields 1 + a + ... + a^k tokens on average)
-/// and the running costs of a draft step and of each verification batch size. With no drafts the round is a plain
-/// step (a 1-token verification batch) while the block drafts the next token on the CPU anyway (a shadow draft), so
-/// the acceptance stays measured at no cost to the chain and drafting resumes once it pays again.
+/// and the measured running costs of a draft step and of each verification batch size (each size is run once
+/// before the first choice, largest first, and again when its cost is `REFRESH` rounds old). With no drafts the
+/// round is a plain step (a 1-token verification batch) while the block drafts the next token on the CPU anyway (a
+/// shadow draft), so the acceptance stays measured at no cost to the chain and drafting resumes once it pays again.
 #[derive(Clone, Debug)]
 struct Policy {
     hits: f64,
     tests: f64,
     draft_ms: Option<f64>,
+    /// Running cost of each verification batch size (1 to `VERIFY_MAX` tokens) and the rounds since it was measured.
     verify_ms: [Option<f64>; super::gpu::VERIFY_MAX],
+    age: [usize; super::gpu::VERIFY_MAX],
 }
 
 impl Policy {
     fn new() -> Self {
-        Self { hits: 0., tests: 0., draft_ms: None, verify_ms: [None; super::gpu::VERIFY_MAX] }.restart()
+        const N: usize = super::gpu::VERIFY_MAX;
+        Self { hits: 0., tests: 0., draft_ms: None, verify_ms: [None; N], age: [0; N] }.restart()
     }
 
     /// A new sequence: acceptance back to its prior (0.8, worth 4 drafts); the costs stay.
@@ -200,26 +206,29 @@ impl Policy {
         *v = Some(v.map_or(ms, |v| v + COST_WEIGHT * (ms - v)));
     }
 
-    /// Running cost of an `n`-token verification batch, else the nearest measured size's scaled by `VERIFY_RATIO`.
-    fn verify(&self, n: usize) -> Option<f64> {
-        self.verify_ms[n - 1].or_else(|| {
-            (1..=self.verify_ms.len())
-                .filter_map(|m| self.verify_ms[m - 1].map(|v| (m.abs_diff(n), v / VERIFY_RATIO[m - 1])))
-                .min_by_key(|x| x.0)
-                .map(|(_, unit)| unit * VERIFY_RATIO[n - 1])
-        })
+    /// A round of `k` drafts took `draft_ms` drafting and `verify_ms` verifying (and rolling back).
+    fn measured(&mut self, k: usize, draft_ms: f64, verify_ms: f64) {
+        if k > 0 {
+            Self::update(&mut self.draft_ms, draft_ms / k as f64);
+        }
+        Self::update(&mut self.verify_ms[k], verify_ms);
+        for a in &mut self.age {
+            *a += 1;
+        }
+        self.age[k] = 0;
     }
 
-    /// Drafts for the next round, at most `max` (`max` until the costs are measured).
+    /// Drafts for the next round, at most `max`.
     fn choose(&self, max: usize) -> usize {
-        let a = self.hits / self.tests;
-        let Some(d) = self.draft_ms else { return max };
-        let (mut best, mut rate, mut tokens, mut p) = (max, f64::MIN, 0., 1.);
+        if let Some(k) = (0..=max).rev().find(|&k| self.verify_ms[k].is_none() || self.age[k] > REFRESH) {
+            return k;
+        }
+        let (a, d) = (self.hits / self.tests, self.draft_ms.unwrap_or(0.));
+        let (mut best, mut rate, mut tokens, mut p) = (0, f64::MIN, 0., 1.);
         for k in 0..=max {
             tokens += p;
             p *= a;
-            let Some(v) = self.verify(k + 1) else { return max };
-            let r = tokens / (k as f64 * d + v);
+            let r = tokens / (k as f64 * d + self.verify_ms[k].unwrap_or(f64::MAX));
             if r > rate {
                 (best, rate) = (k, r);
             }
@@ -377,8 +386,8 @@ impl Speculator {
             // A draft equal to a stop token was right; the round only ended there.
             self.policy.tested(next == drafts[a]);
         }
-        Policy::update(&mut self.policy.draft_ms, draft_ms / k as f64);
-        Policy::update(&mut self.policy.verify_ms[k], verify_ms + rollback_ms);
+        self.policy.measured(k, draft_ms, verify_ms + rollback_ms);
+        self.stats.verify_ms_by_k[k] += verify_ms + rollback_ms;
         self.last = rows[a * w..(a + 1) * w].to_vec();
         let mut out = drafts[..a].to_vec();
         out.push(next);
@@ -413,7 +422,8 @@ impl Speculator {
         self.stats.verify_ms += ms;
         self.stats.rounds += 1;
         self.stats.by_k[0] += 1;
-        Policy::update(&mut self.policy.verify_ms[0], ms);
+        self.policy.measured(0, 0., ms);
+        self.stats.verify_ms_by_k[0] += ms;
         let next = pick(&tops[0]);
         if let Some(d) = shadow {
             self.policy.tested(d == next);
