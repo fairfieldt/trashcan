@@ -2,7 +2,7 @@
 
 Follows [results/qwen4/mtp-20261012](../mtp-20261012/README.md) (the MTP block drafting on the driver's CPU, adaptive
 rounds of 0-3 drafts, greedy chat replies 18.3 -> 21.6 tok/s on six Macs). Branch `worktree-agent-a173c86cfe38f66c7`,
-started from main `4c1346d` (session 1), measured on main `7da6f93` (session 2), rebased on main `5e48d7e`.
+started from main `4c1346d` (session 1), measured on main `7da6f93` (session 2), rebased on main `adf8cfd` (session 3).
 
 ## Sampling (`spec::Draws`)
 
