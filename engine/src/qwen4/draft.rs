@@ -304,7 +304,10 @@ impl Mat {
         match self {
             Mat::Q8 { k, q, d, .. } => dot_q8(&q[r * k..(r + 1) * k], &d[r * k / 32..(r + 1) * k / 32], x.q, x.d),
             Mat::Iq4 { k, q, d, .. } => dot_iq4(&q[r * k / 2..(r + 1) * k / 2], &d[r * k / 32..(r + 1) * k / 32], x.q, x.d),
-            Mat::F32 { k, w, .. } => dot_f32(&w[r * k..(r + 1) * k], x.f),
+            Mat::F32 { k, w, .. } => {
+                debug_assert_eq!(x.f.len(), *k, "an f32 matrix needs the f32 activations");
+                dot_f32(&w[r * k..(r + 1) * k], x.f)
+            }
         }
     }
 
@@ -463,11 +466,16 @@ pub struct Act {
 
 impl Act {
     fn new(x: &[f32], k: usize) -> Self {
+        Self { f: x.to_vec(), ..Self::q8(x, k) }
+    }
+
+    /// The Q8_0 codes only, for quantized matrices.
+    fn q8(x: &[f32], k: usize) -> Self {
         let n = x.len() / k;
         let mut q = vec![0i8; x.len()];
         let mut d = vec![0f32; x.len() / 32];
         quantize_q8(x, &mut q, &mut d);
-        Self { n, k, f: x.to_vec(), q, d }
+        Self { n, k, f: Vec::new(), q, d }
     }
 
     /// Token `t`.
@@ -502,12 +510,14 @@ fn quantize_q8(x: &[f32], q: &mut [i8], d: &mut [f32]) {
 }
 
 /// `x.round() as i8` (half away from zero, saturating) without a call into libm per value (baseline x86_64 has no
-/// instruction for it): truncate, then step away from zero when the exact remainder is at least a half.
+/// instruction for it): clamp to the i8 range, truncate, then step away from zero when the exact remainder is at least
+/// a half.
 #[inline]
 fn round_i8(x: f32) -> i8 {
+    let x = x.clamp(-128., 127.);
     let t = x as i32;
     let f = x - t as f32;
-    t.saturating_add((f >= 0.5) as i32 - (f <= -0.5) as i32).clamp(-128, 127) as i8
+    (t + (f >= 0.5) as i32 - (f <= -0.5) as i32) as i8
 }
 
 fn dot_q8(w: &[i8], wd: &[f32], q: &[i8], d: &[f32]) -> f32 {
@@ -945,7 +955,7 @@ impl Draft {
         if self.head.rows() == 0 {
             return None;
         }
-        let ha = Act::new(hn, self.c.d);
+        let ha = Act::q8(hn, self.c.d);
         let logits = matvec(&self.pool, &self.head, &ha, 256);
         let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
         Some((b as u32 + self.head_row0 as u32, logits[b]))
@@ -954,7 +964,7 @@ impl Draft {
     /// The best of all draft head rows (token id and logit), on the CPU.
     pub fn best_all(&self, hn: &[f32]) -> Option<(u32, f32)> {
         let lo = self.head_lo.as_ref().map(|m| {
-            let logits = matvec(&self.pool, m, &Act::new(hn, self.c.d), 256);
+            let logits = matvec(&self.pool, m, &Act::q8(hn, self.c.d), 256);
             let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
             (b as u32, logits[b])
         });
@@ -969,7 +979,7 @@ impl Draft {
         if self.head.rows() == 0 {
             return Vec::new();
         }
-        let logits = matvec(&self.pool, &self.head, &Act::new(hn, self.c.d), 256);
+        let logits = matvec(&self.pool, &self.head, &Act::q8(hn, self.c.d), 256);
         let row0 = self.head_row0 as u32;
         crate::qwen::pipeline::top_k(&logits).into_iter().map(|(s, id)| (s, id + row0)).collect()
     }
@@ -977,7 +987,7 @@ impl Draft {
     /// The top candidates of all draft head rows, on the CPU.
     pub fn top_all(&self, hn: &[f32]) -> Vec<(f32, u32)> {
         let lo = self.head_lo.as_ref().map_or_else(Vec::new, |m| {
-            crate::qwen::pipeline::top_k(&matvec(&self.pool, m, &Act::new(hn, self.c.d), 256))
+            crate::qwen::pipeline::top_k(&matvec(&self.pool, m, &Act::q8(hn, self.c.d), 256))
         });
         super::gpu::merge_top(lo, self.head_top(hn))
     }
@@ -989,14 +999,14 @@ impl Draft {
         for (i, row) in xn.chunks_exact_mut(d).enumerate() {
             rms_norm(row, Some(&m.norm[(i % hc) * d..(i % hc + 1) * d]), c.eps);
         }
-        let xa = Act::new(&xn, w);
+        let xa = Act::q8(&xn, w);
         let mut first: Vec<&Mat> = vec![&m.down];
         if let Some(inj) = &m.inject {
             first.push(inj);
         }
-        let outs = matvecs(&self.pool, &first, &xa, 16);
+        let outs = matvecs(&self.pool, &first, &xa, 8);
         let lo: Vec<f32> = outs[0].iter().map(|v| silu(v / hc as f32)).collect();
-        let la = Act::new(&lo, c.hc_rank);
+        let la = Act::q8(&lo, c.hc_rank);
         // The up rows of every stream for a range of the sublayer input, their read gates and the stream mean in one
         // parallel loop.
         const CHUNK: usize = 64;
@@ -1099,7 +1109,7 @@ impl Draft {
             }
         });
         self.prof[7] += t0.elapsed().as_secs_f64() * 1e3;
-        matvec(&self.pool, &self.o, &Act::new(&o, nh * hd), 32)
+        matvec(&self.pool, &self.o, &Act::q8(&o, nh * hd), 32)
     }
 
     fn moe(&self, u: &[f32], n: usize) -> Vec<f32> {
@@ -1107,7 +1117,7 @@ impl Draft {
         let (d, ne, k, ff) = (c.d, c.experts, c.used, c.ff_exp);
         let e = &self.moe;
         let ua = Act::new(u, d);
-        let logits = matvec(&self.pool, &e.router, &ua, 32);
+        let logits = matvec(&self.pool, &e.router, &ua, 16);
         // (expert, weight) per token in rank order; the shared expert last with its sigmoid gate.
         let mut chosen = Vec::with_capacity(n * (k + 1));
         for t in 0..n {
@@ -1204,7 +1214,7 @@ impl Draft {
             prof[i] += t.elapsed().as_secs_f64() * 1e3;
             t = std::time::Instant::now();
         };
-        let (ea, ha) = (Act::new(&en, d), Act::new(&hn, d));
+        let (ea, ha) = (Act::q8(&en, d), Act::q8(&hn, d));
         let outs = matvecs_of(&self.pool, &[(&self.eh_e, &ea), (&self.eh_h, &ha)], 32);
         let mut x = outs[1].clone();
         for (r, row) in x.chunks_exact_mut(d).enumerate() {
@@ -1237,7 +1247,7 @@ impl Draft {
     pub fn logits(&self, x: &[f32]) -> Vec<f32> {
         let w = self.c.width();
         let (hn, _) = self.mix(&self.head_mix, &x[x.len() - w..], 1);
-        matvec(&self.pool, &self.head, &Act::new(&hn, self.c.d), 256)
+        matvec(&self.pool, &self.head, &Act::q8(&hn, self.c.d), 256)
     }
 }
 
