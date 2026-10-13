@@ -64,3 +64,34 @@ errors. `scripts/tb-reset.sh` on all six (two rounds) brought every ring link up
 - `trashcan-long-r21` stays off the shared runs until it clears two checks: its per-kernel bounds review, done and clean
   (with a CPU model of every address on adversarial scores), and a single-Mac and then a six-Mac 3061-token run with
   netconsole watched.
+
+## Second incident: invite GPU1 compute timeout, 16:05
+
+At 16:05:46, 25 minutes after the power cycle and with no forced reset before it, invite's GPU1 (0000:06:00.0)
+logged `ring comp_1.1.1 timeout, signaled seq=11368, emitted seq=11369`. A PCI CONFIG reset followed and succeeded.
+This was main's binary (`trashcan-adf8cfd`) on a plain `bench --pp 512 --tg 128` in the decode-host agent's session,
+on invite's node (layers 36-39). No other Mac logged anything.
+- The coredump (`devcd-invite-gpu1-1605.dump`) shows the unfinished work was one ordinary submission: pipeline sync,
+  three IBs (the middle one a 3064-dword layer command buffer), then the fence that never signaled. No host-gated
+  wait was involved.
+- Sessions that tried to start on invite after it were stopped, invite was rebooted, and Thunderbolt was reset on
+  all six (two rounds).
+
+**Diagnostic.** `tools/stress.sh` under `chain6.sh`, main 2293550, 32 runs in two passes:
+- first with the chain reversed (invite holds layers 16-23, inflight 32-39), then in the usual order;
+- each pass: 12 × `bench --pp 512 --tg 128`, 3 × `--pp 4096`, and the 3061-token validate;
+- every Mac's kernel log checked after each run.
+
+The first attempt (`stress1.log`) stopped at run 6 for a runner fault, not a GPU one. alight's node never launched,
+and the run's time limit then killed `q4run.py` before its cleanup. That left idle nodes holding port 7071, which
+spoiled the next session (the verify agent's). `q4run.py` now:
+- refuses to start while any engine process or anything on port 7071 remains;
+- shows and retries a failed node launch;
+- stops its nodes when it is stopped.
+
+Second attempt (`stress2.log`): **32 of 32 runs rc 0, no GPU or PCIe errors on any Mac in either order.** prefill
+480-487 tok/s at 512 tokens and 760-764 at 4096; decode 19.2-19.6 tok/s.
+
+So invite runs clean from a fresh boot, whichever layers it holds. The 16:05 timeout is unexplained: it came with
+main's code and no forced reset first. Two GPU faults on one Mac in half an hour, and none on the other five all day,
+make invite the first suspect if it happens again. Its GPU and PCIe logs stay watched.

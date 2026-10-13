@@ -11,7 +11,7 @@ usage: q4run.py --name NAME --tickets HOST=ID,... --driver-host HOST --nodes HOS
 The driver command is `trashcan qwen4 CMD MODEL ARGS`; give it `--nodes` itself (the addresses are resolved on the
 previous machine of the chain, e.g. invite.tb1:7071).
 """
-import argparse, os, re, shlex, socket, subprocess, sys, time
+import argparse, os, re, shlex, signal, socket, subprocess, sys, time
 
 ROOT = os.environ.get('Q4_ROOT', '/home/fairfieldt/trashcan-exp/flashnext')
 MODEL = os.environ.get('Q4_MODEL', '/home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf')
@@ -46,17 +46,13 @@ def wrapped(clock, argv):
 
 
 start = time.time()
-checks = [(host, subprocess.Popen(['ssh', host, f'pgrep -f "^{ROOT}/{a.binary} qwen4"'], stdout=subprocess.DEVNULL))
+# Any engine binary still running from an earlier run (whatever its name), or anything holding a node's port, would
+# take this run's place in the chain: refuse to start.
+checks = [(host, subprocess.Popen(['ssh', host, f'pgrep -f "^{ROOT}/trashcan[^ ]* qwen4 "'], stdout=subprocess.DEVNULL))
           for host in [a.driver_host] + nodes]
 for host, check in checks:
     if check.wait() == 0:
         sys.exit(f'{host}: an engine process from an earlier run is still running; stop it first')
-children = []
-for host in reversed(nodes):
-    log = f'results/node-{a.name}-{host}.log'
-    cmd = wrapped(f'node-{a.name}-{host}', [f'{ROOT}/{a.binary}', 'qwen4', 'node', a.model, '--listen', '0.0.0.0:7071',
-                                             *shlex.split(a.node_args)]) + f' > {log} 2>&1'
-    children.append((host, subprocess.Popen(leased(host, cmd))))
 
 
 def listening(host):
@@ -67,9 +63,62 @@ def listening(host):
         return False
 
 
+def launch(host):
+    log = f'results/node-{a.name}-{host}.log'
+    cmd = wrapped(f'node-{a.name}-{host}', [f'{ROOT}/{a.binary}', 'qwen4', 'node', a.model, '--listen', '0.0.0.0:7071',
+                                             *shlex.split(a.node_args)]) + f' > {log} 2>&1'
+    return subprocess.Popen(leased(host, cmd), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+for host in nodes:
+    if listening(host):
+        sys.exit(f'{host}: port 7071 is already open before this run started its node; stop whatever holds it first')
+children = [(host, launch(host)) for host in reversed(nodes)]
+
+
+def stop_nodes():
+    t1 = time.time()
+    for sig, wait in (('TERM', 60), ('KILL', 30)):
+        running = [(h, c) for h, c in children if c.poll() is None]
+        if not running:
+            break
+        for p in [subprocess.Popen(['ssh', h, f'pkill -{sig} -f "^{ROOT}/{a.binary} qwen4 node "']) for h, _ in running]:
+            p.wait()
+        deadline = time.time() + wait
+        for h, c in running:
+            try:
+                c.wait(timeout=max(0.1, deadline - time.time()))
+            except subprocess.TimeoutExpired:
+                print(f'{h}: node still running {wait} s after SIG{sig}', file=sys.stderr)
+    print(f'nodes stopped after {time.time() - t1:.1f} s', file=sys.stderr)
+
+
+def stopped(signum, _frame):
+    # Stopped from outside (timeout, Ctrl-C): stop the driver and the nodes before exiting, so no engine process is
+    # left behind on any Mac.
+    subprocess.run(['ssh', a.driver_host, f'pkill -TERM -f "^{ROOT}/{a.binary} qwen4 "'])
+    stop_nodes()
+    sys.exit(128 + signum)
+
+
+for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    signal.signal(sig, stopped)
+
+
 # Start the driver once every node listens (a node accepts the probe as an empty session and waits for the next).
-waiting = set(nodes)
+# A launch that ends before its node listens (e.g. gpuq run refusing while the previous run's wrapper is still
+# exiting) is shown and retried once; a second failure stops the run before the driver starts.
+waiting, retried = set(nodes), set()
 while waiting and time.time() - start < 120:
+    for i, (host, child) in enumerate(children):
+        if host in waiting and child.poll() is not None:
+            print(f'{host}: node launch ended (rc {child.returncode}): {child.stdout.read().strip()[-300:]}', file=sys.stderr)
+            if host in retried:
+                stop_nodes()
+                sys.exit(f'{host}: node did not start twice; stopping')
+            retried.add(host)
+            time.sleep(1)
+            children[i] = (host, launch(host))
     waiting = {h for h in waiting if not listening(h)}
     if waiting:
         time.sleep(0.2)
@@ -82,19 +131,6 @@ cmd = f'echo {note} >> results/commands.log; ' + wrapped(a.name, argv) + f' > re
 t0 = time.time()
 rc = subprocess.run(leased(a.driver_host, cmd)).returncode
 print(f'nodes up after {t0 - start:.1f} s; driver exited {rc} after {time.time() - t0:.0f} s', file=sys.stderr)
-t1 = time.time()
-for signal, wait in (('TERM', 60), ('KILL', 30)):
-    running = [(h, c) for h, c in children if c.poll() is None]
-    if not running:
-        break
-    for p in [subprocess.Popen(['ssh', h, f'pkill -{signal} -f "^{ROOT}/{a.binary} qwen4 node "']) for h, _ in running]:
-        p.wait()
-    deadline = time.time() + wait
-    for h, c in running:
-        try:
-            c.wait(timeout=max(0.1, deadline - time.time()))
-        except subprocess.TimeoutExpired:
-            print(f'{h}: node still running {wait} s after SIG{signal}', file=sys.stderr)
-print(f'nodes stopped after {time.time() - t1:.1f} s', file=sys.stderr)
+stop_nodes()
 subprocess.run(['ssh', a.driver_host, f'cd {ROOT}; tail -5 results/{a.name}.err; head -c 4000 results/{a.name}.json'])
 sys.exit(rc)

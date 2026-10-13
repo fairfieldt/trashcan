@@ -1,0 +1,10 @@
+chain6: queued incite=213,indite=80,inflight=71,alight=78,invite=206,enlight=86
+chain6: holding incite=213,indite=80,inflight=71,alight=78,invite=206,enlight=86
+start 16:17:13 errors: incite=0 indite=0 inflight=0 alight=0 invite=0 enlight=0 
+16:17:40 st-rev-pp512-1 rc 0 27 s "pp_tok_s":451.8073001484589 "tg_tok_s":18.921397169288824 
+16:17:54 st-rev-pp512-2 rc 0 14 s "pp_tok_s":482.71375503394904 "tg_tok_s":19.48753269870965 
+16:18:08 st-rev-pp512-3 rc 0 14 s "pp_tok_s":480.913588387865 "tg_tok_s":19.35543106586528 
+16:18:22 st-rev-pp512-4 rc 0 14 s "pp_tok_s":483.92641988009655 "tg_tok_s":19.231675520588766 
+16:18:36 st-rev-pp4096-4 rc 0 14 s "pp_tok_s":759.9179571126598 "tg_tok_s":17.049571747604766 
+16:21:37 st-rev-pp512-5 rc 124 181 s 
+STOP: rc 124, errors now: incite=0 indite=0 inflight=0 alight=0 invite=0 enlight=0 
