@@ -1,8 +1,8 @@
 #!/bin/bash
-# Six-Mac MTP rounds session 2 (through chain6.sh, binary 78e8848 rebased on main 6f6635a): this branch (coupled
+# Six-Mac MTP rounds session 2 (through chain6.sh, this branch rebased on main 7da6f93): this branch (coupled
 # drafts, unsure drafts dropped, the two-rate policy) against TRASHCAN_MTP_AB=no-gate (every draft counted sure: main's
 # pooled policy, every chosen draft verified) and against main's drafting (TRASHCAN_MTP_AB=greedy-drafts,no-gate) at
-# temperatures 1.0, 0.8 and 0.6; main 6f6635a alongside for greedy decoding: chat prompts, the reference prompt, the
+# temperatures 1.0, 0.8 and 0.6; main 7da6f93 alongside for greedy decoding: chat prompts, the reference prompt, the
 # 3K-token document; the server. Plain and speculative decoding alternate in every run; identical output is required.
 cd /Users/fairfieldt/dev/trashcan/.claude/worktrees/agent-a173c86cfe38f66c7/results/qwen4/chain-20261012 || exit 1
 MODEL=/home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf
@@ -21,7 +21,7 @@ spec() {
     local bin=$1 name=$2 env=$3; shift 3
     run $bin --name $name --env "$env" --driver "./$bin qwen4 mtp spec $MODEL $C --mtp $MTP --draft-tokens 3 $*"
 }
-B=trashcan-6f6635a
+B=trashcan-7da6f93
 T=trashcan-mtp2
 MAIN="TRASHCAN_MTP_AB=greedy-drafts,no-gate"
 spec $T mtp2s2-chat "" --tg 192 --runs 3 $CHAT
