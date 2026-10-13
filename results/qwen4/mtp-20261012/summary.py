@@ -11,7 +11,7 @@ import json, statistics, sys
 def passes(r):
     if 'mtp' not in r:
         return {'mtp': {'tok_s': r['mtp_tok_s'], 'identical': r['identical'], **r}}
-    return {k: r[k] for k in ('mtp', 'fixed') if k in r}
+    return {k: r[k] for k in ('mtp', 'pooled', 'fixed') if k in r}
 
 
 for f in sys.argv[1:]:
