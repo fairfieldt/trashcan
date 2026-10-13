@@ -482,23 +482,20 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests, 
     }
 }
 
-// A verification batch (`"verify": true`): every machine passes the final hidden states of all rows up with the
-// batch's residual rows from the machine that ends the model (the driver's MTP block reads them), scores them with
-// its head rows, and the candidates of every row follow.
+// A verification batch (`"verify": true`): every machine passes the final hidden states of all rows up and starts
+// scoring them with its head rows, then passes up the batch's residual rows from the machine that ends the model (the
+// driver's MTP block reads them; 40 KiB a row, so they travel while the head slices score, off the critical path),
+// and the candidates of every row follow.
 
-fn send_kept_hidden(up: &mut Conn, h: &[f32], rows: &[f32]) -> Result<()> {
-    let mut blob = bytemuck::cast_slice::<f32, u8>(h).to_vec();
-    blob.extend_from_slice(bytemuck::cast_slice(rows));
-    up.send(&json!({"h": h.len(), "rows": rows.len()}), &blob)
+fn send_rows(up: &mut Conn, rows: &[f32]) -> Result<()> {
+    up.send(&json!({"rows": rows.len()}), bytemuck::cast_slice(rows))
 }
 
-fn recv_kept_hidden(down: &mut Conn) -> Result<(Vec<f32>, Vec<f32>)> {
-    let (header, mut blob) = down.recv_hot()?;
-    let n = header["h"].as_u64().context("missing hidden state")? as usize;
-    let r = header["rows"].as_u64().context("missing rows")? as usize;
-    ensure!(blob.len() == n + r, "hidden state length mismatch");
-    let rows = blob.split_off(n);
-    Ok((blob, rows))
+fn recv_rows(down: &mut Conn) -> Result<Vec<f32>> {
+    let (header, blob) = down.recv_hot()?;
+    let n = header["rows"].as_u64().context("missing residual rows")? as usize;
+    ensure!(blob.len() == n, "residual rows length mismatch");
+    Ok(blob)
 }
 
 /// The candidates of every row of a verification batch (binary pairs, row after row).
@@ -542,15 +539,21 @@ fn verify_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value,
         let d = down.as_mut().context("the last machine has no LM head")?;
         d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
     }
-    let (h, rows) = match out {
+    let h = match out {
         Output::Final(h) => {
             down = None;
-            (h, std::mem::take(&mut l.rows))
+            h
         }
-        Output::Hidden(_) => recv_kept_hidden(down.as_mut().context("the last machine has no LM head")?)?,
+        Output::Hidden(_) => recv_hidden(down.as_mut().context("the last machine has no LM head")?)?,
     };
-    send_kept_hidden(up, &h, &rows)?;
-    let mut tops = l.head_rows(&h)?;
+    send_hidden(up, &h)?;
+    let started = l.head_rows_submit(&h)?;
+    let rows = match down.as_mut() {
+        None => std::mem::take(&mut l.rows),
+        Some(d) => recv_rows(d)?,
+    };
+    send_rows(up, &rows)?;
+    let mut tops = l.head_rows_collect(&h, &started)?;
     if let Some(d) = down {
         let (hd, b) = d.recv_hot()?;
         tops = merge_rows(tops, decode_kept(&hd, &b)?)?;
@@ -885,14 +888,14 @@ impl Chain {
             conn.send(&json!({"forward": {"pos": pos, "n": n, "reply": true, "verify": true}}), bytemuck::cast_slice(x))?;
         }
         during();
-        let (h, rows, remote) = match out {
-            Output::Final(h) => (h, std::mem::take(&mut self.local.rows), false),
-            Output::Hidden(_) => {
-                let (h, rows) = recv_kept_hidden(self.next.as_mut().unwrap())?;
-                (h, rows, true)
-            }
+        let remote = matches!(out, Output::Hidden(_));
+        let h = match out {
+            Output::Final(h) => h,
+            Output::Hidden(_) => recv_hidden(self.next.as_mut().unwrap())?,
         };
-        let mut tops = self.local.head_rows(&h)?;
+        let started = self.local.head_rows_submit(&h)?;
+        let rows = if remote { recv_rows(self.next.as_mut().unwrap())? } else { std::mem::take(&mut self.local.rows) };
+        let mut tops = self.local.head_rows_collect(&h, &started)?;
         if remote {
             let (hd, b) = self.next.as_mut().unwrap().recv_hot()?;
             tops = merge_rows(tops, decode_kept(&hd, &b)?)?;

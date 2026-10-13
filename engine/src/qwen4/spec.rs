@@ -144,13 +144,7 @@ impl Local {
         Ok(())
     }
 
-    /// Score final hidden states (`rows x d`) with the head rows of every local stage: merged candidates per row.
-    pub fn head_rows(&mut self, h: &[f32]) -> Result<Vec<Vec<(f32, u32)>>> {
-        let started = self.head_rows_submit(h)?;
-        self.head_rows_collect(h, &started)
-    }
-
-    /// Start scoring on the GPU stages (`head_rows`); which stages started.
+    /// Start scoring final hidden states (`rows x d`) with the head rows of the GPU stages; which stages started.
     pub fn head_rows_submit(&mut self, h: &[f32]) -> Result<Vec<bool>> {
         if let Some(c) = &self.clocks {
             c.busy();
@@ -164,7 +158,7 @@ impl Local {
         Ok(started)
     }
 
-    /// Finish `head_rows_submit` (CPU stages score here).
+    /// Finish `head_rows_submit` (CPU stages score here): merged candidates per row.
     pub fn head_rows_collect(&mut self, h: &[f32], started: &[bool]) -> Result<Vec<Vec<(f32, u32)>>> {
         let d = self.c.d;
         let n = h.len() / d;
@@ -337,7 +331,7 @@ impl Speculator {
     /// One draft step: the block on `tok` at `pos` with input row `h`; the draft for position `pos + 1` (`draws`'
     /// pick from the drafter's candidates) and the output residual.
     fn step(&mut self, chain: &mut Chain, tok: u32, h: &[f32], pos: usize, draws: &Draws) -> Result<(u32, Vec<f32>)> {
-        let greedy = draws.temperature == 0.;
+        let greedy = draws.temperature == 0. || ab_greedy_drafts();
         if self.gpu_rows == 0 {
             let (y, best) = self.draft.forward(&[tok], h, pos, greedy)?;
             if greedy {
@@ -474,7 +468,7 @@ impl Speculator {
         let (tops, rows) = chain.verify_with(&[pending], || {
             shadow = draft.forward(&[pending], &h, pos, false).map(|(y, _)| {
                 let hn = draft.final_hidden(&y);
-                if draws.temperature == 0. {
+                if draws.temperature == 0. || ab_greedy_drafts() {
                     draft.best_all(&hn).map(|b| b.0)
                 } else {
                     Some(draft.top_all(&hn)).filter(|t| !t.is_empty()).map(|t| draws.pick(&t, pos + 1))
@@ -497,6 +491,12 @@ impl Speculator {
         self.last = rows;
         Ok((vec![next], tops[0].clone()))
     }
+}
+
+/// TEMPORARY session A/B switch (removed after the measurement): TRASHCAN_MTP_AB=greedy-drafts drafts the argmax at
+/// every temperature, as main did.
+fn ab_greedy_drafts() -> bool {
+    std::env::var("TRASHCAN_MTP_AB").is_ok_and(|v| v == "greedy-drafts")
 }
 
 /// Decoding of `n` tokens after `prompt` from position 0 with `draws`, plain (`spec` None) or speculative. Returns
