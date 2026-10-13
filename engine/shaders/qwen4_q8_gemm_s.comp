@@ -1,0 +1,74 @@
+#version 460
+#include "common.glsl"
+// Q8_0 matrix times a batch for prefill chunks of up to 32 tokens, lanes owning rows: a 64-lane workgroup owns 64 R
+// rows (lane l: rows 64 r + l) and T tokens. Each lane walks its rows along K and decodes every weight once for the T
+// tokens, whose inputs are the same for every lane (scalar loads, SGPR operands of the multiply-adds), so neither
+// weights nor inputs pass through LDS and a chunk of 16 tokens computes 16, not the 64 of qwen4_q8_gemm's tiles. A
+// lane loads whole 64-byte lines (two blocks) of its rows, with PF one step ahead. The products (q d, exact) and
+// their order (k ascending per output) are qwen4_q8_gemm's, so the results are the same bits. With p.m > 0 the K
+// range is split in p.m parts (multiples of 64): workgroup y covers row block y % blocks of part y / blocks and writes
+// its partial sums to c [part][t][n]. MIX: qwen4_q8_gemm_mix's up projection (R = 4, the four streams' rows of one
+// element in a lane), storing u = mean_s xn_s sigmoid(g_s).
+// b: x [t][k], c: y [t][n] (MIX: u [t][n / 4]), d: (MIX) xn [t][4][n / 4]. p.n rows, p.k columns (a multiple of
+// 64), p.stride = word offset of the quants (quant::repack_q8h).
+// Specialization constant: T | R << 8 | PF << 12 | ROWFIRST << 13 | MIX << 15; workgroup (x, y) is (token tile, row
+// block), or (row block, token tile) with ROWFIRST.
+layout(constant_id=0) const uint CFG=16|1<<8|1<<12;
+const uint T=CFG&255u,R=(CFG>>8)&15u,PF=(CFG>>12)&1u,ROWFIRST=(CFG>>13)&1u,MIX=(CFG>>15)&1u;
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+layout(binding=0,std430) readonly restrict buffer WeightScales { uint s[]; } ws;
+// Arrays sized for the largest configuration; the unrolled loops leave the rest unused.
+float acc[4][32];
+uint xs[32];
+void main(){
+    // MIX (qwen4_q8_gemm_mix's up projection, R = 4): lane l's rows are the 4 streams' rows of element i, 64 r
+    // apart in the row block become p.n / 4 apart.
+    uint nb=batch(),lane=gl_LocalInvocationID.x,dd=p.n/4,rblocks=MIX==1?dd/64:(p.n+64*R-1)/(64*R);
+    uvec2 wg=ROWFIRST==1?gl_WorkGroupID.yx:gl_WorkGroupID.xy;
+    uint part=wg.y/rblocks,row0=(wg.y%rblocks)*64*(MIX==1?1:R)+lane,tok0=wg.x*T,rs=MIX==1?dd:64;
+    uint blocks=p.k/32,kc=(p.m==0?p.k:p.k/p.m)/32,b0=part*kc,b1=b0+kc;
+    [[unroll]]for(uint t=0;t<T;t++){xs[t]=min(tok0+t,nb-1)*(p.k/4);[[unroll]]for(uint r=0;r<R;r++)acc[r][t]=0;}
+    // Each row's quants as uvec4 (two per block) and its f16 scales as pairs (blocks is even).
+    uint qa[4],sa[4];
+    [[unroll]]for(uint r=0;r<R;r++){uint rr=min(row0+rs*r,p.n-1);qa[r]=p.stride/4+rr*blocks*2;sa[r]=rr*blocks/2;}
+    uvec4 nq[4][4];uint ns[4];
+    if(PF==1)[[unroll]]for(uint r=0;r<R;r++){[[unroll]]for(uint j=0;j<4;j++)nq[r][j]=wq.q[qa[r]+2*b0+j];ns[r]=ws.s[sa[r]+b0/2];}
+    for(uint b=b0;b<b1;b+=2){
+        uvec4 q[4][4];vec2 d[4];
+        if(PF==1){
+            [[unroll]]for(uint r=0;r<R;r++){[[unroll]]for(uint j=0;j<4;j++)q[r][j]=nq[r][j];d[r]=unpackHalf2x16(ns[r]);}
+            // The next line, loaded unconditionally (the last step reloads its own).
+            uint nx=min(b+2,b1-2);
+            [[unroll]]for(uint r=0;r<R;r++){[[unroll]]for(uint j=0;j<4;j++)nq[r][j]=wq.q[qa[r]+2*nx+j];ns[r]=ws.s[sa[r]+nx/2];}
+        }else{
+            [[unroll]]for(uint r=0;r<R;r++){[[unroll]]for(uint j=0;j<4;j++)q[r][j]=wq.q[qa[r]+2*b+j];d[r]=unpackHalf2x16(ws.s[sa[r]+b/2]);}
+        }
+        // 16 groups of 4 k: block b words 0-7, then block b + 1 words 0-7.
+        [[unroll]]for(uint g=0;g<16;g++){
+            precise vec4 f[4];
+            [[unroll]]for(uint r=0;r<R;r++){
+                float dd=g<8?d[r].x:d[r].y;
+                // (q + 128) as an unsigned byte (one conversion); fma(q + 128, d, -128 d) = q d exactly.
+                uint u=q[r][g/4][g%4]^0x80808080u;
+                f[r]=fma(vec4(u&255u,(u>>8)&255u,(u>>16)&255u,u>>24),vec4(dd),vec4(-128.0*dd));
+            }
+            [[unroll]]for(uint t=0;t<T;t++){
+                vec4 x=b_v4.v[xs[t]+b*8+g];
+                [[unroll]]for(uint r=0;r<R;r++){
+                    acc[r][t]=fma(f[r].x,x.x,acc[r][t]);acc[r][t]=fma(f[r].y,x.y,acc[r][t]);
+                    acc[r][t]=fma(f[r].z,x.z,acc[r][t]);acc[r][t]=fma(f[r].w,x.w,acc[r][t]);
+                }
+            }
+        }
+    }
+    if(MIX==1){
+        // u = mean_s xn_s sigmoid(g_s) (qwen4_hc_mix); d: xn [t][4][dd], c: u [t][dd].
+        [[unroll]]for(uint t=0;t<T;t++)if(tok0+t<nb){uint base=(tok0+t)*p.n+row0;float u=0;
+            [[unroll]]for(uint r=0;r<4;r++)u=fma(d_f.v[base+r*dd],1.0/(1.0+exp(-acc[r][t])),u);
+            c_f.v[(tok0+t)*dd+row0]=u/4.0;}
+        return;
+    }
+    [[unroll]]for(uint r=0;r<R;r++)if(row0+64*r<p.n)[[unroll]]for(uint t=0;t<T;t++)
+        if(tok0+t<nb)c_f.v[(part*nb+tok0+t)*p.n+row0+64*r]=acc[r][t];
+}

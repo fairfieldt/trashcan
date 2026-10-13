@@ -34,6 +34,12 @@ const FUSED_MAX_Q4: usize = 64;
 /// K splits of the Q8_0 prefill mixer's bottleneck GEMM (10240 -> 324 rows, 6 row tiles of 64 alone, 96 workgroups
 /// per 64 tokens with the splits; 8 and 32 measured the same).
 const MIX_SPLITS: usize = 16;
+/// Q8_0 prefill batches of at most this many tokens use the lane-per-row GEMM (`qwen4_q8_gemm_s*`): the 64-token
+/// tiles of `qwen4_q8_gemm` compute 64 tokens whatever the batch (results/qwen4/prefill-kernels-20261013).
+const LANE_GEMM_MAX: usize = 32;
+/// K splits of the Q8_0 prefill out projections (2560 rows, 40 row tiles of 64 alone): 8 when the partial sums fit
+/// in hgate, else 4.
+const OUT_SPLITS: usize = 8;
 /// Batches of at least this many tokens group their expert slots by expert (`qwen4_moe_tiles`), so each expert's
 /// weights are decoded once per tile of up to `TILE` slots; smaller ones use the per-(token, slot) kernels
 /// (results/qwen4/prefill-experts-20261012: 8 layers' experts 28.2 -> 20.5 ms at 16 tokens, 221 -> 84 ms at 128; a
@@ -360,6 +366,18 @@ fn expert_shader(name: &'static str, fmt: u32) -> &'static str {
     }
 }
 
+/// The Q8_0 GEMM of a prefill batch of `n` tokens over `rows` rows split in `parts` along K: the lane-per-row kernel
+/// up to `LANE_GEMM_MAX` tokens (16 tokens per workgroup, the token tile first), else the 64 x 64 tiles. Returns the
+/// pipeline and its workgroups.
+fn q8_gemm(rows: usize, n: usize, parts: usize) -> (&'static str, usize, usize) {
+    let parts = parts.max(1);
+    if n <= LANE_GEMM_MAX {
+        ("qwen4_q8_gemm_s16r1p", n.div_ceil(16), rows.div_ceil(64) * parts)
+    } else {
+        ("qwen4_q8_gemm", rows.div_ceil(64) * parts, n.div_ceil(64))
+    }
+}
+
 /// Q8_0 kernels for 1 and 2-8 tokens and the rows per workgroup: wide loads (a uvec2 per lane), 4 rows per wave for
 /// tall matrices and 2 for shorter ones, which then get more waves (results/qwen4/decode-kernels-20261012).
 fn q8_decode_shaders(rows: usize) -> (&'static str, &'static str, usize) {
@@ -432,7 +450,7 @@ impl GpuStage {
             "unsupported head sizes"
         );
         ensure!(
-            c.hc <= 4 && c.experts % 64 == 0 && c.experts <= 512,
+            c.hc <= 4 && c.d <= 2560 && c.experts % 64 == 0 && c.experts <= 512,
             "unsupported mixer or router shape"
         );
         ensure!(
@@ -1091,7 +1109,7 @@ impl GpuStage {
                         match n {
                             1 => (one, rows.div_ceil(per), 1),
                             2..=8 => (four, rows.div_ceil(per), n.div_ceil(4)),
-                            _ => ("qwen4_q8_gemm", rows.div_ceil(64), n.div_ceil(64)),
+                            _ => q8_gemm(rows, n, 1),
                         },
                     )
                 }
@@ -1104,6 +1122,41 @@ impl GpuStage {
                 gy as u32,
                 wt,
             )
+        };
+        // Q8_0 out projections of prefill batches split along K, their partial sums in hgate (free during the
+        // sublayer), then summed in part order into y.
+        let splits = if OUT_SPLITS * n * d <= w * self.max_batch { OUT_SPLITS } else { OUT_SPLITS / 2 };
+        let out_proj = |wt: &Dense, x: &Buffer, k: usize| -> Result<()> {
+            match wt {
+                Dense::Q8(b, stride) if n > 8 && k % (64 * splits) == 0 && splits * d <= w => {
+                    let mut u = [0; 16];
+                    u[0] = d as u32;
+                    u[1] = k as u32;
+                    u[2] = splits as u32;
+                    u[3] = *stride;
+                    let (shader, gx, gy) = q8_gemm(d, n, splits);
+                    gpu.dispatch_matrix(
+                        current.get(),
+                        shader,
+                        push([0, x.address, self.hgate.address, 0, 0, 0], u),
+                        gx as u32,
+                        gy as u32,
+                        b,
+                    )?;
+                    let mut u = [0; 16];
+                    u[0] = d as u32;
+                    u[1] = splits as u32;
+                    gpu.dispatch(
+                        current.get(),
+                        "qwen4_sum_parts",
+                        push([self.hgate.address, 0, self.y.address, 0, 0, 0], u),
+                        d.div_ceil(256) as u32,
+                        n as u32,
+                    );
+                    Ok(())
+                }
+                _ => matrix(wt, x, &self.y, k, d, false),
+            }
         };
         // Small f32 projections: one wave per row and eight tokens.
         let matf32 = |wt: &Buffer, x: &Buffer, y: &Buffer, k: usize, rows: usize, defer: bool| -> Result<()> {
@@ -1144,8 +1197,8 @@ impl GpuStage {
                 .layers
                 .iter()
                 .all(|l| l.attn_mix.fused.is_some() && l.ffn_mix.fused.is_some());
-        // Norm all streams into xn (applying the pending combine first), or with `norm` None only combine.
-        let hc_norm = |pending: bool, norm: Option<&Buffer>| {
+        // Norm all streams into xn, applying the pending combine first (one workgroup per stream and token).
+        let hc_norm = |pending: bool, norm: &Buffer| {
             let mut u = [0; 16];
             u[0] = d as u32;
             u[2] = wloc.get().1;
@@ -1156,18 +1209,8 @@ impl GpuStage {
             gpu.dispatch(
                 current.get(),
                 "qwen4_hc_norm",
-                push(
-                    [
-                        self.x.address,
-                        self.y.address,
-                        norm.map_or(0, |_| self.xn.address),
-                        norm.map_or(0, |b| b.address),
-                        wloc.get().0,
-                        0,
-                    ],
-                    u,
-                ),
-                1,
+                push([self.x.address, self.y.address, self.xn.address, norm.address, wloc.get().0, 0], u),
+                hc as u32,
                 n as u32,
             );
         };
@@ -1283,7 +1326,7 @@ impl GpuStage {
                 wloc.set((mo_next.address, (c.hc_rank + 8) as u32, c.hc_rank as u32));
                 return Ok(());
             }
-            hc_norm(pending, Some(&m.norm));
+            hc_norm(pending, &m.norm);
             capture(graph, format!("hc_norm{tag}"), &self.xn, w)?;
             // Q8_0 above FUSED_MAX tokens: the bottleneck and write rows (the fused matrix; the final mixer has no
             // write rows) as a split-K GEMM, its partial sums (in hgate) reduced with the activations, then the up
@@ -1303,12 +1346,19 @@ impl GpuStage {
                 u[1] = w as u32;
                 u[2] = MIX_SPLITS as u32;
                 u[3] = stride;
+                // Up to LANE_GEMM_MAX tokens the lane-per-row kernel, 8 tokens per workgroup and the row blocks first
+                // (16 tokens: 136 against 265 us per mixer).
+                let (shader, gx, gy) = if n <= LANE_GEMM_MAX {
+                    ("qwen4_q8_gemm_s8r1po", rows.div_ceil(64) * MIX_SPLITS, n.div_ceil(8))
+                } else {
+                    ("qwen4_q8_gemm", rows.div_ceil(64) * MIX_SPLITS, n.div_ceil(64))
+                };
                 gpu.dispatch_matrix(
                     current.get(),
-                    "qwen4_q8_gemm",
+                    shader,
                     push([0, self.xn.address, self.hgate.address, 0, 0, 0], u),
-                    (rows.div_ceil(64) * MIX_SPLITS) as u32,
-                    n.div_ceil(64) as u32,
+                    gx as u32,
+                    gy as u32,
                     b,
                 )?;
                 let mut u = [0; 16];
@@ -1326,12 +1376,19 @@ impl GpuStage {
                 u[0] = w as u32;
                 u[1] = c.hc_rank as u32;
                 u[3] = ustride;
+                // Up to 16 tokens the lane-per-row kernel with the four streams' rows of an element in one lane (151
+                // against 217 us per mixer).
+                let (shader, gx, gy) = if n <= 16 {
+                    ("qwen4_q8_gemm_s4r4om", w / 256, n.div_ceil(4))
+                } else {
+                    ("qwen4_q8_gemm_mix", w / 64, n.div_ceil(64))
+                };
                 gpu.dispatch_matrix(
                     current.get(),
-                    "qwen4_q8_gemm_mix",
+                    shader,
                     push([0, self.lo.address, self.u.address, self.xn.address, 0, 0], u),
-                    (w / 64) as u32,
-                    n.div_ceil(64) as u32,
+                    gx as u32,
+                    gy as u32,
                     ub,
                 )?;
                 capture(graph, format!("hc_mixed{tag}"), &self.u, d)?;
@@ -1489,29 +1546,43 @@ impl GpuStage {
                     u[5] = c.k_heads as u32;
                     u[6] = c.state as u32;
                     u[12] = eps;
-                    // Two state rows per wave and vec2 lanes for decode: 52 -> 45 us per layer.
-                    let (gdn_shader, gdn_rows) = if n <= 8 {
-                        ("qwen4_gdn", 8)
+                    if n <= 8 {
+                        // Two state rows per wave and vec2 lanes for decode: 52 -> 45 us per layer.
+                        gpu.dispatch(
+                            current.get(),
+                            "qwen4_gdn",
+                            push(
+                                [
+                                    self.conv_out.address,
+                                    self.ab.address,
+                                    state.address,
+                                    self.o.address,
+                                    dt_a.address,
+                                    snap,
+                                ],
+                                u,
+                            ),
+                            (c.v_heads * c.state / 8) as u32,
+                            1,
+                        );
                     } else {
-                        ("qwen_gdn", crate::qwen::gpu::GDN_ROWS_PER_GROUP)
-                    };
-                    gpu.dispatch(
-                        current.get(),
-                        gdn_shader,
-                        push(
-                            [
-                                self.conv_out.address,
-                                self.ab.address,
-                                state.address,
-                                self.o.address,
-                                dt_a.address,
-                                snap,
-                            ],
-                            u,
-                        ),
-                        (c.v_heads * c.state / gdn_rows) as u32,
-                        1,
-                    );
+                        // Prefill: q and k normalized and the gates prepared once per token, then a lane per state
+                        // row walks the chunk.
+                        gpu.dispatch(
+                            current.get(),
+                            "qwen4_gdn_prep",
+                            push([self.conv_out.address, 0, self.ab.address, 0, dt_a.address, 0], u),
+                            (2 * c.k_heads + 1) as u32,
+                            n as u32,
+                        );
+                        gpu.dispatch(
+                            current.get(),
+                            "qwen4_gdn_rows",
+                            push([0, self.conv_out.address, state.address, self.o.address, self.ab.address, 0], u),
+                            (c.v_heads * c.state / 64) as u32,
+                            1,
+                        );
+                    }
                     capture(&mut graph, format!("attn_output-{il}"), &self.o, vd)?;
                     let mut u = [0; 16];
                     u[0] = vd as u32;
@@ -1525,7 +1596,7 @@ impl GpuStage {
                         n as u32,
                     );
                     capture(&mut graph, format!("final_output-{il}"), &self.o, vd)?;
-                    matrix(out, &self.o, &self.y, vd, d, false)?;
+                    out_proj(out, &self.o, vd)?;
                     capture(&mut graph, format!("linear_attn_out-{il}"), &self.y, d)?;
                 }
                 Mixer::Attention {
@@ -1739,7 +1810,7 @@ impl GpuStage {
                         n as u32,
                     );
                     capture(&mut graph, format!("attn_gated-{il}"), &self.o, qd)?;
-                    matrix(out, &self.o, &self.y, qd, d, false)?;
+                    out_proj(out, &self.o, qd)?;
                     capture(&mut graph, format!("attn_output-{il}"), &self.y, d)?;
                 }
             }

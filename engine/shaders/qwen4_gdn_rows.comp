@@ -1,0 +1,45 @@
+#version 460
+#extension GL_KHR_shader_subgroup_ballot : require
+#include "common.glsl"
+// Gated DeltaNet recurrence for prefill chunks, after qwen4_gdn_prep (q and k normalized, the gates turned into decay
+// and beta): every row of a value head's state evolves on its own,
+//   S *= decay; d = (v_row - S_row . k) beta; S_row += d k; o_row = S_row . q,
+// so a lane owns one row (its 128 values in registers) and walks the tokens. q and k are the same for every lane of a
+// head: each token's pair is loaded one token ahead (lane l < 32: k values 4l..4l + 3, else q) into LDS and read back
+// as broadcasts, and the dot products are sums in key order within the lane, without the cross-lane reductions of
+// qwen_gdn (same arithmetic otherwise). One 64-lane workgroup per 64 rows of a value head (value head h reads key
+// head h % kvheads).
+// b: prepared [t][q | k | v], e: [t][decay(heads) | beta(heads)], c: state [head][row][dim] (read/write),
+// d: output [t][head][dim]. p.heads, p.kvheads, p.dim = 128, p.n = channels per token. Position 0 starts from zero.
+layout(local_size_x=64) in;
+shared vec4 kq[2][64];
+void main(){
+uint lane=gl_LocalInvocationID.x,vh=gl_WorkGroupID.x/2,row=(gl_WorkGroupID.x%2)*64+lane;
+uint kh=vh%p.kvheads,kd=p.kvheads*128,nb=batch();
+float s[128];
+uint at=(vh*128+row)*32;
+if(position()==0){[[unroll]]for(uint j=0;j<128;j++)s[j]=0;}
+else{[[unroll]]for(uint j=0;j<32;j++){vec4 w=c_v4.v[at+j];s[4*j]=w.x;s[4*j+1]=w.y;s[4*j+2]=w.z;s[4*j+3]=w.w;}}
+// Lane l's share of a token's k and q (vec4 index in the token's row), its v, and lanes 0 and 1 the gates.
+uint ki=(lane<32?kd+kh*128:kh*128)/4+lane%32,vi=2*kd+vh*128+row,gi=(lane&1)*p.heads+vh;
+vec4 nkq=b_v4.v[ki];float nv=b_f.v[vi],ng=e_f.v[gi];
+for(uint t=0;t<nb;t++){
+    uint buf=t&1u;
+    kq[buf][lane]=nkq;
+    float v=nv,decay=subgroupBroadcast(ng,0),beta=subgroupBroadcast(ng,1);
+    // The next token's operands (the last step reloads its own), in flight while this one is computed.
+    uint tn=min(t+1,nb-1);
+    nkq=b_v4.v[tn*(p.n/4)+ki];nv=b_f.v[tn*p.n+vi];ng=e_f.v[tn*2*p.heads+gi];
+    memoryBarrierShared();barrier();
+    float sk=0;
+    [[unroll]]for(uint j=0;j<32;j++){vec4 k=kq[buf][j];
+        s[4*j]*=decay;sk=fma(s[4*j],k.x,sk);s[4*j+1]*=decay;sk=fma(s[4*j+1],k.y,sk);
+        s[4*j+2]*=decay;sk=fma(s[4*j+2],k.z,sk);s[4*j+3]*=decay;sk=fma(s[4*j+3],k.w,sk);}
+    float delta=(v-sk)*beta,o=0;
+    [[unroll]]for(uint j=0;j<32;j++){vec4 k=kq[buf][j],q=kq[buf][32+j];
+        s[4*j]=fma(k.x,delta,s[4*j]);o=fma(s[4*j],q.x,o);s[4*j+1]=fma(k.y,delta,s[4*j+1]);o=fma(s[4*j+1],q.y,o);
+        s[4*j+2]=fma(k.z,delta,s[4*j+2]);o=fma(s[4*j+2],q.z,o);s[4*j+3]=fma(k.w,delta,s[4*j+3]);o=fma(s[4*j+3],q.w,o);}
+    d_f.v[(t*p.heads+vh)*128+row]=o;
+}
+[[unroll]]for(uint j=0;j<32;j++)c_v4.v[at+j]=vec4(s[4*j],s[4*j+1],s[4*j+2],s[4*j+3]);
+}

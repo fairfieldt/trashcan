@@ -56,11 +56,11 @@ pub fn repack_iq4xs(src: &[u8]) -> (Vec<u8>, usize) {
     (out, blocks_at / 4)
 }
 
-/// Q8_0 blocks split into all f16 scales, padded to 16 bytes, then the 32-byte blocks: 34 bytes per 32 weights,
-/// as stored. Returns the bytes and the offset of the blocks in u32 words.
+/// Q8_0 blocks split into all f16 scales, padded to 64 bytes (so pairs of blocks are whole cache lines), then the
+/// 32-byte blocks: 34 bytes per 32 weights, as stored. Returns the bytes and the offset of the blocks in u32 words.
 pub fn repack_q8h(src: &[u8]) -> (Vec<u8>, usize) {
     let count = src.len() / 34;
-    let blocks_at = (count * 2).next_multiple_of(16);
+    let blocks_at = (count * 2).next_multiple_of(64);
     let mut out = vec![0u8; blocks_at + count * 32];
     for (i, b) in src.chunks_exact(34).enumerate() {
         out[i * 2..i * 2 + 2].copy_from_slice(&b[..2]);

@@ -1,0 +1,28 @@
+#version 460
+#include "common.glsl"
+// Prefill DeltaNet, before qwen4_gdn_rows: per token, L2-normalize q (times 1/sqrt(dim)) and k of every key head in
+// place in the convolved [q | k | v], and turn the raw gates into decay = exp(softplus(alpha + dt) A) and
+// beta = sigmoid(b) in place; the arithmetic is qwen_gdn's. One 64-lane workgroup per (key head, q or k) and token
+// (lane l: dims l and l + 64); workgroup x = 2 p.kvheads computes the gates.
+// a: convolved [t][p.n] (q | k | v), c: gates [t][alpha(heads) | beta(heads)], e: [dt bias(heads) | A(heads)].
+// p.heads = value heads, p.kvheads = key heads, p.dim = 128, p.n = channels per token, p.r0 = eps bits.
+layout(local_size_x=64) in;
+void main(){
+uint lane=gl_LocalInvocationID.x,t=gl_WorkGroupID.y,x=gl_WorkGroupID.x;if(t>=batch())return;
+if(x==2*p.kvheads){
+    for(uint vh=lane;vh<p.heads;vh+=64){
+        float dt=e_f.v[vh],A=e_f.v[p.heads+vh];
+        float xa=c_f.v[t*2*p.heads+vh]+dt;
+        float decay=exp((xa>20.0?xa:log(1.0+exp(xa)))*A);
+        float beta=1.0/(1.0+exp(-c_f.v[t*2*p.heads+p.heads+vh]));
+        c_f.v[t*2*p.heads+vh]=decay;c_f.v[t*2*p.heads+p.heads+vh]=beta;
+    }
+    return;
+}
+uint at=t*p.n+(x%2)*p.kvheads*p.dim+(x/2)*p.dim;
+vec2 v=vec2(a_f.v[at+lane],a_f.v[at+lane+64]);
+float eps=uintBitsToFloat(p.r0),scale=inversesqrt(float(p.dim));
+if(x%2==0)v*=inversesqrt(subgroupAdd(dot(v,v))+eps)*scale;
+else v*=inversesqrt(subgroupAdd(dot(v,v))+eps);
+a_f.v[at+lane]=v.x;a_f.v[at+lane+64]=v.y;
+}

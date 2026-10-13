@@ -1,0 +1,7 @@
+#version 460
+#include "common.glsl"
+// Sum the K-split partial products of a prefill GEMM in part order: c[t][i] = sum_p a[p][t][i].
+// a: partials [p.k][t][p.n], c: y [t][p.n]. p.n rows, p.k parts.
+layout(local_size_x=256) in;
+void main(){uint i=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y,nb=batch();if(i>=p.n||t>=nb)return;
+float s=a_f.v[t*p.n+i];for(uint q=1;q<p.k;q++)s+=a_f.v[(q*nb+t)*p.n+i];c_f.v[t*p.n+i]=s;}

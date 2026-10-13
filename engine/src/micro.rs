@@ -776,6 +776,22 @@ pub fn selection(iterations: u32, batch: usize) -> Result<()> {
 /// Q4_0 GEMM kernels (`gemm` and its variants) at (rows, k) shapes for `n` tokens on GPU `gpu`, random weights
 /// and activations: milliseconds and TFLOP/s per call, and every variant's output checked bit for bit against
 /// `gemm`. One JSON line per shape and kernel.
+/// Workgroups of a GEMM kernel: the 64 x 64 tiled kernels, or `qwen4_q8_gemm_sTrR[p]` (64 R rows by T tokens, the
+/// token tile first), each times `parts` K splits.
+fn gemm_groups(kernel: &str, rows: usize, n: usize, parts: usize) -> (usize, usize) {
+    let parts = parts.max(1);
+    let tr = kernel.strip_prefix("qwen4_q8_gemm_s").and_then(|c| {
+        let (t, r) = c.trim_end_matches(['p', 'o', 'd', 'm']).split_once('r')?;
+        Some((t.parse::<usize>().ok()?, r.parse::<usize>().ok()?, c.contains('o')))
+    });
+    match tr {
+        Some((t, r, false)) => (n.div_ceil(t), rows.div_ceil(64 * r) * parts),
+        Some((t, r, true)) => (rows.div_ceil(64 * r) * parts, n.div_ceil(t)),
+        None => (rows.div_ceil(64) * parts, n.div_ceil(64)),
+    }
+}
+
+/// Kernels named `qwen4_q8_*` read random Q8_0 weights (`quant::repack_q8h`), the others Q4_0; `KERNEL:PARTS` splits K.
 pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations: u32, gpu: usize, warmup_ms: u64) -> Result<()> {
     ensure!(iterations > 0 && n > 0, "positive iterations and tokens");
     let inst = Rc::new(Instance::new()?);
@@ -793,26 +809,44 @@ pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations:
     let q = unsafe { d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(2), None)? };
     for &(rows, k) in shapes {
         ensure!(rows.is_multiple_of(64) && k.is_multiple_of(32), "rows must be a multiple of 64 and k of 32");
-        let mut blocks = vec![0u8; rows * k / 32 * 18];
-        for b in blocks.chunks_exact_mut(18) {
+        let q8 = kernels.iter().any(|k| k.starts_with("qwen4_q8"));
+        let bytes = if q8 { 34 } else { 18 };
+        let mut blocks = vec![0u8; rows * k / 32 * bytes];
+        for b in blocks.chunks_exact_mut(bytes) {
             let scale = half::f16::from_f32(0.001 + (next() % 1000) as f32 * 5e-5);
             b[..2].copy_from_slice(&scale.to_le_bytes());
             for byte in &mut b[2..] {
                 *byte = next() as u8;
             }
         }
-        let w = d.upload_matrix(&quant::repack_q4(&blocks, k, rows, 0, rows, 0, k))?;
+        let (w, stride) = if q8 {
+            let (packed, stride) = quant::repack_q8h(&blocks);
+            (d.upload_matrix(&packed)?, stride as u32)
+        } else {
+            (d.upload_matrix(&quant::repack_q4(&blocks, k, rows, 0, rows, 0, k))?, (rows * k / 32) as u32)
+        };
         let input: Vec<f32> = (0..n * k).map(|_| (next() as f64 / u32::MAX as f64 * 2. - 1.) as f32).collect();
         let x = d.upload(bytemuck::cast_slice(&input))?;
+        // The normed streams the mixer up projections (`_mix`, `...m`) fold into their output.
+        let normed: Vec<f32> = (0..n * rows).map(|_| (next() as f64 / u32::MAX as f64 * 2. - 1.) as f32).collect();
+        let xn = d.upload(bytemuck::cast_slice(&normed))?;
         let mut reference: Option<Vec<u8>> = None;
-        for kernel in kernels {
-            let y = d.buffer(n * rows * 4, false, false, None)?;
+        for spec in kernels {
+            let (kernel, parts) = match spec.split_once(':') {
+                Some((kn, pp)) => (kn, pp.parse::<usize>()?),
+                None => (spec.as_str(), 0),
+            };
+            let (gx, gy) = gemm_groups(kernel, rows, n, parts);
+            // Zeroed, so kernels that write part of it (the mixer up projections) compare equal elsewhere.
+            let y = d.upload(&vec![0u8; n * rows * 4 * parts.max(1)])?;
             let mut p = Push::default();
             p.ptr[1] = x.address;
             p.ptr[2] = y.address;
+            p.ptr[3] = xn.address;
             p.u[0] = rows as u32;
             p.u[1] = k as u32;
-            p.u[3] = (rows * k / 32) as u32;
+            p.u[2] = parts as u32;
+            p.u[3] = stride;
             p.u[15] = n as u32;
             let cmd = d.begin()?;
             unsafe {
@@ -820,7 +854,7 @@ pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations:
                 d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
             }
             for _ in 0..iterations {
-                d.dispatch_matrix(cmd, kernel, p, rows.div_ceil(64) as u32, n.div_ceil(64) as u32, &w)?;
+                d.dispatch_matrix(cmd, kernel, p, gx as u32, gy as u32, &w)?;
             }
             unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
             d.finish(cmd)?;
@@ -845,11 +879,12 @@ pub fn gemm(shapes: &[(usize, usize)], n: usize, kernels: &[String], iterations:
                 reference = Some(out);
             }
             let tflops = 2. * (rows * k * n) as f64 / (ms * 1e-3) / 1e12;
-            println!("{}", serde_json::json!({"gpu": gpu, "rows": rows, "k": k, "n": n, "kernel": kernel, "ms": ms, "tflops": tflops, "mismatches": mismatches, "max_diff": max_diff}));
+            println!("{}", serde_json::json!({"gpu": gpu, "rows": rows, "k": k, "n": n, "kernel": spec, "ms": ms, "tflops": tflops, "mismatches": mismatches, "max_diff": max_diff}));
             keep.push(y);
         }
         keep.push(w);
         keep.push(x);
+        keep.push(xn);
     }
     unsafe { d.dev.destroy_query_pool(q, None) };
     drop(keep);
