@@ -1,0 +1,55 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+// Down projections for prefill, grouped by expert: one workgroup per 128 rows of one tile (qwen4_moe_tiles), each lane
+// walking one row whole for all of the tile's slots (scalar loads of their activations) and loading 4 blocks (a
+// 64-byte line) at once, so every weight is decoded once per tile; one copy of the walk per slot count. Writes each
+// slot's output scaled by its routing weight, for rows p.offset .. p.offset + p.m:
+// ys[slot][row - p.offset] = w[slot] * W_e[row] . act[slot]; qwen4_moe_sum adds a token's slots. Q4_0 or IQ4_NL
+// weights as in qwen4_moe_down; p.k a multiple of 128.
+// b: act [t * slots][ff], c: ys [t * slots][p.m], d: tiles, e: list, f: weights [t * slots].
+// p.n = d (rows per expert), p.k = ff, p.m = rows of this pass, p.offset = its first row, p.stride = word offset of
+// the blocks.
+#define TILE 8
+layout(local_size_x=128) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+layout(binding=0,std430) readonly restrict buffer WeightPairs { uvec2 h[]; } wp;
+uint slot[TILE],xb[TILE],r,i;
+void walk(const uint C){
+    uint blocks=p.k/32;
+    float acc[TILE];
+    [[unroll]]for(uint t=0;t<C;t++)acc[t]=0;
+    uvec4 q0,q1,q2,q3;
+    uvec2 h;
+    for(uint b=0;b<blocks;b++){
+        if((b&3u)==0){uint a=p.stride/4+r+b;q0=wq.q[a];q1=wq.q[a+1];q2=wq.q[a+2];q3=wq.q[a+3];h=wp.h[(r+b)>>2];}
+        uvec4 q=q0;
+        q0=q1;q1=q2;q2=q3;
+        uint ib=b&3u;
+        float s=unpackHalf2x16(ib<2?h.x>>(16u*ib):h.y>>(16u*(ib-2))).x;
+        float ps[TILE];
+        [[unroll]]for(uint t=0;t<C;t++)ps[t]=0;
+        [[unroll]]for(uint w=0;w<4;w++){
+            vec4 lo=qlo(q[w]),hi=qhi(q[w]);
+            [[unroll]]for(uint t=0;t<C;t++){
+                vec4 x0=b_v4.v[xb[t]+b*8+w],x1=b_v4.v[xb[t]+b*8+w+4];
+                ps[t]=fma(lo.x,x0.x,ps[t]);ps[t]=fma(lo.y,x0.y,ps[t]);ps[t]=fma(lo.z,x0.z,ps[t]);ps[t]=fma(lo.w,x0.w,ps[t]);
+                ps[t]=fma(hi.x,x1.x,ps[t]);ps[t]=fma(hi.y,x1.y,ps[t]);ps[t]=fma(hi.z,x1.z,ps[t]);ps[t]=fma(hi.w,x1.w,ps[t]);
+            }
+        }
+        [[unroll]]for(uint t=0;t<C;t++)acc[t]=fma(ps[t],s,acc[t]);
+    }
+    [[unroll]]for(uint t=0;t<C;t++)c_f.v[slot[t]*p.m+i]=f_f.v[slot[t]]*acc[t];
+}
+void main(){
+init_lut();
+uint tile=gl_WorkGroupID.y;if(tile>=d_u.v[0])return;
+uint e=d_u.v[1+2*tile],pk=d_u.v[2+2*tile],cnt=pk>>16;
+i=gl_WorkGroupID.x*128+gl_LocalInvocationID.x;
+if(i>=p.m||p.offset+i>=p.n)return;
+[[unroll]]for(uint t=0;t<TILE;t++){slot[t]=e_u.v[(pk&0xffffu)+min(t,cnt-1)]&0xffffu;xb[t]=slot[t]*(p.k/4);}
+r=(e*p.n+p.offset+i)*(p.k/32);
+switch(cnt){
+case 1u:walk(1u);break;case 2u:walk(2u);break;case 3u:walk(3u);break;case 4u:walk(4u);break;
+case 5u:walk(5u);break;case 6u:walk(6u);break;case 7u:walk(7u);break;default:walk(8u);break;}
+}

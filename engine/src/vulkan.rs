@@ -478,6 +478,10 @@ impl Device {
             ("qwen4_topk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_topk.spv")).as_slice()),
             ("qwen4_moe_gu", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu.spv")).as_slice()),
             ("qwen4_moe_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_down.spv")).as_slice()),
+            ("qwen4_moe_tiles", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_tiles.spv")).as_slice()),
+            ("qwen4_moe_gu_tiles", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu_tiles.spv")).as_slice()),
+            ("qwen4_moe_down_tiles", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_down_tiles.spv")).as_slice()),
+            ("qwen4_moe_sum", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_sum.spv")).as_slice()),
             ("qwen4_ple_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_gate.spv")).as_slice()),
             ("qwen4_ple_conv", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_conv.spv")).as_slice()),
             ("qwen4_idx_store", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_idx_store.spv")).as_slice()),
@@ -551,6 +555,15 @@ impl Device {
                     ("qwen4_moe_down_q2", Some(3)),
                 ],
                 "qwen4_q8_gemm" => &[("qwen4_q8_gemm", Some(0)), ("qwen4_q8_gemm_mix", Some(1))],
+                "qwen4_moe_gu_tiles" => &[
+                    ("qwen4_moe_gu_tiles", Some(0)),
+                    ("qwen4_moe_gu_tiles_iq4nl", Some(1)),
+                    ("qwen4_moe_gu_tiles_iq4xs", Some(2)),
+                ],
+                "qwen4_moe_down_tiles" => &[
+                    ("qwen4_moe_down_tiles", Some(0)),
+                    ("qwen4_moe_down_tiles_iq4nl", Some(1)),
+                ],
                 "qwen4_mix_down" => &[("qwen4_mix_down", Some(0)), ("qwen4_mix_down_q8", Some(1))],
                 "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],
                 "qwen4_attention_sparse" => &[

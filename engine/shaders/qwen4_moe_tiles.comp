@@ -1,0 +1,35 @@
+#version 460
+#include "common.glsl"
+// Group a prefill batch's expert slots by expert into tiles for qwen4_moe_gu_tiles and qwen4_moe_down_tiles. One
+// workgroup: count each expert's slots, cut them into tiles of p.k slots and a remainder, and list the tiles (expert,
+// first list entry | slots << 16) fullest first: all full tiles, then the remainders by size, so the longest
+// workgroups start first and those of one size run together. The slots are listed by expert (token << 16 | token *
+// slots + slot), in arbitrary order within an expert; every slot is computed on its own.
+// a: ids [t][slots] (u32), c: tiles [1 + 2 * tiles] (u32, count first), d: list [t * slots] (u32).
+// p.n = experts including the shared one (at most 1024), p.m = slots per token, p.k = slots per tile (at most 32).
+layout(local_size_x=256) in;
+shared uint cnt[1024],off[1024],part[256],rem[32],rpos[32];
+void main(){uint l=gl_LocalInvocationID.x,total=batch()*p.m;
+for(uint e=l;e<1024;e+=256)cnt[e]=0;
+if(l<32){rem[l]=0;rpos[l]=0;}
+barrier();
+for(uint a=l;a<total;a+=256)atomicAdd(cnt[a_u.v[a]],1u);
+barrier();
+// Slots in the low 16 bits and full tiles in the high 16 bits, scanned together (both stay below 2^16).
+uint v[4],s=0;
+[[unroll]]for(uint j=0;j<4;j++){uint e=4*l+j,c=e<p.n?cnt[e]:0;v[j]=c|((c/p.k)<<16);s+=v[j];
+    if(c%p.k!=0)atomicAdd(rem[c%p.k],1u);}
+part[l]=s;barrier();
+for(uint d=1;d<256;d*=2){uint x=l>=d?part[l-d]:0;barrier();part[l]+=x;barrier();}
+uint run=part[l]-s;
+[[unroll]]for(uint j=0;j<4;j++){off[4*l+j]=run;run+=v[j];}
+// Remainder tiles of size r start after the full tiles and the larger remainders.
+if(l==0){uint t=part[255]>>16;for(uint r=p.k-1;r>0;r--){uint c=rem[r];rem[r]=t;t+=c;}c_u.v[0]=t;}
+barrier();
+for(uint e=l;e<p.n;e+=256){uint c=cnt[e],o=off[e]&0xffffu,t=off[e]>>16,i=0;
+    for(;(i+1)*p.k<=c;i++){c_u.v[1+2*(t+i)]=e;c_u.v[2+2*(t+i)]=(o+i*p.k)|(p.k<<16);}
+    uint r=c-i*p.k;
+    if(r>0){uint x=rem[r]+atomicAdd(rpos[r],1u);c_u.v[1+2*x]=e;c_u.v[2+2*x]=(o+i*p.k)|(r<<16);}
+    cnt[e]=0;}
+barrier();
+for(uint a=l;a<total;a+=256){uint e=a_u.v[a];d_u.v[(off[e]&0xffffu)+atomicAdd(cnt[e],1u)]=((a/p.m)<<16)|a;}}

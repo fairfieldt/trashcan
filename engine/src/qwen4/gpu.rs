@@ -34,6 +34,18 @@ const FUSED_MAX_Q4: usize = 64;
 /// K splits of the Q8_0 prefill mixer's bottleneck GEMM (10240 -> 324 rows, 6 row tiles of 64 alone, 96 workgroups
 /// per 64 tokens with the splits; 8 and 32 measured the same).
 const MIX_SPLITS: usize = 16;
+/// Batches of at least this many tokens group their expert slots by expert (`qwen4_moe_tiles`), so each expert's
+/// weights are decoded once per tile of up to `TILE` slots; smaller ones use the per-(token, slot) kernels
+/// (results/qwen4/prefill-experts-20261012: 8 layers' experts 28.2 -> 20.5 ms at 16 tokens, 221 -> 84 ms at 128; a
+/// tie at 8).
+const GROUPED_MIN: usize = 16;
+/// Slots per expert tile (`TILE` in qwen4_moe_{gu,down}_tiles.comp).
+const TILE: usize = 8;
+
+/// Tiles needed at most for `slots` slots over `experts` experts.
+fn max_tiles(slots: usize, experts: usize) -> usize {
+    slots.min(experts + slots / TILE)
+}
 
 /// A dense matrix: Q4_0 repacked with f32 scales (the Gemma kernels) or Q8_0 with f16 scales (`qwen4_q8_*`, the
 /// word offset of its blocks).
@@ -273,6 +285,9 @@ pub struct GpuStage {
     ids: Buffer,
     wts: Buffer,
     act: Buffer,
+    /// Expert tiles of a prefill batch and its slots grouped by expert (`qwen4_moe_tiles`).
+    tiles: Buffer,
+    list: Buffer,
     ik: Buffer,
     iq: Buffer,
     iqr: Buffer,
@@ -304,6 +319,9 @@ fn expert_shader(name: &'static str, fmt: u32) -> &'static str {
         ("qwen4_moe_down", 1) => "qwen4_moe_down_iq4nl",
         ("qwen4_moe_down", 2) => "qwen4_moe_down_iq4xs",
         ("qwen4_moe_down", 3) => "qwen4_moe_down_q2",
+        ("qwen4_moe_gu_tiles", 1) => "qwen4_moe_gu_tiles_iq4nl",
+        ("qwen4_moe_gu_tiles", 2) => "qwen4_moe_gu_tiles_iq4xs",
+        ("qwen4_moe_down_tiles", 1) => "qwen4_moe_down_tiles_iq4nl",
         _ => name,
     }
 }
@@ -629,6 +647,8 @@ impl GpuStage {
             ids: alloc(slots)?,
             wts: alloc(slots)?,
             act: alloc(slots * c.ff_exp)?,
+            tiles: gpu.buffer((1 + 2 * max_batch * slots) * 4, false, false, None)?,
+            list: alloc(slots)?,
             ik: alloc(c.idx_dim)?,
             iq: alloc(c.idx_heads * c.idx_dim)?,
             iqr: alloc(c.idx_heads * c.idx_dim)?,
@@ -1555,44 +1575,117 @@ impl GpuStage {
             capture(&mut graph, format!("moe_weights-{il}"), &self.wts, slots)?;
             mark(&mut graph, li, "router");
             let (gu_stride, down_stride) = (l.gu_stride, l.down_stride);
-            // One workgroup per (token, slot), each reading its expert's rows: faster than grouping the slots by
-            // expert at every chunk size measured, 1-256 tokens (results/qwen4/prefill-batch-20261012).
-            let mut u = [0; 16];
-            u[0] = ff as u32;
-            u[1] = d as u32;
-            u[2] = slots as u32;
-            u[3] = gu_stride;
-            gpu.dispatch_matrix(
-                current.get(),
-                expert_shader("qwen4_moe_gu", l.gu_fmt),
-                push([0, self.u.address, self.act.address, self.ids.address, 0, 0], u),
-                ff.div_ceil(16) as u32,
-                (n * slots) as u32,
-                &l.gate_up,
-            )?;
-            let mut u = [0; 16];
-            u[0] = d as u32;
-            u[1] = ff as u32;
-            u[2] = slots as u32;
-            u[3] = down_stride;
-            gpu.dispatch_matrix(
-                current.get(),
-                expert_shader("qwen4_moe_down", l.down_fmt),
-                push(
-                    [
-                        0,
-                        self.act.address,
-                        self.y.address,
-                        self.ids.address,
-                        self.wts.address,
-                        0,
-                    ],
-                    u,
-                ),
-                d.div_ceil(16) as u32,
-                n as u32,
-                &l.down,
-            )?;
+            // Prefill batches group the slots by expert, so each expert's rows are decoded once per tile of slots;
+            // small batches use one workgroup per (token, slot), each reading its expert's rows.
+            let grouped = n >= GROUPED_MIN && n * slots < 1 << 16 && l.gu_fmt <= 2 && d % 256 == 0 && ff % 128 == 0;
+            let tiles = max_tiles(n * slots, ne + 1) as u32;
+            if grouped {
+                let mut u = [0; 16];
+                u[0] = (ne + 1) as u32;
+                u[1] = TILE as u32;
+                u[2] = slots as u32;
+                gpu.dispatch(
+                    current.get(),
+                    "qwen4_moe_tiles",
+                    push([self.ids.address, 0, self.tiles.address, self.list.address, 0, 0], u),
+                    1,
+                    1,
+                );
+                let mut u = [0; 16];
+                u[0] = ff as u32;
+                u[1] = d as u32;
+                u[3] = gu_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    expert_shader("qwen4_moe_gu_tiles", l.gu_fmt),
+                    push([0, self.u.address, self.act.address, self.tiles.address, self.list.address, 0], u),
+                    ff.div_ceil(128) as u32,
+                    tiles,
+                    &l.gate_up,
+                )?;
+            } else {
+                let mut u = [0; 16];
+                u[0] = ff as u32;
+                u[1] = d as u32;
+                u[2] = slots as u32;
+                u[3] = gu_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    expert_shader("qwen4_moe_gu", l.gu_fmt),
+                    push([0, self.u.address, self.act.address, self.ids.address, 0, 0], u),
+                    ff.div_ceil(16) as u32,
+                    (n * slots) as u32,
+                    &l.gate_up,
+                )?;
+            }
+            if grouped && l.down_fmt <= 1 {
+                // Each slot's weighted output for a range of rows goes to `big` (free during the experts), then a
+                // token's slots are summed in order.
+                let rows = (c.conv_dim().max(2 * c.heads * c.head_dim) / slots) / 128 * 128;
+                for first in (0..d).step_by(rows) {
+                    let m = rows.min(d - first);
+                    let mut u = [0; 16];
+                    u[0] = d as u32;
+                    u[1] = ff as u32;
+                    u[2] = m as u32;
+                    u[3] = down_stride;
+                    u[10] = first as u32;
+                    gpu.dispatch_matrix(
+                        current.get(),
+                        expert_shader("qwen4_moe_down_tiles", l.down_fmt),
+                        push(
+                            [
+                                0,
+                                self.act.address,
+                                self.big.address,
+                                self.tiles.address,
+                                self.list.address,
+                                self.wts.address,
+                            ],
+                            u,
+                        ),
+                        m.div_ceil(128) as u32,
+                        tiles,
+                        &l.down,
+                    )?;
+                    let mut u = [0; 16];
+                    u[0] = d as u32;
+                    u[1] = slots as u32;
+                    u[2] = m as u32;
+                    u[10] = first as u32;
+                    gpu.dispatch(
+                        current.get(),
+                        "qwen4_moe_sum",
+                        push([self.big.address, 0, self.y.address, 0, 0, 0], u),
+                        m.div_ceil(256) as u32,
+                        n as u32,
+                    );
+                }
+            } else {
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[1] = ff as u32;
+                u[2] = slots as u32;
+                u[3] = down_stride;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    expert_shader("qwen4_moe_down", l.down_fmt),
+                    push(
+                        [
+                            0,
+                            self.act.address,
+                            self.y.address,
+                            self.ids.address,
+                            self.wts.address,
+                            0,
+                        ],
+                        u,
+                    ),
+                    d.div_ceil(16) as u32,
+                    n as u32,
+                    &l.down,
+                )?;
+            }
             capture(&mut graph, format!("ffn_out-{il}"), &self.y, d)?;
             mark(&mut graph, li, "experts");
             pending = true;

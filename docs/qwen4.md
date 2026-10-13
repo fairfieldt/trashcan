@@ -9,10 +9,11 @@ are in [qwen.md](qwen.md).
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type match the reference with the six-Mac
 recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
-CPU reference, prefill 298 tok/s on a 512-token prompt and 415-434 on 2048 with the two GPUs of a Mac on
+CPU reference, prefill 369 tok/s on a 512-token prompt and 598 on 2048 with the two GPUs of a Mac on
 consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)),
-the chunk size chosen by prompt length ([results/qwen4/prefill-chunks-20261012](../results/qwen4/prefill-chunks-20261012/README.md))
-and split-K prefill mixers ([results/qwen4/prefill-mixer-20261012](../results/qwen4/prefill-mixer-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
+the chunk size chosen by prompt length ([results/qwen4/prefill-chunks-20261012](../results/qwen4/prefill-chunks-20261012/README.md)),
+split-K prefill mixers ([results/qwen4/prefill-mixer-20261012](../results/qwen4/prefill-mixer-20261012/README.md))
+and experts that decode each expert's rows once per tile of its tokens ([results/qwen4/prefill-experts-20261012](../results/qwen4/prefill-experts-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), and 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)). Not done yet: a
 cheaper head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
@@ -208,7 +209,7 @@ that the next mixer, the head or the stage output resolves.
 | DeltaNet | qwen35's `qwen_conv` and `qwen_gdn`, `qwen4_gated_norm` (sigmoid gate) |
 | QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
 | QSA, longer contexts | `qwen4_idx_store`/`qwen4_idx_pool` (raw and pooled block keys), `qwen_qk` on the indexer queries, `qwen4_idx_score` (block scores, one wave per block for 8 tokens), `qwen4_idx_select` (exact radix top-512, ties to the earlier block), `qwen4_attention_sparse[_full]` |
-| MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot) at every batch size (grouping the slots by expert was slower at 16-256 tokens, results/qwen4/prefill-batch-20261012) |
+| MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; below 16 tokens `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot); from 16 tokens `qwen4_moe_tiles` groups the slots by expert into tiles of up to 8, `qwen4_moe_gu_tiles`/`qwen4_moe_down_tiles` decode each expert's rows once per tile (a lane per row, whole 64-byte lines, the slots' inputs through scalar loads) and `qwen4_moe_sum` adds a token's slots (2.6x faster at 128 tokens, results/qwen4/prefill-experts-20261012) |
 | experts | IQ4_XS (4.25 bpw), IQ4_NL or Q4_0 (f16 scale per 32, 4.5 bpw), at their GGUF size; the shared expert is stacked as expert 512 and must share the routed format |
 | head | final mixer, qwen35's Q6 `headvec` (int8 with f32 scales per 16), top-64; any range of vocabulary rows (`--head-split`) |
 
@@ -264,8 +265,8 @@ Formats compared on layers 0-5 (decode GPU time per DeltaNet layer; experts per 
 Fusing the mixers into two dispatches each took decode from 9.05 to 6.65 ms for six layers: the mixers were half
 of a decode layer and almost none of its bytes. Moving block scoring out of the single-workgroup select took the
 QSA layer at 32K from 13.25 to 2.16 ms per decode token and the 256-token chunk there from 272 to 190 ms (G-q8d). In
-prefill the experts take 50-60% of a layer; the per-(token, slot) kernels beat kernels that grouped the slots by
-expert at every chunk size (221 against 259 ms for 8 layers at 128 tokens; results/qwen4/prefill-batch-20261012).
+prefill the per-(token, slot) expert kernels took 50-60% of a layer; kernels that decode each expert's rows once per
+tile of its slots took the 8 layers' experts at 128 tokens from 221 to 84 ms (results/qwen4/prefill-experts-20261012).
 Splitting the mixer bottleneck GEMM along K (its 324 rows gave 5-6 workgroups) took 16 prefill mixers from 63 to
 20 ms per 128-token chunk and from 77 to 38 ms per 256-token chunk; the fused mixers now win only up to 8 tokens
 (64-token chunks: 53 -> 11 ms; results/qwen4/prefill-mixer-20261012).
@@ -310,22 +311,20 @@ short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 1.72 s, **298 tok/s** (measured) | ~1.2 s, ~430 tok/s |
-| 2048 | ~0.8 s | 4.7-4.9 s, **415-434 tok/s** (measured) | ~3 s, ~660 tok/s |
-| 4K | ~1.5 s, 2,800 tok/s | ~10 s, ~400 tok/s | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | 18.3 s, **447 tok/s** (measured before the split-K mixers) | ~9 s, ~920 tok/s |
-| 32K | ~11 s, 3,150 tok/s | ~1 min, ~520 tok/s | ~35 s, ~950 tok/s |
-| 128K | ~42 s | ~5 min, ~445 tok/s | ~2.5 min, ~900 tok/s |
-| 200K | ~65 s | ~8 min, ~415 tok/s | ~4 min, ~850 tok/s |
-| 262K | ~83 s | ~11 min, ~400 tok/s | ~5.5 min, ~820 tok/s |
+| 512 | ~0.25 s | 1.39 s, **369 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 3.4 s, **598 tok/s** (measured) | ~3 s, ~660 tok/s |
+| 4K | ~1.5 s, 2,800 tok/s | ~6.5 s, ~630 tok/s | ~5 s, ~820 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | 13.2 s, **618 tok/s** (measured before the split-K mixers) | ~9 s, ~920 tok/s |
+| 32K | ~11 s, 3,150 tok/s | ~40 s, ~820 tok/s | ~35 s, ~950 tok/s |
+| 128K | ~42 s | ~3.4 min, ~650 tok/s | ~2.5 min, ~900 tok/s |
+| 200K | ~65 s | ~5.8 min, ~590 tok/s | ~4 min, ~850 tok/s |
+| 262K | ~83 s | ~7.8 min, ~560 tok/s | ~5.5 min, ~820 tok/s |
 
-Today: kernels reach ~18% of FP32 peak and the per-slot expert kernels re-read each token's 11 experts (~15 GB per GPU
-per 128-token chunk, about half of a chunk's time: bandwidth bound). Every GPU is a pipeline stage (a Mac's two GPUs
-work on consecutive chunks), so a prompt takes about the sum of its chunks' stage times (~0.21-0.3 s per 128-token
-chunk) plus 11 times the largest: the ~2.5 s pipeline fill is most of a 512-token prompt. Toward the realistic column:
-an expert kernel that reuses weights across the tokens routed to an expert (~2x on experts), chunked DeltaNet, faster
-block selection and sparse attention at long contexts, and smaller chunks for short prompts (less pipeline fill: 512
-tokens in an estimated ~2.2 s with 64-token chunks).
+Today: the experts take about a third of a 128-token chunk's time at ~38% of FP32 peak (each expert's rows decoded
+once per tile of up to 8 of its tokens). Every GPU is a pipeline stage (a Mac's two GPUs work on consecutive chunks),
+so a prompt takes about the sum of its chunks' stage times plus 11 times the largest, and the pipeline fill is most of
+a short prompt's time. Toward the realistic column: chunked DeltaNet, faster block selection and sparse attention at
+long contexts, and the Q8_0 GEMM tile kernel.
 
 **Beyond these ceilings.** MTP speculative decoding: with 2 drafts accepted ~70-80% of the time, a verification step
 costs ~1.4-1.5x a decode step for ~2.4 tokens, ~1.6-1.7x effective (~45 tok/s on top of the realistic decode); the MTP
@@ -410,8 +409,8 @@ worth it at the acceptance rates speculative decoding usually sees, but not buil
    matrix too), so those uploads can go (~28 MiB per GPU).
 3. **Clock levels** (done): in decode each GPU idles ~90% of a token and drops to its lowest clocks on `auto`;
    stages now hold the high level while work arrives and return to `auto` after 1 s idle (~35 W per idle GPU).
-4. **Prefill**: an expert kernel that reuses weights across the tokens routed to an expert without losing to the
-   per-slot kernels (28-32 ms of a 52 ms layer at 128 tokens), the Q8_0 GEMM tile kernel (64 x 64, ~55% of the FMA
+4. **Prefill**: experts that reuse weights across the tokens routed to an expert (done: 221 -> 84 ms for 8 layers
+   at 128 tokens, 2048 tokens 434 -> 598 tok/s, results/qwen4/prefill-experts-20261012), the Q8_0 GEMM tile kernel (64 x 64, ~55% of the FMA
    peak; most of the 1.2 ms per mixer per 128-token chunk and of the DeltaNet and QSA projections), chunked
    DeltaNet (19 ms), grouping the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K),
    the f32 router (3.8 ms), and smaller chunks for short prompts, whose time is mostly the 12-stage pipeline fill

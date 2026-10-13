@@ -1,0 +1,68 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+// Gate and up projections with SwiGLU for prefill, grouped by expert: one workgroup per 128 rows of one tile (up to
+// TILE slots routed to one expert, from qwen4_moe_tiles). Each lane owns gate row i and up row i of the expert and
+// walks them whole, so every weight is decoded once for all of the tile's slots; the slots' inputs are the same for
+// every lane (scalar loads) and no sums cross lanes. A lane loads 4 blocks (a 64-byte line) of a row at once: rows
+// are 1280 bytes apart, and loading block by block fetched each line up to four times. One copy of the walk per slot
+// count keeps the slot loop free of branches. Weights as in qwen4_moe_gu; p.k a multiple of 256.
+// b: u [t][k], c: act [t * slots][ff], d: tiles, e: list (qwen4_moe_tiles).
+// p.n = ff, p.k = d, p.stride = word offset of the blocks.
+#define TILE 8
+layout(local_size_x=128) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+layout(binding=0,std430) readonly restrict buffer WeightPairs { uvec2 h[]; } wp;
+uint slot[TILE],xb[TILE],rg,ru,ri;
+// Block ib's scale from an IQ4_XS header, or from 4 f16 scales (Q4_0, IQ4_NL).
+float scale(uvec2 h,uint ib){
+    if(FMT==2){
+        uint ls=((h.y>>(4u*ib))&15u)|(((h.x>>(16u+2u*ib))&3u)<<4);
+        return unpackHalf2x16(h.x).x*float(int(ls)-32);
+    }
+    return unpackHalf2x16(ib<2?h.x>>(16u*ib):h.y>>(16u*(ib-2))).x;
+}
+void walk(const uint C){
+    uint blocks=p.k/32;
+    float g[TILE],u[TILE];
+    [[unroll]]for(uint t=0;t<C;t++){g[t]=0;u[t]=0;}
+    uvec4 g0,g1,g2,g3,u0,u1,u2,u3;
+    uvec2 hg,hu;
+    for(uint b=0;b<blocks;b++){
+        if((b&3u)==0){
+            uint a=p.stride/4+rg+b,c=p.stride/4+ru+b;
+            g0=wq.q[a];g1=wq.q[a+1];g2=wq.q[a+2];g3=wq.q[a+3];u0=wq.q[c];u1=wq.q[c+1];u2=wq.q[c+2];u3=wq.q[c+3];
+            if(FMT!=2){hg=wp.h[(rg+b)>>2];hu=wp.h[(ru+b)>>2];}
+        }
+        if(FMT==2&&(b&7u)==0){hg=wp.h[(rg+b)>>3];hu=wp.h[(ru+b)>>3];}
+        uvec4 qg=g0,qu=u0;
+        g0=g1;g1=g2;g2=g3;u0=u1;u1=u2;u2=u3;
+        float sg=scale(hg,FMT==2?b&7u:b&3u),su=scale(hu,FMT==2?b&7u:b&3u);
+        float pg[TILE],pu[TILE];
+        [[unroll]]for(uint t=0;t<C;t++){pg[t]=0;pu[t]=0;}
+        [[unroll]]for(uint w=0;w<4;w++){
+            vec4 gl=qlo(qg[w]),gh=qhi(qg[w]),ul=qlo(qu[w]),uh=qhi(qu[w]);
+            [[unroll]]for(uint t=0;t<C;t++){
+                vec4 x0=b_v4.v[xb[t]+b*8+w],x1=b_v4.v[xb[t]+b*8+w+4];
+                pg[t]=fma(gl.x,x0.x,pg[t]);pg[t]=fma(gl.y,x0.y,pg[t]);pg[t]=fma(gl.z,x0.z,pg[t]);pg[t]=fma(gl.w,x0.w,pg[t]);
+                pg[t]=fma(gh.x,x1.x,pg[t]);pg[t]=fma(gh.y,x1.y,pg[t]);pg[t]=fma(gh.z,x1.z,pg[t]);pg[t]=fma(gh.w,x1.w,pg[t]);
+                pu[t]=fma(ul.x,x0.x,pu[t]);pu[t]=fma(ul.y,x0.y,pu[t]);pu[t]=fma(ul.z,x0.z,pu[t]);pu[t]=fma(ul.w,x0.w,pu[t]);
+                pu[t]=fma(uh.x,x1.x,pu[t]);pu[t]=fma(uh.y,x1.y,pu[t]);pu[t]=fma(uh.z,x1.z,pu[t]);pu[t]=fma(uh.w,x1.w,pu[t]);
+            }
+        }
+        [[unroll]]for(uint t=0;t<C;t++){g[t]=fma(pg[t],sg,g[t]);u[t]=fma(pu[t],su,u[t]);}
+    }
+    if(ri<p.n)[[unroll]]for(uint t=0;t<C;t++){float a=g[t];c_f.v[slot[t]*p.n+ri]=a/(1.0+exp(-a))*u[t];}
+}
+void main(){
+init_lut();
+uint tile=gl_WorkGroupID.y;if(tile>=d_u.v[0])return;
+uint e=d_u.v[1+2*tile],pk=d_u.v[2+2*tile],cnt=pk>>16;
+ri=gl_WorkGroupID.x*128+gl_LocalInvocationID.x;
+[[unroll]]for(uint t=0;t<TILE;t++){uint en=e_u.v[(pk&0xffffu)+min(t,cnt-1)];slot[t]=en&0xffffu;xb[t]=(en>>16)*(p.k/4);}
+// First block of gate row i and of up row i.
+rg=(e*2*p.n+min(ri,p.n-1))*(p.k/32);ru=rg+p.n*(p.k/32);
+switch(cnt){
+case 1u:walk(1u);break;case 2u:walk(2u);break;case 3u:walk(3u);break;case 4u:walk(4u);break;
+case 5u:walk(5u);break;case 6u:walk(6u);break;case 7u:walk(7u);break;default:walk(8u);break;}
+}

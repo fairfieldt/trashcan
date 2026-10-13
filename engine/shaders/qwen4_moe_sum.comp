@@ -1,0 +1,8 @@
+#version 460
+#include "common.glsl"
+// Sum a token's weighted expert outputs in slot order for rows p.offset .. p.offset + p.m (qwen4_moe_down_tiles):
+// y[t][p.offset + i] = sum_j ys[t * slots + j][i].
+// a: ys [t * slots][p.m], c: y [t][p.n]. p.n = d, p.m = rows of this pass, p.k = slots per token.
+layout(local_size_x=256) in;
+void main(){uint i=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y;if(i>=p.m||t>=batch())return;
+float s=0;for(uint j=0;j<p.k;j++)s+=a_f.v[(t*p.k+j)*p.m+i];c_f.v[t*p.n+p.offset+i]=s;}
