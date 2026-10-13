@@ -1,9 +1,9 @@
 #!/bin/bash
-# Six-Mac MTP rounds session 2 (through chain6.sh, binary 78e8848 rebased on main 6f6635a): unsure drafts dropped with the two-rate policy (the
-# engine) against TRASHCAN_MTP_AB=no-gate (every draft counted sure: main's pooled policy, every chosen draft verified),
-# and greedy drafts at temperature 1 (TRASHCAN_MTP_AB=greedy-drafts,no-gate: main's drafting); main 6f6635a alongside:
-# chat prompts greedy and at temperature 1, the reference prompt, the 3K-token document, the server. Plain and
-# speculative decoding alternate in every run; identical output is required.
+# Six-Mac MTP rounds session 2 (through chain6.sh, binary 78e8848 rebased on main 6f6635a): this branch (coupled
+# drafts, unsure drafts dropped, the two-rate policy) against TRASHCAN_MTP_AB=no-gate (every draft counted sure: main's
+# pooled policy, every chosen draft verified) and against main's drafting (TRASHCAN_MTP_AB=greedy-drafts,no-gate) at
+# temperatures 1.0, 0.8 and 0.6; main 6f6635a alongside for greedy decoding: chat prompts, the reference prompt, the
+# 3K-token document; the server. Plain and speculative decoding alternate in every run; identical output is required.
 cd /Users/fairfieldt/dev/trashcan/.claude/worktrees/agent-a173c86cfe38f66c7/results/qwen4/chain-20261012 || exit 1
 MODEL=/home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf
 MTP=/home/fairfieldt/models/qwen3.8-flash-next/mtp/mtp-G-iq4.gguf
@@ -23,13 +23,16 @@ spec() {
 }
 B=trashcan-6f6635a
 T=trashcan-mtp2
-S="--temperature 1 --top-k 64 --top-p 0.95 --seed 11"
+MAIN="TRASHCAN_MTP_AB=greedy-drafts,no-gate"
 spec $T mtp2s2-chat "" --tg 192 --runs 3 $CHAT
 spec $T mtp2s2-chat-nogate "TRASHCAN_MTP_AB=no-gate" --tg 192 --runs 3 $CHAT
 spec $B mtp2s2-base-chat "" --tg 192 --runs 3 $CHAT
-spec $T mtp2s2-t1 "" --tg 192 --runs 3 $S $CHAT
-spec $T mtp2s2-t1-nogate "TRASHCAN_MTP_AB=no-gate" --tg 192 --runs 3 $S $CHAT
-spec $T mtp2s2-t1-main "TRASHCAN_MTP_AB=greedy-drafts,no-gate" --tg 192 --runs 3 $S $CHAT
+spec $T mtp2s2-t1.0 "" --tg 192 --runs 3 --temperature 1 --top-k 64 --top-p 0.95 --seed 11 $CHAT
+spec $T mtp2s2-t1.0-main "$MAIN" --tg 192 --runs 3 --temperature 1 --top-k 64 --top-p 0.95 --seed 11 $CHAT
+for t in 0.8 0.6; do
+    spec $T mtp2s2-t$t "" --tg 192 --runs 2 --temperature $t --top-k 64 --top-p 0.95 --seed 11 $CHAT
+    spec $T mtp2s2-t$t-main "$MAIN" --tg 192 --runs 2 --temperature $t --top-k 64 --top-p 0.95 --seed 11 $CHAT
+done
 spec $T mtp2s2-gate "" --tg 64 --runs 3
 spec $B mtp2s2-base-gate "" --tg 64 --runs 3
 spec $T mtp2s2-long "" --tg 96 --runs 2 $P/long.ids

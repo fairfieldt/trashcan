@@ -1,5 +1,7 @@
 #!/bin/bash
 # The reference prompt's greedy reply (it degenerates into a repeated token) with the drafter replayed along it.
+# trashcan-pasteos: `qwen4 mtp accept` with its end-of-sequence stop skipped when PAST_EOS is set (a one-line local
+# patch, not committed), as `qwen4 mtp spec` decodes past the end of the reply.
 set -uo pipefail
 cd "$(dirname "$0")"
 W=/Users/fairfieldt/dev/trashcan/.claude/worktrees/agent-a173c86cfe38f66c7
