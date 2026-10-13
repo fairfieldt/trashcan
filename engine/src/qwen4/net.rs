@@ -243,13 +243,16 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
                 "plan does not match the probed chain"
             );
             drop(local.take());
-            local = Some(Local::new(model, devices, &mine, &my_heads, context, batch, kv)?);
+            // The machines after this one load their stages while this one loads its own.
             if let Some(d) = down.as_mut() {
                 d.send(
                     &json!({"setup": {"plans": &plans[1..], "heads": &heads[1..], "context": context,
                         "batch": batch, "kv": kv.name()}}),
                     &[],
                 )?;
+            }
+            local = Some(Local::new(model, devices, &mine, &my_heads, context, batch, kv)?);
+            if let Some(d) = down.as_mut() {
                 d.recv()?;
             }
             up.send(&json!({"ok": true}), &[])?;
@@ -522,9 +525,12 @@ impl Chain {
                     "batch": max_batch, "kv": kv.name()}}),
                 &[],
             )?;
+        }
+        // Every machine loads its stages at the same time; wait for the others after loading this one's.
+        let local = Local::new(model, &devices, &plans[0], &heads[0], context, max_batch, kv)?;
+        if let Some(conn) = next.as_mut() {
             conn.recv()?;
         }
-        let local = Local::new(model, &devices, &plans[0], &heads[0], context, max_batch, kv)?;
         Ok(Self {
             local,
             next,
