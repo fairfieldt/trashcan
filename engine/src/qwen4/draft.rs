@@ -769,7 +769,7 @@ pub struct Draft {
     /// Rows `head_row0..vocab` of the LM head, Q8_0 (the driver's GPUs score the rows before, `skip_head_rows`).
     head: Mat,
     head_row0: usize,
-    /// Rows `0..head_row0`, for drafts while the driver's GPUs are busy (`best_all`).
+    /// Rows `0..head_row0`, for drafts while the driver's GPUs are busy (`top_all`).
     head_lo: Option<Mat>,
     kc: Vec<f32>,
     vc: Vec<f32>,
@@ -920,7 +920,7 @@ impl Draft {
     }
 
     /// Leave the first `rows` head rows to another scorer (the driver's GPU head slices): `head_best` ranks only
-    /// the rest, `best_all` all of them.
+    /// the rest, `top_all` all of them.
     pub fn skip_head_rows(&mut self, rows: usize) {
         let rows = rows.min(self.vocab());
         if self.head_row0 > 0 || rows == 0 {
@@ -959,19 +959,6 @@ impl Draft {
         let logits = matvec(&self.pool, &self.head, &ha, 256);
         let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
         Some((b as u32 + self.head_row0 as u32, logits[b]))
-    }
-
-    /// The best of all draft head rows (token id and logit), on the CPU.
-    pub fn best_all(&self, hn: &[f32]) -> Option<(u32, f32)> {
-        let lo = self.head_lo.as_ref().map(|m| {
-            let logits = matvec(&self.pool, m, &Act::q8(hn, self.c.d), 256);
-            let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
-            (b as u32, logits[b])
-        });
-        match (lo, self.head_best(hn)) {
-            (Some(l), Some(h)) => Some(if l.1 >= h.1 { l } else { h }),
-            (l, h) => l.or(h),
-        }
     }
 
     /// The top candidates (logit, token id; best first) of the CPU head rows, as a head slice returns them.

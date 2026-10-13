@@ -222,21 +222,25 @@ const COST_WEIGHT: f64 = 0.2;
 /// avoids keep a current cost (e.g. a shorter context in the next request).
 const REFRESH: usize = 256;
 /// A draft whose top candidate has less probability than this (softmax at temperature 1 over the drafter's
-/// candidates) is not verified and ends the round's drafting: such drafts are accepted about half the time against
-/// 0.99 above 0.99 (greedy chat replies); rounds that drop them were simulated 3-6% faster on the replays at every
-/// temperature, verifying them as a round's last draft 2-3% (results/qwen4/mtp-rounds-20261013).
+/// candidates) is unsure: it is not verified and ends the round's drafting. Such drafts are accepted about half the
+/// time against 0.99 above 0.99 (greedy chat replies); dropping them, with the policy's two rates, was simulated 3-6%
+/// faster on the replays at every temperature (results/qwen4/mtp-rounds-20261013).
 const UNSURE: f32 = 0.6;
 
-/// How many drafts the next round makes: the count with the most expected tokens per millisecond, from the recent
-/// acceptance of drafts (`a`, all depths pooled: a round of k drafts yields 1 + a + ... + a^k tokens on average)
-/// and the measured running costs of a draft step and of each verification batch size (each size is run once
-/// before the first choice, largest first, and again when its cost is `REFRESH` rounds old). With no drafts the
-/// round is a plain step (a 1-token verification batch) while the block drafts the next token on the CPU anyway (a
-/// shadow draft), so the acceptance stays measured at no cost to the chain and drafting resumes once it pays again.
+/// How many drafts the next round makes: the count with the most expected tokens per millisecond, from two recent
+/// rates (each draft's weight decaying by `ACCEPT_DECAY` per newer one): `c`, the share of drafts the drafter is sure
+/// of (`UNSURE`), and `a`, the acceptance of those; and from the measured running costs of a draft step and of each
+/// verification batch size (each size is run once before the first choice, largest first, and again when its cost
+/// is `REFRESH` rounds old). A round of k drafts yields 1 + ca + ... + (ca)^k tokens on average, computes
+/// 1 + c + ... + c^(k-1) draft steps and verifies m < k drafts with probability c^m (1 - c) (all k with c^k). With no
+/// drafts the round is a plain step (a 1-token verification batch) while the block drafts the next token on the CPU
+/// anyway (a shadow draft), so both rates stay measured at no cost to the chain and drafting resumes once it pays.
 #[derive(Clone, Debug)]
 struct Policy {
     hits: f64,
     tests: f64,
+    sure: f64,
+    seen: f64,
     draft_ms: Option<f64>,
     /// Running cost of each verification batch size (1 to `VERIFY_MAX` tokens) and the rounds since it was measured.
     verify_ms: [Option<f64>; super::gpu::VERIFY_MAX],
@@ -246,18 +250,25 @@ struct Policy {
 impl Policy {
     fn new() -> Self {
         const N: usize = super::gpu::VERIFY_MAX;
-        Self { hits: 0., tests: 0., draft_ms: None, verify_ms: [None; N], age: [0; N] }.restart()
+        Self { hits: 0., tests: 0., sure: 0., seen: 0., draft_ms: None, verify_ms: [None; N], age: [0; N] }.restart()
     }
 
-    /// A new sequence: acceptance back to its prior (0.8, worth 2 drafts); the costs stay.
+    /// A new sequence: both rates back to their prior (0.8, worth 2 drafts); the costs stay.
     fn restart(mut self) -> Self {
-        (self.hits, self.tests) = (1.6, 2.);
+        (self.hits, self.tests, self.sure, self.seen) = (1.6, 2., 1.6, 2.);
         self
     }
 
+    /// A draft the drafter was sure of was compared with the target's token.
     fn tested(&mut self, hit: bool) {
         self.hits = self.hits * ACCEPT_DECAY + hit as u8 as f64;
         self.tests = self.tests * ACCEPT_DECAY + 1.;
+    }
+
+    /// A draft was made; whether the drafter was sure of it.
+    fn drafted_one(&mut self, sure: bool) {
+        self.sure = self.sure * ACCEPT_DECAY + sure as u8 as f64;
+        self.seen = self.seen * ACCEPT_DECAY + 1.;
     }
 
     fn update(v: &mut Option<f64>, ms: f64) {
@@ -286,12 +297,15 @@ impl Policy {
         if let Some(k) = (0..=max).rev().find(|&k| self.verify_ms[k].is_none() || self.age[k] > REFRESH) {
             return (k, true);
         }
-        let (a, d) = (self.hits / self.tests, self.draft_ms.unwrap_or(0.));
-        let (mut best, mut rate, mut tokens, mut p) = (0, f64::MIN, 0., 1.);
+        let (a, c, d) = (self.hits / self.tests, self.sure / self.seen, self.draft_ms.unwrap_or(0.));
+        let v = |m: usize| self.verify_ms[m].unwrap_or(f64::MAX);
+        let (mut best, mut rate) = (0, f64::MIN);
         for k in 0..=max {
-            tokens += p;
-            p *= a;
-            let r = tokens / (k as f64 * d + self.verify_ms[k].unwrap_or(f64::MAX));
+            let tokens: f64 = (0..=k).map(|j| (c * a).powi(j as i32)).sum();
+            let steps: f64 = (0..k).map(|j| c.powi(j as i32)).sum();
+            let verify: f64 =
+                (0..k).map(|m| c.powi(m as i32) * (1. - c) * v(m)).sum::<f64>() + c.powi(k as i32) * v(k);
+            let r = tokens / (steps * d + verify);
             if r > rate {
                 (best, rate) = (k, r);
             }
@@ -405,7 +419,7 @@ impl Speculator {
             return self.shadow_round(chain, pending, draws, None);
         }
         let t0 = std::time::Instant::now();
-        let mut drafts: Vec<u32> = Vec::with_capacity(k);
+        let (mut drafts, mut sure) = (Vec::with_capacity(k), Vec::with_capacity(k));
         let mut h = std::mem::take(&mut self.last);
         // A draft the drafter is unsure of is not verified and ends the drafting (a round that measures its batch
         // size's cost verifies them all).
@@ -413,11 +427,14 @@ impl Speculator {
         while drafts.len() < k {
             let tok = drafts.last().copied().unwrap_or(pending);
             let (draft, confidence, y) = self.step(chain, tok, &h, pos + drafts.len(), draws)?;
-            if confidence < UNSURE && !refresh && !ab_no_gate() {
+            let is_sure = confidence >= UNSURE || ab_no_gate();
+            self.policy.drafted_one(is_sure);
+            if !is_sure && !refresh {
                 unsure = Some(draft);
                 break;
             }
             drafts.push(draft);
+            sure.push(is_sure);
             h = y;
         }
         let draft_ms = t0.elapsed().as_secs_f64() * 1e3;
@@ -456,15 +473,19 @@ impl Speculator {
         self.stats.by_k[k] += 1;
         self.stats.drafted += drafts.len();
         self.stats.accepted += a;
-        for _ in 0..a {
-            self.policy.tested(true);
+        // The acceptance counts the drafts the drafter was sure of.
+        for &s in &sure[..a] {
+            if s {
+                self.policy.tested(true);
+            }
         }
         if a < drafts.len() {
             // A draft equal to a stop token was right; the round only ended there.
-            self.policy.tested(next == drafts[a]);
+            if sure[a] {
+                self.policy.tested(next == drafts[a]);
+            }
         } else if let Some(u) = unsure {
-            // Every draft was kept: the next token is at the unsure draft's position, so it is tested too.
-            self.policy.tested(next == u);
+            // Every draft was kept: the next token is at the unsure draft's position.
             self.stats.dropped_hits += (next == u) as usize;
         }
         self.policy.measured(k, verify_ms + rollback_ms);
@@ -477,30 +498,31 @@ impl Speculator {
 
     /// A round without drafts: `pending` alone through the chain while the block drafts the token after it on the
     /// CPU once this machine's stages are done (its whole draft vocabulary there), which keeps the block's keys
-    /// complete and measures the acceptance; `drafted` is that draft when the round already made it.
+    /// complete and measures both of `Policy`'s rates; `unsure` is that draft when the round already made it and the
+    /// drafter was unsure of it.
     fn shadow_round(
         &mut self,
         chain: &mut Chain,
         pending: u32,
         draws: &Draws,
-        drafted: Option<u32>,
+        unsure: Option<u32>,
     ) -> Result<(Vec<u32>, Vec<(f32, u32)>)> {
         let w = chain.local.c.width();
         let pos = chain.pos;
         let t0 = std::time::Instant::now();
         let (h, draft) = (std::mem::take(&mut self.last), &mut self.draft);
-        let mut shadow = Ok(drafted);
+        // The shadow draft and whether the drafter was sure of it.
+        let mut shadow = Ok(unsure.map(|d| (d, false)));
         let (tops, rows) = chain.verify_with(&[pending], || {
-            if drafted.is_some() {
+            if unsure.is_some() {
                 return;
             }
             shadow = draft.forward(&[pending], &h, pos, false).map(|(y, _)| {
-                let hn = draft.final_hidden(&y);
-                if draws.temperature == 0. || ab_greedy_drafts() {
-                    draft.best_all(&hn).map(|b| b.0)
-                } else {
-                    Some(draft.top_all(&hn)).filter(|t| !t.is_empty()).map(|t| draws.pick(&t, pos + 1))
-                }
+                let top = draft.top_all(&draft.final_hidden(&y));
+                let best = *top.first()?;
+                let confidence = 1. / top.iter().map(|(s, _)| (s - best.0).exp()).sum::<f32>();
+                let d = if ab_greedy_drafts() { best.1 } else { draws.pick(&top, pos + 1) };
+                Some((d, confidence >= UNSURE || ab_no_gate()))
             });
         })?;
         let shadow = shadow?;
@@ -512,8 +534,13 @@ impl Speculator {
         self.policy.measured(0, ms);
         self.stats.verify_ms_by_k[0] += ms;
         let next = draws.pick(&tops[0], pos + 1);
-        if let Some(d) = shadow {
-            self.policy.tested(d == next);
+        if let Some((d, sure)) = shadow {
+            if unsure.is_none() {
+                self.policy.drafted_one(sure);
+            }
+            if sure {
+                self.policy.tested(d == next);
+            }
             self.stats.shadow_hits += (d == next) as usize;
         }
         self.last = rows;
@@ -647,6 +674,29 @@ mod tests {
         // Another seed gives another sequence.
         let (a, b) = (Draws::new(1., 64, 1., 1).unwrap(), Draws::new(1., 64, 1., 2).unwrap());
         assert!((0..64).any(|pos| a.pick(&c, pos) != b.pick(&c, pos)));
+    }
+
+    #[test]
+    fn the_policy_drafts_what_its_two_rates_pay_for() {
+        let mut p = Policy::new();
+        for (k, ms) in [55., 91., 108., 128.].into_iter().enumerate() {
+            p.measured(k, ms);
+        }
+        p.drafted(3, 15.);
+        let rates = |p: &mut Policy, sure: f64, accepted: f64| {
+            (p.hits, p.tests, p.sure, p.seen) = (accepted, 1., sure, 1.);
+            p.choose(3)
+        };
+        // Sure of every draft: the pooled rate decides (0.9: three drafts; 0.5: none).
+        assert_eq!(rates(&mut p, 1., 0.9), (3, false));
+        assert_eq!(rates(&mut p, 1., 0.5), (0, false));
+        // Accepted when sure, but rarely sure: no drafts.
+        assert_eq!(rates(&mut p, 0.2, 0.99), (0, false));
+        // Usually sure and then accepted: drafts, though fewer than three can pay.
+        assert!(rates(&mut p, 0.85, 0.97).0 >= 2);
+        // A batch size whose cost is old is measured again, drafting all of its drafts.
+        p.age[2] = REFRESH + 1;
+        assert_eq!(p.choose(3), (2, true));
     }
 
     #[test]
