@@ -218,6 +218,10 @@ const COST_WEIGHT: f64 = 0.2;
 /// Rounds after which a batch size's cost is measured again (one round of that size), so that sizes the choice
 /// avoids keep a current cost (e.g. a shorter context in the next request).
 const REFRESH: usize = 256;
+/// A draft whose top candidate has less probability than this (softmax at temperature 1 over the drafter's
+/// candidates) ends the round's drafting: such drafts are accepted about half the time against 0.99 above 0.99 (greedy
+/// chat replies), and rounds that stop there were simulated 2-3% faster at every temperature (results/qwen4/mtp-rounds-20261013).
+const UNSURE: f32 = 0.6;
 
 /// How many drafts the next round makes: the count with the most expected tokens per millisecond, from the recent
 /// acceptance of drafts (`a`, all depths pooled: a round of k drafts yields 1 + a + ... + a^k tokens on average)
@@ -268,10 +272,11 @@ impl Policy {
         self.age[k] = 0;
     }
 
-    /// Drafts for the next round, at most `max`.
-    fn choose(&self, max: usize) -> usize {
+    /// Drafts for the next round, at most `max`, and whether the round measures that batch size's cost (it then
+    /// drafts all of them).
+    fn choose(&self, max: usize) -> (usize, bool) {
         if let Some(k) = (0..=max).rev().find(|&k| self.verify_ms[k].is_none() || self.age[k] > REFRESH) {
-            return k;
+            return (k, true);
         }
         let (a, d) = (self.hits / self.tests, self.draft_ms.unwrap_or(0.));
         let (mut best, mut rate, mut tokens, mut p) = (0, f64::MIN, 0., 1.);
@@ -283,7 +288,7 @@ impl Policy {
                 (best, rate) = (k, r);
             }
         }
-        best
+        (best, false)
     }
 }
 
@@ -328,37 +333,24 @@ impl Speculator {
         self.gpu_rows = end;
     }
 
-    /// One draft step: the block on `tok` at `pos` with input row `h`; the draft for position `pos + 1` (`draws`'
-    /// pick from the drafter's candidates) and the output residual.
-    fn step(&mut self, chain: &mut Chain, tok: u32, h: &[f32], pos: usize, draws: &Draws) -> Result<(u32, Vec<f32>)> {
-        let greedy = draws.temperature == 0. || ab_greedy_drafts();
-        if self.gpu_rows == 0 {
-            let (y, best) = self.draft.forward(&[tok], h, pos, greedy)?;
-            if greedy {
-                return Ok((best.context("draft head")?.0, y));
-            }
-            let top = self.draft.head_top(&self.draft.final_hidden(&y));
-            ensure!(!top.is_empty(), "draft head");
-            return Ok((draws.pick(&top, pos + 1), y));
-        }
+    /// One draft step: the block on `tok` at `pos` with input row `h`. Returns the draft for position `pos + 1`
+    /// (`draws`' pick from the drafter's candidates), the drafter's confidence (its top candidate's probability at
+    /// temperature 1 among its candidates) and the output residual.
+    fn step(&mut self, chain: &mut Chain, tok: u32, h: &[f32], pos: usize, draws: &Draws) -> Result<(u32, f32, Vec<f32>)> {
         let (y, _) = self.draft.forward(&[tok], h, pos, false)?;
         let hn = self.draft.final_hidden(&y);
-        let started = chain.local.head_rows_submit(&hn)?;
-        if !greedy {
+        let top = if self.gpu_rows == 0 {
+            self.draft.head_top(&hn)
+        } else {
+            let started = chain.local.head_rows_submit(&hn)?;
             let cpu = self.draft.head_top(&hn);
             let gpu = chain.local.head_rows_collect(&hn, &started)?;
-            let top = merge_top(cpu, gpu.into_iter().next().unwrap_or_default());
-            ensure!(!top.is_empty(), "draft head");
-            return Ok((draws.pick(&top, pos + 1), y));
-        }
-        let cpu = self.draft.head_best(&hn);
-        let gpu = chain.local.head_rows_collect(&hn, &started)?;
-        let gpu = gpu.first().and_then(|t| t.first()).map(|(s, id)| (*id, *s));
-        let best = match (cpu, gpu) {
-            (Some(c), Some(g)) => if g.1 >= c.1 { g } else { c },
-            (c, g) => c.or(g).context("draft head")?,
+            merge_top(cpu, gpu.into_iter().next().unwrap_or_default())
         };
-        Ok((best.0, y))
+        ensure!(!top.is_empty(), "draft head");
+        let confidence = 1. / top.iter().map(|(s, _)| (s - top[0].0).exp()).sum::<f32>();
+        let draft = if ab_greedy_drafts() { top[0].1 } else { draws.pick(&top, pos + 1) };
+        Ok((draft, confidence, y))
     }
 
     /// Prefill `ids` on the chain (`Chain::prefill_cached`), fetch the final residual rows of its last `WINDOW` tokens
@@ -400,7 +392,7 @@ impl Speculator {
         let w = chain.local.c.width();
         let pos = chain.pos;
         let k = self.k.min(max).min(chain.context.saturating_sub(pos + 1)).min(super::gpu::VERIFY_MAX - 1);
-        let k = self.policy.choose(k);
+        let (k, refresh) = self.policy.choose(k);
         if k == 0 {
             return self.shadow_round(chain, pending, draws);
         }
@@ -409,10 +401,16 @@ impl Speculator {
         let mut h = std::mem::take(&mut self.last);
         while drafts.len() < k {
             let tok = drafts.last().copied().unwrap_or(pending);
-            let (draft, y) = self.step(chain, tok, &h, pos + drafts.len(), draws)?;
+            let (draft, confidence, y) = self.step(chain, tok, &h, pos + drafts.len(), draws)?;
             drafts.push(draft);
             h = y;
+            // A draft the drafter is unsure of is the round's last (it is still verified); a round that measures its
+            // batch size's cost drafts them all.
+            if confidence < UNSURE && !refresh && !ab_no_gate() {
+                break;
+            }
         }
+        let k = drafts.len();
         let draft_ms = t0.elapsed().as_secs_f64() * 1e3;
         self.stats.draft_ms += draft_ms;
         let t0 = std::time::Instant::now();
@@ -493,10 +491,14 @@ impl Speculator {
     }
 }
 
-/// TEMPORARY session A/B switch (removed after the measurement): TRASHCAN_MTP_AB=greedy-drafts drafts the argmax at
-/// every temperature, as main did.
+/// TEMPORARY session A/B switches (removed after the measurement): TRASHCAN_MTP_AB=greedy-drafts drafts the argmax at
+/// every temperature, as main did; no-gate drafts as many as the policy chose whatever the confidence.
 fn ab_greedy_drafts() -> bool {
-    std::env::var("TRASHCAN_MTP_AB").is_ok_and(|v| v == "greedy-drafts")
+    std::env::var("TRASHCAN_MTP_AB").is_ok_and(|v| v.split(',').any(|x| x == "greedy-drafts"))
+}
+
+fn ab_no_gate() -> bool {
+    std::env::var("TRASHCAN_MTP_AB").is_ok_and(|v| v.split(',').any(|x| x == "no-gate"))
 }
 
 /// Decoding of `n` tokens after `prompt` from position 0 with `draws`, plain (`spec` None) or speculative. Returns
