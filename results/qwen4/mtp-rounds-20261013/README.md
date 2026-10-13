@@ -180,9 +180,9 @@ as the round's last; main `4c1346d` alongside; `tools/mtp2-chain1.sh`):
 
 | run | plain tok/s | MTP tok/s | gain | accepted/draft | rounds k = 0/1/2/3 | ms per round k = 0/1/2/3 | draft step |
 |---|---|---|---|---|---|---|---|
-| chat, greedy, main | 18.30 | 21.55 | +17.8% | 0.70 / 0.84 / 0.71 | | 54.6-55.4 / 90.9-92.9 / 107.5-109.5 / 128.1-128.8 | 5.77 ms |
-| chat, greedy, branch, unsure draft verified last | 18.34 | **22.27** | **+21.4%** | 0.74 / 0.86 / 0.76 | | 54.6-55.0 / 90.0-91.6 / 107.3-109.3 / 126.9-128.2 | 5.05-5.10 |
-| chat, greedy, branch, every chosen draft verified | 18.38 | 22.10 | +20.2% | 0.70 / 0.85 / 0.69 | | | 5.01-5.04 |
+| chat, greedy, main | 18.30 | 21.55 | +17.8% | 0.70 / 0.84 / 0.71 | 85/7/318/254 | 54.6-55.4 / 90.9-92.9 / 107.5-109.5 / 128.1-128.8 | 5.77 ms |
+| chat, greedy, branch, unsure draft verified last | 18.34 | **22.27** | **+21.4%** | 0.74 / 0.86 / 0.76 | 85/70/283/232 | 54.6-55.0 / 90.0-91.6 / 107.3-109.3 / 126.9-128.2 | 5.05-5.10 |
+| chat, greedy, branch, every chosen draft verified | 18.38 | 22.10 | +20.2% | 0.70 / 0.85 / 0.69 | 74/7/281/287 | | 5.01-5.04 |
 | reference (64 tokens), main | 18.49 | 18.17 | -1.7% | 0.57 | 159/1/12/1 | 54.7 / 91.0 / 107.5 / 134.8 | |
 | reference, branch | 18.53 | 18.15 | -2.0% | 0.50 | 154/4/12/2 | 54.2 / 89.4 / 106.4 / 129.9 | |
 | 3K-token document, main | 16.15 | 16.23 | +0.5% | 0.62 | 61/1/53/3 | 62.9 / 103.0 / 123.6 / 150.5 | 6.55 |
@@ -191,7 +191,7 @@ as the round's last; main `4c1346d` alongside; `tools/mtp2-chain1.sh`):
 (chat: water / csv / transformer; per-prompt rows in `chain1/summary.txt`.) The draft step on the chain went from 5.77 to
 5.05 ms at chat lengths and from 6.55 to 5.21 ms at ~3.1K positions; a k = 0 round (a plain step with the shadow draft)
 costs 0.2-0.4 ms more than a plain step (54.2 against 53.97 ms on the reference prompt; main 54.7 against 54.08), and
-2-4-token rounds 0.5-5 ms less. Sampled, same texts for both drafting methods (the keyed sampler makes the plain output
+2-4-token rounds 0.2-1.5 ms less on the chat replies. Sampled, same texts for both drafting methods (the keyed sampler makes the plain output
 the same; seeds 1 and 2):
 
 | T | plain | main's drafting (greedy drafts) | branch (coupled drafts, unsure verified last) | accepted/draft main / branch |
@@ -255,8 +255,9 @@ tools/cpu2.sh 0 1; tools/same.sh
 tools/mtp2-db-ab2.sh; python3 tools/instrument2.py WORKTREE   # temporary timers, then draft-bench
 # x86 unit tests (the SSSE3/AVX drafter kernels) built in the kbuild VM and run on incite
 tools/xtest.sh; ./trashcan-mtp2-tests qwen4::draft qwen4::spec
-# six Macs
+# six Macs (sessions 1-3; DRY=1 prints session 3's commands)
 chain6.sh mtp2-chain1 50 OWNER -- tools/mtp2-chain1.sh; tools/fetch_session.sh chain1 NAMES...
+chain6.sh mtp2-chain2 35 OWNER -- tools/mtp2-chain2.sh; chain6.sh mtp2-chain3 8 OWNER -- tools/mtp2-chain3.sh
 python3 summary.py chain1/*.json
 ```
 
