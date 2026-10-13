@@ -340,6 +340,36 @@ impl OutI8 {
     }
 }
 
+/// The positions a token at `p` attends to (`CpuStage::select` with the block scores computed in parallel), from
+/// `first` (the first position the block holds keys for).
+fn visible(c: &Config, pool: &Pool, iq: &[f32], pooled: &[f32], first: usize, p: usize) -> Vec<usize> {
+    let (kp, id) = (c.kpool, c.idx_dim);
+    let complete = (p + 1) / kp;
+    let mut blocks: Vec<usize> = (0..complete).collect();
+    let top = c.top_blocks();
+    if complete > top {
+        const CHUNK: usize = 64;
+        let scale = 1. / (id as f32).sqrt();
+        let mut scores = vec![0f32; complete];
+        let out = Out::new(&mut scores);
+        pool.run(complete.div_ceil(CHUNK), &|i| {
+            for b in i * CHUNK..((i + 1) * CHUNK).min(complete) {
+                let kb = &pooled[b * id..(b + 1) * id];
+                let s = iq.chunks_exact(id).map(|q| dot_f32(q, kb).max(0.)).sum::<f32>() * scale;
+                unsafe { out.set(b, s) };
+            }
+        });
+        // The best `top` blocks, ties to the earlier block.
+        let order = |a: &usize, b: &usize| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b));
+        blocks.select_nth_unstable_by(top - 1, order);
+        blocks.truncate(top);
+        blocks.sort_unstable();
+    }
+    let mut out: Vec<usize> = blocks.iter().flat_map(|b| b * kp..(b + 1) * kp).filter(|&j| j >= first).collect();
+    out.extend((complete * kp).max(first)..=p);
+    out
+}
+
 /// Softmax attention of one query over the cache rows `j * stride + off` of the visible positions: the output
 /// before normalization and the sum of the weights.
 fn attend(q: &[f32], vis: &[usize], kc: &[f32], vc: &[f32], stride: usize, off: usize, scale: f32) -> (Vec<f32>, f32) {
@@ -1048,7 +1078,9 @@ impl Draft {
                 self.vc[slot..slot + hd].copy_from_slice(&v[at..at + hd]);
             }
         }
-        let visible: Vec<Vec<usize>> = (0..n).map(|t| self.visible(&iq[t * ih * id..(t + 1) * ih * id], pos + t)).collect();
+        let visible: Vec<Vec<usize>> = (0..n)
+            .map(|t| visible(&c, &self.pool, &iq[t * ih * id..(t + 1) * ih * id], &self.pooled, self.first, pos + t))
+            .collect();
         let scale = 1. / (hd as f32).sqrt();
         let mut o = vec![0f32; n * nh * hd];
         let out = Out::new(&mut o);
@@ -1068,39 +1100,6 @@ impl Draft {
         });
         self.prof[7] += t0.elapsed().as_secs_f64() * 1e3;
         matvec(&self.pool, &self.o, &Act::new(&o, nh * hd), 32)
-    }
-
-    /// The positions a token at `p` attends to (`CpuStage::select` with the block scores computed in parallel), from
-    /// the first the block holds keys for.
-    fn visible(&self, iq: &[f32], p: usize) -> Vec<usize> {
-        let c = &self.c;
-        let (kp, id) = (c.kpool, c.idx_dim);
-        let complete = (p + 1) / kp;
-        let mut blocks: Vec<usize> = (0..complete).collect();
-        let top = c.top_blocks();
-        if complete > top {
-            const CHUNK: usize = 64;
-            let scale = 1. / (id as f32).sqrt();
-            let mut scores = vec![0f32; complete];
-            let out = Out::new(&mut scores);
-            let pooled = &self.pooled;
-            self.pool.run(complete.div_ceil(CHUNK), &|i| {
-                for b in i * CHUNK..((i + 1) * CHUNK).min(complete) {
-                    let kb = &pooled[b * id..(b + 1) * id];
-                    let s = iq.chunks_exact(id).map(|q| dot_f32(q, kb).max(0.)).sum::<f32>() * scale;
-                    unsafe { out.set(b, s) };
-                }
-            });
-            // The best `top` blocks, ties to the earlier block.
-            let order = |a: &usize, b: &usize| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b));
-            blocks.select_nth_unstable_by(top - 1, order);
-            blocks.truncate(top);
-            blocks.sort_unstable();
-        }
-        let first = self.first;
-        let mut out: Vec<usize> = blocks.iter().flat_map(|b| b * kp..(b + 1) * kp).filter(|&j| j >= first).collect();
-        out.extend((complete * kp).max(first)..=p);
-        out
     }
 
     fn moe(&self, u: &[f32], n: usize) -> Vec<f32> {
@@ -1245,6 +1244,37 @@ impl Draft {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn visible_positions_match_the_reference_selection() {
+        // The model's indexer shape (4 heads of 128, blocks of 4, 512 blocks kept), random pooled keys and queries,
+        // with ties between blocks (repeated keys).
+        let c = Config {
+            d: 8, layers: 1, heads: 1, kv_heads: 1, head_dim: 8, rot: 4, rope_base: 1e4, eps: 1e-6, interval: 4,
+            conv: 4, k_heads: 1, v_heads: 1, state: 8, vocab: 16, hc: 4, hc_rank: 2, experts: 4, used: 2, ff_exp: 4,
+            ff_shexp: 4, idx_heads: 4, idx_dim: 128, idx_budget: 2048, kpool: 4, ngram: None,
+        };
+        let pool = Pool::new(4);
+        let mut s = 3u64;
+        let mut rnd = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (s >> 40) as f32 / (1u64 << 24) as f32 - 0.5
+        };
+        let blocks = 2000;
+        let mut pooled: Vec<f32> = (0..blocks * 128).map(|_| rnd()).collect();
+        for b in (0..blocks).step_by(7) {
+            let src: Vec<f32> = pooled[..128].to_vec();
+            pooled[b * 128..(b + 1) * 128].copy_from_slice(&src);
+        }
+        for p in [100, 2050, 2051, 2052, 3000, 5000, 7999] {
+            let iq: Vec<f32> = (0..4 * 128).map(|_| rnd()).collect();
+            for first in [0, 37, 2900] {
+                let mut want = CpuStage::select(&c, &iq, &pooled, p);
+                want.retain(|&j| j >= first);
+                assert_eq!(visible(&c, &pool, &iq, &pooled, first, p), want, "p {p} first {first}");
+            }
+        }
+    }
 
     #[test]
     fn rounding_matches_f32_round() {
