@@ -86,8 +86,10 @@ pub enum Cmd {
         kv: String,
         #[arg(long, default_value_t = 2048)]
         context: usize,
-        #[arg(long, default_value_t = 256)]
-        batch: usize,
+        /// Prefill chunk sizes, timed one after another on one load (the largest sizes the buffers); one JSON line
+        /// per size.
+        #[arg(long, value_delimiter = ',', default_value = "256")]
+        batch: Vec<usize>,
         /// Decode steps timed, after a prefill of `start` tokens.
         #[arg(long, default_value_t = 32)]
         decode: usize,
@@ -282,15 +284,17 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 heads[ranges.len() - head_rows.len() + k] = Some((a.parse()?, b.parse()?));
             }
             let kv = super::gpu::KvCache::parse(&kv)?;
-            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, &heads, context, batch, kv)?;
+            ensure!(batch.iter().all(|&b| b > 0), "--batch sizes must be positive");
+            let max_batch = batch.iter().copied().max().context("--batch needs a size")?;
+            let mut local = super::pipeline::Local::new(&model, &devices, &ranges, &heads, context, max_batch, kv)?;
             if let (Some(tf), Some(out)) = (tokens_file, out) {
+                ensure!(batch.len() == 1, "a dump runs one --batch");
                 let tokens = prompt(Some(&tf), &[])?;
-                return super::bench::stage_dump(&mut local, &out, &tokens, batch);
+                return super::bench::stage_dump(&mut local, &out, &tokens, max_batch);
             }
-            println!(
-                "{}",
-                super::bench::stage_bench(&mut local, decode, start, prefill, batch)?
-            );
+            for b in batch {
+                println!("{}", super::bench::stage_bench(&mut local, decode, start, prefill, b)?);
+            }
             Ok(())
         }
         Cmd::VramProbe { chunk_mib } => {
