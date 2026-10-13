@@ -228,11 +228,14 @@ python3 summary.py chain1/*.json
 - Cheaper 2-4-token verification batches remain the largest lever (another agent's kernels): a round's verification is
   ~90% of its time (k = 3: 127 ms of verification against 15 ms of drafting), and the policy picks up cheaper batches
   by itself (`gate/policysim.py` with 40 / 52 / 60 / 70 ms rounds: 39 tok/s on the chat replies).
-- The block's context in a conversation: a request that continues the live state prefills its new tokens in 16-token
-  chunks, and the block reads only the last chunk's rows (`Speculator::prefill`, `first` reset), so from the second turn
-  on it no longer sees the earlier turns (the 3K-token document lost 11% of its tokens per round to a 128-token window in
-  the previous README). Keeping the block's keys needs the residual rows of every new token: one chunk for short
-  continuations, or the last stage keeping the rows of a prefill's chunks (pipeline/prefill code).
+- The block's context: it reads only the residual rows of a prompt's last prefill chunk (`Speculator::prefill`), so a
+  prompt whose length is just past a multiple of the chunk size leaves it 1-4 rows, and from a conversation's second
+  turn on it no longer sees the earlier turns. In a second turn (`turns/`: water's prompt and greedy reply, then a
+  follow-up question, 312 tokens, reply decoded on the CPU reference) the drafter's 3-draft rounds gave 2.46 tokens per
+  round with 2 prompt tokens of context (what a 1-token last chunk leaves), 2.56-2.67 with 8 to 128 (no trend past a few
+  rows). Merging a remainder of a few tokens into the previous prefill chunk (`Chain::extend`, prefill code) would avoid
+  the short windows; the earlier turns did not matter for this reply (the 3K-token document lost 11% of its tokens per
+  round to a 128-token window in the previous README).
 - The draft step's remaining time below the bandwidth: the mixers (0.27 ms each for 4 MB) and the input projection
   (the four streams decode each weight block four times, 0.46 ms for 8 MB); at long contexts each of the 24 attention
   heads reads its KV head's 2,051 positions from L3 (100 MB per step at 3K positions, 0.73 ms), where the 12 heads

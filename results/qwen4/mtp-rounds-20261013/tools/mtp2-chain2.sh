@@ -1,7 +1,7 @@
 #!/bin/bash
-# Six-Mac MTP rounds session 2 (through chain6.sh, binary f06a691): unsure drafts dropped with the two-rate policy (the
+# Six-Mac MTP rounds session 2 (through chain6.sh, binary 78e8848 rebased on main 6f6635a): unsure drafts dropped with the two-rate policy (the
 # engine) against TRASHCAN_MTP_AB=no-gate (every draft counted sure: main's pooled policy, every chosen draft verified),
-# and greedy drafts at temperature 1 (TRASHCAN_MTP_AB=greedy-drafts,no-gate: main's drafting); main 4c1346d alongside:
+# and greedy drafts at temperature 1 (TRASHCAN_MTP_AB=greedy-drafts,no-gate: main's drafting); main 6f6635a alongside:
 # chat prompts greedy and at temperature 1, the reference prompt, the 3K-token document, the server. Plain and
 # speculative decoding alternate in every run; identical output is required.
 cd /Users/fairfieldt/dev/trashcan/.claude/worktrees/agent-a173c86cfe38f66c7/results/qwen4/chain-20261012 || exit 1
@@ -21,7 +21,7 @@ spec() {
     local bin=$1 name=$2 env=$3; shift 3
     run $bin --name $name --env "$env" --driver "./$bin qwen4 mtp spec $MODEL $C --mtp $MTP --draft-tokens 3 $*"
 }
-B=trashcan-4c1346d
+B=trashcan-6f6635a
 T=trashcan-mtp2
 S="--temperature 1 --top-k 64 --top-p 0.95 --seed 11"
 spec $T mtp2s2-chat "" --tg 192 --runs 3 $CHAT

@@ -16,7 +16,8 @@ for f in sys.argv[1:]:
     t = s.get('temperature', 0)
     print(f"== {f.split('/')[-1]}: T {t}" + (f" top-k {s['top_k']} top-p {s['top_p']:.2f}" if t else '') +
           f", {len({r['run'] for r in rows})} runs, all identical: {same}")
-    print('prompt\tplain tok/s\tMTP tok/s\tgain\taccepted/draft\tshadow\ttokens/round\trounds by k\tms by k\tdraft ms/step')
+    print('prompt\tplain tok/s\tMTP tok/s\tgain\taccepted/draft\tshadow\ttokens/round\trounds by k\tms by k\tdraft ms/step'
+          '\tdropped (hits)')
     means = ([], [])
     for p in dict.fromkeys(r['prompt'] for r in rows):
         rs = [r for r in rows if r['prompt'] == p]
@@ -29,9 +30,12 @@ for f in sys.argv[1:]:
         byk = [sum(x['by_k'][i] for x in st) for i in range(4)]
         sh = sum(x['shadow_hits'] for x in st) / max(byk[0], 1)
         vk = [sum(x['verify_ms_by_k'][i] for x in st) / max(byk[i], 1) for i in range(4)]
-        dms = sum(x['draft_ms'] for x in st) / max(drafted, 1)
+        dropped = sum(x.get('dropped', 0) for x in st)
+        steps = drafted + dropped
+        dms = sum(x['draft_ms'] for x in st) / max(steps, 1)
         tpr = statistics.mean(r['mtp']['tokens_per_round'] for r in rs)
+        dh = sum(x.get('dropped_hits', 0) for x in st)
         print(f"{p}\t{pl:.2f}\t{mt:.2f}\t{mt / pl - 1:+.1%}\t{accepted / max(drafted, 1):.3f}\t{sh:.3f}\t{tpr:.2f}"
-              f"\t{'/'.join(map(str, byk))}\t{'/'.join(f'{v:.1f}' for v in vk)}\t{dms:.2f}")
+              f"\t{'/'.join(map(str, byk))}\t{'/'.join(f'{v:.1f}' for v in vk)}\t{dms:.2f}\t{dropped} ({dh})")
     pl, mt = statistics.mean(means[0]), statistics.mean(means[1])
     print(f"mean\t{pl:.2f}\t{mt:.2f}\t{mt / pl - 1:+.1%}")
