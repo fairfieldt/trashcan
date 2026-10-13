@@ -13,8 +13,10 @@ ROUNDS = {1: 1.84, 2: 2.50, 3: 2.95}
 SCENARIOS = {
     # Measured on the chain (mtp spec, session 2): 67.3 ms per plain token, 112.6 ms for 3 tokens, 133.3 ms for 4;
     # 2 tokens from stage-bench's 1.38x on the GPU share.
-    'today': {1: 67.3, 2: 90.0, 3: 112.6, 4: 133.3},
-    # Fused decode kernels: 35 ms per token, 3 tokens at 1.4x and 4 at ~1.65x.
+    'session 2': {1: 67.3, 2: 90.0, 3: 112.6, 4: 133.3},
+    # Session 4, main with the decode kernels: 53.9 ms per plain token; verification with rollback 91 / 108 / 128 ms.
+    'session 4': {1: 53.9, 2: 91.0, 3: 108.0, 4: 128.0},
+    # The target the coordinator set: 35 ms per token, 3 tokens at 1.4x and 4 at ~1.65x.
     '35 ms decode, 3 tokens 1.4x': {1: 35.0, 2: 42.0, 3: 49.0, 4: 58.0},
 }
 DRAFT_MS = [10.0, 7.0, 6.0, 4.0]

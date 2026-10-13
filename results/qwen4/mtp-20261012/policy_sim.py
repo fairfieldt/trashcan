@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Simulate the engine's adaptive rounds (`spec::Policy`) on greedy acceptance traces (`qwen4 mtp accept`: the
 generated ids and, at every step, three chained drafts) with measured costs; compare acceptance estimators (one
-pooled rate or one per depth), memories and priors with fixed rounds and plain decoding.
+pooled rate, one per depth, or the first draft's and the deeper drafts' pooled), memories and priors with fixed rounds and plain decoding.
 
 `--gate RUN.json` adds the reference prompt as decoded on the chain (`qwen4 mtp spec`'s plain ids): its first 9
 drafts right (as on the CPU reference, which stops at the end of the reply), none after (the trunk then repeats one
@@ -9,27 +9,30 @@ token the block never drafts; session 3: 1 of 148 shadow drafts right).
 
 usage: policy_sim.py [--gate RUN.json] TRACE.json...
 """
-import json, sys
+import json, os, sys
 
 # Session 3 (six Macs, main b5b79c7): ms per verification batch of 1-4 tokens (with rollback), per draft step, per
 # plain token.
-VERIFY = [68.0, 101.0, 112.5, 134.5]
-DRAFT = 6.5
-PLAIN = 67.2
+VERIFY = [float(x) for x in os.environ.get("VERIFY", "68.0,101.0,112.5,134.5").split(",")]
+DRAFT = float(os.environ.get("DRAFT", "6.5"))
+PLAIN = float(os.environ.get("PLAIN", "67.2"))
 
 
-def run(trace, kmax, decay=None, prior=(0.8, 4.0), fixed=None, depth=False):
+def run(trace, kmax, decay=None, prior=(0.8, 4.0), fixed=None, depth='pooled'):
     toks, drafts = trace['tokens'], trace['drafts']
-    # Per depth (or one pooled rate in slot 0): decayed hits and tests.
+    # Decayed hits and tests: one pooled rate, one per depth, or the first draft and the deeper ones pooled.
     est = [[prior[0] * prior[1], prior[1]] for _ in range(kmax)]
     i, ms, n = 0, 0.0, 0
 
+    def slot(j):
+        return {'pooled': 0, 'depth': j, 'first': min(j, 1)}[depth]
+
     def rate(j):
-        e = est[j if depth else 0]
+        e = est[slot(j)]
         return e[0] / e[1]
 
     def tested(j, hit):
-        e = est[j if depth else 0]
+        e = est[slot(j)]
         e[0], e[1] = e[0] * decay + hit, e[1] * decay + 1
 
     while i + 1 < len(toks) and i < len(drafts):
@@ -74,10 +77,10 @@ if args[:1] == ['--gate']:
     args = args[2:]
 traces.update({f.split('/')[-1].removesuffix('.json'): json.load(open(f)) for f in args})
 variants = [('plain', None), ('fixed k=1', dict(fixed=1)), ('fixed k=2', dict(fixed=2)), ('fixed k=3', dict(fixed=3))]
-for depth in (False, True):
+for depth in ('pooled', 'first', 'depth'):
     for decay in (0.94, 0.9, 0.8):
         for w in (4.0, 2.0):
-            variants.append((f"{'per depth' if depth else 'pooled'} {decay} 0.8x{w:g}",
+            variants.append((f"{depth} {decay} 0.8x{w:g}",
                              dict(decay=decay, prior=(0.8, w), depth=depth)))
 print('variant\t\t\t' + '\t'.join(traces) + '\tmean of text')
 for name, kw in variants:
