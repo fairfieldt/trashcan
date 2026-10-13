@@ -1,0 +1,35 @@
+session 0 (lease 62, tools/load-sb.sh; prof0 = main + tools/prof-main.patch):
+base-w1 trashcan-6f6635a warm rc 0 wall 19.217653192 s
+prof0-w1 trashcan-load-prof0 warm rc 0 wall 20.640871192 s
+base-w2 trashcan-6f6635a warm rc 0 wall 18.443262856 s
+prof0-w2 trashcan-load-prof0 warm rc 0 wall 21.441751077 s
+prof0-c1 trashcan-load-prof0 cold rc 0 wall 43.399332892 s
+base-c1 trashcan-6f6635a cold rc 0 wall 43.884903377 s
+
+session 1 (lease 64, tools/load-s1.sh; v1 = 8a8df54 (staging uploader); v2 = v1 + read-ahead thread (986f27b, dropped);
+prof1/prof2 = v1/v2 + tools/instrument.py):
+hashmain-w1 trashcan-load-hash-main warm rc 0 wall 45.882786803 s
+hashnew-w1 trashcan-load-hash-new warm rc 0 wall 30.155569009 s
+base-w3 trashcan-6f6635a warm rc 0 wall 21.491656470 s
+v1-w1 trashcan-load-v1 warm rc 0 wall 2.524290020 s
+base-w4 trashcan-6f6635a warm rc 0 wall 20.484726293 s
+v1-w2 trashcan-load-v1 warm rc 0 wall 2.516617120 s
+prof1-w1 trashcan-load-prof1 warm rc 0 wall 2.562808046 s
+prof1-c1 trashcan-load-prof1 cold rc 0 wall 13.058750231 s
+v1-c1 trashcan-load-v1 cold rc 0 wall 12.878918741 s
+v2-w1 trashcan-load-v2 warm rc 0 wall 2.603707614 s
+prof2-w1 trashcan-load-prof2 warm rc 0 wall 2.618848579 s
+prof2-c1 trashcan-load-prof2 cold rc 0 wall 14.063452046 s
+v2-c1 trashcan-load-v2 cold rc 0 wall 22.854812791 s
+v1-c2 trashcan-load-v1 cold rc 0 wall 14.179314705 s
+dump-main trashcan-6f6635a warm rc 0 wall 20.275268435 s
+dump-v1 trashcan-load-v1 warm rc 0 wall 2.467372030 s
+dd direct bs=64M: 2147483648 bytes (2.1 GB, 2.0 GiB) copied, 1.74335 s, 1.2 GB/s
+dd direct bs=4M: 2147483648 bytes (2.1 GB, 2.0 GiB) copied, 1.95801 s, 1.1 GB/s
+dd direct bs=1M: 2147483648 bytes (2.1 GB, 2.0 GiB) copied, 3.67719 s, 584 MB/s
+dd direct bs=128K: 2147483648 bytes (2.1 GB, 2.0 GiB) copied, 2.48181 s, 865 MB/s
+session 1 done
+
+checks after the session:
+load-hashmain-w1.err:174 HASH lines, load-hashnew-w1.err:174 HASH lines: ALL HASHES IDENTICAL (11.8058 GB hashed)
+dumps (dec-p100.ids = p100.ids): 114 tensors, 0 differ; index.tsv identical

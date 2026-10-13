@@ -1,0 +1,271 @@
+diff --git a/engine/src/main.rs b/engine/src/main.rs
+index 11c8b11..3eca0c0 100644
+--- a/engine/src/main.rs
++++ b/engine/src/main.rs
+@@ -5,6 +5,7 @@ mod generation;
+ mod gguf;
+ mod gpu;
+ mod link;
++pub mod loadprof;
+ mod micro;
+ mod model;
+ mod prefill_micro;
+@@ -611,6 +612,7 @@ fn validate_draft(path: Option<&std::path::PathBuf>, k: usize, batch: usize) ->
+ }
+ 
+ fn main() -> Result<()> {
++    loadprof::start();
+     match Cli::parse().cmd {
+         Cmd::Serve(options) => server::serve(options),
+         Cmd::AllreduceBench(options) => allreduce::run(&options),
+diff --git a/engine/src/qwen4/bench.rs b/engine/src/qwen4/bench.rs
+index 5582ecf..99d7b7b 100644
+--- a/engine/src/qwen4/bench.rs
++++ b/engine/src/qwen4/bench.rs
+@@ -87,7 +87,9 @@ pub fn stage_bench(
+         local.forward(x, ple.as_deref(), pos, toks.len(), None)?;
+         Ok(())
+     };
++    crate::loadprof::mark("stage_bench");
+     run(local, &stream[..batch], 0)?;
++    crate::loadprof::mark("warm-up chunk done");
+     let mut pre = Vec::new();
+     let t0 = std::time::Instant::now();
+     for _ in 0..prefill {
+@@ -132,6 +134,7 @@ pub fn stage_bench(
+         run(local, &stream[..batch], 0)?;
+         profile(local, &mut pre_disp, 0, batch, 1.)?;
+     }
++    crate::loadprof::mark("first decode step");
+     let t0 = std::time::Instant::now();
+     for i in 0..decode {
+         run(local, &stream[start + i..start + i + 1], start + i)?;
+@@ -161,6 +164,7 @@ pub fn stage_bench(
+         }
+         together = t0.elapsed().as_secs_f64() / 16. * 1e3;
+     }
++    crate::loadprof::mark("timed steps done");
+     let mib: Vec<f64> = local
+         .stages
+         .iter()
+diff --git a/engine/src/qwen4/gpu.rs b/engine/src/qwen4/gpu.rs
+index 7b67161..2e317ad 100644
+--- a/engine/src/qwen4/gpu.rs
++++ b/engine/src/qwen4/gpu.rs
+@@ -19,6 +19,7 @@ use crate::{
+ use anyhow::{ensure, Context, Result};
+ use ash::vk;
+ use std::{collections::HashMap, rc::Rc};
++use crate::loadprof as lp;
+ 
+ pub const TOP_K: usize = crate::qwen::gpu::TOP_K;
+ const GRAPH_CACHE_CAPACITY: usize = 6;
+@@ -449,14 +450,16 @@ impl GpuStage {
+             let (k, n) = (t.dims[0] as usize, t.dims[1] as usize);
+             Ok(match t.ty {
+                 GgmlType::Q8_0 => {
+-                    let (packed, stride) = quant::repack_q8h(g.data(t));
++                    let (packed, stride) = lp::time(5, || quant::repack_q8h(g.data(t)));
+                     Dense::Q8(gpu.upload_matrix(&packed)?, stride as u32)
+                 }
+-                _ => Dense::Q4(gpu.upload_matrix(&quant::repack_q4(q4_rows(g, t, 0, n)?, k, n, 0, n, 0, k))?),
++                _ => Dense::Q4(gpu.upload_matrix(&lp::time(5, || -> Result<Vec<u8>> { Ok(quant::repack_q4(q4_rows(g, t, 0, n)?, k, n, 0, n, 0, k)) })?)?),
+             })
+         };
+         let f32s = |v: &[f32]| gpu.upload(bytemuck::cast_slice(v));
+         let mat32 = |v: &[f32]| gpu.upload_matrix(bytemuck::cast_slice(v));
++        let rows_f32 = |g: &Gguf, t: &TensorInfo| lp::time(7, || rows_f32(g, t));
++        let vector = |g: &Gguf, t: &TensorInfo| lp::time(7, || vector(g, t));
+         let vecb = |t: &TensorInfo| -> Result<Buffer> { f32s(&vector(g, t)?) };
+         let mix = |prefix: &str, inject: bool| -> Result<Mix> {
+             let tt = |name: &str| {
+@@ -467,15 +470,15 @@ impl GpuStage {
+                 let (dn, inj) = (tt("down")?, tt("inject")?);
+                 match (dn.ty, inj.ty) {
+                     (GgmlType::Q4_0, GgmlType::Q4_0) => {
+-                        let mut raw = g.data(dn).to_vec();
+-                        raw.extend_from_slice(g.data(inj));
++                        let raw = lp::time(8, || { let mut raw = g.data(dn).to_vec();
++                        raw.extend_from_slice(g.data(inj)); raw });
+                         let (k, n) = (dn.dims[0] as usize, dn.dims[1] as usize + inj.dims[1] as usize);
+-                        Some(Dense::Q4(gpu.upload_matrix(&quant::repack_q4(&raw, k, n, 0, n, 0, k))?))
++                        Some(Dense::Q4(gpu.upload_matrix(&lp::time(5, || quant::repack_q4(&raw, k, n, 0, n, 0, k)))?))
+                     }
+                     (GgmlType::Q8_0, GgmlType::Q8_0) => {
+-                        let mut raw = g.data(dn).to_vec();
+-                        raw.extend_from_slice(g.data(inj));
+-                        let (packed, stride) = quant::repack_q8h(&raw);
++                        let raw = lp::time(8, || { let mut raw = g.data(dn).to_vec();
++                        raw.extend_from_slice(g.data(inj)); raw });
++                        let (packed, stride) = lp::time(5, || quant::repack_q8h(&raw));
+                         Some(Dense::Q8(gpu.upload_matrix(&packed)?, stride as u32))
+                     }
+                     _ => None,
+@@ -508,8 +511,8 @@ impl GpuStage {
+                     ab: mat32(&ab)?,
+                     dt_a: f32s(&dt_a)?,
+                     conv_w: vecb(t(il, "ssm_conv1d.weight")?)?,
+-                    conv: gpu.buffer((c.conv - 1) * c.conv_dim() * 4, false, false, None)?,
+-                    state: gpu.buffer(c.v_heads * c.state * c.state * 4, false, false, None)?,
++                    conv: lp::time(9, || gpu.buffer((c.conv - 1) * c.conv_dim() * 4, false, false, None))?,
++                    state: lp::time(9, || gpu.buffer(c.v_heads * c.state * c.state * 4, false, false, None))?,
+                     norm: vecb(t(il, "ssm_norm.weight")?)?,
+                     out: q4(t(il, "ssm_out.weight")?)?,
+                 }
+@@ -525,8 +528,8 @@ impl GpuStage {
+                     q_norm: vecb(t(il, "attn_q_norm.weight")?)?,
+                     k_norm: vecb(t(il, "attn_k_norm.weight")?)?,
+                     out: q4(t(il, "attn_output.weight")?)?,
+-                    kc: gpu.buffer(kbytes, false, false, None)?,
+-                    vc: gpu.buffer(vbytes, false, false, None)?,
++                    kc: lp::time(9, || gpu.buffer(kbytes, false, false, None))?,
++                    vc: lp::time(9, || gpu.buffer(vbytes, false, false, None))?,
+                     index: if sparse {
+                         Some(Index {
+                             q: mat32(&rows_f32(g, t(il, "indexer.q_proj.weight")?)?)?,
+@@ -567,6 +570,7 @@ impl GpuStage {
+                     b.ty
+                 );
+             }
++            let gu = lp::time(6, || -> Result<Vec<u8>> {
+             let mut gu = Vec::with_capacity((ne + 1) * 2 * ff * expert_format(gt)?.1);
+             for e in 0..ne {
+                 gu.extend_from_slice(expert_rows(g, gt, e * ff, ff)?);
+@@ -574,17 +578,20 @@ impl GpuStage {
+             }
+             gu.extend_from_slice(expert_rows(g, gs, 0, ff)?);
+             gu.extend_from_slice(expert_rows(g, us, 0, ff)?);
+-            let (packed, gu_stride) = expert_pack(gu_fmt, &gu);
+-            drop(gu);
++            Ok(gu) })?;
++            let (packed, gu_stride) = lp::time(5, || expert_pack(gu_fmt, &gu));
++            lp::time(19, || drop(gu));
+             let gate_up = gpu.upload_matrix(&packed)?;
+-            drop(packed);
++            lp::time(19, || drop(packed));
++            let dn = lp::time(6, || -> Result<Vec<u8>> {
+             let mut dn = Vec::with_capacity((ne + 1) * d * expert_format(dt)?.1);
+             dn.extend_from_slice(expert_rows(g, dt, 0, ne * d)?);
+             dn.extend_from_slice(expert_rows(g, ds, 0, d)?);
+-            let (packed, down_stride) = expert_pack(down_fmt, &dn);
+-            drop(dn);
++            Ok(dn) })?;
++            let (packed, down_stride) = lp::time(5, || expert_pack(down_fmt, &dn));
++            lp::time(19, || drop(dn));
+             let down = gpu.upload_matrix(&packed)?;
+-            drop(packed);
++            lp::time(19, || drop(packed));
+             let mut router = rows_f32(g, t(il, "ffn_gate_inp.weight")?)?;
+             router.extend(vector(g, t(il, "ffn_gate_inp_shexp.weight")?)?);
+             layers.push(Layer {
+@@ -630,7 +637,7 @@ impl GpuStage {
+                 let rb = d / 256 * 210;
+                 Some(Head {
+                     mix: if ends { Some(mix("output_hc", false)?) } else { None },
+-                    w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[row0 * rb..row1 * rb]))?,
++                    w: gpu.upload_matrix(&lp::time(5, || quant::repack_q6(&g.data(t)[row0 * rb..row1 * rb])))?,
+                     logits: gpu.buffer(VERIFY_MAX * rows * 4, false, false, None)?,
+                     scratch: gpu.buffer(VERIFY_MAX * chunks * TOP_K * 8, false, false, None)?,
+                     top: gpu.buffer(VERIFY_MAX * TOP_K * 8, true, false, None)?,
+@@ -642,6 +649,7 @@ impl GpuStage {
+             }
+             None => None,
+         };
++        let t9 = std::time::Instant::now();
+         let alloc = |n: usize| gpu.buffer(n * max_batch * 4, false, false, None);
+         let qd = c.heads * c.head_dim;
+         let slots = c.used + 1;
+@@ -654,7 +662,7 @@ impl GpuStage {
+                 None,
+             )?
+         };
+-        Ok(Self {
++        let s = Self {
+             first,
+             last,
+             layers,
+@@ -738,7 +746,9 @@ impl GpuStage {
+             phases: Vec::new(),
+             c: c.clone(),
+             gpu,
+-        })
++        };
++        lp::add(9, t9.elapsed().as_nanos() as u64);
++        Ok(s)
+     }
+ 
+     /// Indexer upkeep and block selection for one QSA layer: raw keys into the ring, pooled keys of completed blocks,
+diff --git a/engine/src/qwen4/pipeline.rs b/engine/src/qwen4/pipeline.rs
+index 372aec9..86225fc 100644
+--- a/engine/src/qwen4/pipeline.rs
++++ b/engine/src/qwen4/pipeline.rs
+@@ -131,7 +131,9 @@ impl Local {
+         max_batch: usize,
+         kv: KvCache,
+     ) -> Result<Self> {
++        crate::loadprof::mark("Local::new");
+         let gguf = Gguf::open(path)?;
++        crate::loadprof::mark("gguf open");
+         super::cpu::set_kv_cache(kv);
+         let c = Config::new(&gguf)?;
+         ensure!(ranges.len() <= devices.count(), "more stages than devices");
+@@ -149,6 +151,7 @@ impl Local {
+                 clocks = crate::clocks::Clocks::new();
+                 let inst = Rc::new(Instance::new()?);
+                 let all = inst.amd_gpus()?;
++                crate::loadprof::mark("instance");
+                 for (i, &(first, last)) in ranges.iter().enumerate() {
+                     let pd = *all
+                         .get(indices[i])
+@@ -158,8 +161,10 @@ impl Local {
+                         indices[i],
+                         heads[i].map_or(String::new(), |(a, b)| format!(" + head rows {a}..{b}"))
+                     );
+-                    let gpu = Device::new(inst.clone(), pd)?;
+-                    let stage = GpuStage::new(gpu, &gguf, &c, first, last, heads[i], context, max_batch, kv)?;
++                    let t0 = std::time::Instant::now();
++                    let gpu = crate::loadprof::time(10, || Device::new(inst.clone(), pd))?;
++                    let stage = crate::loadprof::time(11, || GpuStage::new(gpu, &gguf, &c, first, last, heads[i], context, max_batch, kv))?;
++                    crate::loadprof::report(&format!("GPU{}", indices[i]), t0.elapsed().as_secs_f64());
+                     let (size, budget, usage) = heap_mib(&inst, pd);
+                     eprintln!(
+                         "GPU{}: {:.1} MiB allocated; device-local heap {usage:.0} of {size:.0} MiB used, budget {budget:.0}",
+@@ -177,6 +182,7 @@ impl Local {
+                 }
+             }
+         }
++        crate::loadprof::mark("Local::new done");
+         Ok(Self {
+             gguf,
+             c,
+diff --git a/engine/src/vulkan.rs b/engine/src/vulkan.rs
+index aa257e7..1ea3fcb 100644
+--- a/engine/src/vulkan.rs
++++ b/engine/src/vulkan.rs
+@@ -1357,13 +1357,19 @@ impl Device {
+         self.upload(data)
+     }
+     pub fn upload(self: &Rc<Self>, data: &[u8]) -> Result<Buffer> {
+-        let dst = self.buffer(data.len(), false, false, None)?;
+-        let staging = self.buffer(data.len(), true, false, None)?;
+-        staging.write(data)?;
+-        let cmd = self.begin()?;
+-        self.copy(cmd, &staging, 0, &dst, 0, staging.size);
+-        self.finish(cmd)?;
+-        self.run(cmd)?;
++        use crate::loadprof as lp;
++        lp::add(12, data.len() as u64);
++        lp::add(13, 1);
++        let dst = lp::time(0, || self.buffer(data.len(), false, false, None))?;
++        let staging = lp::time(1, || self.buffer(data.len(), true, false, None))?;
++        lp::time(2, || staging.write(data))?;
++        lp::time(3, || -> Result<()> {
++            let cmd = self.begin()?;
++            self.copy(cmd, &staging, 0, &dst, 0, staging.size);
++            self.finish(cmd)?;
++            self.run(cmd)
++        })?;
++        lp::time(4, || drop(staging));
+         Ok(dst)
+     }
+     pub fn timeline(&self, external: bool) -> Result<vk::Semaphore> {

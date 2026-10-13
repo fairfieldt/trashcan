@@ -1,0 +1,11 @@
+session 4 (lease 70, tools/load-s4.sh; trashcan-load-4307 = the branch rebased onto main 4307169, the small-batch
+experts; hash builds = tools/hash.py on 4307169 and on the rebased branch):
+hashmain4307-w1 trashcan-load-hash-main4307 warm rc 0 wall 45.867973746 s
+hashnew4307-w1 trashcan-load-hash-new4307 warm rc 0 wall 32.544759255 s
+weight hashes: 174 buffers, all identical to 4307169
+base4307-w1 trashcan-4307169 warm rc 0 wall 19.988175799 s
+new4307-w1 trashcan-load-4307 warm rc 0 wall 2.487036051 s
+dump-main4307 trashcan-4307169 warm rc 0 wall 21.794974832 s
+dump-new4307 trashcan-load-4307 warm rc 0 wall 2.419521303 s
+dump rebased against main 4307169: 114 tensors, 0 differ; index identical
+session 4 done

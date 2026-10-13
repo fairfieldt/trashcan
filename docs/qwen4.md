@@ -223,7 +223,17 @@ that the next mixer, the head or the stage output resolves.
 `qwen4 stage-bench` times stages alone (prefill chunks, then decode steps, back to back so the clocks stay up) with
 GPU timestamps around every layer and phase; `--start` prefills that many tokens first and also reports the last
 of those chunks. With `TRASHCAN_Q4_PROFILE=1` it also times every dispatch of the decode steps and of one prefill
-chunk (`dispatches`, `prefill_dispatches`).
+chunk (`dispatches`, `prefill_dispatches`). `--batch 16,32,64,128` times several chunk sizes on one load, one after
+another, and prints one JSON line per size, each as `--batch` with that size alone prints it. The largest size sizes
+the buffers, so the smaller ones run as in a chain with that `--batch`, where kernel choices that depend on it can
+differ from a run of the size alone
+([results/qwen4/load-time-20261013](../results/qwen4/load-time-20261013/README.md#stage-bench-several-sizes-on-one-load)).
+
+Loading: a stage repacks its weights from the GGUF mapping straight into three reused 64 MiB staging buffers on every
+core, and each buffer's copies run while the next one is filled (`vulkan::Uploader`). A Mac's two stages (11.8 GB)
+load in about 2 s from the page cache and 12 s from its SSD, against 20 and 41 s before; on six Macs a whole
+`qwen4 validate` run takes 5.3 s instead of 23 s and `trashcan serve` is up after 3 s instead of 20
+([results/qwen4/load-time-20261013](../results/qwen4/load-time-20261013/README.md)).
 
 ### Validation on the D700s
 
@@ -509,6 +519,7 @@ trashcan qwen4 stage-bench MODEL --ranges 0:4 --gpus 0 --context 32768 --start 3
 trashcan qwen4 stage-bench S-q2dn.gguf --ranges 0:4 --gpus 0 --context 204800 --kv q8 --batch 128 \
     --head-rows 0:21504 --start 204672 --decode 16 --prefill 1
 trashcan qwen4 stage-bench MODEL --ranges 4:5 --gpus 0 --head-rows 0:20736 --decode 4 --prefill 0 --batch 16
+trashcan qwen4 stage-bench MODEL --ranges 0:4,4:8 --gpus 0,1 --context 32768 --batch 16,32,64,128 --decode 0
 trashcan qwen4 ngram-bench META_SHARD TABLE_SHARD --mode ram-q4|direct|buffered-cold [--ids IDS]
 python3 tools/qwen4_budget.py [--context N] [--batch N] [--head-split N] [--lean] [--kv q8] [--q2-down rco]
 python3 tools/qwen4_budget.py --grid --context 204800   # six Macs, long-context options

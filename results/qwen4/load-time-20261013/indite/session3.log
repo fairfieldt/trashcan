@@ -1,0 +1,11 @@
+session 3 (lease 68, tools/load-s3.sh; trashcan-load = c8ac8b1, the final branch; hash-final = c8ac8b1 +
+tools/hash.py; tools/outproj.py deployed as load-outproj.py):
+hashfinal-w1 trashcan-load-hash-final warm rc 0 wall 29.068638291 s
+weight hashes: 174 buffers, all identical to 7da6f93
+final-w1 trashcan-load warm rc 0 wall 2.529113773 s
+final-w2 trashcan-load warm rc 0 wall 2.535786569 s
+final-c1 trashcan-load cold rc 0 wall 12.956987228 s
+results/load-outproj-multi.json batch 16 prefill GPU ms 29.44 | out projections 4 ['qwen4_q8_gemm_s16r1p 2560x6144'] 5.436 ms | part sums 0 0 ms
+results/load-outproj-multi.json batch 128 prefill GPU ms 107.25 | out projections 4 ['qwen4_q8_gemm 2560x6144'] 9.413 ms | part sums 4 0.145 ms
+results/load-outproj-16.json batch 16 prefill GPU ms 26.48 | out projections 4 ['qwen4_q8_gemm_s16r1p 2560x6144'] 2.309 ms | part sums 4 0.029 ms
+session 3 done
