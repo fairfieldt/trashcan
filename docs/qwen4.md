@@ -9,11 +9,12 @@ are in [qwen.md](qwen.md).
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type match the reference with the six-Mac
 recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
-CPU reference, prefill 369 tok/s on a 512-token prompt and 598 on 2048 with the two GPUs of a Mac on
+CPU reference, prefill 432 tok/s on a 512-token prompt, 633 on 2048 and 755 on 8192 with the two GPUs of a Mac on
 consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)),
 the chunk size chosen by prompt length ([results/qwen4/prefill-chunks-20261012](../results/qwen4/prefill-chunks-20261012/README.md)),
 split-K prefill mixers ([results/qwen4/prefill-mixer-20261012](../results/qwen4/prefill-mixer-20261012/README.md))
-and experts that decode each expert's rows once per tile of its tokens ([results/qwen4/prefill-experts-20261012](../results/qwen4/prefill-experts-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
+experts that decode each expert's rows once per tile of its tokens ([results/qwen4/prefill-experts-20261012](../results/qwen4/prefill-experts-20261012/README.md))
+and the prefill kernels for 16-128-token chunks of [results/qwen4/prefill-kernels-20261013](../results/qwen4/prefill-kernels-20261013/README.md), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)), and 17.9 with
 the decode kernels of [results/qwen4/decode-kernels-20261012](../results/qwen4/decode-kernels-20261012/README.md). MTP speculative
@@ -207,10 +208,10 @@ that the next mixer, the head or the stage output resolves.
 | part | kernels |
 |---|---|
 | mixer, up to 8 tokens | `qwen4_mix_down_sk` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows; split over 8 chunks of the residual, the last workgroup to finish sums them; `_sk4`: four tokens per workgroup), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
-| mixer, prefill | `qwen4_hc_norm`; Q8_0: the 320 bottleneck and 4 write rows (the fused matrix) as one `qwen4_q8_gemm` split 16 ways along K, `qwen4_mix_act` (sums the parts, activations), `qwen4_q8_gemm_mix` (the up projection with the read gates folded into the sublayer input); Q4_0: the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
-| dense matrices | Q8_0: `qwen4_q8_mvw4_r4`/`_r2` (1-8 tokens: 8-byte loads, 4 or 2 rows per wave), `qwen4_q8_gemm` (64 x 64 tiles, optionally split along K), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw); small f32 matrices (router, alpha/beta, indexer): `qwen4_matf32` up to 4 tokens |
+| mixer, prefill | `qwen4_hc_norm` (one workgroup per stream and token); Q8_0: the 320 bottleneck and 4 write rows (the fused matrix) as one GEMM split 16 ways along K (`qwen4_q8_gemm`, or up to 32 tokens `qwen4_q8_gemm_s8r1po`), `qwen4_mix_act` (sums the parts, activations), `qwen4_q8_gemm_mix` (the up projection with the read gates folded into the sublayer input; up to 16 tokens `qwen4_q8_gemm_s4r4om`); Q4_0: the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
+| dense matrices | Q8_0: `qwen4_q8_mvw4_r4`/`_r2` (1-8 tokens: 8-byte loads, 4 or 2 rows per wave), `qwen4_q8_gemm_s16r1p` (9-32 tokens: a lane per row decoding each weight once for 16 tokens, whose inputs are scalar operands), `qwen4_q8_gemm` (64 x 64 tiles beyond), optionally split along K (the 2560-row out projections in 8 parts, summed by `qwen4_sum_parts`), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw); small f32 matrices (router, alpha/beta, indexer): `qwen4_matf32` up to 4 tokens |
 | n-gram module | key/value projections, `qwen4_ple_sums` and `qwen4_ple_gate`, `qwen4_ple_conv` (dilated convolution, 9-step history) |
-| DeltaNet | qwen35's `qwen_conv`, `qwen4_gdn` (up to 8 tokens; qwen35's `qwen_gdn` beyond), `qwen4_gated_norm` (sigmoid gate) |
+| DeltaNet | qwen35's `qwen_conv`, `qwen4_gdn` (up to 8 tokens), beyond: `qwen4_gdn_prep` (q, k norms and the gates once per token) and `qwen4_gdn_rows` (a state row in a lane's registers, q and k as LDS broadcasts), `qwen4_gated_norm` (sigmoid gate) |
 | QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
 | QSA, longer contexts | `qwen4_idx_store`/`qwen4_idx_pool` (raw and pooled block keys), `qwen_qk` on the indexer queries, `qwen4_idx_score` (block scores, one wave per block for 8 tokens), `qwen4_idx_select` (exact radix top-512, ties to the earlier block), `qwen4_attention_sparse[_full]` |
 | MoE | router (f32, with the shared gate as row 512), `qwen4_topk`; below 16 tokens `qwen4_moe_gu`, `qwen4_moe_down` per (token, slot); from 16 tokens `qwen4_moe_tiles` groups the slots by expert into tiles of up to 8, `qwen4_moe_gu_tiles`/`qwen4_moe_down_tiles` decode each expert's rows once per tile (a lane per row, whole 64-byte lines, the slots' inputs through scalar loads) and `qwen4_moe_sum` adds a token's slots (2.6x faster at 128 tokens, results/qwen4/prefill-experts-20261012); up to 8 tokens `qwen4_moe_down_w` for the down projections |
@@ -320,20 +321,23 @@ short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 1.39 s, **369 tok/s** (measured; 1024 tokens: 512 tok/s) | ~1.2 s, ~430 tok/s |
-| 2048 | ~0.8 s | 3.4 s, **598 tok/s** (measured) | ~3 s, ~660 tok/s |
-| 4K | ~1.5 s, 2,800 tok/s | 6.3 s, **650 tok/s** (measured) | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | 11.6 s, **707 tok/s** (measured) | ~9 s, ~920 tok/s |
+| 512 | ~0.25 s | 1.19 s, **432 tok/s** (measured; 1024 tokens: 543 tok/s) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 3.2 s, **633 tok/s** (measured) | ~3 s, ~660 tok/s |
+| 4K | ~1.5 s, 2,800 tok/s | 6.0 s, **686 tok/s** (measured) | ~5 s, ~820 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | 10.8 s, **755 tok/s** (measured) | ~9 s, ~920 tok/s |
 | 32K | ~11 s, 3,150 tok/s | ~40 s, ~820 tok/s | ~35 s, ~950 tok/s |
 | 128K | ~42 s | ~3.4 min, ~650 tok/s | ~2.5 min, ~900 tok/s |
 | 200K | ~65 s | ~5.8 min, ~590 tok/s | ~4 min, ~850 tok/s |
 | 262K | ~83 s | ~7.8 min, ~560 tok/s | ~5.5 min, ~820 tok/s |
 
-Today: the experts take about a third of a 128-token chunk's time at ~38% of FP32 peak (each expert's rows decoded
-once per tile of up to 8 of its tokens). Every GPU is a pipeline stage (a Mac's two GPUs work on consecutive chunks),
-so a prompt takes about the sum of its chunks' stage times plus 11 times the largest, and the pipeline fill is most of
-a short prompt's time. Toward the realistic column: chunked DeltaNet, faster block selection and sparse attention at
-long contexts, and the Q8_0 GEMM tile kernel.
+Today: the experts take 42-45% of a chunk's time at 20-39% of FP32 peak (each expert's rows decoded once per tile of
+up to 8 of its tokens; most tiles of 16-64-token chunks hold 1-3), the Q8_0 projections run at 27-45% of the peak up
+to 32 tokens and 50-63% beyond, and the DeltaNet recurrence is 2.7% of a chunk
+([results/qwen4/prefill-kernels-20261013](../results/qwen4/prefill-kernels-20261013/README.md)). Every GPU is a
+pipeline stage (a Mac's two GPUs work on consecutive chunks), so a prompt takes about the sum of its chunks' stage times
+plus 11 times the largest, and the pipeline fill is most of a short prompt's time. Toward the realistic column: the
+expert tiles, faster block selection and sparse attention at long contexts, the f32 router, and the stage output copy
+to host memory (~2 GB/s: 1.3 ms per GPU per 64-token chunk).
 
 **Beyond these ceilings.** MTP speculative decoding (measured, [results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)):
 the block (1.49 GB) runs on the driver's CPU (5.7 ms per draft step with the draft head's first rows on the driver's
@@ -422,11 +426,13 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
 3. **Clock levels** (done): in decode each GPU idles ~90% of a token and drops to its lowest clocks on `auto`;
    stages now hold the high level while work arrives and return to `auto` after 1 s idle (~35 W per idle GPU).
 4. **Prefill**: experts that reuse weights across the tokens routed to an expert (done: 221 -> 84 ms for 8 layers
-   at 128 tokens, 2048 tokens 434 -> 598 tok/s, results/qwen4/prefill-experts-20261012), the Q8_0 GEMM tile kernel (64 x 64, ~55% of the FMA
-   peak; most of the 1.2 ms per mixer per 128-token chunk and of the DeltaNet and QSA projections), chunked
-   DeltaNet (19 ms), grouping the 12 query heads that share a KV head in sparse attention (76 ms per chunk at 32K),
-   the f32 router (3.8 ms), and smaller chunks for short prompts, whose time is mostly the 12-stage pipeline fill
-   since the two GPUs of a Mac work on consecutive chunks (done: 2048 tokens 210 -> 324 tok/s,
+   at 128 tokens, 2048 tokens 434 -> 598 tok/s, results/qwen4/prefill-experts-20261012); a lane-per-row Q8_0 GEMM up
+   to 32 tokens, split-K out projections and the DeltaNet recurrence in registers (done: 512 tokens 369 -> 432 tok/s,
+   8192 702 -> 755, results/qwen4/prefill-kernels-20261013); the expert tiles (42-45% of a chunk; occupancy splits,
+   prefetch, vector-loaded inputs and unrolled lines all lost there), the Q8_0 GEMMs at 64-128 tokens (58-63% of the
+   FMA peak, LDS-bound), grouping the 12 query heads that share a KV head in sparse attention (76 ms per chunk at
+   32K), the f32 router (8% of a chunk), and smaller chunks for short prompts, whose time is mostly the 12-stage
+   pipeline fill since the two GPUs of a Mac work on consecutive chunks (done: 2048 tokens 210 -> 324 tok/s,
    results/qwen4/prefill-overlap-20261012).
 5. **Decode**: a DeltaNet layer takes ~1.0 ms per token (about 110 GB/s; results/qwen4/decode-kernels-20261012):
    the expert gate/up kernel (0.17 ms, neither its VALU nor its loads alone explain it), the out projections at
