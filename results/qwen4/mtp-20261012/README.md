@@ -1,11 +1,14 @@
 # Flash-Next MTP speculative decoding (2026-10-12)
 
-Qwen3.8-Flash-Next ships one MTP block. The trashcan engine now drafts with it on the chain driver's CPU (incite) and
+Qwen3.8-Flash-Next ships one MTP block. The trashcan engine drafts with it on the chain driver's CPU (incite) and
 verifies the pending token and its drafts as one batch through the 12 GPU stages, rolling the recurrent state back to
-the accepted prefix. On the six-Mac chain, greedy decoding of three chat replies goes from **14.85 to 20.86 tok/s
-(+40%) with three drafts per round** (20.54 with two), output identical to plain greedy decoding; the Responses server
-passes `scripts/test-server.py` with `--mtp`. On a 3K-token document summary it does not pay (-5%: fewer accepted drafts
-and a costlier verification at that context).
+the accepted prefix; every round drafts as many tokens (0 to 3) as the recent acceptance pays for at the measured
+costs. On the six-Mac chain with main's decode kernels (`ef4ce87`, 18.3 tok/s plain), greedy decoding of three chat
+replies runs at **21.45-21.62 tok/s (+17-18%)**, output identical to plain greedy decoding; on a reply that drafting
+cannot predict it costs 1.2-1.6% (fixed 3-draft rounds lost 57% there), and on a 3K-token document summary it breaks
+even (+0.2-0.8%, fixed rounds -16%). Before the decode kernels the same rounds gave +39% (14.86 -> 20.66 tok/s):
+those kernels made single tokens 20% cheaper but 2-4-token verification batches only 5-7%, which now cost 1.69x /
+2.0x / 2.37x a plain token. The Responses server passes `scripts/test-server.py` with `--mtp`.
 
 ## Weights
 
@@ -158,15 +161,15 @@ block never drafts) three drafts per round took greedy decoding from 14.6 to 6.8
 tokens per millisecond:
 
 - acceptance `a`: the share of recent drafts that matched (all depths pooled, each draft's weight decaying by 0.94
-  per newer one, so about the last 16 drafts; 0.8 worth 4 drafts at the start of each sequence); a round of k drafts
+  per newer one, so about the last 16 drafts; 0.8 worth 2 drafts at the start of each sequence); a round of k drafts
   yields 1 + a + ... + a^k tokens on average;
 - costs: running averages (weight 0.2 for the newest) of the measured draft step and of each verification batch size
   including its rollback, taken from the rounds themselves. Each size is run once before the first choice (k = 3, 2,
   1, 0, the first rounds after loading) and again once its cost is 256 rounds old, so sizes the choice avoids stay
   current; no cost constants, so faster decode or verification kernels move the break-even with them;
 - k = 0 is a plain step through the verification path (a 1-token batch, which returns the residual row) while the
-  driver's CPU runs the block on the pending token anyway, during the chain's step (the shadow draft: the whole 64K
-  draft vocabulary on the CPU, the driver's GPUs being busy). Its draft is compared with the next token, so the
+  driver runs the block on the pending token anyway once its own stages are done and the rest of the chain works
+  (`Chain::verify_with`; the shadow draft: the whole 64K draft vocabulary on the CPU). Its draft is compared with the next token, so the
   acceptance stays measured without probe rounds, and the block's keys stay complete for when drafting resumes.
 
 With session 2's costs (67.3 ms per token, verification 1.67x/1.98x, 6 ms draft steps) the best choice is k = 0
@@ -174,10 +177,26 @@ below a = 0.43, k = 1 to 0.71, k = 2 to 0.81 and k = 3 above (`project.py`); wit
 verification: 0.37, 0.67 and 0.86.
 
 `policy_sim.py` replays the rounds on the CPU reference's acceptance traces with session 3's costs
-(`policy_sim.txt`): a pooled rate against one per depth, memories of ~16, ~10 and ~5 drafts, priors worth 4 or 2
+(`policy_sim.txt`; session 4's in `policy_sim-session4.txt`): a pooled rate against one per depth or first and
+later drafts apart, memories of ~16, ~10 and ~5 drafts, priors worth 4 or 2
 drafts. Every variant lands within about ±1.5% of the others on the chat and long traces (decisions near a break-even
 flip on small differences), and within 1% of the best fixed depth on their mean; the reference prompt prefers short
 memories and a weak prior. The engine keeps one pooled rate, a memory of ~16 drafts and a prior worth 2.
+
+Session 5 compared that pooled rate with separate rates for first drafts and for later drafts (chained drafts are
+accepted less often, and session 4 showed water running plain steps at 88% first-draft acceptance), in the same runs
+with fixed 3-draft rounds (tok/s; plain 18.28 chat mean, 18.52 reference, 16.07 long):
+
+| | reference | water | csv | transformer | chat mean | long |
+|---|---|---|---|---|---|---|
+| pooled rate (the engine) | **18.30** | 20.23 | 24.66 | 19.97 | **21.62** | 16.10 |
+| first and later drafts apart | 17.64 | 19.30 | 24.49 | 21.31 | 21.70 | 16.29 |
+| fixed 3 drafts | 7.88 | 21.13 | 24.70 | 19.78 | 21.87 | 13.53 |
+
+The split helped transformer and lost on water, where the later-draft rate dropped and was never tested again at one
+draft per round (304 rounds of k = 1); the chat mean moved 0.4% and the reference prompt went from -1.2% to -4.8%.
+It was removed. Adaptive rounds stay within 1-2% of fixed 3-draft rounds on chat replies (session 4 -1.7%, session 5 -1.1%)
+and far ahead on low acceptance.
 
 ## End to end (six Macs)
 
@@ -187,7 +206,34 @@ water.ids csv.ids transformer.ids`: for each prompt plain greedy decoding, then 
 rates exclude the prompt. Run through `chain6.sh` and `tools/q4run.py` (nodes under gpuq leases, clocks logged:
 850/1370 MHz on every GPU while working, `chain*/*.txt`), commands in `chain*/commands.log`.
 
-**Session 3** (`chain3/`, commit `85ab9a4` on main `b5b79c7`: adaptive prefill chunks, split-K prefill mixers,
+**Session 5** (`chain5/`, commit `e0fe684` on main `ef4ce87`): the estimator comparison in
+[Adaptive rounds](#adaptive-rounds-specpolicy); its pooled-rate pass is the engine as committed (session 4's
+policy). Costs as in session 4: k = 0 55-57 ms, verification with rollback 89-94 / 107-114 / 126-131 ms for 2 / 3 / 4
+tokens, draft steps 5.7-5.9 ms. Clocks 850/1370 MHz on every GPU while working.
+
+**Session 4** (`chain4/`, commit `9377f34` on main `ef4ce87`, the decode kernels: single-token decode 14.7 -> 17.9
+tok/s; adaptive rounds with one pooled acceptance rate, the shadow draft on the driver's main thread, the prior worth 2
+drafts). Same runs as session 3:
+
+| prompt | plain tok/s | adaptive | gain | rounds k = 0/1/2/3 | fixed 3 drafts | gain |
+|---|---|---|---|---|---|---|
+| reference (64 tokens, 3 runs) | 18.56 | 18.26 | -1.6% | 159/1/8/4 | 7.90 | -57.5% |
+| water | 18.38 | 20.03 | +9.0% | 49/4/137/63 | 21.30 | +15.9% |
+| csv | 18.35 | 24.47 | +33.3% | 0/3/5/156 | 24.31 | +32.5% |
+| transformer | 18.24 | 19.85 | +8.8% | 79/2/150/44 | 19.89 | +9.0% |
+| **chat mean** (192 tokens, 3 runs) | **18.32** | **21.45** | **+17.1%** | | **21.83** | **+19.1%** |
+| long (3061-token prompt, 96 tokens, 2 runs) | 16.13 | **16.26** | **+0.8%** | 61/1/53/3 | 13.47 | -16.5% |
+
+The decode kernels made a single token 20% cheaper (53.9 ms) but 2-4-token batches only 5-7%: verification with
+rollback now takes 91 / 108 / 128 ms for 2 / 3 / 4 tokens (1.69x / 2.0x / 2.37x of a plain token, against 1.43x /
+1.69x / 2.0x in session 3), so a round must keep more drafts to pay and the gain on chat replies falls from +39% to
++17%. A k = 0 round costs 55 ms (+1.1 ms over a plain step with the shadow draft on the main thread, about what it
+cost on its own thread in session 3: the overhead is the verification path itself). On water the rounds ran 49 plain
+steps while 88% of their shadow drafts were right: one rate pooled over first and chained drafts sat near the higher
+break-even (chained drafts are accepted less often than first ones), which session 5 tested. Server: every
+`scripts/test-server.py` check passes; `q4-turns.py` 57 tokens in 2.83 s, then 64 in 2.53 s.
+
+**Session 3** (`chain3/`, commit `d04a8e1`, run as `85ab9a4` on main `b5b79c7`: adaptive prefill chunks, split-K prefill mixers,
 expert prefill tiles; adaptive rounds with the shadow draft on its own thread and a prior worth 4 drafts). For every
 prompt and run: plain greedy decoding, adaptive rounds (up to 3 drafts) and fixed 3-draft rounds (an experiment switch
 for this comparison), all three with identical ids; clocks 850/1370 MHz on every GPU while working:
@@ -221,7 +267,7 @@ Server (`tools/q4serve-test.sh ... --mtp mtp-G-iq4.gguf --draft-tokens 3`, adapt
 `scripts/test-server.py` check passes; `q4-turns.py` turn 1 57 tokens in 2.98 s, turn 2 (78 of 99 prompt tokens
 reused) 64 tokens in 2.82 s.
 
-**Session 2** (`chain2/`, commit `c4ac1fe`, the engine's drafter: 4-bit dense, Q8 head rows 43008-65535 on the CPU and
+**Session 2** (`chain2/`, commit `1ce750b`, run as `c4ac1fe` on main `90cb371`, the engine's drafter: 4-bit dense, Q8 head rows 43008-65535 on the CPU and
 0-43007 on the driver's GPUs, 24 threads, no rewrite):
 
 | prompt | plain tok/s | MTP k=3 | gain | tokens/round | MTP k=2 | gain | tokens/round |
@@ -241,7 +287,7 @@ Server (`tools/q4serve-test.sh` with `--mtp mtp-G-iq4.gguf --draft-tokens 3`, `-
 tokens in 3.20 s (17.8 tok/s streamed, against 13.9 without MTP in results/qwen4/chain-20261012), turn 2 (78 of 99
 prompt tokens reused) 64 tokens in 2.73 s (23.4 tok/s).
 
-**Session 1** (`chain1/`, commit `ff50ba6`: the whole draft head on the CPU, 12 threads; the variants compared):
+**Session 1** (`chain1/`, commit `64f6870`, run as `ff50ba6` on main `da28c66`: the whole draft head on the CPU, 12 threads; the variants compared):
 
 | variant | k | plain tok/s | MTP tok/s | gain | draft ms/round | verify ms/round |
 |---|---|---|---|---|---|---|
@@ -255,18 +301,19 @@ prompt tokens reused) 64 tokens in 2.73 s (23.4 tok/s).
 
 `project.py`: tok/s = tokens per round / (k draft steps + a (k + 1)-token verification), with the pooled tokens per
 round of the engine's rounds (1.84 / 2.50 / 2.95 for k = 1 / 2 / 3, the long prompt included; the chat prompts alone
-give ~3.1 at k = 3). Today's chain (67.3 ms per token, verification 1.67x and 1.98x) with 6 ms draft steps gives
-20.1 tok/s at k = 2 and 19.5 at k = 3 (measured on the chat prompts: 20.5 and 20.9). With the decode kernels being
-worked on (35 ms per token, 3 tokens at 1.4x and 4 at ~1.65x):
+give ~3.1 at k = 3), 6 ms draft steps:
 
-| draft step | k = 1 | k = 2 | k = 3 |
-|---|---|---|---|
-| 10 ms | 35.4 | 36.2 | 33.5 |
-| 6 ms (today's drafter with the GPU head rows) | 38.3 | 41.0 | 38.8 |
-| 4 ms | 40.0 | 43.9 | 42.1 |
+| chain | plain | k = 1 | k = 2 | k = 3 |
+|---|---|---|---|---|
+| session 2 (67.3 ms per token, verification 1.34x / 1.67x / 1.98x) | 14.9 | 19.2 | 20.1 | 19.5 |
+| session 4, decode kernels (53.9 ms, 1.69x / 2.0x / 2.37x) | 18.6 | 19.0 | 20.8 | 20.2 |
+| 35 ms per token, 2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x | 28.6 | 38.3 | 41.0 | 38.8 |
+| 35 ms per token, 4 ms draft steps | 28.6 | 40.0 | 43.9 | 42.1 |
 
-~40 tok/s needs the faster decode and verification kernels; with them k = 2 is the better depth unless 4-token
-verification becomes relatively cheaper.
+~40 tok/s needs single tokens near 35 ms and verification batches that grow by ~20% of a token per extra token
+(today: 37 ms for the second token, 17-20 ms for the third and fourth). The per-acceptance break-even moves with the
+costs: with session 4's, drafting pays above a per-draft acceptance of 0.72 (2 drafts from there, 3 above 0.81; one
+draft never pays); with the 35 ms row, above 0.37.
 
 Drafting ahead during verification (the CPU idles ~110 ms per round: continue the chain and send the next k chained
 drafts at once when every draft and the bonus token matched) was simulated on 9-deep chains (`ahead.py`): 0-5% at best
@@ -285,20 +332,26 @@ tools/llama_server.sh mtp-G-iq4.gguf 8091 log; python3 tools/llama_accept.py htt
 tools/mtp-cpu6.sh; tools/mtp-hybrid.sh
 # one Mac (under a lease): verification cost
 tools/mtp-stagebench.sh
-# six Macs
+# six Macs (sessions 3-5: plain, adaptive and fixed rounds per prompt; tools/fetch_session.sh copies the results)
 chain6.sh mtp-chain2 40 OWNER -- tools/mtp-chain2.sh; python3 summary.py chain2/mtp2-k3.json chain2/mtp2-k2.json
+chain6.sh mtp-chain4 35 OWNER -- tools/mtp-chain4.sh; python3 summary.py chain4/mtp4-{gate,k3,long}.json
 python3 project.py
+# Mac: the block's window under main's prefill chunks; the policy on the acceptance traces
+tools/replay_window.sh
+python3 policy_sim.py --gate chain3/mtp3-gate.json acceptance/{water,csv,transformer,long}.json
+VERIFY=55,91,108,128 DRAFT=5.7 PLAIN=53.9 python3 policy_sim.py --gate chain4/mtp4-gate.json acceptance/{water,csv,transformer,long}.json
 ```
 
 ## What is left
 
-- Faster 2-4 token verification batches (a 4-token batch costs 1.98 decode steps: the per-slot expert kernels and
-  the fused mixers grow with every token), the largest lever toward ~40 tok/s.
-- A shorter draft step: the dense half of a step runs well below the CPU's bandwidth (about a dozen short parallel
-  loops); the block's attention grows with the context (~5 ms at positions 2048-4096 against ~1.6 at 512) and needs
-  threaded block scoring past 2K.
-- Long prompts: the block reads at most the last 64 tokens of the prompt's last chunk (11% fewer tokens per round on
-  the 3K-token document than with the whole prompt), and drafting does not pay on that document today; an adaptive
-  depth (fewer drafts when acceptance drops) was not tried.
+- Cheaper 2-4-token verification batches (1.69x / 2.0x / 2.37x a plain token since the decode kernels): the largest
+  lever; another agent works on those kernels, and the adaptive rounds pick the costs up as measured.
+- A k = 0 round costs ~1.1 ms more than a plain step (the verification path's residual rows and copies); a plain step
+  that also returns the residual row would remove it.
+- A shorter draft step: the dense half runs well below the CPU's bandwidth (about a dozen short parallel loops); the
+  block's attention grows with the context (~5 ms at positions 2048-4096 against ~1.6 at 512) and needs threaded
+  block scoring past 2K.
+- The block reads only the prompt's last chunk (16-64 rows under main's chunk sizes; -0.6% tokens per round on the
+  four prompts, 11% fewer on the 3K-token document than with its whole prompt).
 - Above temperature 0 the server keeps a draft when the sampled token equals it (the output follows the target's
   distribution with the same draws as plain decoding); acceptance there was not measured.

@@ -17,8 +17,9 @@ and experts that decode each expert's rows once per tile of its tokens ([results
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)), and 17.9 with
 the decode kernels of [results/qwen4/decode-kernels-20261012](../results/qwen4/decode-kernels-20261012/README.md). MTP speculative
-decoding (the block drafting on the driver's CPU, the chain verifying the pending token and its drafts in one batch)
-took greedy decoding of chat replies from 14.85 to 20.9 tok/s (+40%) with identical output before the decode kernels
+decoding (the block drafting on the driver's CPU, the chain verifying the pending token and its drafts in one batch,
+each round drafting as many tokens as the recent acceptance pays for) takes greedy decoding of chat replies from 18.3
+to 21.5-21.6 tok/s (+17-18%) with identical output, and costs at most 1.6% where drafts miss
 ([results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)). Not done yet: a cheaper head split and prefix
 checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain ([Serving](#serving)).
 
@@ -337,9 +338,10 @@ long contexts, and the Q8_0 GEMM tile kernel.
 **Beyond these ceilings.** MTP speculative decoding (measured, [results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)):
 the block (1.49 GB) runs on the driver's CPU (5.7 ms per draft step with the draft head's first rows on the driver's
 GPU head slices); greedy drafts are accepted 90%, 85% and 84% of the time (first, second given the first, third given
-both), so a round of 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verification (1.98 decode steps
-today): 20.9 tok/s on chat replies against 14.85, and ~39-41 tok/s projected with ~35 ms decode steps and verification
-of 3 tokens at 1.4x, 4 at ~1.65x. Tensor or
+both), so a round of 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verification. With the decode kernels
+a 2 / 3 / 4-token verification costs 1.69x / 2.0x / 2.37x a 53.9 ms decode step, and chat replies run at 21.5-21.6
+tok/s against 18.3 (+39% before those kernels, when verification cost 1.43x / 1.69x / 2.0x); ~39-41 tok/s is
+projected with ~35 ms decode steps and verification of 2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x. Tensor or
 expert parallelism over all 12 GPUs at once: ~2 ms of bytes per token, but ~96 cross-Mac all-reduces per token at
 >= 100 us each over the ring bound it near 50-80 tok/s, at a large cost in engineering.
 
@@ -434,10 +436,11 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
 6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
-9. **MTP** (done: chat replies 14.85 -> 20.9 tok/s, results/qwen4/mtp-20261012): faster 2-4 token verification
-   batches (a 4-token batch costs 1.98 decode steps), a shorter CPU draft step (its dense half runs well below the
-   CPU's bandwidth), and more of the prompt for the block (it reads the last 64 tokens: 11% fewer tokens per round on
-   a 3K-token document, where drafting does not pay yet).
+9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012): cheaper
+   2-4-token verification batches (1.69x / 2.0x / 2.37x a decode step since the decode kernels), a plain step that
+   returns the residual row (k = 0 rounds cost ~1.1 ms more than a decode step), a shorter CPU draft step, and more of
+   the prompt for the block (it reads the last prefill chunk: 11% fewer tokens per round on a 3K-token document,
+   where drafting breaks even).
 10. **Prefix checkpoints**: the server continues only from the live state, so a prompt that is not an extension of
     everything processed so far starts again at position 0.
 
@@ -460,8 +463,9 @@ Each `--nodes` address is resolved on the previous machine of the chain (`<peer>
 A request continues from the live state when everything processed so far (the previous prompt and its reply) is a
 prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet
 and n-gram states only run forward. `--no-prefix-cache` always starts at 0. `--mtp mtp-G-iq4.gguf [--draft-tokens 3]
-[--draft-vocab 65536]` drafts with the MTP block on the driver's CPU (above temperature 0 a draft is kept when the
-sampled token equals it, so sampling follows the target distribution with the same draws). No `--tp`.
+[--draft-vocab 65536]` drafts with the MTP block on the driver's CPU, up to 3 tokens per round, as many as the recent
+acceptance pays for at the measured costs (above temperature 0 a draft is kept when the sampled token equals it, so
+sampling follows the target distribution with the same draws). No `--tp`.
 `scripts/test-server.py` passes against it, and a second chat turn reuses the first
 ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md#server)).
 
