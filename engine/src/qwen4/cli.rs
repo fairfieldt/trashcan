@@ -451,12 +451,12 @@ fn layer_check(model: &Path, dir: &Path, first: usize, last: Option<usize>, dump
     Ok(())
 }
 
-/// Run a prompt (chunked by the batch size), dump the last token's activations and logits in the reference format,
-/// then decode greedily.
+/// Run a prompt (chunked as `Chain::prefill` chunks it), dump the last token's activations and logits in the
+/// reference format, then decode greedily.
 fn validate(e: &mut super::net::Chain, out: &Path, tokens: &[u32], greedy: usize) -> Result<Vec<u32>> {
     let mut caps = super::cpu::Captures::new();
     e.pos = 0;
-    let chunks: Vec<_> = tokens.chunks(e.max_batch).collect();
+    let chunks: Vec<_> = tokens.chunks(e.chunk_size(tokens.len())).collect();
     let mut top = None;
     for (i, chunk) in chunks.iter().enumerate() {
         let last = i + 1 == chunks.len();

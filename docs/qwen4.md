@@ -9,8 +9,9 @@ are in [qwen.md](qwen.md).
 Status: the CPU reference matches llama.cpp; GPU stages for every layer type match the reference with the six-Mac
 recipe's formats; with Q8 K/V caches and Q2_0 down projections on one layer per GPU a stage runs at 204,800
 positions. The six-Mac chain runs (12 GPU stages over a Thunderbolt ring, 2026-10-12): the same greedy tokens as the
-CPU reference, prefill 158 tok/s on a 512-token prompt and 324 on 2048 tokens with the two GPUs of a Mac on
-consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
+CPU reference, prefill 261 tok/s on a 512-token prompt, 364 on 2048 and 447 on 8192 with the two GPUs of a Mac on
+consecutive chunks ([results/qwen4/prefill-overlap-20261012](../results/qwen4/prefill-overlap-20261012/README.md)) and
+the chunk size chosen by prompt length ([results/qwen4/prefill-chunks-20261012](../results/qwen4/prefill-chunks-20261012/README.md)), decode 13.5 tok/s with the GPUs held at amdgpu's high clock
 level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md)), and 14.7 with
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)). Not done yet: a
 cheaper head split, MTP and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on
@@ -304,10 +305,10 @@ short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 3.25 s, **158 tok/s** (measured) | ~1.2 s, ~430 tok/s |
-| 2048 | ~0.8 s | 6.3 s, **324 tok/s** (measured; 364 tok/s on 3000) | ~3 s, ~660 tok/s |
+| 512 | ~0.25 s | 1.96 s, **261 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 5.6 s, **364 tok/s** (measured; 379 tok/s on 3000) | ~3 s, ~660 tok/s |
 | 4K | ~1.5 s, 2,800 tok/s | ~10 s, ~400 tok/s | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | ~17 s, ~475 tok/s | ~9 s, ~920 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | 18.3 s, **447 tok/s** (measured) | ~9 s, ~920 tok/s |
 | 32K | ~11 s, 3,150 tok/s | ~1 min, ~520 tok/s | ~35 s, ~950 tok/s |
 | 128K | ~42 s | ~5 min, ~445 tok/s | ~2.5 min, ~900 tok/s |
 | 200K | ~65 s | ~8 min, ~415 tok/s | ~4 min, ~850 tok/s |

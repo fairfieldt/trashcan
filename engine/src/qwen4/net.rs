@@ -531,9 +531,19 @@ impl Chain {
         Ok((self.extend(&ids[start..])?, start))
     }
 
+    /// Prefill chunk size for `n` tokens. The last chunk's result is back after (chunks + stages - 1) chunk times and
+    /// a chunk costs about as much as 16 more tokens (results/qwen4/prefill-chunks-20261012), so the best size is about
+    /// sqrt(16 n / (stages - 1)): the nearest power of two from 16 up to the configured batch.
+    pub fn chunk_size(&self, n: usize) -> usize {
+        let stages: usize = self.plans.iter().map(Vec::len).sum();
+        let best = (16. * n as f64 / stages.saturating_sub(1).max(1) as f64).sqrt();
+        let pow = 1usize << best.max(1.).log2().round() as u32;
+        pow.max(16).min(self.max_batch)
+    }
+
     /// Process `ids` at the current position in chunks; only the final chunk waits for its result.
     fn extend(&mut self, ids: &[u32]) -> Result<Vec<(f32, u32)>> {
-        let chunks: Vec<_> = ids.chunks(self.max_batch).collect();
+        let chunks: Vec<_> = ids.chunks(self.chunk_size(ids.len())).collect();
         let mut top = None;
         for (i, chunk) in chunks.iter().enumerate() {
             top = self.forward(chunk, i + 1 == chunks.len(), None)?;
