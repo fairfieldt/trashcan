@@ -461,9 +461,10 @@ per position per QSA layer (2.2 GB per Mac at 1M). Without Q2_0 this would also 
 K/V cache takes at 200K.
 
 **MTP at long contexts.** The block runs on the driver's CPU with its K/V in host RAM (f32, 4 KiB per position,
-0.8 GB at 200K). Its sparse attention reads at most ~2,051 positions per draft, but the attention part of a draft step
-grows from ~1.6 ms at position 512 to ~5 ms at 2048-4096 (`draft-bench`; block scoring and selection run on one
-thread per token), so long contexts need that threaded. Not measured past 8K.
+0.8 GB at 200K). Its sparse attention reads at most ~2,051 positions per draft; with block scoring in parallel and the
+attention in AVX the attention part of a draft step takes 1.1 ms at position 512 and 1.6-2.0 ms at 2048-4096 (a whole
+step 4.8 and 5.1-5.8 ms, `draft-bench`; 2.0 and 3.0-5.9 ms before,
+[results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)). Not measured past 8K.
 
 ## What is left
 
@@ -535,8 +536,9 @@ A request continues from the live state when everything processed so far (the pr
 prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet
 and n-gram states only run forward. `--no-prefix-cache` always starts at 0. `--mtp mtp-G-iq4.gguf [--draft-tokens 3]
 [--draft-vocab 65536]` drafts with the MTP block on the driver's CPU, up to 3 tokens per round, as many as the recent
-acceptance pays for at the measured costs (above temperature 0 a draft is kept when the sampled token equals it, so
-sampling follows the target distribution with the same draws). No `--tp`.
+acceptance pays for at the measured costs. Tokens are picked with Gumbel noise keyed by the seed and the position
+(`spec::Draws`), plain or speculative, and drafts are sampled with the same noise, so a seed gives the same reply with
+and without `--mtp`, at every temperature. No `--tp`.
 `scripts/test-server.py` passes against it, and a second chat turn reuses the first
 ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md#server)).
 `scripts/latency-run.py` (how the chain runs start the engine) holds a 0 µs CPU latency request, so idle cores
@@ -554,12 +556,12 @@ trashcan qwen4 layer-check MODEL LLAMA_DUMP [--emulate-ggml]
 trashcan qwen4 node MODEL --listen 0.0.0.0:7071 [--cpu | --gpus 0,1]
 trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] [--kv q8] --greedy 10
 trashcan qwen4 bench MODEL --gpus 0,1 --nodes ... --pp 256 --tg 32
-# MTP: CPU reference, acceptance, the CPU drafter, speculative decoding on the chain (greedy with and without drafts)
+# MTP: CPU reference, acceptance, the CPU drafter, speculative decoding on the chain (plain and speculative, same tokens)
 trashcan qwen4 mtp ref MODEL MTP OUT --chain 3
-trashcan qwen4 mtp accept MODEL MTP OUT.json --tokens-file IDS --steps 256 --depth 3
-trashcan qwen4 mtp replay MODEL MTP RUN.json OUT.json --vocab 65536 [--rounds]
-trashcan qwen4 mtp draft-check MODEL MTP; trashcan qwen4 mtp draft-bench MODEL MTP --start 512 --threads 12
-trashcan qwen4 mtp spec MODEL --gpus 0,1 --nodes ... --mtp MTP --draft-tokens 3 --tg 192 --runs 3 PROMPT.ids...
+trashcan qwen4 mtp accept MODEL MTP OUT.json --tokens-file IDS --steps 256 --depth 3 [--temperature T --top-k K --top-p P]
+trashcan qwen4 mtp replay MODEL MTP RUN.json OUT.json --vocab 65536 [--rounds | --teacher]
+trashcan qwen4 mtp draft-check MODEL MTP; trashcan qwen4 mtp draft-bench MODEL MTP --start 512 --threads 24
+trashcan qwen4 mtp spec MODEL --gpus 0,1 --nodes ... --mtp MTP --draft-tokens 3 --tg 192 --runs 3 [--temperature T] PROMPT.ids...
 # six Macs (not run yet: every other Mac runs `qwen4 node MODEL --listen 0.0.0.0:7071 --gpus 0,1`), 32K with G-iq4,
 # 200K with the Q2_0 build and Q8 K/V
 trashcan qwen4 bench G-iq4.gguf --gpus 0,1 --nodes MAC2:7071,MAC3:7071,MAC4:7071,MAC5:7071,MAC6:7071 \

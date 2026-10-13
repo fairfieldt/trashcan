@@ -1,8 +1,8 @@
 # Flash-Next MTP rounds: sampling, the draft step, the verification reply (2026-10-13)
 
 Follows [results/qwen4/mtp-20261012](../mtp-20261012/README.md) (the MTP block drafting on the driver's CPU, adaptive
-rounds of 0-3 drafts, greedy chat replies 18.3 -> 21.6 tok/s on six Macs). Branch `worktree-agent-a173c86cfe38f66c7`
-from main `4c1346d`.
+rounds of 0-3 drafts, greedy chat replies 18.3 -> 21.6 tok/s on six Macs). Branch `worktree-agent-a173c86cfe38f66c7`,
+started from main `4c1346d` (session 1), rebased on main `6f6635a` (parallel chain setup; session 2).
 
 ## Sampling (`spec::Draws`)
 
@@ -131,32 +131,40 @@ temperature 1 over its 64 candidates):
 |---|---|---|---|---|---|---|---|---|
 | accepted | 0.16 | 0.22 | 0.53 | 0.64 | 0.76 | 0.83 | 0.90 | 0.99 (53% of drafts) |
 
-The policy picks a round's number of drafts from one pooled acceptance rate before drafting; it cannot skip a draft it
-is unsure of. `gate/confsim.py` replays rounds on these traces (round costs 55 / 91 / 108 / 128 ms for 1-4 tokens, 5.1
-ms draft steps; tok/s, mean of the three prompts):
+Main's policy picks a round's number of drafts from one pooled acceptance rate before drafting, and verifies every draft
+it chose. Fixed rules replayed on these traces (`gate/confsim.py`; round costs 55 / 91 / 108 / 128 ms for 1-4 tokens,
+5.1 ms draft steps; tok/s, mean of the three prompts; `gate/confsim2.py` draws the coupled acceptance probabilities 20
+times on the sampled replays):
 
-| rule | greedy (T = 0) | same, verification 40 / 52 / 60 / 70 ms |
-|---|---|---|
-| the pooled policy's choice | 22.45 | 38.11 |
-| always 3 drafts | 22.66 | 38.07 |
-| an unsure draft (top < 0.6) is verified as the round's last | 23.22 | 38.49 |
-| **an unsure draft is not verified, the round keeps the drafts before it** (its draft step still counted) | **23.89 (+6.4%)** | **39.42 (+3.4%)** |
-| same, threshold 0.5 / 0.7 / 0.8 | 23.48 / 23.66 / 23.37 | 38.95 / 38.67 / 37.60 |
+| rule | T = 0 | T = 0.6 | T = 0.8 | T = 1.0 |
+|---|---|---|---|---|
+| always 3 drafts | 22.66 | 22.22 | 21.28 | 21.53 |
+| an unsure draft (top < 0.6) verified as the round's last | 23.22 | 22.70 | 21.80 | 22.24 |
+| **an unsure draft not verified**, the round keeps the drafts before it (its draft step counted) | **23.89** | **22.95** | **22.06** | **22.56** |
+| same, threshold 0.5 / 0.7 / 0.8 (T = 0) | 23.48 / 23.66 / 23.37 | | | |
 
-and on the sampled replays (`gate/confsim2.py`, coupled acceptance probabilities drawn 20 times; tok/s):
+A dropped draft saves its verification slot (36 ms for a first draft, 17-20 ms for a later one), and the next round
+starts from the trunk's residual row, whose first draft is accepted more often than a chained one. With drafts dropped,
+one pooled rate misleads the policy (unsure drafts drag it down, so it drafts fewer even when the sure ones are
+accepted): the policy now keeps two rates, the share of drafts the drafter is sure of (c) and the acceptance of those
+(a), and rates k drafts by their expected tokens 1 + ca + ... + (ca)^k against the expected draft steps (1 + c + ... +
+c^(k-1)) and verification (m < k drafts verified with probability c^m (1 - c)). `gate/policysim.py` replays the
+engine's rounds (its policy, the shadow draft of k = 0 rounds, sizes measured at the start) on the traces, the
+degenerate reference reply included (`tools/refrun.sh`); costs of session 1 (5.05 ms draft steps, 54.2 / 90 / 107.3 /
+127.8 ms rounds; plain 18.52 tok/s):
 
-| rule | T = 0.6 | T = 0.8 | T = 1.0 |
-|---|---|---|---|
-| always 3 drafts | 22.22 | 21.28 | 21.53 |
-| unsure draft verified as the last (top < 0.6) | 22.70 | 21.80 | 22.24 |
-| **unsure draft not verified** (top < 0.6) | **22.95** | **22.06** | **22.56** |
+| policy | T = 0 chat | T = 0 reference | T = 0.6 | T = 0.8 | T = 1.0 | T = 0, rounds 40 / 52 / 60 / 70 ms |
+|---|---|---|---|---|---|---|
+| main (pooled, every draft verified) | 22.37 | 18.25 | 22.44 | 21.72 | 21.73 | 37.68 |
+| session 1 (unsure verified as the last) | 22.61 | 18.38 | 22.52 | 21.82 | 22.04 | 38.09 |
+| pooled, unsure dropped | 23.00 | 18.48 | 22.80 | 22.04 | 22.18 | 38.41 |
+| **two rates, unsure dropped (the engine)** | **23.67 (+5.8%)** | 18.28 | 22.76 (+1.4%) | 21.99 (+1.2%) | **22.37 (+2.9%)** | **39.04 (+3.6%)** |
 
-A dropped draft saves its verification slot (36 ms for a first draft, 17-20 ms for a later one) and the next round
-starts from the trunk's residual row, whose first draft is accepted more often than a chained one. The engine drops a
-draft whose top candidate is below 0.6: an unsure first draft makes the round a plain step with that draft standing in
-for its shadow draft; an unsure later draft ends the drafting, and when every draft before it is kept it is still
-compared with the next token, so the acceptance estimate sees it. Rounds that measure a batch size's cost (`REFRESH`)
-verify all their drafts.
+Session 1 measured the second row at +0.8% over the first on the chain (simulated +1.1%). The engine drops a draft
+whose top candidate is below 0.6 (0.5 and 0.7 simulate 23.22 and 23.49 at T = 0): an unsure first draft makes the round a
+plain step with that draft standing in for its shadow draft; an unsure later draft ends the drafting. Shadow drafts
+(their confidence from all 64K draft rows) feed both rates; rounds that measure a batch size's cost (`REFRESH`) verify
+all their drafts.
 
 ## End to end (six Macs)
 
