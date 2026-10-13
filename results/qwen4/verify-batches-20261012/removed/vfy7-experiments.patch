@@ -1,0 +1,113 @@
+diff --git a/engine/build.rs b/engine/build.rs
+index 7cd5f6f..342cd46 100644
+--- a/engine/build.rs
++++ b/engine/build.rs
+@@ -95,6 +95,10 @@ fn main() {
+         "qwen4_mix_down_sk",
+         "qwen4_mix_down_sk4",
+         "qwen4_mix_down_skw",
++        "qwen4_mix_skwx2",
++        "qwen4_mix_skwx4",
++        "qwen4_mix_down_fin",
++        "qwen4_q8_mvk",
+         "qwen4_mix_rows_up",
+         // Cross-machine all-reduce benchmark
+         "allreduce_partial",
+diff --git a/engine/src/qwen4/gpu.rs b/engine/src/qwen4/gpu.rs
+index 77d8fc3..394c1c3 100644
+--- a/engine/src/qwen4/gpu.rs
++++ b/engine/src/qwen4/gpu.rs
+@@ -1092,7 +1092,14 @@ impl GpuStage {
+                     u[3] = *stride;
+                     (
+                         b,
+-                        if n <= 8 {
++                        if n == 1
++                            && rows < 4096
++                            && k % 1024 == 0
++                            && std::env::var("TRASHCAN_VFY_OUT").is_ok_and(|v| v == "k2")
++                        {
++                            // EXPERIMENT: K split over two waves per row pair.
++                            ("qwen4_q8_mvk", rows.div_ceil(4), 1)
++                        } else if n <= 8 {
+                             let (shader, per) = q8_decode_shader(rows, k, n);
+                             (shader, rows.div_ceil(per), n.div_ceil(4))
+                         } else {
+@@ -1213,7 +1220,18 @@ impl GpuStage {
+                     // qwen4_mix_down). Q8_0 is split by stream with 8-byte loads and the exact column count per
+                     // workgroup (qwen4_mix_down_skw), the same sums at every batch size.
+                     let groups = if n == 1 { 1 } else { n.div_ceil(4) };
++                    // EXPERIMENT (TRASHCAN_VFY_DOWN=r2 | r4n | r2n): 2 rows per wave, and/or the finishing pass as its
++                    // own dispatch.
++                    let xd = std::env::var("TRASHCAN_VFY_DOWN").unwrap_or_default();
++                    let c4 = n.min(4) - 1;
++                    let (xshader, xper, xfin) = match xd.as_str() {
++                        "r2" => (["qwen4_mix_skwx2_c1", "qwen4_mix_skwx2_c2", "qwen4_mix_skwx2_c3", "qwen4_mix_skwx2_c4"][c4], 8, false),
++                        "r2n" => (["qwen4_mix_skwx2_c1n", "qwen4_mix_skwx2_c2n", "qwen4_mix_skwx2_c3n", "qwen4_mix_skwx2_c4n"][c4], 8, true),
++                        "r4n" => (["qwen4_mix_skwx4_c1n", "qwen4_mix_skwx4_c2n", "qwen4_mix_skwx4_c3n", "qwen4_mix_skwx4_c4n"][c4], 16, true),
++                        _ => ("", 16, false),
++                    };
+                     let (shader, chunks) = match (q8, n) {
++                        (true, _) if hc == 4 && !xshader.is_empty() => (xshader, hc),
+                         (true, _) if hc == 4 => (
+                             ["qwen4_mix_down_skw_c1", "qwen4_mix_down_skw_c2", "qwen4_mix_down_skw_c3", "qwen4_mix_down_skw_c4"]
+                                 [n.min(4) - 1],
+@@ -1239,10 +1257,19 @@ impl GpuStage {
+                             u,
+                         )
+                         .with_extra(self.mcount.address),
+-                        (c.hc_rank + 4).div_ceil(16) as u32,
++                        (c.hc_rank + 4).div_ceil(if q8 && hc == 4 { xper } else { 16 }) as u32,
+                         (groups * chunks) as u32,
+                         wb,
+                     )?;
++                    if q8 && hc == 4 && xfin {
++                        gpu.dispatch(
++                            current.get(),
++                            "qwen4_mix_down_fin",
++                            push([0, 0, self.mp.address, 0, 0, mo_next.address], u),
++                            1,
++                            n as u32,
++                        );
++                    }
+                 } else {
+                     gpu.dispatch_matrix(
+                         current.get(),
+diff --git a/engine/src/vulkan.rs b/engine/src/vulkan.rs
+index 88cd0bc..2430989 100644
+--- a/engine/src/vulkan.rs
++++ b/engine/src/vulkan.rs
+@@ -512,6 +512,10 @@ impl Device {
+             ("qwen4_mix_down_sk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk.spv")).as_slice()),
+             ("qwen4_mix_down_sk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk4.spv")).as_slice()),
+             ("qwen4_mix_down_skw", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_skw.spv")).as_slice()),
++            ("qwen4_mix_skwx2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_skwx2.spv")).as_slice()),
++            ("qwen4_mix_skwx4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_skwx4.spv")).as_slice()),
++            ("qwen4_mix_down_fin", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_fin.spv")).as_slice()),
++            ("qwen4_q8_mvk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mvk.spv")).as_slice()),
+             ("qwen4_mix_rows_up", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_rows_up.spv")).as_slice()),
+             // Cross-machine all-reduce benchmark
+             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
+@@ -601,6 +605,22 @@ impl Device {
+                     ("qwen4_mix_down_skw_c3", Some(3)),
+                     ("qwen4_mix_down_skw_c4", Some(4)),
+                 ],
++                "qwen4_mix_skwx2" => &[
++                    ("qwen4_mix_skwx2_c1", Some(1)),
++                    ("qwen4_mix_skwx2_c2", Some(2)),
++                    ("qwen4_mix_skwx2_c3", Some(3)),
++                    ("qwen4_mix_skwx2_c4", Some(4)),
++                    ("qwen4_mix_skwx2_c1n", Some(9)),
++                    ("qwen4_mix_skwx2_c2n", Some(10)),
++                    ("qwen4_mix_skwx2_c3n", Some(11)),
++                    ("qwen4_mix_skwx2_c4n", Some(12)),
++                ],
++                "qwen4_mix_skwx4" => &[
++                    ("qwen4_mix_skwx4_c1n", Some(9)),
++                    ("qwen4_mix_skwx4_c2n", Some(10)),
++                    ("qwen4_mix_skwx4_c3n", Some(11)),
++                    ("qwen4_mix_skwx4_c4n", Some(12)),
++                ],
+                 "qwen4_mix_rows_up" => &[
+                     ("qwen4_mix_rows_up_c1", Some(1)),
+                     ("qwen4_mix_rows_up_c2", Some(2)),

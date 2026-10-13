@@ -1,0 +1,24 @@
+#version 460
+#include "common.glsl"
+// EXPERIMENT: qwen4_q8_mvw4_r2 for one token with each row's K split over two waves (the halves added through LDS):
+// a workgroup of 4 waves takes 4 rows, wave w rows 2 (w / 2).. over K half w % 2, so the waves are half as long and
+// twice as many. b: x [k], c: y [n]. p.n rows, p.k columns (a multiple of 1024), p.stride = word offset of the blocks.
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+layout(local_size_x=256) in;
+shared float half1[2][2];
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+void main(){uint lane=gl_SubgroupInvocationID,wv=gl_SubgroupID,part=lane%4,blocks=p.k/32,hb=blocks/2;
+uint rg=wv/2,kh=wv%2,first=gl_WorkGroupID.x*4+rg*2;
+float s[2];s[0]=0;s[1]=0;
+for(uint b=kh*hb+lane/4;b<(kh+1)*hb;b+=16){
+    uvec2 w[2];float d[2];
+    [[unroll]]for(uint r=0;r<2;r++){uint row=min(first+r,p.n-1),blk=row*blocks+b;
+        w[r]=ww2.v[p.stride/2+blk*4+part];d[r]=unpackHalf2x16(uint(wh.halves[blk])).x;}
+    uint xo=b*8+part*2;vec4 x0=b_v4.v[xo],x1=b_v4.v[xo+1];
+    [[unroll]]for(uint r=0;r<2;r++)s[r]=fma(dot(i8(w[r].x),x0)+dot(i8(w[r].y),x1),d[r],s[r]);
+}
+float v0=subgroupAdd(s[0]),v1=subgroupAdd(s[1]);
+if(kh==1&&lane==0){half1[rg][0]=v0;half1[rg][1]=v1;}
+barrier();
+if(kh==0&&lane==0){if(first<p.n)c_f.v[first]=v0+half1[rg][0];if(first+1<p.n)c_f.v[first+1]=v1+half1[rg][1];}
+}

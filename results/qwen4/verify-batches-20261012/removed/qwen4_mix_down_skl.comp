@@ -1,0 +1,49 @@
+#version 460
+#include "common.glsl"
+// EXPERIMENT: qwen4_mix_down_skw with the four streams in one workgroup, so the stream sums meet in LDS instead of
+// a finishing workgroup (no partials in memory, no atomic counter): workgroup (g, tg) takes 8 of the 324 rows for
+// tokens C tg.., wave w the rows 4 (w / 4).. over stream w % 4, as qwen4_mix_down_skw's waves; the stream sums of
+// squares come from the waves of the first row group. Same sums as qwen4_mix_down_skw.
+// a: x [t][hc][n], b: y [t][n] (flags & 1: combine), d: previous mixer out (write weights at m), e: gamma [hc][n],
+// f: out [t][m + 8] (bottleneck | write | inv norms). p.n = stream width, p.k = hc * n, p.m = bottleneck rows,
+// p.stride = word offset of the blocks, p.r0 = eps bits.
+layout(constant_id=0) const uint C=1;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+layout(local_size_x=512) in;
+shared float red[4][8][4],sq[4][4];
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+void main(){
+uint lane=gl_SubgroupInvocationID,wv=gl_SubgroupID,tid=gl_LocalInvocationID.x;
+uint blocks=p.k/32,sb=p.n/32,nb=batch(),part=lane%4,s=wv%4,rg=wv/4,t0=gl_WorkGroupID.y*C;
+if(t0>=nb)return;
+uint rows=p.m+4,first=gl_WorkGroupID.x*8+rg*4,P=p.m+8;
+bool comb=(p.flags&1)!=0;
+float ws[4],ss[4],acc[4][4];
+uint tt[4];
+[[unroll]]for(uint z=0;z<4;z++){tt[z]=min(t0+z,nb-1);ws[z]=comb?d_f.v[tt[z]*P+p.m+s]:0.0;ss[z]=0;
+    [[unroll]]for(uint r=0;r<4;r++)acc[r][z]=0;}
+uint rb[4];[[unroll]]for(uint r=0;r<4;r++)rb[r]=min(first+r,rows-1)*blocks;
+for(uint b=s*sb+lane/4;b<(s+1)*sb;b+=16){
+    uint i0=(b*32-s*p.n)/4+part*2;
+    uvec2 q[4];uint d[4];
+    [[unroll]]for(uint r=0;r<4;r++){uint blk=rb[r]+b;q[r]=ww2.v[p.stride/2+blk*4+part];d[r]=uint(wh.halves[blk]);}
+    vec4 e0=e_v4.v[s*p.n/4+i0],e1=e_v4.v[s*p.n/4+i0+1];
+    [[unroll]]for(uint z=0;z<C;z++){uint xo=(tt[z]*p.k+b*32)/4+part*2;
+        vec4 x0=a_v4.v[xo],x1=a_v4.v[xo+1];
+        if(comb){x0=fma(vec4(ws[z]),b_v4.v[tt[z]*p.n/4+i0],x0);x1=fma(vec4(ws[z]),b_v4.v[tt[z]*p.n/4+i0+1],x1);}
+        ss[z]+=dot(x0,x0)+dot(x1,x1);
+        vec4 g0=x0*e0,g1=x1*e1;
+        [[unroll]]for(uint r=0;r<4;r++)acc[r][z]=fma(dot(i8(q[r].x),g0)+dot(i8(q[r].y),g1),unpackHalf2x16(d[r]).x,acc[r][z]);}
+}
+[[unroll]]for(uint z=0;z<C;z++){
+    [[unroll]]for(uint r=0;r<4;r++){float v=subgroupAdd(acc[r][z]);if(lane==0)red[z][rg*4+r][s]=v;}
+    if(rg==0){float v=subgroupAdd(ss[z]);if(lane==0)sq[z][s]=v;}}
+barrier();
+float eps=uintBitsToFloat(p.r0);
+if(tid<8*C){uint z=tid/8,j=gl_WorkGroupID.x*8+tid%8,t=t0+z;
+    if(t<nb&&j<rows){float v=0;
+        [[unroll]]for(uint s=0;s<4;s++)v+=inversesqrt(sq[z][s]/float(p.n)+eps)*red[z][tid%8][s];
+        float y=v*0.25;f_f.v[t*P+j]=j<p.m?y/(1.0+exp(-y)):2.0/(1.0+exp(-y));}}
+if(gl_WorkGroupID.x==0&&tid>=64&&tid<64+4*C){uint z=(tid-64)/4,s=(tid-64)%4,t=t0+z;
+    if(t<nb)f_f.v[t*P+p.m+4+s]=inversesqrt(sq[z][s]/float(p.n)+eps);}
+}

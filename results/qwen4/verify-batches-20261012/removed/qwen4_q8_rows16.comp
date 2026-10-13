@@ -1,0 +1,3 @@
+#version 460
+#define KS 16
+#include "qwen4_q8_rows_body.glsl"

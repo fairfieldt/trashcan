@@ -1,0 +1,22 @@
+#version 460
+#include "common.glsl"
+// EXPERIMENT: qwen4_mix_down_skw's finishing pass as its own dispatch (after qwen4_mix_skwx with NOFIN): one
+// workgroup per token sums the four streams' partials with the stream norms and writes the mixer's first-half output.
+// c: partials [t][hc][m + 8] (sum of squares at m + 4), f: out [t][m + 8]. p.n = stream width, p.m = bottleneck rows,
+// p.r0 = eps bits.
+layout(local_size_x=256) in;
+void main(){
+uint t=gl_WorkGroupID.y,tid=gl_LocalInvocationID.x;
+if(t>=batch())return;
+uint rows=p.m+4,P=p.m+8,base=t*4*P,o=t*P;
+float eps=uintBitsToFloat(p.r0);
+float q[4],a[2][4];
+[[unroll]]for(uint s=0;s<4;s++){uint at=base+s*P;q[s]=c_f.v[at+p.m+4];
+    [[unroll]]for(uint h=0;h<2;h++)a[h][s]=c_f.v[at+min(tid+256*h,rows-1)];}
+float inv[4];
+[[unroll]]for(uint s=0;s<4;s++)inv[s]=inversesqrt(q[s]/float(p.n)+eps);
+[[unroll]]for(uint h=0;h<2;h++){uint j=tid+256*h;if(j<rows){float v=0;
+    [[unroll]]for(uint s=0;s<4;s++)v+=inv[s]*a[h][s];
+    float y=v*0.25;f_f.v[o+j]=j<p.m?y/(1.0+exp(-y)):2.0/(1.0+exp(-y));}}
+if(tid<4)f_f.v[o+p.m+4+tid]=inv[tid];
+}

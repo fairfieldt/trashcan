@@ -19,11 +19,14 @@ level while work arrives (`engine/src/clocks.rs`) and 8.1 without ([results/qwen
 every Mac scoring its head slices at once ([results/qwen4/head-parallel-20261012](../results/qwen4/head-parallel-20261012/README.md)), 17.9 with
 the decode kernels of [results/qwen4/decode-kernels-20261012](../results/qwen4/decode-kernels-20261012/README.md), and 19.0 (18.1 before)
 with the small-batch MoE kernels of [results/qwen4/decode-experts-20261013](../results/qwen4/decode-experts-20261013/README.md),
-which also take prefill to 454 tok/s on 512 tokens and 673 on 2048. MTP speculative
+which also take prefill to 454 tok/s on 512 tokens and 673 on 2048, and 20.0 with the 1-4-token mixer and Q8_0
+matrix kernels of [results/qwen4/verify-batches-20261012](../results/qwen4/verify-batches-20261012/README.md). MTP speculative
 decoding (the block drafting on the driver's CPU, the chain verifying the pending token and its drafts in one batch,
 each round drafting as many tokens as the recent acceptance pays for) takes greedy decoding of chat replies from 18.3
 to 21.5-21.6 tok/s (+17-18%) with identical output, and costs at most 1.6% where drafts miss
-([results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)); 22.9 with the small-batch MoE kernels. Not done yet: a cheaper head split and prefix
+([results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)); 22.9 with the small-batch MoE kernels, and
+27.0 with the 1-4-token kernels, which take a 2 / 3 / 4-token verification from 86 / 101 / 119-121 to 66-69 / 83-84 /
+102-105 ms. Not done yet: a cheaper head split and prefix
 checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain ([Serving](#serving)).
 
 | | |
@@ -209,9 +212,9 @@ that the next mixer, the head or the stage output resolves.
 
 | part | kernels |
 |---|---|
-| mixer, up to 8 tokens | `qwen4_mix_down_sk` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows; split over 8 chunks of the residual, the last workgroup to finish sums them; `_sk4`: four tokens per workgroup), `qwen4_mix_up` (read gates, stream mean, stores the combined residual) |
+| mixer, up to 8 tokens | Q8_0: `qwen4_mix_down_skw` (pending combine, the four stream norms folded into the 320 bottleneck and 4 write rows; split by stream with 8-byte loads, the last workgroup to finish sums the parts; 1-4 tokens per workgroup), `qwen4_mix_rows_up` (a lane per row of the up projection, a workgroup reading 64 whole rows once for 1-4 tokens; read gates, stream mean, stores the combined residual); Q4_0: `qwen4_mix_down_sk` (split over 8 chunks of the residual; `_sk4`: four tokens per workgroup), `qwen4_mix_up` |
 | mixer, prefill | `qwen4_hc_norm` (one workgroup per stream and token); Q8_0: the 320 bottleneck and 4 write rows (the fused matrix) as one GEMM split 16 ways along K (`qwen4_q8_gemm`, or up to 32 tokens `qwen4_q8_gemm_s8r1po`), `qwen4_mix_act` (sums the parts, activations), `qwen4_q8_gemm_mix` (the up projection with the read gates folded into the sublayer input; up to 16 tokens `qwen4_q8_gemm_s4r4om`); Q4_0: the dense matrix kernels, `qwen4_act`, `qwen4_hc_mix` |
-| dense matrices | Q8_0: `qwen4_q8_mvw4_r4`/`_r2` (1-8 tokens: 8-byte loads, 4 or 2 rows per wave), `qwen4_q8_gemm_s16r1p` (9-32 tokens: a lane per row decoding each weight once for 16 tokens, whose inputs are scalar operands), `qwen4_q8_gemm` (64 x 64 tiles beyond), optionally split along K (the 2560-row out projections in 8 parts, summed by `qwen4_sum_parts`), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw); small f32 matrices (alpha/beta, indexer): `qwen4_matf32` up to 4 tokens |
+| dense matrices | Q8_0: `qwen4_q8_mvw4_r4`/`_r2` (1-8 tokens: 8-byte loads, 4 or 2 rows per wave, exactly 1-4 columns per workgroup), `qwen4_q8_mvk2`/`_mvk4` (the 2560-row out projections up to 8 tokens: each row's K split over two waves), `qwen4_q8_gemm_s16r1p` (9-32 tokens: a lane per row decoding each weight once for 16 tokens, whose inputs are scalar operands), `qwen4_q8_gemm` (64 x 64 tiles beyond), optionally split along K (the 2560-row out projections in 8 parts, summed by `qwen4_sum_parts`), f16 scales, 8.5 bpw; Q4_0: the Gemma kernels (f32 scales, 5 bpw); small f32 matrices (alpha/beta, indexer): `qwen4_matf32` up to 4 tokens |
 | n-gram module | key/value projections, `qwen4_ple_sums` and `qwen4_ple_gate`, `qwen4_ple_conv` (dilated convolution, 9-step history) |
 | DeltaNet | qwen35's `qwen_conv`, `qwen4_gdn` (up to 8 tokens), beyond: `qwen4_gdn_prep` (q, k norms and the gates once per token) and `qwen4_gdn_rows` (a state row in a lane's registers, q and k as LDS broadcasts), `qwen4_gated_norm` (sigmoid gate) |
 | QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
@@ -274,7 +277,10 @@ Layer 1 adds the n-gram module to its DeltaNet layer (0.24 ms per decode token, 
 time is from results/qwen4/prefill-mixer-20261012 (4.3-5.7 ms before the split-K bottleneck; it does not depend on the
 position). The small-batch MoE kernels of results/qwen4/decode-experts-20261013 (measured on enlight) take the router
 and top-k to 0.058 ms and the experts to 0.22 ms per decode token, the MoE phase of a 2-4-token batch down by a fifth,
-and the router of a 128-token chunk from 2.1 to 0.24 ms.
+and the router of a 128-token chunk from 2.1 to 0.24 ms. The 1-4-token mixer and Q8_0 kernels of
+results/qwen4/verify-batches-20261012 (measured on invite) take a mixer to 0.089 ms (0.047 + 0.042) and the out
+projections from 0.12 to 0.10 ms per decode token, and 8 layers from 7.9 to 7.6 ms for one token and from 12.6 / 15.1 /
+17.9 to 9.8 / 12.2 / 15.1 ms for 2 / 3 / 4 tokens.
 
 Formats compared on layers 0-5 (decode GPU time per DeltaNet layer; experts per decode token / per prefill chunk):
 
@@ -358,7 +364,9 @@ the block (1.49 GB) runs on the driver's CPU (5.7 ms per draft step with the dra
 GPU head slices); greedy drafts are accepted 90%, 85% and 84% of the time (first, second given the first, third given
 both), so a round of 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verification. With the decode kernels
 a 2 / 3 / 4-token verification costs 1.69x / 2.0x / 2.37x a 53.9 ms decode step, and chat replies run at 21.5-21.6
-tok/s against 18.3 (+39% before those kernels, when verification cost 1.43x / 1.69x / 2.0x); ~39-41 tok/s is
+tok/s against 18.3 (+39% before those kernels, when verification cost 1.43x / 1.69x / 2.0x); with the 1-4-token
+mixer and Q8_0 kernels of results/qwen4/verify-batches-20261012 it costs 1.36x / 1.69x / 2.09x of a 49.5 ms step and
+chat replies run at 27.0 tok/s against 20.2 (+33%); ~39-41 tok/s is
 projected with ~35 ms decode steps and verification of 2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x. Tensor or
 expert parallelism over all 12 GPUs at once: ~2 ms of bytes per token, but ~96 cross-Mac all-reduces per token at
 >= 100 us each over the ring bound it near 50-80 tok/s, at a large cost in engineering.
@@ -451,16 +459,17 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
    results/qwen4/prefill-overlap-20261012).
 5. **Decode**: a DeltaNet layer takes ~1.0 ms per token (about 110 GB/s; results/qwen4/decode-kernels-20261012):
    the expert gate/up kernel (0.14 ms since results/qwen4/decode-experts-20261013, about 60% of the VALU rate: 2 VALU
-   per nibble to address the IQ4 table), the out projections at ~145 GB/s, the mixer's second half (0.05 ms each),
-   single-wave top-k (0.023 ms); RADV writes back and invalidates the L2 at every barrier on GFX6. Batches of 2-4
-   tokens (MTP verification) re-read each token's 11 experts (~0.165 ms per extra token and layer). And a
+   per nibble to address the IQ4 table), the out projections at ~164 GB/s, the mixers (0.047 + 0.042 ms for 7 MB,
+   latency-bound; results/qwen4/verify-batches-20261012), single-wave top-k (0.023 ms); RADV writes back and
+   invalidates the L2 at every barrier on GFX6. Batches of 2-4 tokens (MTP verification) re-read each token's 11
+   experts (~0.165 ms per extra token and layer; 39% of a 4-token batch). And a
    multi-workgroup radix select (block selection takes 0.6 ms of a QSA layer at 32K and 1.9 ms at 200K).
 6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
-9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012): cheaper
-   2-4-token verification batches (1.69x / 2.0x / 2.37x a decode step since the decode kernels; their MoE phase a fifth
-   shorter since results/qwen4/decode-experts-20261013), a plain step that
+9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012; 27.0 with
+   the 1-4-token kernels of results/qwen4/verify-batches-20261012): cheaper 2-4-token verification batches (1.36x /
+   1.69x / 2.09x a decode step; the experts, read per token, are the most of what an extra token adds), a plain step that
    returns the residual row (k = 0 rounds cost ~1.1 ms more than a decode step), a shorter CPU draft step, and more of
    the prompt for the block (it reads the last prefill chunk: 11% fewer tokens per round on a 3K-token document,
    where drafting breaks even).

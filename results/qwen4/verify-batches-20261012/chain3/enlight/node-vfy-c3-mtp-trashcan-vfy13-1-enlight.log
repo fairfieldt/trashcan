@@ -1,0 +1,6 @@
+CPU latency request: 0 us, scoped to this command
+Error: listening on 0.0.0.0:7071
+
+Caused by:
+    Address already in use (os error 98)
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 48C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 47C  log=results/clocks/node-vfy-c3-mtp-trashcan-vfy13-1-enlight.txt
