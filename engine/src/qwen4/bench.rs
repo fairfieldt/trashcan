@@ -107,10 +107,36 @@ pub fn stage_bench(
         add(&mut late, collect(local), 1.);
     }
     let mut dec = Vec::new();
+    // Per dispatch (TRASHCAN_Q4_PROFILE=1): stage, label, mean ms and mean gap before it over the decode steps.
+    let mut disp: Vec<Vec<(String, f64, f64)>> = Vec::new();
+    let profile = |local: &Local, disp: &mut Vec<Vec<(String, f64, f64)>>, pos: usize, n: usize, k: f64| -> Result<()> {
+        let mut i = 0;
+        for s in &local.stages {
+            if let Stage::Gpu(g) = s {
+                let p = g.dispatch_profile(pos, n)?;
+                if disp.len() <= i {
+                    disp.push(p.iter().map(|x| (x.0.clone(), 0., 0.)).collect());
+                }
+                for (a, b) in disp[i].iter_mut().zip(&p) {
+                    a.1 += b.1 / k;
+                    a.2 += b.2 / k;
+                }
+                i += 1;
+            }
+        }
+        Ok(())
+    };
+    // The last timed prefill chunk's dispatches (batches of a few tokens).
+    let mut pre_disp = Vec::new();
+    if prefill > 0 {
+        run(local, &stream[..batch], 0)?;
+        profile(local, &mut pre_disp, 0, batch, 1.)?;
+    }
     let t0 = std::time::Instant::now();
     for i in 0..decode {
         run(local, &stream[start + i..start + i + 1], start + i)?;
         add(&mut dec, collect(local), decode as f64);
+        profile(local, &mut disp, start + i, 1, decode as f64)?;
     }
     let dec_wall = t0.elapsed().as_secs_f64() / decode.max(1) as f64;
     // Stages holding head rows without ending the model: wall time to score one hidden state.
@@ -147,6 +173,10 @@ pub fn stage_bench(
         serde_json::json!({"batch": batch, "prefill_chunks": prefill, "prefill_wall_ms": pre_wall * 1e3,
         "prefill": json(&pre), "decode_steps": decode, "decode_start": start, "decode_wall_ms": dec_wall * 1e3,
         "decode": json(&dec), "device_mib": mib, "late_chunk_pos": late_pos, "late_chunk": json(&late),
-        "head_slice_wall_ms": slices, "head_slices_together_wall_ms": together}),
+        "head_slice_wall_ms": slices, "head_slices_together_wall_ms": together,
+        "dispatches": disp.iter().map(|v| v.iter().map(|x| serde_json::json!([x.0, x.1, x.2])).collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        "prefill_dispatches": pre_disp.iter().map(|v| v.iter().map(|x| serde_json::json!([x.0, x.1, x.2]))
+            .collect::<Vec<_>>()).collect::<Vec<_>>()}),
     )
 }

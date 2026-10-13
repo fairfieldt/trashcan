@@ -1,0 +1,20 @@
+#version 460
+#include "common.glsl"
+// Small f32 projection (the router, the DeltaNet alpha/beta, the indexer projections) for COLS = 1 or up to 4
+// tokens: y[t][row] = W[row] . x[t], one wave per row. Every lane issues its loads for U values of the row (and of
+// each token's x, clamped to the last token) before using them: qwen_matf32's conditional loads cost a memory round
+// trip each on the D700. Each lane sums its values in qwen_matf32's order, so the results are the same bits.
+// W in set 0, x in b, y in c. p.n rows, p.k row length.
+#define U 20
+layout(local_size_x=256) in;
+layout(constant_id=0) const uint COLS=1;
+void main(){uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x*4+gl_SubgroupID,nb=batch();
+if(row>=p.n)return;
+float s[COLS];[[unroll]]for(uint z=0;z<COLS;z++)s[z]=0;
+for(uint i0=lane;i0<p.k;i0+=64*U){
+    float w[U],x[COLS][U];
+    [[unroll]]for(uint u=0;u<U;u++){uint i=min(i0+64*u,p.k-1);w[u]=uintBitsToFloat(ww.words[row*p.k+i]);
+        [[unroll]]for(uint z=0;z<COLS;z++)x[z][u]=b_f.v[min(z,nb-1)*p.k+i];}
+    [[unroll]]for(uint u=0;u<U;u++)if(i0+64*u<p.k)[[unroll]]for(uint z=0;z<COLS;z++)s[z]=fma(w[u],x[z][u],s[z]);
+}
+[[unroll]]for(uint z=0;z<COLS;z++){float v=subgroupAdd(s[z]);if(lane==0&&z<nb)c_f.v[z*p.n+row]=v;}}

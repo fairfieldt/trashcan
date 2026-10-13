@@ -1,0 +1,4 @@
+GPU0: layers 0..4
+GPU0: 5671.9 MiB allocated; device-local heap 5672 of 5888 MiB used, budget 5865
+GPU1: layers 4..8
+GPU1: 5638.1 MiB allocated; device-local heap 5638 of 5888 MiB used, budget 5847

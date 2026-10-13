@@ -1,12 +1,13 @@
 #version 460
 #include "common.glsl"
 // Per value head: RMS norm over the head with a shared weight, gated by sigmoid(z) (Flash-Next's DeltaNet output
-// gate; qwen_gated_norm uses SiLU). One wave per (head, token).
+// gate; qwen_gated_norm uses SiLU). One wave per (head, token); p.dim = 128 (two values per lane, all loaded before
+// the first store, which a later load would otherwise wait for).
 // a: DeltaNet output [t][head][dim] (in place), b: z (same layout), c: weight [dim]. p.n = heads * dim, p.dim,
 // p.r0 = eps bits.
 layout(local_size_x=64) in;
 void main(){uint h=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
-uint base=t*p.n+h*p.dim;float ss=0;
-for(uint j=l;j<p.dim;j+=64){float x=a_f.v[base+j];ss=fma(x,x,ss);}
+uint base=t*p.n+h*p.dim;float x[2],z[2],w[2],ss=0;
+[[unroll]]for(uint k=0;k<2;k++){uint j=l+64*k;x[k]=a_f.v[base+j];z[k]=b_f.v[base+j];w[k]=c_f.v[j];ss=fma(x[k],x[k],ss);}
 float inv=inversesqrt(subgroupAdd(ss)/float(p.dim)+uintBitsToFloat(p.r0));
-for(uint j=l;j<p.dim;j+=64){float z=b_f.v[base+j];a_f.v[base+j]=a_f.v[base+j]*inv*c_f.v[j]/(1.0+exp(-z));}}
+[[unroll]]for(uint k=0;k<2;k++)a_f.v[base+l+64*k]=x[k]*inv*w[k]/(1.0+exp(-z[k]));}

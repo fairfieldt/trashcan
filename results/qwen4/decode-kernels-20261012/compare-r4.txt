@@ -1,0 +1,24 @@
+== dec-r4-val14-b1 vs cpu-reference
+result_norm                      rel  2.51e-04  cos 1.000000
+worst relative error over 1330 tensors: 9.38e-01
+logits: rel 2.78e-04 cos 1.000000; top-1 9419 vs 9419; top-10 overlap 10/10
+== dec-r4-val14 vs cpu-reference
+result_norm                      rel  2.46e-04  cos 1.000000
+worst relative error over 1330 tensors: 9.38e-01
+logits: rel 2.84e-04 cos 1.000000; top-1 9419 vs 9419; top-10 overlap 10/10
+== dec-r4-val100 vs cpu-reference-p100
+result_norm                      rel  4.50e-02  cos 0.998987
+worst relative error over 1330 tensors: 9.38e-01
+logits: rel 3.48e-02 cos 0.999448; top-1 248046 vs 248046; top-10 overlap 10/10
+== dec-r4-val100-base vs cpu-reference-p100
+result_norm                      rel  4.50e-02  cos 0.998987
+worst relative error over 1330 tensors: 9.38e-01
+logits: rel 3.48e-02 cos 0.999448; top-1 248046 vs 248046; top-10 overlap 10/10
+== dec-r4-val100 vs baseline-p100
+result_norm                      rel  2.98e-05  cos 1.000000
+worst relative error over 583 tensors: 1.30e-04
+logits: rel 2.14e-05 cos 1.000000; top-1 248046 vs 248046; top-10 overlap 10/10
+dec-r4-val14-b1 greedy: 9419 0 2500 628 353 1438 488 3242 30 248046 
+dec-r4-val14 greedy: 9419 0 2500 628 353 1438 488 3242 30 248046 
+dec-r4-val100 greedy: 248046 198 248045 248045 248046 198 248045 74455 198 248068 
+dec-r4-val100-base greedy: 248046 198 248045 248045 248046 198 248045 74455 198 248068 

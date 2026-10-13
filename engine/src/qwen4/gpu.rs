@@ -14,7 +14,7 @@ use crate::{
     gguf::{GgmlType, Gguf, TensorInfo},
     quant,
     qwen::{dequant_row, vector},
-    vulkan::{attention_shaders, q4_decode_shader, Buffer, Device, Push},
+    vulkan::{attention_shaders, q4_decode_shader, Buffer, Device, Push, Stamps, STAMP_CAPACITY},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
@@ -46,6 +46,8 @@ const TILE: usize = 8;
 fn max_tiles(slots: usize, experts: usize) -> usize {
     slots.min(experts + slots / TILE)
 }
+/// Residual chunk of a qwen4_mix_down_sk workgroup (40 blocks of 32, two per stream of 2560).
+const SPLIT: usize = 1280;
 
 /// A dense matrix: Q4_0 repacked with f32 scales (the Gemma kernels) or Q8_0 with f16 scales (`qwen4_q8_*`, the
 /// word offset of its blocks).
@@ -178,10 +180,17 @@ struct Graph {
     captures: Vec<(String, Buffer, usize)>,
     /// Phase timestamps after the layer stamps: (layer index in the stage, phase name).
     marks: Vec<(usize, &'static str)>,
+    /// Dispatch timestamps (`TRASHCAN_Q4_PROFILE=1`): the query pool and a label per query.
+    stamps: Option<(vk::QueryPool, Vec<String>)>,
 }
 impl Drop for Graph {
     fn drop(&mut self) {
-        unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &self.cmds) };
+        unsafe {
+            self.gpu.dev.free_command_buffers(self.gpu.pool, &self.cmds);
+            if let Some((pool, _)) = self.stamps {
+                self.gpu.dev.destroy_query_pool(pool, None);
+            }
+        }
     }
 }
 
@@ -265,6 +274,11 @@ pub struct GpuStage {
     lo: Buffer,
     /// Fused mixer outputs `[t][rank + 8]` (bottleneck | write weights | inverse norms), alternating per mixer.
     mo: [Buffer; 2],
+    /// Split mixer partials `[t][chunk][rank + 8]` and the workgroup counter per token group (qwen4_mix_down_sk).
+    mp: Buffer,
+    mcount: Buffer,
+    /// Partial sums of the n-gram gates `[t][group][16]` (qwen4_ple_sums).
+    psum: Buffer,
     hgate: Buffer,
     u: Buffer,
     w: Buffer,
@@ -323,6 +337,25 @@ fn expert_shader(name: &'static str, fmt: u32) -> &'static str {
         ("qwen4_moe_gu_tiles", 2) => "qwen4_moe_gu_tiles_iq4xs",
         ("qwen4_moe_down_tiles", 1) => "qwen4_moe_down_tiles_iq4nl",
         _ => name,
+    }
+}
+
+/// Q8_0 kernels for 1 and 2-8 tokens and the rows per workgroup: wide loads (a uvec2 per lane), 4 rows per wave for
+/// tall matrices and 2 for shorter ones, which then get more waves (results/qwen4/decode-kernels-20261012).
+fn q8_decode_shaders(rows: usize) -> (&'static str, &'static str, usize) {
+    if rows >= 4096 {
+        ("qwen4_q8_mvw4_r4", "qwen4_q8_mvw4_r4_c4", 16)
+    } else {
+        ("qwen4_q8_mvw4_r2", "qwen4_q8_mvw4_r2_c4", 8)
+    }
+}
+
+/// The f32 projection kernel: up to four tokens issue all their loads at once (qwen4_matf32).
+fn matf32_shader(n: usize) -> &'static str {
+    match n {
+        1 => "qwen4_matf32",
+        2..=4 => "qwen4_matf32_c4",
+        _ => "qwen_matf32",
     }
 }
 
@@ -620,6 +653,9 @@ impl GpuStage {
             xn: alloc(w)?,
             lo: alloc(c.hc_rank)?,
             mo: [alloc(c.hc_rank + 8)?, alloc(c.hc_rank + 8)?],
+            mp: alloc((w / SPLIT).max(1) * (c.hc_rank + 8))?,
+            mcount: gpu.upload(&[0u8; 8])?,
+            psum: alloc(16 * d.div_ceil(256))?,
             hgate: alloc(w)?,
             u: alloc(d)?,
             w: alloc(c.hc)?,
@@ -701,7 +737,7 @@ impl GpuStage {
             u[1] = d as u32;
             gpu.dispatch_matrix(
                 current.get(),
-                "qwen_matf32",
+                matf32_shader(n),
                 push([0, self.u.address, y.address, 0, 0, 0], u),
                 rows.div_ceil(4) as u32,
                 n.div_ceil(8) as u32,
@@ -878,6 +914,7 @@ impl GpuStage {
                 cmds: vec![cmd],
                 captures: Vec::new(),
                 marks: Vec::new(),
+                stamps: None,
             };
             self.gpu.barrier(cmd);
             self.score_head(&mut graph, cmd, hd, hd.h.address, dump)?;
@@ -918,8 +955,19 @@ impl GpuStage {
             cmds: vec![current.get()],
             captures: Vec::new(),
             marks: Vec::new(),
+            stamps: None,
         };
         let cmd = current.get();
+        if std::env::var_os("TRASHCAN_Q4_PROFILE").is_some() {
+            let pool = unsafe {
+                gpu.dev.create_query_pool(
+                    &vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(STAMP_CAPACITY),
+                    None,
+                )?
+            };
+            unsafe { gpu.dev.cmd_reset_query_pool(cmd, pool, 0, STAMP_CAPACITY) };
+            *gpu.stamps.borrow_mut() = Some(Stamps { pool, labels: Vec::new(), dispatches: true });
+        }
         // Timestamps around every layer's submission (the last one includes the final mixer or the output copy).
         let stamp = |cmd: vk::CommandBuffer, index: usize, end: bool| unsafe {
             let stage = if end {
@@ -980,11 +1028,12 @@ impl GpuStage {
                 }
                 Dense::Q8(b, stride) => {
                     u[3] = *stride;
+                    let (one, four, per) = q8_decode_shaders(rows);
                     (
                         b,
                         match n {
-                            1 => ("qwen4_q8_mv", rows.div_ceil(16), 1),
-                            2..=8 => ("qwen4_q8_mv4", rows.div_ceil(16), n.div_ceil(4)),
+                            1 => (one, rows.div_ceil(per), 1),
+                            2..=8 => (four, rows.div_ceil(per), n.div_ceil(4)),
                             _ => ("qwen4_q8_gemm", rows.div_ceil(64), n.div_ceil(64)),
                         },
                     )
@@ -1006,7 +1055,7 @@ impl GpuStage {
             u[1] = k as u32;
             gpu.dispatch_matrix(
                 current.get(),
-                "qwen_matf32",
+                matf32_shader(n),
                 push([0, x.address, y.address, 0, 0, 0], u).defer_barrier(defer),
                 rows.div_ceil(4) as u32,
                 n.div_ceil(8) as u32,
@@ -1065,6 +1114,21 @@ impl GpuStage {
                 n as u32,
             );
         };
+        // Apply the pending combine without a norm: x_s += w_s * y.
+        let combine = || {
+            let mut u = [0; 16];
+            u[0] = d as u32;
+            u[2] = wloc.get().1;
+            u[4] = hc as u32;
+            u[10] = wloc.get().2;
+            gpu.dispatch(
+                current.get(),
+                "qwen4_combine",
+                push([self.x.address, self.y.address, 0, 0, wloc.get().0, 0], u),
+                d.div_ceil(256) as u32,
+                n as u32,
+            );
+        };
         // A mixer: sublayer input in u and, with an inject matrix, write weights in w (or the fused output).
         let mixer = |graph: &mut Graph, m: &Mix, pending: bool, tag: &str| -> Result<()> {
             if let (true, Some(fm)) = (fused, &m.fused) {
@@ -1081,24 +1145,55 @@ impl GpuStage {
                 u[3] = stride;
                 u[11] = u32::from(pending);
                 u[12] = eps;
-                gpu.dispatch_matrix(
-                    current.get(),
-                    if q8 { "qwen4_mix_down_q8" } else { "qwen4_mix_down" },
-                    push(
-                        [
-                            self.x.address,
-                            self.y.address,
-                            mo_next.address,
-                            mo_prev.address,
-                            m.norm.address,
-                            0,
-                        ],
-                        u,
-                    ),
-                    (c.hc_rank + 4).div_ceil(16) as u32,
-                    n as u32,
-                    wb,
-                )?;
+                if d == 2 * SPLIT && w % SPLIT == 0 && n <= 8 {
+                    // Split over the residual (qwen4_mix_down has 21 workgroups for one token): one token, or four
+                    // per workgroup reading the weights once (measured up to 8 tokens; prefill chunks keep
+                    // qwen4_mix_down).
+                    let groups = if n == 1 { 1 } else { n.div_ceil(4) };
+                    gpu.dispatch_matrix(
+                        current.get(),
+                        match (q8, n) {
+                            (true, 1) => "qwen4_mix_down_sk_q8",
+                            (false, 1) => "qwen4_mix_down_sk",
+                            (true, _) => "qwen4_mix_down_sk4_q8",
+                            (false, _) => "qwen4_mix_down_sk4",
+                        },
+                        push(
+                            [
+                                self.x.address,
+                                self.y.address,
+                                self.mp.address,
+                                mo_prev.address,
+                                m.norm.address,
+                                mo_next.address,
+                            ],
+                            u,
+                        )
+                        .with_extra(self.mcount.address),
+                        (c.hc_rank + 4).div_ceil(16) as u32,
+                        (groups * (w / SPLIT)) as u32,
+                        wb,
+                    )?;
+                } else {
+                    gpu.dispatch_matrix(
+                        current.get(),
+                        if q8 { "qwen4_mix_down_q8" } else { "qwen4_mix_down" },
+                        push(
+                            [
+                                self.x.address,
+                                self.y.address,
+                                mo_next.address,
+                                mo_prev.address,
+                                m.norm.address,
+                                0,
+                            ],
+                            u,
+                        ),
+                        (c.hc_rank + 4).div_ceil(16) as u32,
+                        n as u32,
+                        wb,
+                    )?;
+                }
                 let (ub, ustride, uq8) = match &m.up {
                     Dense::Q4(b) => (b, (w * c.hc_rank / 32) as u32, false),
                     Dense::Q8(b, st) => (b, *st, true),
@@ -1214,33 +1309,44 @@ impl GpuStage {
         let mut pending = false;
         for l in &self.layers {
             let il = l.il;
+            gpu.stamp(current.get(), false, || format!("layer {il}"));
             if let (Some(p), true) = (&self.ple, c.ngram.as_ref().is_some_and(|p| p.layer == il)) {
-                hc_norm(pending, None);
+                if pending {
+                    combine();
+                }
                 pending = false;
                 capture(&mut graph, "ple_embd".into(), &self.pe, d)?;
-                matrix(&p.key, &self.pe, &self.pk, d, w, true)?;
-                matrix(&p.value, &self.pe, &self.pv, d, d, false)?;
+                if n <= 8 {
+                    matrix(&p.value, &self.pe, &self.pv, d, d, true)?;
+                    matrix(&p.key, &self.pe, &self.pk, d, w, false)?;
+                } else {
+                    matrix(&p.key, &self.pe, &self.pk, d, w, true)?;
+                    matrix(&p.value, &self.pe, &self.pv, d, d, false)?;
+                }
                 let mut u = [0; 16];
                 u[0] = d as u32;
                 u[4] = hc as u32;
                 u[12] = eps;
-                gpu.dispatch(
-                    current.get(),
-                    "qwen4_ple_gate",
-                    push(
-                        [
-                            self.pk.address,
-                            self.pv.address,
-                            self.x.address,
-                            p.norms.address,
-                            self.gv.address,
-                            self.pn.address,
-                        ],
-                        u,
-                    ),
-                    1,
-                    n as u32,
-                );
+                for shader in ["qwen4_ple_sums", "qwen4_ple_gate"] {
+                    gpu.dispatch(
+                        current.get(),
+                        shader,
+                        push(
+                            [
+                                self.pk.address,
+                                self.pv.address,
+                                self.x.address,
+                                p.norms.address,
+                                self.gv.address,
+                                self.pn.address,
+                            ],
+                            u,
+                        )
+                        .with_extra(self.psum.address),
+                        d.div_ceil(256) as u32,
+                        n as u32,
+                    );
+                }
                 capture(&mut graph, format!("ple_gated_value-{il}"), &self.gv, w)?;
                 let mut u = [0; 16];
                 u[0] = w as u32;
@@ -1281,9 +1387,16 @@ impl GpuStage {
                     out,
                 } => {
                     let (cd, vd) = (c.conv_dim(), c.value_dim());
-                    matrix(qkv, &self.u, &self.big, d, cd, true)?;
-                    matrix(z, &self.u, &self.z, d, vd, true)?;
-                    matf32(ab, &self.u, &self.ab, d, 2 * c.v_heads, false)?;
+                    // Decode puts the small projections first: the last dispatch of a group starts its waves last.
+                    if n <= 8 {
+                        matf32(ab, &self.u, &self.ab, d, 2 * c.v_heads, true)?;
+                        matrix(z, &self.u, &self.z, d, vd, true)?;
+                        matrix(qkv, &self.u, &self.big, d, cd, false)?;
+                    } else {
+                        matrix(qkv, &self.u, &self.big, d, cd, true)?;
+                        matrix(z, &self.u, &self.z, d, vd, true)?;
+                        matf32(ab, &self.u, &self.ab, d, 2 * c.v_heads, false)?;
+                    }
                     capture(&mut graph, format!("linear_attn_qkv_mixed-{il}"), &self.big, cd)?;
                     capture(&mut graph, format!("z-{il}"), &self.z, vd)?;
                     let mut u = [0; 16];
@@ -1312,9 +1425,15 @@ impl GpuStage {
                     u[5] = c.k_heads as u32;
                     u[6] = c.state as u32;
                     u[12] = eps;
+                    // Two state rows per wave and vec2 lanes for decode: 52 -> 45 us per layer.
+                    let (gdn_shader, gdn_rows) = if n <= 8 {
+                        ("qwen4_gdn", 8)
+                    } else {
+                        ("qwen_gdn", crate::qwen::gpu::GDN_ROWS_PER_GROUP)
+                    };
                     gpu.dispatch(
                         current.get(),
-                        "qwen_gdn",
+                        gdn_shader,
                         push(
                             [
                                 self.conv_out.address,
@@ -1326,7 +1445,7 @@ impl GpuStage {
                             ],
                             u,
                         ),
-                        (c.v_heads * c.state / crate::qwen::gpu::GDN_ROWS_PER_GROUP) as u32,
+                        (c.v_heads * c.state / gdn_rows) as u32,
                         1,
                     );
                     capture(&mut graph, format!("attn_output-{il}"), &self.o, vd)?;
@@ -1358,9 +1477,15 @@ impl GpuStage {
                 } => {
                     let (hd, kvd) = (c.head_dim, c.kv_heads * c.head_dim);
                     let qd = c.heads * hd;
-                    matrix(q, &self.u, &self.big, d, 2 * qd, true)?;
-                    matrix(k, &self.u, &self.kb, d, kvd, true)?;
-                    matrix(v, &self.u, &self.vb, d, kvd, false)?;
+                    if n <= 8 {
+                        matrix(k, &self.u, &self.kb, d, kvd, true)?;
+                        matrix(v, &self.u, &self.vb, d, kvd, true)?;
+                        matrix(q, &self.u, &self.big, d, 2 * qd, false)?;
+                    } else {
+                        matrix(q, &self.u, &self.big, d, 2 * qd, true)?;
+                        matrix(k, &self.u, &self.kb, d, kvd, true)?;
+                        matrix(v, &self.u, &self.vb, d, kvd, false)?;
+                    }
                     for (src, norm, out, cache, heads, stride, width, scale, defer) in [
                         (
                             &self.big,
@@ -1669,7 +1794,13 @@ impl GpuStage {
                 u[3] = down_stride;
                 gpu.dispatch_matrix(
                     current.get(),
-                    expert_shader("qwen4_moe_down", l.down_fmt),
+                    // Up to 8 tokens: wide loads and the (slot, block) pairs over the lanes (ff = 640 is 20 blocks).
+                    match (n <= 8, l.down_fmt) {
+                        (true, 0) => "qwen4_moe_down_w",
+                        (true, 1) => "qwen4_moe_down_w_iq4nl",
+                        (true, 2) => "qwen4_moe_down_w_iq4xs",
+                        _ => expert_shader("qwen4_moe_down", l.down_fmt),
+                    },
                     push(
                         [
                             0,
@@ -1692,12 +1823,18 @@ impl GpuStage {
             if l.il + 1 < self.last {
                 let li = l.il - self.first;
                 stamp(current.get(), 2 * li + 1, true);
-                gpu.finish(current.get())?;
-                let next = gpu.begin()?;
-                stamp(next, 2 * li + 2, false);
-                gpu.barrier(next);
-                graph.cmds.push(next);
-                current.set(next);
+                // Prefill submits a command buffer per layer (each GPU job well inside amdgpu's timeout); a decode
+                // step records the stage in one, since every submission costs ~11 us between layers on the D700.
+                if n > 8 {
+                    gpu.finish(current.get())?;
+                    let next = gpu.begin()?;
+                    stamp(next, 2 * li + 2, false);
+                    gpu.barrier(next);
+                    graph.cmds.push(next);
+                    current.set(next);
+                } else {
+                    stamp(current.get(), 2 * li + 2, false);
+                }
             }
         }
         let last = self.last - 1;
@@ -1708,14 +1845,50 @@ impl GpuStage {
             gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
         } else {
             if pending {
-                hc_norm(true, None);
+                combine();
             }
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
             gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
         }
         stamp(current.get(), 2 * self.layers.len() - 1, true);
         gpu.finish(current.get())?;
+        graph.stamps = gpu.stamps.borrow_mut().take().map(|s| (s.pool, s.labels));
         Ok(graph)
+    }
+
+    /// Dispatch times of the graph that ran `n` tokens at `pos` last (`TRASHCAN_Q4_PROFILE=1`): per dispatch its
+    /// label, GPU milliseconds from its start to the end of all work before it, and the gap before its start.
+    pub fn dispatch_profile(&self, pos: usize, n: usize) -> Result<Vec<(String, f64, f64)>> {
+        let Some(graph) = self.graphs.get(&(n, partitions(pos, n), false)) else { return Ok(Vec::new()) };
+        let Some((pool, labels)) = &graph.stamps else { return Ok(Vec::new()) };
+        let mut t = vec![0u64; labels.len()];
+        unsafe {
+            self.gpu.dev.get_query_pool_results(
+                *pool,
+                0,
+                &mut t,
+                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+            )?
+        };
+        let ms = self.gpu.period as f64 / 1e6;
+        let mut out = Vec::new();
+        let (mut i, mut prev) = (0, t.first().copied().unwrap_or(0));
+        while i < labels.len() {
+            if labels[i].starts_with("layer ") || i + 1 >= labels.len() {
+                out.push((labels[i].clone(), 0., t[i].wrapping_sub(prev) as f64 * ms));
+                prev = t[i];
+                i += 1;
+                continue;
+            }
+            out.push((
+                labels[i].clone(),
+                t[i + 1].wrapping_sub(t[i]) as f64 * ms,
+                t[i].wrapping_sub(prev) as f64 * ms,
+            ));
+            prev = t[i + 1];
+            i += 2;
+        }
+        Ok(out)
     }
 
     /// Run `n` tokens at `pos` on the `n x hc x d` residual; `ple` carries the gathered n-gram rows when this stage

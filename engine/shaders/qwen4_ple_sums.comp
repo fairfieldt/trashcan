@@ -1,0 +1,16 @@
+#version 460
+#include "common.glsl"
+// Sums for the n-gram (PLE) gates over 256 elements of a stream width: per stream s the squares of key_s and x_s and
+// (key_s * gk_s) . (x_s * gq_s), and the squares of the value: 13 partial sums per workgroup, into
+// extra [t][group][16]. Workgroup (g, t). a: key [t][hc][n], b: value [t][n], c: x [t][hc][n], d: gamma [3][hc][n].
+// p.n = stream width, p.heads = streams.
+layout(local_size_x=256) in;
+shared float part[4][13];
+void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x,i=gl_WorkGroupID.x*256+l;if(t>=batch())return;
+uint w=p.n*p.heads,base=t*w;float acc[13];[[unroll]]for(uint j=0;j<13;j++)acc[j]=0;
+if(i<p.n){float v=b_f.v[t*p.n+i];acc[12]=v*v;
+    [[unroll]]for(uint s=0;s<4;s++)if(s<p.heads){float k=a_f.v[base+s*p.n+i],x=c_f.v[base+s*p.n+i];
+        acc[3*s]=k*k;acc[3*s+1]=x*x;acc[3*s+2]=(k*d_f.v[s*p.n+i])*(x*d_f.v[w+s*p.n+i]);}}
+[[unroll]]for(uint j=0;j<13;j++){float v=subgroupAdd(acc[j]);if(gl_SubgroupInvocationID==0)part[gl_SubgroupID][j]=v;}
+barrier();
+if(l<13)extra_f.v[(t*gl_NumWorkGroups.x+gl_WorkGroupID.x)*16+l]=part[0][l]+part[1][l]+part[2][l]+part[3][l];}

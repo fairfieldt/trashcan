@@ -26,10 +26,12 @@ for(uint task=lane;task<tasks;task+=64){
     }
 }
 [[unroll]]for(uint j=0;j<16;j++)acc[j]=subgroupAdd(acc[j]);
-if(lane<4&&first+lane<p.n){uint i=first+lane;float u=0;
+// Everything the epilogue reads is loaded before the first store: a load after a store to a buffer that may alias it
+// waits for the store, a memory round trip each.
+if(lane<4&&first+lane<p.n){uint i=first+lane;float u=0,y=f_f.v[t*p.n+i],x[4],wp[4],inv[4],gm[4];
+    [[unroll]]for(uint s=0;s<4;s++){x[s]=a_f.v[(t*4+s)*p.n+i];wp[s]=d_f.v[o+p.m+s];inv[s]=b_f.v[o+p.m+4+s];gm[s]=e_f.v[s*p.n+i];}
     [[unroll]]for(uint s=0;s<4;s++){float g=0;[[unroll]]for(uint j=0;j<16;j++)if(j==s*4+lane)g=acc[j];
-        uint at=(t*4+s)*p.n+i;float x=a_f.v[at];
-        if((p.flags&1)!=0){x=fma(d_f.v[o+p.m+s],f_f.v[t*p.n+i],x);a_f.v[at]=x;}
-        u=fma(x*b_f.v[o+p.m+4+s]*e_f.v[s*p.n+i],1.0/(1.0+exp(-g)),u);}
+        if((p.flags&1)!=0){x[s]=fma(wp[s],y,x[s]);a_f.v[(t*4+s)*p.n+i]=x[s];}
+        u=fma(x[s]*inv[s]*gm[s],1.0/(1.0+exp(-g)),u);}
     c_f.v[t*p.n+i]=u*0.25;}
 }

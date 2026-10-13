@@ -1,0 +1,4 @@
+#version 460
+#define ROWS 2
+#define WAVES 4
+#include "qwen4_q8_mvw_body.glsl"
