@@ -21,3 +21,21 @@ Six Macs, G-iq4, `--head-split 12 --context 32768 --batch 128 --ngram disk`. Eve
 | `trashcan serve` test with MTP | 7 checks pass; server up after 27 s |
 
 Raw outputs: `ms-4307169/`.
+
+## adf8cfd (load time: weights repacked into reused staging buffers), 2026-10-13 15:59
+
+Measured right after invite's power cycle and the reboots of alight, enlight and indite (`results/qwen4/invite-hang-20261013`).
+
+| item | result |
+|---|---|
+| validate, 14-token reference prompt | greedy tokens the CPU reference's (10/10); logits rel 2.78e-4, top-10 10/10 |
+| validate, p100 | greedy tokens the CPU reference's (10/10); logits rel 3.48e-2, top-10 10/10 |
+| decode, 128 tokens after a 512-token prompt | 19.58, 19.22 tok/s |
+| prefill 512 tokens | 465.9, 465.4 tok/s |
+| prefill 2048 (decode after it) | 677.1 tok/s (17.07 tok/s) |
+| prefill 8192 | 795.8 tok/s (16.98 tok/s) |
+| prefill 30000 | 850.0 tok/s (16.49 tok/s) |
+| MTP, chat prompts | water 22.32, csv 26.10, transformer 21.24 tok/s (plain 19.30-19.41); output identical to plain |
+| `trashcan serve` test with MTP | 7 checks pass; server up after 10 s |
+
+The whole suite took 3.6 min (validate runs 6 s once the page cache was warm). Raw outputs: `ms-adf8cfd/`.
