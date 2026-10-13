@@ -170,19 +170,15 @@ const COST_WEIGHT: f64 = 0.2;
 const REFRESH: usize = 256;
 
 /// How many drafts the next round makes: the count with the most expected tokens per millisecond, from the recent
-/// acceptance of first drafts (`a`) and of later drafts given the ones before (`b`, depths 2 and 3 pooled: chained
-/// drafts are accepted less often than first ones; a round of k drafts yields 1 + a (1 + b + ... + b^(k-1)) tokens
-/// on average) and the measured running costs of a draft step and of each verification batch size (each size is run once
+/// acceptance of drafts (`a`, all depths pooled: a round of k drafts yields 1 + a + ... + a^k tokens on average)
+/// and the measured running costs of a draft step and of each verification batch size (each size is run once
 /// before the first choice, largest first, and again when its cost is `REFRESH` rounds old). With no drafts the
 /// round is a plain step (a 1-token verification batch) while the block drafts the next token on the CPU anyway (a
 /// shadow draft), so the acceptance stays measured at no cost to the chain and drafting resumes once it pays again.
 #[derive(Clone, Debug)]
 struct Policy {
-    /// Decayed matches and drafts: first drafts, later drafts.
-    hits: [f64; 2],
-    tests: [f64; 2],
-    /// Experiment: one rate over all depths (session 4's estimator).
-    pooled: bool,
+    hits: f64,
+    tests: f64,
     draft_ms: Option<f64>,
     /// Running cost of each verification batch size (1 to `VERIFY_MAX` tokens) and the rounds since it was measured.
     verify_ms: [Option<f64>; super::gpu::VERIFY_MAX],
@@ -192,20 +188,18 @@ struct Policy {
 impl Policy {
     fn new() -> Self {
         const N: usize = super::gpu::VERIFY_MAX;
-        Self { hits: [0.; 2], tests: [0.; 2], pooled: false, draft_ms: None, verify_ms: [None; N], age: [0; N] }.restart()
+        Self { hits: 0., tests: 0., draft_ms: None, verify_ms: [None; N], age: [0; N] }.restart()
     }
 
-    /// A new sequence: acceptances back to their prior (0.8, worth 2 drafts); the costs stay.
+    /// A new sequence: acceptance back to its prior (0.8, worth 2 drafts); the costs stay.
     fn restart(mut self) -> Self {
-        (self.hits, self.tests) = ([1.6; 2], [2.; 2]);
+        (self.hits, self.tests) = (1.6, 2.);
         self
     }
 
-    /// The draft at `depth` (0: the first) was checked.
-    fn tested(&mut self, depth: usize, hit: bool) {
-        let i = if self.pooled { 0 } else { depth.min(1) };
-        self.hits[i] = self.hits[i] * ACCEPT_DECAY + hit as u8 as f64;
-        self.tests[i] = self.tests[i] * ACCEPT_DECAY + 1.;
+    fn tested(&mut self, hit: bool) {
+        self.hits = self.hits * ACCEPT_DECAY + hit as u8 as f64;
+        self.tests = self.tests * ACCEPT_DECAY + 1.;
     }
 
     fn update(v: &mut Option<f64>, ms: f64) {
@@ -229,13 +223,11 @@ impl Policy {
         if let Some(k) = (0..=max).rev().find(|&k| self.verify_ms[k].is_none() || self.age[k] > REFRESH) {
             return k;
         }
-        let a = self.hits[0] / self.tests[0];
-        let b = if self.pooled { a } else { self.hits[1] / self.tests[1] };
-        let d = self.draft_ms.unwrap_or(0.);
+        let (a, d) = (self.hits / self.tests, self.draft_ms.unwrap_or(0.));
         let (mut best, mut rate, mut tokens, mut p) = (0, f64::MIN, 0., 1.);
         for k in 0..=max {
             tokens += p;
-            p *= if k == 0 { a } else { b };
+            p *= a;
             let r = tokens / (k as f64 * d + self.verify_ms[k].unwrap_or(f64::MAX));
             if r > rate {
                 (best, rate) = (k, r);
@@ -252,8 +244,6 @@ pub struct Speculator {
     pub k: usize,
     pub stats: Stats,
     policy: Policy,
-    /// Experiment: always `k` drafts.
-    pub fixed: bool,
     /// The residual row of the token before the pending one (the block's `h` for the pending token).
     last: Vec<f32>,
     /// Head rows `0..gpu_rows` are scored by the driver's GPU head slices (at the same time as the CPU scores the
@@ -263,16 +253,11 @@ pub struct Speculator {
 
 impl Speculator {
     pub fn new(draft: super::draft::Draft, k: usize) -> Self {
-        Self { draft, k, stats: Stats::default(), policy: Policy::new(), fixed: false, last: Vec::new(), gpu_rows: 0 }
+        Self { draft, k, stats: Stats::default(), policy: Policy::new(), last: Vec::new(), gpu_rows: 0 }
     }
 
     /// Score the first draft head rows with the driver's GPU head slices when they hold the vocabulary's first rows:
     /// the CPU then ranks only the rows after them.
-    /// Experiment: one acceptance rate over all depths.
-    pub fn set_pooled(&mut self, pooled: bool) {
-        self.policy.pooled = pooled;
-    }
-
     pub fn use_local_head(&mut self, chain: &Chain) {
         let mut end = 0;
         let mut ranges: Vec<(usize, usize)> = chain
@@ -352,7 +337,7 @@ impl Speculator {
         let w = chain.local.c.width();
         let pos = chain.pos;
         let k = self.k.min(max).min(chain.context.saturating_sub(pos + 1)).min(super::gpu::VERIFY_MAX - 1);
-        let k = if self.fixed { k } else { self.policy.choose(k) };
+        let k = self.policy.choose(k);
         if k == 0 {
             return self.shadow_round(chain, pending, pick);
         }
@@ -392,12 +377,12 @@ impl Speculator {
         self.stats.by_k[k] += 1;
         self.stats.drafted += drafts.len();
         self.stats.accepted += a;
-        for j in 0..a {
-            self.policy.tested(j, true);
+        for _ in 0..a {
+            self.policy.tested(true);
         }
         if a < drafts.len() {
             // A draft equal to a stop token was right; the round only ended there.
-            self.policy.tested(a, next == drafts[a]);
+            self.policy.tested(next == drafts[a]);
         }
         self.policy.measured(k, draft_ms, verify_ms + rollback_ms);
         self.stats.verify_ms_by_k[k] += verify_ms + rollback_ms;
@@ -436,7 +421,7 @@ impl Speculator {
         self.stats.verify_ms_by_k[0] += ms;
         let next = pick(&tops[0]);
         if let Some(d) = shadow {
-            self.policy.tested(0, d == next);
+            self.policy.tested(d == next);
             self.stats.shadow_hits += (d == next) as usize;
         }
         self.last = rows;
