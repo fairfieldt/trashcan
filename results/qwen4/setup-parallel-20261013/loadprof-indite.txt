@@ -1,0 +1,8 @@
+LOADPROF gguf open 0.07 s
+LOADPROF GPU0: device 0.03 s, stage 22.78 s: upload alloc 0.89 s, staging write 3.02 s, copy+wait 0.64 s, 5.92 GB; repack 2.91 s
+LOADPROF GPU1: device 0.01 s, stage 19.19 s: upload alloc 0.83 s, staging write 2.91 s, copy+wait 0.64 s, 5.89 GB; repack 2.35 s
+run 1 wall 43.423412566 s
+LOADPROF gguf open 0.05 s
+LOADPROF GPU0: device 0.04 s, stage 10.03 s: upload alloc 0.95 s, staging write 3.35 s, copy+wait 0.63 s, 5.92 GB; repack 2.63 s
+LOADPROF GPU1: device 0.04 s, stage 9.38 s: upload alloc 0.92 s, staging write 3.08 s, copy+wait 0.64 s, 5.89 GB; repack 2.68 s
+run 2 wall 20.231656436 s

@@ -21,3 +21,21 @@ chain on the M3 Ultra (driver and two CPU nodes, the 14-token prompt): rel 0 aga
 
 This also shortens `trashcan serve`'s start on the chain (106 s before; not re-measured) and every six-Mac A/B session
 (6-8 chain loads each).
+
+## Runner and connect retry (later the same day)
+
+`tools/q4run.py` now starts the driver as soon as every node's port answers, instead of after a fixed 3 s. It logs the
+command inside the driver's ssh and stops all nodes at once (TERM, then KILL, with one shared deadline). `Conn::connect`
+retries a refused connection every 100 ms for up to 60 s, so a machine that starts before the next one listens waits
+instead of failing. One MTP run that morning failed with `Connection refused` to `indite.tb0:7071`.
+
+Six Macs, `tools/runner-check.sh` under `chain6.sh`. `trashcan-retry` is main 6f6635a plus the retry:
+
+| run | nodes up | driver | nodes stopped | whole run |
+|---|---|---|---|---|
+| validate, main 6f6635a | 2.1 s | 20 s | 0.6 s | 23 s |
+| validate, 6f6635a + retry | 0.7 s | 22 s | 0.5 s | 23 s |
+
+The same validate runs took 30 and 31 s with the previous runner. `logits.f32` is byte-identical between the two
+binaries, and the greedy tokens are the CPU reference's. `loadprof-indite.txt` is the per-GPU load profile (warm 20 s
+per Mac, cold 43 s) that the load-time work started from.
