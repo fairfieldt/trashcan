@@ -450,8 +450,12 @@ impl GpuStage {
             "unsupported head sizes"
         );
         ensure!(
-            c.hc <= 4 && c.d <= 2560 && c.experts % 64 == 0 && c.experts <= 512,
+            c.hc <= 4 && c.d <= 2560 && c.experts == 512 && c.used <= 64,
             "unsupported mixer or router shape"
+        );
+        ensure!(
+            c.d == 2560 && c.ff_exp == 640,
+            "the small-batch expert kernels expect 2560-wide inputs and 640-wide experts"
         );
         ensure!(
             context % c.kpool == 0 && c.idx_dim <= 128 && c.idx_heads * c.idx_dim <= 512,
@@ -1820,18 +1824,57 @@ impl GpuStage {
             capture(&mut graph, format!("hc_combine-{il}"), &self.x, w)?;
             // MoE: router (with the shared gate as its last row), top-k, experts, weighted sum.
             let (ne, slots, ff) = (c.experts, c.used + 1, c.ff_exp);
-            matf32(&l.router, &self.u, &self.logits, d, ne + 1, false)?;
-            capture(&mut graph, format!("ffn_moe_logits_all-{il}"), &self.logits, ne + 1)?;
+            // The batch as a push constant (u[15]), so these kernels start without loading it.
+            let nb = n as u32;
+            // Logits: one wave per row up to 4 tokens (the same bits as qwen4_matf32); prefill batches multiply in
+            // 64 x 64 tiles with the K range split in `parts`, which top-k adds (in `big`, free until the experts).
+            let parts = (16 / n.div_ceil(64)).max(1);
+            let gemm = n > 4 && d % (32 * parts) == 0 && parts * n * (ne + 1) <= self.big.size / 4;
+            let logits = if gemm { &self.big } else { &self.logits };
+            let mut u = [0; 16];
+            u[0] = (ne + 1) as u32;
+            u[1] = d as u32;
+            u[15] = nb;
+            if n <= 4 && d % (64 * 20) == 0 {
+                gpu.dispatch_matrix(
+                    current.get(),
+                    if n == 1 { "qwen4_router" } else { "qwen4_router_c4" },
+                    push([0, self.u.address, self.logits.address, 0, 0, 0], u),
+                    (ne + 1).div_ceil(4) as u32,
+                    1,
+                    &l.router,
+                )?;
+            } else if gemm {
+                u[2] = parts as u32;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    "qwen4_router_gemm",
+                    push([0, self.u.address, self.big.address, 0, 0, 0], u),
+                    ((ne + 1).div_ceil(64) * parts) as u32,
+                    n.div_ceil(64) as u32,
+                    &l.router,
+                )?;
+            } else {
+                matf32(&l.router, &self.u, &self.logits, d, ne + 1, false)?;
+            }
+            if !gemm {
+                capture(&mut graph, format!("ffn_moe_logits_all-{il}"), logits, ne + 1)?;
+            }
             let mut u = [0; 16];
             u[0] = ne as u32;
+            u[1] = if gemm { parts as u32 } else { 1 };
             u[2] = c.used as u32;
+            u[15] = nb;
             gpu.dispatch(
                 current.get(),
                 "qwen4_topk",
-                push([self.logits.address, 0, self.ids.address, self.wts.address, 0, 0], u),
+                push([logits.address, 0, self.ids.address, self.wts.address, 0, 0], u),
                 1,
                 n as u32,
             );
+            if gemm {
+                capture(&mut graph, format!("ffn_moe_logits_all-{il}"), logits, ne + 1)?;
+            }
             capture(&mut graph, format!("moe_weights-{il}"), &self.wts, slots)?;
             mark(&mut graph, li, "router");
             let (gu_stride, down_stride) = (l.gu_stride, l.down_stride);
@@ -1869,6 +1912,7 @@ impl GpuStage {
                 u[1] = d as u32;
                 u[2] = slots as u32;
                 u[3] = gu_stride;
+                u[15] = nb;
                 gpu.dispatch_matrix(
                     current.get(),
                     expert_shader("qwen4_moe_gu", l.gu_fmt),
@@ -1927,13 +1971,13 @@ impl GpuStage {
                 u[1] = ff as u32;
                 u[2] = slots as u32;
                 u[3] = down_stride;
+                u[15] = nb;
                 gpu.dispatch_matrix(
                     current.get(),
-                    // Up to 8 tokens: wide loads and the (slot, block) pairs over the lanes (ff = 640 is 20 blocks).
-                    match (n <= 8, l.down_fmt) {
-                        (true, 0) => "qwen4_moe_down_w",
-                        (true, 1) => "qwen4_moe_down_w_iq4nl",
-                        (true, 2) => "qwen4_moe_down_w_iq4xs",
+                    // Wide loads and the (slot, block) pairs over the lanes (ff = 640 is 20 blocks); Q2_0 per slot.
+                    match l.down_fmt {
+                        0 => "qwen4_moe_down_w",
+                        1 => "qwen4_moe_down_w_iq4nl",
                         _ => expert_shader("qwen4_moe_down", l.down_fmt),
                     },
                     push(

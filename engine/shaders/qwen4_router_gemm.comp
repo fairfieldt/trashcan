@@ -1,0 +1,33 @@
+#version 460
+#include "common.glsl"
+// MoE router logits for prefill batches: the f32 router (p.n = 513 rows of p.k) times the batch, 64 x 64 outputs per
+// 256-thread workgroup with 4 x 4 accumulators per thread and a K step of 32, as qwen4_q8_gemm. The K range is split in
+// p.m equal parts (multiples of 32), so the 9 row tiles get enough workgroups: workgroup x covers row tile x % 9 of
+// part x / 9 and writes its partial sums to c [part][t][n]; qwen4_topk adds the parts. The last row tile starts at
+// p.n - 64 and recomputes rows of the one before it (the same bits), so every tile is full.
+// W in set 0 (f32 rows), b: x [t][k], c: partial logits [part][t][n].
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+shared vec4 tile_w[64][9],tile_x[64][9];
+void main(){uint nb=batch(),lane=gl_LocalInvocationID.x,group=lane/16;
+uint rr=(group%4)*4+(lane%4),tt=(group/4)*4+((lane%16)/4);
+uint tiles=(p.n+63)/64,part=gl_WorkGroupID.x/tiles,kc=p.k/p.m;
+uint row0=min((gl_WorkGroupID.x%tiles)*64,p.n-64),tok0=gl_WorkGroupID.y*64,out0=part*nb*p.n;
+vec4 a0=vec4(0),a1=vec4(0),a2=vec4(0),a3=vec4(0);
+uint r=lane/4,q=lane%4,row=row0+r;
+for(uint kb=part*kc;kb<(part+1)*kc;kb+=32){
+uint w=(row*p.k+kb)/4+2*q;
+tile_w[r][2*q]=uintBitsToFloat(wq.q[w]);tile_w[r][2*q+1]=uintBitsToFloat(wq.q[w+1]);
+for(uint i=lane;i<512;i+=256){uint xr=i/8,xj=i%8;vec4 x=vec4(0);if(tok0+xr<nb)x=b_v4.v[(tok0+xr)*(p.k/4)+kb/4+xj];tile_x[xr][xj]=x;}barrier();
+[[unroll]]for(uint j=0;j<8;j++){
+vec4 b0=tile_x[tt][j],b1=tile_x[tt+16][j],b2=tile_x[tt+32][j],b3=tile_x[tt+48][j];
+vec4 w0=tile_w[rr][j],w1=tile_w[rr+16][j],w2=tile_w[rr+32][j],w3=tile_w[rr+48][j];
+[[unroll]]for(uint v=0;v<4;v++){vec4 x=vec4(b0[v],b1[v],b2[v],b3[v]);
+a0=fma(vec4(w0[v]),x,a0);a1=fma(vec4(w1[v]),x,a1);a2=fma(vec4(w2[v]),x,a2);a3=fma(vec4(w3[v]),x,a3);}
+}barrier();}
+for(uint t=0;t<4;t++){uint col=tok0+tt+t*16;if(col<nb){
+c_f.v[out0+col*p.n+row0+rr]=a0[t];
+c_f.v[out0+col*p.n+row0+rr+16]=a1[t];
+c_f.v[out0+col*p.n+row0+rr+32]=a2[t];
+c_f.v[out0+col*p.n+row0+rr+48]=a3[t];
+}}}

@@ -72,6 +72,8 @@ fn main() {
         "qwen4_moe_down_tiles",
         "qwen4_moe_sum",
         "qwen4_moe_down_w",
+        "qwen4_router",
+        "qwen4_router_gemm",
         "qwen4_ple_gate",
         "qwen4_ple_sums",
         "qwen4_combine",

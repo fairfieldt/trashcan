@@ -1,0 +1,21 @@
+#version 460
+#include "common.glsl"
+// MoE router logits (with the shared-expert gate as the last row) for COLS = 1 or up to 4 tokens: y[t][row] =
+// W[row] . x[t], one wave per row, as qwen4_matf32 computes them (each lane sums its values in qwen_matf32's order,
+// so the logits are the same bits at every batch size). p.k is a multiple of 64 * U: no clamped indices, so the
+// loads take their offsets from the instruction, and few registers let every wave of the 513 rows start at once.
+// W in set 0, x in b, y in c. p.n rows, p.k row length.
+layout(local_size_x=256) in;
+layout(constant_id=0) const uint COLS=1;
+const uint U=COLS==1?20:8;
+void main(){uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x*4+gl_SubgroupID,nb=batch();
+if(row>=p.n)return;
+float s[COLS];[[unroll]]for(uint z=0;z<COLS;z++)s[z]=0;
+uint wr=row*p.k;
+for(uint i0=lane;i0<p.k;i0+=64*U){
+    float w[20],x[COLS][20];
+    [[unroll]]for(uint u=0;u<U;u++){w[u]=uintBitsToFloat(ww.words[wr+i0+64*u]);
+        [[unroll]]for(uint z=0;z<COLS;z++)x[z][u]=b_f.v[min(z,nb-1)*p.k+i0+64*u];}
+    [[unroll]]for(uint u=0;u<U;u++)[[unroll]]for(uint z=0;z<COLS;z++)s[z]=fma(w[u],x[z][u],s[z]);
+}
+[[unroll]]for(uint z=0;z<COLS;z++){float v=subgroupAdd(s[z]);if(lane==0&&z<nb)c_f.v[z*p.n+row]=v;}}

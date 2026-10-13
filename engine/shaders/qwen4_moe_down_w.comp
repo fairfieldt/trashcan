@@ -1,31 +1,33 @@
 #version 460
 #include "common.glsl"
 #include "qwen4_expert.glsl"
-// qwen4_moe_down with wide loads (two lanes per 32-weight block, each loading half of its nibbles as one uvec2)
-// and the (slot, block) pairs of a token flattened over the 32 lane pairs: y[t][i] = sum_j sum_b w[t][j] * scale
-// * dot. One workgroup per 16 output rows and token; each wave owns 4 rows. Formats 0-2 of qwen4_expert.glsl.
+// Down projections of a token's experts, summed with the routing weights, for batches below 16 tokens:
+// y[t][i] = sum_j w[t][j] * W_e(j)[i] . act[t][j], with wide loads (two lanes per 32-weight block, each loading half
+// of its nibbles as one uvec2) and the (slot, block) pairs of a token flattened over the 32 lane pairs (ff = 640 is
+// 20 blocks), walked incrementally, with the rows' offsets constants of the 640-column shape. One workgroup per 16
+// output rows and token; each wave owns 4 rows. Formats 0 and 1 of qwen4_expert.glsl (an f16 scale per block).
 // b: act [t][slots][ff], c: y [t][n], d: ids [t][slots] (u32), e: weights [t][slots].
-// p.n = d, p.m = slots, p.k = ff, p.stride = word offset of the blocks.
-layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+// p.n = d, p.m = slots, p.k = ff = 640, p.stride = word offset of the blocks.
+#define BLOCKS 20
 layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
 void main(){
 init_lut();
-uint lane=gl_SubgroupInvocationID,h=lane%2,blocks=p.k/32,t=gl_WorkGroupID.y;
+uint lane=gl_SubgroupInvocationID,h=lane&1u,w=gl_SubgroupID,t=gl_WorkGroupID.y;
 if(t>=batch())return;
-uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
+uint first=gl_WorkGroupID.x*16+w*4,pairs=p.m*BLOCKS;
+// Pair f = lane / 2 + 32 i: slot f / 20, block f % 20.
+uint f=lane>>1,j=f/BLOCKS,b=f%BLOCKS;
 vec4 acc=vec4(0);
-uint j=0,b=lane/2;
-while(b>=blocks){b-=blocks;j++;}
-for(;j<p.m;){
-    uint e=d_u.v[t*p.m+j],xo=(t*p.m+j)*(p.k/4)+b*8+h*2;
-    float wt=e_f.v[t*p.m+j];
-    vec4 x0=b_v4.v[xo],x1=b_v4.v[xo+1],x2=b_v4.v[xo+4],x3=b_v4.v[xo+5];
-    [[unroll]]for(uint r=0;r<4;r++){
-        uint blk=(e*p.n+first+r)*blocks+b;uvec2 q=ww2.v[p.stride/2+blk*2+h];
-        acc[r]=fma(dot(qlo(q.x),x0)+dot(qlo(q.y),x1)+dot(qhi(q.x),x2)+dot(qhi(q.y),x3),bscale(blk)*wt,acc[r]);
-    }
-    b+=32;
-    while(b>=blocks){b-=blocks;j++;}
+for(uint i=0;i*32<pairs;i++){
+    bool on=f<pairs;uint jj=min(j,p.m-1);
+    uint e=d_u.v[t*p.m+jj],blk=(e*p.n+first)*BLOCKS+b,xo=(t*p.m+jj)*(BLOCKS*8)+b*8+h*2;
+    float cw=on?e_f.v[t*p.m+jj]:0.0;
+    vec4 c0=b_v4.v[xo],c1=b_v4.v[xo+1],c2=b_v4.v[xo+4],c3=b_v4.v[xo+5];
+    [[unroll]]for(uint r=0;r<4;r++){uvec2 q=ww2.v[p.stride/2+(blk+r*BLOCKS)*2+h];
+        acc[r]=fma(dot(qlo(q.x),c0)+dot(qlo(q.y),c1)+dot(qhi(q.x),c2)+dot(qhi(q.y),c3),
+            unpackHalf2x16(uint(wh.halves[blk+r*BLOCKS])).x*cw,acc[r]);}
+    f+=32;b+=12;j+=1;if(b>=BLOCKS){b-=BLOCKS;j++;}
 }
 acc=subgroupAdd(acc);
 if(lane==0)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[t*p.n+first+r]=acc[r];
