@@ -371,8 +371,7 @@ impl Speculator {
         };
         ensure!(!top.is_empty(), "draft head");
         let confidence = 1. / top.iter().map(|(s, _)| (s - top[0].0).exp()).sum::<f32>();
-        let draft = if ab_greedy_drafts() { top[0].1 } else { draws.pick(&top, pos + 1) };
-        Ok((draft, confidence, y))
+        Ok((draws.pick(&top, pos + 1), confidence, y))
     }
 
     /// Prefill `ids` on the chain (`Chain::prefill_cached`), fetch the final residual rows of its last `WINDOW` tokens
@@ -427,7 +426,7 @@ impl Speculator {
         while drafts.len() < k {
             let tok = drafts.last().copied().unwrap_or(pending);
             let (draft, confidence, y) = self.step(chain, tok, &h, pos + drafts.len(), draws)?;
-            let is_sure = confidence >= UNSURE || ab_no_gate();
+            let is_sure = confidence >= UNSURE;
             self.policy.drafted_one(is_sure);
             if !is_sure && !refresh {
                 unsure = Some(draft);
@@ -521,8 +520,7 @@ impl Speculator {
                 let top = draft.top_all(&draft.final_hidden(&y));
                 let best = *top.first()?;
                 let confidence = 1. / top.iter().map(|(s, _)| (s - best.0).exp()).sum::<f32>();
-                let d = if ab_greedy_drafts() { best.1 } else { draws.pick(&top, pos + 1) };
-                Some((d, confidence >= UNSURE || ab_no_gate()))
+                Some((draws.pick(&top, pos + 1), confidence >= UNSURE))
             });
         })?;
         let shadow = shadow?;
@@ -546,16 +544,6 @@ impl Speculator {
         self.last = rows;
         Ok((vec![next], tops[0].clone()))
     }
-}
-
-/// TEMPORARY session A/B switches (removed after the measurement): TRASHCAN_MTP_AB=greedy-drafts drafts the argmax at
-/// every temperature, as main did; no-gate drafts as many as the policy chose whatever the confidence.
-fn ab_greedy_drafts() -> bool {
-    std::env::var("TRASHCAN_MTP_AB").is_ok_and(|v| v.split(',').any(|x| x == "greedy-drafts"))
-}
-
-fn ab_no_gate() -> bool {
-    std::env::var("TRASHCAN_MTP_AB").is_ok_and(|v| v.split(',').any(|x| x == "no-gate"))
 }
 
 /// Decoding of `n` tokens after `prompt` from position 0 with `draws`, plain (`spec` None) or speculative. Returns
