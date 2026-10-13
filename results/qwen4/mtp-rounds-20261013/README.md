@@ -241,6 +241,19 @@ draft steps 4.95-5.21 ms against main's 5.84-7.31. Every run gave plain decoding
 every `scripts/test-server.py` check passes; up after 27 s (parallel setup); `q4-turns.py` 57 tokens in 2.64 s, then 64
 in 2.50 s.
 
+**Session 3** (`chain3/`, this branch rebased on main `2293550`: small-batch experts, connect retries, load time,
+prefill; `tools/mtp2-chain3.sh`): validation, then one alternated pair on the chat replies (greedy, `--runs 1`):
+
+| run | plain tok/s | MTP tok/s | gain | water / csv / transformer | accepted/draft | rounds k = 0/1/2/3 | ms per round k = 0/1/2/3 | draft step |
+|---|---|---|---|---|---|---|---|---|
+| chat, main `2293550` | 19.54 | 23.28 | +19.2% | 21.97 / 26.23 / 21.66 | 0.71 / 0.86 / 0.71 | 18/3/97/93 | 53.1-53.3 / 84.3-85.0 / 99.7-101.0 / 118.9-119.5 | 5.75-5.98 ms |
+| **chat, this branch** | 19.48 | **24.72** | **+26.9%** | 23.62 / 26.92 / 23.62 | 0.80 / 0.88 / 0.81 | 33/21/28/122 | 52.0-52.6 / 83.4-85.5 / 100.2-102.3 / 117.7-118.1 | 5.06-5.17 ms |
+
+The branch adds 6.2% to main's MTP (23.28 -> 24.72 tok/s; 62 drafts dropped, 9 of them matching the next token), with
+the same tokens as plain decoding. Validation (`tools/valcmp.sh mtp2s3`, `chain3/validation.txt`): the branch's p100
+dump is byte-identical to main's (586 of 586 files); on the 14-token reference prompt the top token is the CPU
+reference's (9419, logits rel 2.8e-4), and p100's logits are as far from the CPU reference as main's (rel 3.5e-2).
+
 ## Reproduction
 
 ```sh
