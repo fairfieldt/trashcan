@@ -238,13 +238,12 @@ impl KvCache {
     }
 }
 
-/// What a batch keeps besides its output: nothing, the per-token states for a rollback (a verification batch), or the
-/// residual rows on the stage that ends the model.
+/// What a batch keeps besides its output: nothing, or (a verification batch) the per-token states for a rollback and
+/// the residual rows on the stage that ends the model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 enum Mode {
     Plain,
     Verify,
-    Rows,
 }
 
 pub enum Output {
@@ -337,8 +336,8 @@ pub struct GpuStage {
     ple_hist0: Option<Buffer>,
     verify_max: usize,
     last_verify: Option<usize>,
-    /// Rows of the latest batch whose residual the stage that ends the model kept (`residual`).
-    last_rows: Option<usize>,
+    /// Tokens of the latest batch (`tail`).
+    last_n: usize,
     queries: vk::QueryPool,
     /// GPU milliseconds of each layer's submission in the last forward (the last includes the head or output).
     pub profile: Vec<f64>,
@@ -733,7 +732,7 @@ impl GpuStage {
             ple_hist0: None,
             verify_max: 0,
             last_verify: None,
-            last_rows: None,
+            last_n: 0,
             queries,
             profile: Vec::new(),
             phases: Vec::new(),
@@ -1912,7 +1911,7 @@ impl GpuStage {
             } else {
                 gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
             }
-            if mode != Mode::Plain {
+            if verify {
                 gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
             }
         } else {
@@ -1986,11 +1985,27 @@ impl GpuStage {
         self.collect(None)
     }
 
-    /// `forward` that also keeps the residual rows of the batch on the stage that ends the model (`residual`): the
-    /// MTP block's input for the end of a prompt.
-    pub fn forward_rows(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize) -> Result<Output> {
-        self.submit_mode(x, ple, pos, n, false, Mode::Rows)?;
-        self.collect(None)
+    /// The last `m` residual rows (`m x hc x d`, fewer when the latest batch was shorter) of the latest batch on the
+    /// stage that ends the model: the MTP block's input at the end of a prompt (copied out on its own).
+    pub fn tail(&mut self, m: usize) -> Result<Vec<f32>> {
+        ensure!(self.last == self.c.layers, "only the stage that ends the model keeps the final residual");
+        ensure!(self.pending.is_none(), "the stage is still working on a forward");
+        let m = m.min(self.last_n);
+        ensure!(m >= 1, "no batch has run");
+        let w4 = self.c.width() * 4;
+        let cmd = self.gpu.begin()?;
+        self.gpu.barrier(cmd);
+        self.gpu.copy(cmd, &self.x, (self.last_n - m) * w4, &self.output, 0, m * w4);
+        self.gpu.finish(cmd)?;
+        unsafe {
+            self.gpu.dev.reset_fences(&[self.fence])?;
+        }
+        self.gpu.submit(cmd, None, None, self.fence)?;
+        unsafe {
+            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]);
+        }
+        Ok(bytemuck::cast_slice(&self.output.read(m * w4)?).to_vec())
     }
 
     /// Keep tokens `0..keep` of the latest verification batch: restore the recurrent states after token `keep - 1`.
@@ -2028,7 +2043,6 @@ impl GpuStage {
             self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]);
         }
         self.last_verify = Some(keep);
-        self.last_rows = self.last_rows.map(|r| r.min(keep));
         Ok(())
     }
 
@@ -2064,7 +2078,7 @@ impl GpuStage {
     /// The residual rows (`n x hc x d`) of the latest verification batch on the stage that ends the model: the MTP
     /// block's input.
     pub fn residual(&self, n: usize) -> Result<Vec<f32>> {
-        ensure!(self.last_rows.is_some_and(|v| n <= v), "no residual rows of the latest batch");
+        ensure!(self.last_verify.is_some_and(|v| n <= v), "no residual rows of a verification batch");
         Ok(bytemuck::cast_slice(&self.output.read(n * self.c.width() * 4)?).to_vec())
     }
 
@@ -2159,7 +2173,7 @@ impl GpuStage {
         }
         let verify = key.3 == Mode::Verify;
         self.last_verify = verify.then_some(n);
-        self.last_rows = (key.3 != Mode::Plain).then_some(n);
+        self.last_n = n;
         let rows = if verify { n } else { 1 };
         Ok(match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
             Some(hd) => Output::Final(bytemuck::cast_slice(&hd.h.read(rows * d * 4)?).to_vec()),

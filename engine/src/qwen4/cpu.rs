@@ -164,9 +164,11 @@ pub struct CpuStage {
     /// the PLE layer).
     ple_conv: Vec<f32>,
     pub head: bool,
-    /// The latest verification batch: the recurrent states before it, its input rows, n-gram rows and position,
-    /// and its output rows (speculative decoding; `rollback` replays the kept tokens).
+    /// The latest verification batch: the recurrent states before it, its input rows, n-gram rows and position
+    /// (speculative decoding; `rollback` replays the kept tokens).
     verified: Option<Verified>,
+    /// The final residual rows of the latest batch when this stage ends the model (`tail`).
+    tail: Vec<f32>,
 }
 
 struct Verified {
@@ -283,7 +285,16 @@ impl CpuStage {
             ple_conv,
             head,
             verified: None,
+            tail: Vec::new(),
         }
+    }
+
+    /// The last `m` final residual rows of the latest batch (fewer when it was shorter; the stage must end the model).
+    pub fn tail(&self, m: usize) -> Result<Vec<f32>> {
+        let w = self.c.width();
+        let m = m.min(self.tail.len() / w);
+        ensure!(self.head && m >= 1, "no final residual rows");
+        Ok(self.tail[self.tail.len() - m * w..].to_vec())
     }
 
     fn recurrent(&self) -> Vec<Vec<f32>> {
@@ -407,6 +418,9 @@ impl CpuStage {
             record(format!("ffn_out-{il}"), &y, c.d);
             Self::combine(&c, x, &y, m.write.as_deref().unwrap(), n);
             record(format!("l_last-{il}"), x, w);
+        }
+        if self.head {
+            self.tail = x.to_vec();
         }
         Ok(())
     }

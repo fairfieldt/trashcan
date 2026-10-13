@@ -19,17 +19,9 @@ impl Local {
         Ok(())
     }
 
-    /// Run a batch through the local stages, as `forward`; a verification batch (`verify`) keeps what `rollback`
-    /// needs, scores every row at the head and keeps the residual rows on the stage that ends the model (in
-    /// `rows`); otherwise only the residual rows are kept (the end of a prompt, for the MTP block).
-    pub fn forward_kept(
-        &mut self,
-        mut x: Vec<f32>,
-        ple: Option<&[f32]>,
-        pos: usize,
-        n: usize,
-        verify: bool,
-    ) -> Result<Output> {
+    /// Run a verification batch through the local stages, as `forward`: every stage keeps what `rollback` needs, and the
+    /// stage that ends the model returns the final hidden state of every row and keeps the residual rows (`rows`).
+    pub fn verify(&mut self, mut x: Vec<f32>, ple: Option<&[f32]>, pos: usize, n: usize) -> Result<Output> {
         if let Some(c) = &self.clocks {
             c.busy();
         }
@@ -37,22 +29,17 @@ impl Local {
         for stage in self.stages.iter_mut() {
             let out = match stage {
                 Stage::Gpu(s) => {
-                    let out = if verify { s.verify(&x, ple, pos, n)? } else { s.forward_rows(&x, ple, pos, n)? };
+                    let out = s.verify(&x, ple, pos, n)?;
                     if let Output::Final(_) = out {
                         self.rows = s.residual(n)?;
                     }
                     out
                 }
                 Stage::Cpu(s) => {
-                    if verify {
-                        s.verify(g, &mut x, ple, pos, n)?;
-                    } else {
-                        s.forward(g, &mut x, ple, pos, n, &mut None)?;
-                    }
+                    s.verify(g, &mut x, ple, pos, n)?;
                     if s.head {
                         self.rows = x.clone();
-                        let w = self.c.width();
-                        Output::Final(if verify { s.final_rows(g, &x)? } else { s.final_rows(g, &x[(n - 1) * w..])? })
+                        Output::Final(s.final_rows(g, &x)?)
                     } else {
                         Output::Hidden(std::mem::take(&mut x))
                     }
@@ -64,6 +51,27 @@ impl Local {
             }
         }
         Ok(Output::Hidden(x))
+    }
+
+    /// Whether a local stage ends the model.
+    pub fn ends(&self) -> bool {
+        self.stages.iter().any(|s| match s {
+            Stage::Gpu(g) => g.last == self.c.layers,
+            Stage::Cpu(c) => c.head,
+        })
+    }
+
+    /// The last `m` final residual rows of the latest batch, from the local stage that ends the model.
+    pub fn tail(&mut self, m: usize) -> Result<Vec<f32>> {
+        let layers = self.c.layers;
+        for s in self.stages.iter_mut() {
+            match s {
+                Stage::Gpu(g) if g.last == layers => return g.tail(m),
+                Stage::Cpu(c) if c.head => return c.tail(m),
+                _ => {}
+            }
+        }
+        anyhow::bail!("no local stage ends the model")
     }
 
     /// Keep tokens `0..keep` of the latest verification batch on every local stage.
@@ -130,6 +138,11 @@ impl Local {
         Ok(tops)
     }
 }
+
+/// Prompt tokens the MTP block reads (the last ones): with 16 or 128 of a 3K-token document it gave 2.39 and 2.52
+/// tokens per round (k = 3) against 2.83 with the whole prompt; each costs ~3 ms on the driver's CPU before the first
+/// draft (results/qwen4/mtp-20261012).
+const WINDOW: usize = 64;
 
 /// Counters of a speculative generation.
 #[derive(Default, Debug, Clone, serde::Serialize)]
@@ -201,23 +214,22 @@ impl Speculator {
         Ok((best.0, y))
     }
 
-    /// Prefill `ids` on the chain (continuing from the live state when it is a prefix, as `Chain::prefill_cached`),
-    /// keeping the residual rows of the last chunk, and run the MTP block over that chunk while the head rows are
-    /// scored. Returns the last token's candidates and the reused positions.
+    /// Prefill `ids` on the chain (`Chain::prefill_cached`), fetch the final residual rows of its last `WINDOW` tokens
+    /// (at most the last chunk's) and run the MTP block over them. Returns the last token's candidates and the reused
+    /// positions.
     pub fn prefill(&mut self, chain: &mut Chain, ids: &[u32]) -> Result<(Vec<(f32, u32)>, usize)> {
         let w = chain.local.c.width();
-        let draft = &mut self.draft;
-        // The block reads token p with the residual of p - 1: over the chunk's tokens after its first.
-        let (top, start, rows) = chain.prefill_rows(ids, &mut |toks: &[u32], end: usize, rows: &[f32]| {
-            let m = rows.len() / w;
-            let first = end - m + 1;
-            draft.first = first;
-            if m > 1 {
-                draft.forward(&toks[1..], &rows[..(m - 1) * w], first, false)?;
-            }
-            Ok(())
-        })?;
-        self.last = rows[rows.len() - w..].to_vec();
+        let (top, start) = chain.prefill_cached(ids)?;
+        let end = chain.pos;
+        let rows = chain.tail(WINDOW.min(end - start))?;
+        let m = rows.len() / w;
+        // The block reads token p with the residual of p - 1: the window's tokens after its first.
+        let first = end - m + 1;
+        self.draft.first = first;
+        if m > 1 {
+            self.draft.forward(&chain.history[first..end], &rows[..(m - 1) * w], first, false)?;
+        }
+        self.last = rows[(m - 1) * w..].to_vec();
         Ok((top, start))
     }
 
