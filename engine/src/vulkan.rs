@@ -1,6 +1,7 @@
 //! Owned Vulkan resources with cached descriptors. Device addresses are deliberately disabled:
 //! RADV otherwise submits every allocation, serializing imported peer buffers.
 use crate::gpu::Instance;
+use crate::quant::{Kind, Planes};
 use anyhow::{ensure, Context, Result};
 use ash::vk;
 use std::{
@@ -37,6 +38,8 @@ pub struct Device {
     calibrated: Option<ash::ext::calibrated_timestamps::Device>,
     /// Device-local memory shared by many buffers, once `use_arena` is called.
     arena: RefCell<Option<Vec<Chunk>>>,
+    /// An `Uploader` has copies in flight: a buffer dropped meanwhile (an error while loading) waits for them.
+    uploading: Cell<bool>,
 }
 
 /// One allocation of the arena: memory type, size, bytes handed out.
@@ -705,6 +708,7 @@ impl Device {
             stamps: RefCell::new(None),
             calibrated,
             arena: RefCell::new(None),
+            uploading: Cell::new(false),
         }))
     }
     /// Place later device-local buffers (not host-visible, not external) in shared allocations of `CHUNK`
@@ -1411,6 +1415,257 @@ impl Drop for Device {
         }
     }
 }
+/// Bytes of each staging buffer of an `Uploader`, and how many it cycles through.
+const STAGING_BYTES: usize = 64 << 20;
+const STAGING_SLOTS: usize = 3;
+/// How long an upload's copies may take (as `run_reusable` waits).
+const FENCE_NS: u64 = 60_000_000_000;
+
+/// Weight uploads through a few reused, mapped staging buffers: matrices are repacked straight into staging memory by
+/// every core, each staging buffer's copies run on the GPU while the next one is filled, and `finish` waits for the
+/// last of them. (`Device::upload` allocates a staging buffer per tensor and waits for each copy.)
+pub struct Uploader<'a> {
+    gpu: Rc<Device>,
+    slots: Vec<Staging>,
+    /// The staging buffer being filled and its bytes in use.
+    at: usize,
+    used: usize,
+    /// Repacks still to write into it: format, GGUF blocks, offsets of their heads and bodies.
+    jobs: Vec<(Kind, &'a [u8], usize, usize)>,
+    threads: usize,
+}
+
+struct Staging {
+    buf: Buffer,
+    cmd: vk::CommandBuffer,
+    fence: vk::Fence,
+    /// Copies are being recorded; a submission has not been waited for.
+    open: bool,
+    busy: bool,
+}
+
+impl<'a> Uploader<'a> {
+    pub fn new(gpu: &Rc<Device>) -> Result<Self> {
+        let mut up = Self {
+            gpu: gpu.clone(),
+            slots: Vec::new(),
+            at: 0,
+            used: 0,
+            jobs: Vec::new(),
+            threads: std::thread::available_parallelism().map_or(8, |n| n.get()),
+        };
+        for _ in 0..STAGING_SLOTS {
+            let buf = gpu.buffer(STAGING_BYTES, true, false, None)?;
+            let info = vk::CommandBufferAllocateInfo::default()
+                .command_pool(gpu.pool)
+                .level(vk::CommandBufferLevel::PRIMARY)
+                .command_buffer_count(1);
+            let cmd = unsafe { gpu.dev.allocate_command_buffers(&info)? }[0];
+            let fence = unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None) };
+            let fence = fence.inspect_err(|_| unsafe { gpu.dev.free_command_buffers(gpu.pool, &[cmd]) })?;
+            up.slots.push(Staging { buf, cmd, fence, open: false, busy: false });
+        }
+        Ok(up)
+    }
+
+    /// Room for `len` bytes in the current staging buffer, or the next one when they do not fit: their offset.
+    fn reserve(&mut self, len: usize) -> Result<usize> {
+        ensure!(len <= STAGING_BYTES, "staging piece too large");
+        if self.used + len > STAGING_BYTES {
+            self.submit()?;
+        }
+        let s = &mut self.slots[self.at];
+        if !s.open {
+            if s.busy {
+                unsafe {
+                    self.gpu.dev.wait_for_fences(&[s.fence], true, FENCE_NS)?;
+                    self.gpu.dev.reset_fences(&[s.fence])?;
+                }
+                s.busy = false;
+            }
+            let begin = vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+            unsafe { self.gpu.dev.begin_command_buffer(s.cmd, &begin)? };
+            s.open = true;
+        }
+        let at = self.used;
+        self.used = (at + len).next_multiple_of(16);
+        Ok(at)
+    }
+
+    /// Copy `len` staging bytes at `from` into `dst` at `to`.
+    fn copy(&self, dst: &Buffer, to: usize, from: usize, len: usize) {
+        let s = &self.slots[self.at];
+        let region = [vk::BufferCopy { src_offset: from as u64, dst_offset: to as u64, size: len as u64 }];
+        unsafe { self.gpu.dev.cmd_copy_buffer(s.cmd, s.buf.buf, dst.buf, &region) };
+    }
+
+    /// Zero `len` staging bytes at `at`.
+    fn zero(&self, at: usize, len: usize) {
+        let s = &self.slots[self.at];
+        assert!(at + len <= s.buf.size);
+        unsafe { std::ptr::write_bytes(s.buf.ptr.add(at), 0, len) };
+    }
+
+    /// Write the pending repacks, then submit the current staging buffer's copies and move to the next one.
+    fn submit(&mut self) -> Result<()> {
+        let s = &mut self.slots[self.at];
+        if !s.open {
+            return Ok(());
+        }
+        repack(s.buf.ptr, s.buf.size, std::mem::take(&mut self.jobs), self.threads);
+        self.gpu.scoped_barrier(
+            s.cmd,
+            vk::PipelineStageFlags::TRANSFER,
+            vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER,
+            vk::AccessFlags::TRANSFER_WRITE,
+            vk::AccessFlags::SHADER_READ | vk::AccessFlags::TRANSFER_READ,
+        );
+        let cmds = [s.cmd];
+        unsafe {
+            self.gpu.dev.end_command_buffer(s.cmd)?;
+            self.gpu.dev.queue_submit(self.gpu.queue, &[vk::SubmitInfo::default().command_buffers(&cmds)], s.fence)?;
+        }
+        s.open = false;
+        s.busy = true;
+        self.gpu.uploading.set(true);
+        self.at = (self.at + 1) % self.slots.len();
+        self.used = 0;
+        Ok(())
+    }
+
+    /// A device-local buffer holding `data` (once `finish` returns).
+    pub fn bytes(&mut self, data: &[u8]) -> Result<Buffer> {
+        let dst = self.gpu.buffer(data.len(), false, false, None)?;
+        // The buffer is rounded up to whole words; the rest is zero.
+        let mut done = 0;
+        while done < dst.size {
+            let n = (dst.size - done).min(STAGING_BYTES);
+            let at = self.reserve(n)?;
+            let part = &data[done.min(data.len())..(done + n).min(data.len())];
+            self.slots[self.at].buf.write_at(at, part)?;
+            self.zero(at + part.len(), n - part.len());
+            self.copy(&dst, done, at, n);
+            done += n;
+        }
+        Ok(dst)
+    }
+
+    /// A device-local buffer holding a matrix repacked into `p` (once `finish` returns) from its GGUF blocks, given as
+    /// consecutive runs of whole blocks.
+    pub fn planes(&mut self, p: Planes, runs: &[&'a [u8]]) -> Result<Buffer> {
+        let (s, h, b) = p.kind.sizes();
+        ensure!(
+            p.count > 0
+                && runs.iter().all(|r| r.len() % s == 0)
+                && runs.iter().map(|r| r.len()).sum::<usize>() == p.count * s,
+            "{:?} matrix of {} blocks given other blocks",
+            p.kind,
+            p.count
+        );
+        let dst = self.gpu.buffer(p.size(), false, false, None)?;
+        // Zeros after the heads (to `body_at`) and after the bodies (to whole words) go with the last piece.
+        let (pad, tail) = (p.body_at - p.count * h, dst.size - p.size());
+        let (mut done, mut run, mut off) = (0, 0, 0);
+        while done < p.count {
+            let room = (STAGING_BYTES - self.used).saturating_sub(16 + pad + tail) / (h + b);
+            let left = p.count - done;
+            // Whole groups of 8 blocks keep the copies' offsets aligned.
+            let n = if room >= left { left } else { room / 8 * 8 };
+            if n == 0 {
+                self.submit()?;
+                continue;
+            }
+            let last = n == left;
+            let (hl, bl) = if last { (n * h + pad, n * b + tail) } else { (n * h, n * b) };
+            let at = self.reserve(hl.next_multiple_of(16) + bl)?;
+            let (heads, bodies) = (at, at + hl.next_multiple_of(16));
+            let mut k = 0;
+            while k < n {
+                let r = runs[run];
+                let m = ((r.len() - off) / s).min(n - k);
+                self.jobs.push((p.kind, &r[off..off + m * s], heads + k * h, bodies + k * b));
+                (k, off) = (k + m, off + m * s);
+                if off == r.len() {
+                    (run, off) = (run + 1, 0);
+                }
+            }
+            self.zero(heads + n * h, hl - n * h);
+            self.zero(bodies + n * b, bl - n * b);
+            self.copy(&dst, done * h, heads, hl);
+            self.copy(&dst, p.body_at + done * b, bodies, bl);
+            done += n;
+        }
+        Ok(dst)
+    }
+
+    /// Submit the last copies and wait for all of them.
+    pub fn finish(mut self) -> Result<()> {
+        self.submit()?;
+        for s in &mut self.slots {
+            if s.busy {
+                unsafe { self.gpu.dev.wait_for_fences(&[s.fence], true, FENCE_NS)? };
+                s.busy = false;
+            }
+        }
+        self.gpu.uploading.set(false);
+        Ok(())
+    }
+}
+
+impl Drop for Uploader<'_> {
+    fn drop(&mut self) {
+        for s in &self.slots {
+            unsafe {
+                // Copies still reading a staging buffer (an error before `finish`) must end before it is freed.
+                if s.busy {
+                    let _ = self.gpu.dev.wait_for_fences(&[s.fence], true, FENCE_NS);
+                }
+                self.gpu.dev.free_command_buffers(self.gpu.pool, &[s.cmd]);
+                self.gpu.dev.destroy_fence(s.fence, None);
+            }
+        }
+        self.gpu.uploading.set(false);
+    }
+}
+
+/// Repack `jobs` into the `len` mapped staging bytes at `base`, in pieces of about a megabyte spread over `threads`
+/// threads (small amounts on this one).
+fn repack(base: *mut u8, len: usize, jobs: Vec<(Kind, &[u8], usize, usize)>, threads: usize) {
+    let mut work = Vec::new();
+    let mut bytes = 0;
+    for (kind, src, heads, bodies) in jobs {
+        let (s, h, b) = kind.sizes();
+        let n = src.len() / s;
+        assert!(heads + n * h <= bodies && bodies + n * b <= len, "repack outside its staging range");
+        // SAFETY: `Uploader::planes` reserved each job's heads and bodies, disjoint from every other job's, inside
+        // the staging buffer, which stays mapped and is not otherwise accessed until the copies are submitted.
+        let (hs, bs) = unsafe {
+            (std::slice::from_raw_parts_mut(base.add(heads), n * h), std::slice::from_raw_parts_mut(base.add(bodies), n * b))
+        };
+        let per = ((1 << 20) / s).max(1);
+        for ((x, hp), bp) in src.chunks(per * s).zip(hs.chunks_mut(per * h)).zip(bs.chunks_mut(per * b)) {
+            work.push((kind, x, hp, bp));
+        }
+        bytes += src.len();
+    }
+    if bytes < 4 << 20 || threads < 2 {
+        for (kind, x, h, b) in work {
+            kind.fill(x, h, b);
+        }
+        return;
+    }
+    work.reverse();
+    let work = std::sync::Mutex::new(work);
+    std::thread::scope(|scope| {
+        for _ in 0..threads {
+            scope.spawn(|| loop {
+                let Some((kind, x, h, b)) = work.lock().unwrap().pop() else { break };
+                kind.fill(x, h, b);
+            });
+        }
+    });
+}
+
 pub struct Buffer {
     pub gpu: Rc<Device>,
     pub buf: vk::Buffer,
@@ -1499,6 +1754,9 @@ impl Drop for Buffer {
             .device_bytes
             .set(self.gpu.device_bytes.get() - self.device_bytes);
         unsafe {
+            if self.gpu.uploading.get() {
+                let _ = self.gpu.dev.device_wait_idle();
+            }
             if !self.ptr.is_null() {
                 self.gpu.dev.unmap_memory(self.memory);
             }

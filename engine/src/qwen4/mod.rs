@@ -388,7 +388,7 @@ pub fn embed(g: &Gguf, c: &Config, tokens: &[u32]) -> Result<Vec<f32>> {
 mod tests {
     use super::Ngram;
 
-    /// The GPU's IQ4_XS layout (quant::repack_iq4xs) decoded as qwen4_expert.glsl does (header words, then the
+    /// The GPU's IQ4_XS layout (quant::Kind::Iq4xs) decoded as qwen4_expert.glsl does (header words, then the
     /// sub-block's 4 nibble words) gives the same values as the reference decoding of the original superblock.
     #[test]
     fn iq4xs_repack_matches_the_shader_decode() {
@@ -410,7 +410,8 @@ mod tests {
                 want[ib * 32 + j + 16] = d * (ls as i32 - 32) as f32 * super::IQ4_VALUES[(q >> 4) as usize] as f32;
             }
         }
-        let (packed, stride) = crate::quant::repack_iq4xs(&sb);
+        let p = crate::quant::Planes::of(crate::quant::Kind::Iq4xs, sb.len());
+        let (packed, stride) = (p.pack(&sb), p.body_at / 4);
         let words: Vec<u32> = packed
             .chunks_exact(4)
             .map(|w| u32::from_le_bytes(w.try_into().unwrap()))
@@ -443,7 +444,8 @@ mod tests {
         let want: Vec<f32> = (0..64)
             .map(|j| -0.375 * (((blk[2 + j / 4] >> (2 * (j % 4))) & 3) as i32 - 1) as f32)
             .collect();
-        let (packed, stride) = crate::quant::repack_q4h(&blk);
+        let p = crate::quant::Planes::of(crate::quant::Kind::Q4h, blk.len());
+        let (packed, stride) = (p.pack(&blk), p.body_at / 4);
         let scale = half::f16::from_le_bytes([packed[0], packed[1]]).to_f32();
         let words: Vec<u32> = packed
             .chunks_exact(4)

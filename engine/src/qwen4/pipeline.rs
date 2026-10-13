@@ -158,13 +158,16 @@ impl Local {
                         indices[i],
                         heads[i].map_or(String::new(), |(a, b)| format!(" + head rows {a}..{b}"))
                     );
+                    let start = std::time::Instant::now();
                     let gpu = Device::new(inst.clone(), pd)?;
                     let stage = GpuStage::new(gpu, &gguf, &c, first, last, heads[i], context, max_batch, kv)?;
                     let (size, budget, usage) = heap_mib(&inst, pd);
                     eprintln!(
-                        "GPU{}: {:.1} MiB allocated; device-local heap {usage:.0} of {size:.0} MiB used, budget {budget:.0}",
+                        "GPU{}: {:.1} MiB allocated in {:.2} s; device-local heap {usage:.0} of {size:.0} MiB used, budget \
+                         {budget:.0}",
                         indices[i],
-                        stage.device_mib()
+                        stage.device_mib(),
+                        start.elapsed().as_secs_f64()
                     );
                     // RADV silently places what does not fit in system memory, where the stage runs far slower.
                     ensure!(

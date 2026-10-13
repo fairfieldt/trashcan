@@ -5,16 +5,16 @@
 //! Every mixer applies the previous sublayer's write (`x_s += w_s * y`) in its norm kernel, so a layer ends with a
 //! pending combine that the next mixer, the head or the stage output resolves.
 //!
-//! Dense matrices are Q4_0 repacked with f32 scales (`quant::repack_q4`, the Gemma kernels) or Q8_0 with f16 scales;
+//! Dense matrices are Q4_0 repacked with f32 scales (`quant::Kind::Q4`, the Gemma kernels) or Q8_0 with f16 scales;
 //! experts are Q4_0, IQ4_NL (4.5 bits per weight) or IQ4_XS (4.25), at their GGUF size, stacked into one gate/up and
 //! one down matrix per layer with the shared expert appended as expert `experts`. Attention is dense, so a stage
 //! accepts at most `idx_budget + kpool - 1` visible tokens (the sparse block selection is not implemented here yet).
 use super::{cpu::Captures, Config};
 use crate::{
     gguf::{GgmlType, Gguf, TensorInfo},
-    quant,
+    quant::{Kind, Planes},
     qwen::{dequant_row, vector},
-    vulkan::{attention_shaders, q4_decode_shader, Buffer, Device, Push, Stamps, STAMP_CAPACITY},
+    vulkan::{attention_shaders, q4_decode_shader, Buffer, Device, Push, Stamps, Uploader, STAMP_CAPACITY},
 };
 use anyhow::{ensure, Context, Result};
 use ash::vk;
@@ -118,7 +118,8 @@ struct Layer {
     mixer: Mixer,
     /// Router rows and the shared-expert gate as row `experts` (f32).
     router: Buffer,
-    /// Experts in Q4_0 with f16 scales (`quant::repack_q4h`) and the word offsets of their blocks.
+    /// Experts with their scales or headers first (`quant::Kind::Q4h`, `Kind::Iq4xs`) and the word offsets of their
+    /// blocks.
     gate_up: Buffer,
     down: Buffer,
     gu_stride: u32,
@@ -149,12 +150,12 @@ fn expert_rows<'a>(g: &'a Gguf, t: &TensorInfo, row0: usize, rows: usize) -> Res
     Ok(&g.data(t)[row0 * rb..(row0 + rows) * rb])
 }
 
-/// Experts repacked for the GPU: scales or headers, then the nibble blocks (and the blocks' word offset).
-fn expert_pack(fmt: u32, raw: &[u8]) -> (Vec<u8>, usize) {
+/// How experts are repacked for the GPU: scales or headers, then the nibble blocks.
+fn expert_kind(fmt: u32) -> Kind {
     if fmt == 2 {
-        quant::repack_iq4xs(raw)
+        Kind::Iq4xs
     } else {
-        quant::repack_q4h(raw)
+        Kind::Q4h
     }
 }
 
@@ -434,9 +435,9 @@ fn rows_f32(g: &Gguf, t: &TensorInfo) -> Result<Vec<f32>> {
 
 impl GpuStage {
     #[allow(clippy::too_many_arguments)]
-    pub fn new(
+    pub fn new<'a>(
         gpu: Rc<Device>,
-        g: &Gguf,
+        g: &'a Gguf,
         c: &Config,
         first: usize,
         last: usize,
@@ -467,18 +468,32 @@ impl GpuStage {
         let ring = (max_batch + c.kpool).next_multiple_of(c.kpool);
         let (d, w) = (c.d, c.width());
         let t = |il: usize, name: &str| c.layer_tensor(g, il, name);
-        let q4 = |t: &TensorInfo| -> Result<Dense> {
-            let (k, n) = (t.dims[0] as usize, t.dims[1] as usize);
-            Ok(match t.ty {
-                GgmlType::Q8_0 => {
-                    let (packed, stride) = quant::repack_q8h(g.data(t));
-                    Dense::Q8(gpu.upload_matrix(&packed)?, stride as u32)
-                }
-                _ => Dense::Q4(gpu.upload_matrix(&quant::repack_q4(q4_rows(g, t, 0, n)?, k, n, 0, n, 0, k))?),
+        // Weights are repacked straight into staging memory and copied while the next ones are prepared; they are
+        // all on the GPU once `finish` returns, at the end.
+        let up = std::cell::RefCell::new(Uploader::new(&gpu)?);
+        // A dense matrix from its blocks, given as consecutive runs (Q4_0 with f32 scales or Q8_0 with f16 scales).
+        let dense = |q8: bool, runs: &[&'a [u8]]| -> Result<Dense> {
+            let bytes = runs.iter().map(|r| r.len()).sum();
+            Ok(if q8 {
+                let p = Planes::of(Kind::Q8h, bytes);
+                Dense::Q8(up.borrow_mut().planes(p, runs)?, (p.body_at / 4) as u32)
+            } else {
+                Dense::Q4(up.borrow_mut().planes(Planes::of(Kind::Q4, bytes), runs)?)
             })
         };
-        let f32s = |v: &[f32]| gpu.upload(bytemuck::cast_slice(v));
-        let mat32 = |v: &[f32]| gpu.upload_matrix(bytemuck::cast_slice(v));
+        let q4 = |t: &TensorInfo| -> Result<Dense> {
+            match t.ty {
+                GgmlType::Q8_0 => dense(true, &[g.data(t)]),
+                _ => dense(false, &[q4_rows(g, t, 0, t.dims[1] as usize)?]),
+            }
+        };
+        // Stacked experts and the word offset of their blocks.
+        let experts = |fmt: u32, runs: &[&'a [u8]]| -> Result<(Buffer, usize)> {
+            let p = Planes::of(expert_kind(fmt), runs.iter().map(|r| r.len()).sum());
+            Ok((up.borrow_mut().planes(p, runs)?, p.body_at / 4))
+        };
+        let f32s = |v: &[f32]| up.borrow_mut().bytes(bytemuck::cast_slice(v));
+        let mat32 = f32s;
         let vecb = |t: &TensorInfo| -> Result<Buffer> { f32s(&vector(g, t)?) };
         let mix = |prefix: &str, inject: bool| -> Result<Mix> {
             let tt = |name: &str| {
@@ -486,20 +501,11 @@ impl GpuStage {
                 g.tensor(&full).with_context(|| format!("missing {full}"))
             };
             let fused = if inject && c.hc == 4 {
+                // The bottleneck rows followed by the write rows.
                 let (dn, inj) = (tt("down")?, tt("inject")?);
                 match (dn.ty, inj.ty) {
-                    (GgmlType::Q4_0, GgmlType::Q4_0) => {
-                        let mut raw = g.data(dn).to_vec();
-                        raw.extend_from_slice(g.data(inj));
-                        let (k, n) = (dn.dims[0] as usize, dn.dims[1] as usize + inj.dims[1] as usize);
-                        Some(Dense::Q4(gpu.upload_matrix(&quant::repack_q4(&raw, k, n, 0, n, 0, k))?))
-                    }
-                    (GgmlType::Q8_0, GgmlType::Q8_0) => {
-                        let mut raw = g.data(dn).to_vec();
-                        raw.extend_from_slice(g.data(inj));
-                        let (packed, stride) = quant::repack_q8h(&raw);
-                        Some(Dense::Q8(gpu.upload_matrix(&packed)?, stride as u32))
-                    }
+                    (GgmlType::Q4_0, GgmlType::Q4_0) => Some(dense(false, &[g.data(dn), g.data(inj)])?),
+                    (GgmlType::Q8_0, GgmlType::Q8_0) => Some(dense(true, &[g.data(dn), g.data(inj)])?),
                     _ => None,
                 }
             } else {
@@ -589,24 +595,15 @@ impl GpuStage {
                     b.ty
                 );
             }
-            let mut gu = Vec::with_capacity((ne + 1) * 2 * ff * expert_format(gt)?.1);
+            let mut gu = Vec::with_capacity(2 * ne + 2);
             for e in 0..ne {
-                gu.extend_from_slice(expert_rows(g, gt, e * ff, ff)?);
-                gu.extend_from_slice(expert_rows(g, ut, e * ff, ff)?);
+                gu.push(expert_rows(g, gt, e * ff, ff)?);
+                gu.push(expert_rows(g, ut, e * ff, ff)?);
             }
-            gu.extend_from_slice(expert_rows(g, gs, 0, ff)?);
-            gu.extend_from_slice(expert_rows(g, us, 0, ff)?);
-            let (packed, gu_stride) = expert_pack(gu_fmt, &gu);
-            drop(gu);
-            let gate_up = gpu.upload_matrix(&packed)?;
-            drop(packed);
-            let mut dn = Vec::with_capacity((ne + 1) * d * expert_format(dt)?.1);
-            dn.extend_from_slice(expert_rows(g, dt, 0, ne * d)?);
-            dn.extend_from_slice(expert_rows(g, ds, 0, d)?);
-            let (packed, down_stride) = expert_pack(down_fmt, &dn);
-            drop(dn);
-            let down = gpu.upload_matrix(&packed)?;
-            drop(packed);
+            gu.push(expert_rows(g, gs, 0, ff)?);
+            gu.push(expert_rows(g, us, 0, ff)?);
+            let (gate_up, gu_stride) = experts(gu_fmt, &gu)?;
+            let (down, down_stride) = experts(down_fmt, &[expert_rows(g, dt, 0, ne * d)?, expert_rows(g, ds, 0, d)?])?;
             let mut router = rows_f32(g, t(il, "ffn_gate_inp.weight")?)?;
             router.extend(vector(g, t(il, "ffn_gate_inp_shexp.weight")?)?);
             layers.push(Layer {
@@ -652,7 +649,7 @@ impl GpuStage {
                 let rb = d / 256 * 210;
                 Some(Head {
                     mix: if ends { Some(mix("output_hc", false)?) } else { None },
-                    w: gpu.upload_matrix(&quant::repack_q6(&g.data(t)[row0 * rb..row1 * rb]))?,
+                    w: up.borrow_mut().planes(Planes::of(Kind::Q6, rows * rb), &[&g.data(t)[row0 * rb..row1 * rb]])?,
                     logits: gpu.buffer(VERIFY_MAX * rows * 4, false, false, None)?,
                     scratch: gpu.buffer(VERIFY_MAX * chunks * TOP_K * 8, false, false, None)?,
                     top: gpu.buffer(VERIFY_MAX * TOP_K * 8, true, false, None)?,
@@ -676,7 +673,7 @@ impl GpuStage {
                 None,
             )?
         };
-        Ok(Self {
+        let stage = Self {
             first,
             last,
             layers,
@@ -696,7 +693,7 @@ impl GpuStage {
             lo: alloc(c.hc_rank)?,
             mo: [alloc(c.hc_rank + 8)?, alloc(c.hc_rank + 8)?],
             mp: alloc((w / SPLIT).max(1) * (c.hc_rank + 8))?,
-            mcount: gpu.upload(&[0u8; 8])?,
+            mcount: up.borrow_mut().bytes(&[0u8; 8])?,
             psum: alloc(16 * d.div_ceil(256))?,
             hgate: alloc(w)?,
             u: alloc(d)?,
@@ -760,7 +757,9 @@ impl GpuStage {
             phases: Vec::new(),
             c: c.clone(),
             gpu,
-        })
+        };
+        up.into_inner().finish()?;
+        Ok(stage)
     }
 
     /// Indexer upkeep and block selection for one QSA layer: raw keys into the ring, pooled keys of completed blocks,
