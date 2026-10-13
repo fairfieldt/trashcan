@@ -42,7 +42,12 @@ Decode after the prefill: 13.3-14.7 tok/s either way. Every GPU held 850/1370 MH
 - CPU chain on this Mac (driver and two CPU nodes, `--batch 64`: the 100-token prompt in chunks of 32, 32, 32 and 4)
   against the single-shot CPU reference of the same prompt: every tensor rel 0, the same 10 greedy tokens
   ([compare-cpuchain-val100-vs-cpu.txt](compare-cpuchain-val100-vs-cpu.txt)).
-- The first six-Mac validation ran before `qwen4 validate` used the rule (it chunked by `--batch`), so it repeated the
-  one-chunk result; the GPU check with the rule is queued.
+- Six Macs with the rule (88def0d, `tools/val-chunks.sh`): the 100-token prompt in 16-token chunks against the CPU
+  reference: the same 10 greedy tokens and top-10, logits rel 3.48e-2 as with one chunk
+  ([compare-gpu-val100-chunks16-vs-cpu.txt](compare-gpu-val100-chunks16-vs-cpu.txt)); against the one-chunk GPU run:
+  logits rel 1.3e-5, residual after layer 47 rel 1.5e-5
+  ([compare-gpu-val100-chunks16-vs-onechunk.txt](compare-gpu-val100-chunks16-vs-onechunk.txt)); the 14-token reference
+  prompt: logits rel 2.84e-4, the same tokens ([compare-gpu-val14-vs-cpu.txt](compare-gpu-val14-vs-cpu.txt)). (An
+  earlier six-Mac validation ran before `qwen4 validate` used the rule and repeated the one-chunk result.)
 - Multi-chunk GPU runs at other chunk sizes were bit-identical to main in results/qwen4/prefill-overlap-20261012 (64
   and 128); the fused mixers and per-slot experts at 16-64 tokens were validated in results/qwen4/prefill-batch-20261012.
