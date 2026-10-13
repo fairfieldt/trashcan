@@ -6,7 +6,7 @@ use super::{
     net::Chain,
     pipeline::{Local, Stage},
 };
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 
 impl Local {
     /// Allocate the state copies verification batches of up to `max` tokens need.
@@ -191,9 +191,9 @@ impl Policy {
         Self { hits: 0., tests: 0., draft_ms: None, verify_ms: [None; N], age: [0; N] }.restart()
     }
 
-    /// A new sequence: acceptance back to its prior (0.8, worth 4 drafts); the costs stay.
+    /// A new sequence: acceptance back to its prior (0.8, worth 2 drafts); the costs stay.
     fn restart(mut self) -> Self {
-        (self.hits, self.tests) = (3.2, 4.);
+        (self.hits, self.tests) = (1.6, 2.);
         self
     }
 
@@ -395,8 +395,8 @@ impl Speculator {
     }
 
     /// A round without drafts: `pending` alone through the chain while the block drafts the token after it on the
-    /// CPU (its whole draft vocabulary there, the driver's GPU being busy), which keeps the block's keys complete and
-    /// measures the acceptance.
+    /// CPU once this machine's stages are done (its whole draft vocabulary there), which keeps the block's keys
+    /// complete and measures the acceptance.
     fn shadow_round(
         &mut self,
         chain: &mut Chain,
@@ -407,16 +407,13 @@ impl Speculator {
         let pos = chain.pos;
         let t0 = std::time::Instant::now();
         let (h, draft) = (std::mem::take(&mut self.last), &mut self.draft);
-        let (shadow, verified) = std::thread::scope(|s| {
-            let t = s.spawn(|| -> Result<Option<u32>> {
-                let (y, _) = draft.forward(&[pending], &h, pos, false)?;
-                Ok(draft.best_all(&draft.final_hidden(&y)).map(|b| b.0))
-            });
-            let v = chain.verify(&[pending]);
-            (t.join(), v)
-        });
-        let (tops, rows) = verified?;
-        let shadow = shadow.map_err(|_| anyhow!("shadow draft panicked"))??;
+        let mut shadow = Ok(None);
+        let (tops, rows) = chain.verify_with(&[pending], || {
+            shadow = draft
+                .forward(&[pending], &h, pos, false)
+                .map(|(y, _)| draft.best_all(&draft.final_hidden(&y)).map(|b| b.0));
+        })?;
+        let shadow = shadow?;
         let ms = t0.elapsed().as_secs_f64() * 1e3;
         ensure!(tops.len() == 1 && rows.len() == w, "verification reply size");
         self.stats.verify_ms += ms;

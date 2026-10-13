@@ -674,6 +674,11 @@ impl Chain {
     /// Verify `tokens` (the pending token and its drafts) as one batch that can be rolled back: the candidates of every
     /// row and the batch's residual rows at the end of the model (`n x hc x d`), the MTP block's input.
     pub fn verify(&mut self, tokens: &[u32]) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
+        self.verify_with(tokens, || {})
+    }
+
+    /// `verify`, running `during` once this machine's stages are done, while the rest of the chain works.
+    pub fn verify_with(&mut self, tokens: &[u32], during: impl FnOnce()) -> Result<(Vec<Vec<(f32, u32)>>, Vec<f32>)> {
         let n = tokens.len();
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(self.pos + n <= self.context, "context exhausted");
@@ -693,6 +698,7 @@ impl Chain {
             let conn = self.next.as_mut().context("no machine holds the LM head")?;
             conn.send(&json!({"forward": {"pos": pos, "n": n, "reply": true, "verify": true}}), bytemuck::cast_slice(x))?;
         }
+        during();
         let (h, rows, remote) = match out {
             Output::Final(h) => (h, std::mem::take(&mut self.local.rows), false),
             Output::Hidden(_) => {
