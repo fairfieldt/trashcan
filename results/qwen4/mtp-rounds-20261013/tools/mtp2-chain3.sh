@@ -1,8 +1,8 @@
 #!/bin/bash
-# Six-Mac MTP rounds session 3 (through chain6.sh): the final check after rebasing on main adf8cfd (small-batch
-# experts, connect retries, load time), per the coordinator's testing policy: validation on the reference prompt and p100 (this branch, and main's
+# Six-Mac MTP rounds session 3 (through chain6.sh): the final check after rebasing on main 2293550 (small-batch
+# experts, connect retries, load time, prefill), per the coordinator's testing policy: validation on the reference prompt and p100 (this branch, and main's
 # p100 for a bit-for-bit comparison of the plain path), then one alternated MTP pair on the chat prompts (greedy,
-# deterministic, --runs 1): main adf8cfd, this branch. DRY=1 prints the commands instead of running them.
+# deterministic, --runs 1): main 2293550, this branch. DRY=1 prints the commands instead of running them.
 cd /Users/fairfieldt/dev/trashcan/.claude/worktrees/agent-a173c86cfe38f66c7/results/qwen4/chain-20261012 || exit 1
 MODEL=/home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf
 MTP=/home/fairfieldt/models/qwen3.8-flash-next/mtp/mtp-G-iq4.gguf
@@ -19,7 +19,7 @@ run() {
         "$@" > /dev/null 2>&1
     echo "done $2 rc $?"
 }
-B=trashcan-adf8cfd
+B=trashcan-2293550
 T=trashcan-mtp2
 run --name mtp2s3-val14 --binary $T --driver "validate results/mtp2s3-val14 $C --greedy 10"
 run --name mtp2s3-val100 --binary $T --driver "validate results/mtp2s3-val100 $C --greedy 10 --tokens-file $F/p100.ids"
