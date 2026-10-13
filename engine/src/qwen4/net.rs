@@ -33,8 +33,18 @@ impl Conn {
             w: BufWriter::with_capacity(1 << 20, s),
         })
     }
+    /// Connect to the next machine, retrying for up to a minute while it is still starting (its port refuses).
     fn connect(addr: &str) -> Result<Self> {
-        Self::new(TcpStream::connect(addr).with_context(|| format!("connecting to {addr}"))?)
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+        loop {
+            match TcpStream::connect(addr) {
+                Ok(s) => return Self::new(s),
+                Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused && std::time::Instant::now() < deadline => {
+                    std::thread::sleep(std::time::Duration::from_millis(100))
+                }
+                Err(e) => return Err(e).with_context(|| format!("connecting to {addr}")),
+            }
+        }
     }
     fn send(&mut self, header: &Value, blob: &[u8]) -> Result<()> {
         let h = serde_json::to_vec(header)?;
