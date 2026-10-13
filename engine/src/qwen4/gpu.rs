@@ -1127,11 +1127,12 @@ impl GpuStage {
             )
         };
         // Q8_0 out projections of prefill batches split along K, their partial sums in hgate (free during the
-        // sublayer), then summed in part order into y.
-        let splits = if OUT_SPLITS * n * d <= w * self.max_batch { OUT_SPLITS } else { OUT_SPLITS / 2 };
+        // sublayer, [part][token][row] for this batch's tokens), then summed in part order into y.
         let out_proj = |wt: &Dense, x: &Buffer, k: usize| -> Result<()> {
-            match wt {
-                Dense::Q8(b, stride) if n > 8 && k % (64 * splits) == 0 && splits * d <= w => {
+            let splits =
+                [OUT_SPLITS, OUT_SPLITS / 2].into_iter().find(|&s| k % (64 * s) == 0 && s * n * d <= w * self.max_batch);
+            match (wt, splits) {
+                (Dense::Q8(b, stride), Some(splits)) if n > 8 => {
                     let mut u = [0; 16];
                     u[0] = d as u32;
                     u[1] = k as u32;
