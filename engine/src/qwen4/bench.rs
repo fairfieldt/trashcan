@@ -42,6 +42,99 @@ fn json(v: &Profile) -> Vec<serde_json::Value> {
         .collect()
 }
 
+/// The head's candidate kernels (`qwen4_head_topk`, `qwen4_head_merge`) against qwen35's `topk` and `merge` on GPU
+/// `gpu`: random logits on a grid of 1/64 (many exact ties, some -0 and +0, equal maxima in different chunks) for
+/// the head slices of six Macs, a third, the whole vocabulary and a partial chunk, 1, 2 and 4 rows. Every row's 64
+/// candidates must match bit for bit between the two pairs and a CPU sort (score, then the lower id). One JSON line
+/// per shape with the milliseconds of each pair (`iterations` back to back).
+pub fn head_topk_check(gpu: usize, iterations: u32) -> Result<()> {
+    use anyhow::{ensure, Context};
+    use ash::vk;
+    let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("no such GPU")?;
+    let d = crate::vulkan::Device::new(inst, pd)?;
+    let q = unsafe {
+        d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(2), None)?
+    };
+    let mut seed = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        seed
+    };
+    for rows in [21504usize, 11776, 82944, 248320, 1000] {
+        for cols in [1usize, 2, 4] {
+            let chunks = rows.div_ceil(1024);
+            let mut logits: Vec<f32> = (0..rows * cols)
+                .map(|_| match next() {
+                    r if r % 97 == 0 => -0.0,
+                    r if r % 89 == 0 => 0.0,
+                    r => ((r >> 20) % 1024) as f32 / 64. - 8.,
+                })
+                .collect();
+            for c in 0..cols {
+                for k in 0..5 {
+                    logits[c * rows + (k * 4099 + c) % rows] = 9.0;
+                }
+            }
+            let x = d.upload(bytemuck::cast_slice(&logits))?;
+            let scratch = d.buffer(cols * chunks * 64 * 8, false, false, None)?;
+            let outs = [d.buffer(cols * 64 * 8, true, false, None)?, d.buffer(cols * 64 * 8, true, false, None)?];
+            let params = d.upload(bytemuck::cast_slice(&[0u32, cols as u32]))?;
+            let push = |a: u64, c: u64, u: [u32; 16]| {
+                let mut p = crate::vulkan::Push::default();
+                (p.ptr[0], p.ptr[2], p.ptr[6], p.u) = (a, c, params.address, u);
+                p
+            };
+            let mut ms = [0f64; 2];
+            for (k, (topk, merge)) in [("topk", "merge"), ("qwen4_head_topk", "qwen4_head_merge")].into_iter().enumerate() {
+                let cmd = d.begin()?;
+                unsafe {
+                    d.dev.cmd_reset_query_pool(cmd, q, 0, 2);
+                    d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
+                }
+                for _ in 0..iterations {
+                    let mut u = [0u32; 16];
+                    (u[0], u[1], u[2], u[15]) = (rows as u32, 64, (chunks * 64) as u32, cols as u32);
+                    d.dispatch(cmd, topk, push(x.address, scratch.address, u), chunks as u32, cols as u32);
+                    let mut u = [0u32; 16];
+                    (u[0], u[1], u[15]) = ((chunks * 64) as u32, 64, cols as u32);
+                    d.dispatch(cmd, merge, push(scratch.address, outs[k].address, u), 1, cols as u32);
+                }
+                unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+                d.finish(cmd)?;
+                d.run_reusable(cmd)?;
+                d.run(cmd)?;
+                let mut t = [0u64; 2];
+                unsafe {
+                    d.dev.get_query_pool_results(q, 0, &mut t, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)?
+                };
+                ms[k] = (t[1] - t[0]) as f64 * d.period as f64 / 1e6 / iterations as f64;
+            }
+            let (old, new) = (outs[0].read(cols * 64 * 8)?, outs[1].read(cols * 64 * 8)?);
+            ensure!(old == new, "rows {rows} cols {cols}: the candidates differ from topk/merge");
+            for c in 0..cols {
+                let row = &logits[c * rows..(c + 1) * rows];
+                let mut want: Vec<(f32, u32)> = row.iter().enumerate().map(|(i, &v)| (v, i as u32)).collect();
+                want.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap().then(a.1.cmp(&b.1)));
+                for (r, &(v, id)) in want[..64].iter().enumerate() {
+                    let at = (c * 64 + r) * 8;
+                    let got = (u32::from_le_bytes(new[at..at + 4].try_into()?), u32::from_le_bytes(new[at + 4..at + 8].try_into()?));
+                    ensure!(got == (v.to_bits(), id), "rows {rows} col {c} rank {r}: {got:?} against ({v}, {id})");
+                }
+            }
+            println!(
+                "{}",
+                serde_json::json!({"gpu": gpu, "rows": rows, "cols": cols, "chunks": chunks, "topk_merge_ms": ms[0],
+                    "qwen4_head_ms": ms[1], "identical": true})
+            );
+        }
+    }
+    unsafe { d.dev.destroy_query_pool(q, None) };
+    Ok(())
+}
+
 /// Run a prompt through the local stages only (chunks of `batch`), writing the last chunk's last-token
 /// activations in the reference dump format, for comparing a layer range against `qwen4 ref`.
 pub fn stage_dump(local: &mut Local, out: &std::path::Path, tokens: &[u32], batch: usize) -> Result<()> {

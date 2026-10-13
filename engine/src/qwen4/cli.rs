@@ -104,6 +104,14 @@ pub enum Cmd {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Check the head's candidate kernels (qwen4_head_topk, qwen4_head_merge) against qwen35's topk and merge on
+    /// random logits with ties, bit for bit, and time both on GPU `gpu`.
+    HeadTopkCheck {
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 200)]
+        iterations: u32,
+    },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
         #[arg(long, default_value_t = 64)]
@@ -297,6 +305,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             }
             Ok(())
         }
+        Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
             // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.
@@ -514,6 +523,16 @@ fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_j
     };
     let prefill_ms = profile(e);
     let mut decode_ms: Vec<Vec<f64>> = prefill_ms.iter().map(|p| vec![0.; p.len()]).collect();
+    // With TRASHCAN_Q4_TRACE: every machine's clock offset before and after the decode steps.
+    let mut clocks = Vec::new();
+    let mut sync = |e: &mut super::net::Chain| -> Result<()> {
+        if super::trace::on() {
+            let t = super::trace::now();
+            clocks.push(serde_json::json!({"t": t, "offsets": e.sync_clocks(64)?}));
+        }
+        Ok(())
+    };
+    sync(e)?;
     let start = std::time::Instant::now();
     for _ in 0..tg {
         top = e.forward(&[top[0].1], true, None)?.context("missing candidates")?;
@@ -524,6 +543,11 @@ fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_j
         }
     }
     let tg_s = start.elapsed().as_secs_f64();
+    sync(e)?;
+    if super::trace::on() {
+        e.write_traces()?;
+    }
+    super::trace::write("driver", serde_json::json!({"clocks": clocks, "plans": e.plans}));
     let mib: Vec<f64> = e
         .local
         .stages

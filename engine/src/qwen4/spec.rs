@@ -25,6 +25,9 @@ impl Local {
         if let Some(c) = &self.clocks {
             c.busy();
         }
+        if self.direct(n) {
+            return self.forward_direct(x, ple, pos, n, super::gpu::Mode::Verify);
+        }
         let g = &self.gguf;
         for stage in self.stages.iter_mut() {
             let out = match stage {

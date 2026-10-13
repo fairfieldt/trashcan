@@ -17,6 +17,10 @@ enum Store {
     File { file: File, offset: u64, direct: bool },
 }
 
+/// Gathers of up to this many rows (a decode step's or a verification batch's) try to read each row on the calling
+/// thread first (`Table::gather`).
+const FEW: usize = 64;
+
 pub struct Table {
     pub dim: usize,
     pub rows: u64,
@@ -220,19 +224,31 @@ impl Table {
         }
     }
 
-    /// Gather `rows` into `out` (`rows.len() x dim`), split over `threads` scoped threads.
+    /// Gather `rows` into `out` (`rows.len() x dim`), split over `threads` scoped threads. A decode step's few rows are
+    /// read on this thread when that needs no disk access (resident rows, or rows in the page cache); only the others
+    /// go to threads (spawning 16 of them cost about 0.5 ms per decode step, results/qwen4/decode-host-20261013).
     pub fn gather(&self, rows: &[u32], out: &mut [f32], threads: usize) -> Result<()> {
         ensure!(out.len() == rows.len() * self.dim, "n-gram output length");
-        let per = rows.len().div_ceil(threads.max(1)).max(1);
+        let few = rows.len() <= FEW;
+        let mut rest: Vec<(u32, &mut [f32])> = Vec::with_capacity(rows.len());
+        for (&r, o) in rows.iter().zip(out.chunks_exact_mut(self.dim)) {
+            if !(few && self.row_now(r, o)?) {
+                rest.push((r, o));
+            }
+        }
+        if few && rest.len() <= 1 {
+            let mut page = vec![0u8; 3 * 4096];
+            return rest.into_iter().try_for_each(|(r, o)| self.row(r, o, &mut page));
+        }
+        let per = rest.len().div_ceil(threads.max(1)).max(1);
         std::thread::scope(|s| -> Result<()> {
-            let handles: Vec<_> = rows
-                .chunks(per)
-                .zip(out.chunks_mut(per * self.dim))
-                .map(|(rs, os)| {
+            let handles: Vec<_> = rest
+                .chunks_mut(per)
+                .map(|part| {
                     s.spawn(move || -> Result<()> {
                         let mut page = vec![0u8; 3 * 4096];
-                        for (&r, o) in rs.iter().zip(os.chunks_exact_mut(self.dim)) {
-                            self.row(r, o, &mut page)?;
+                        for (r, o) in part.iter_mut() {
+                            self.row(*r, o, &mut page)?;
                         }
                         Ok(())
                     })
@@ -243,6 +259,33 @@ impl Table {
             }
             Ok(())
         })
+    }
+
+    /// Row `r` into `out` if that needs no disk access: a resident row, or one in the page cache (`RWF_NOWAIT` fails
+    /// instead of waiting for the disk). False when the row must be read from the disk.
+    fn row_now(&self, r: u32, out: &mut [f32]) -> Result<bool> {
+        ensure!((r as u64) < self.rows, "n-gram row {r} out of range");
+        let rb = self.row_bytes();
+        match &self.store {
+            Store::Ram(map) => dequant(self.ty, &map[r as usize * rb..(r as usize + 1) * rb], out).map(|_| true),
+            #[cfg(target_os = "linux")]
+            Store::File {
+                file,
+                offset,
+                direct: false,
+            } => {
+                use std::os::unix::io::AsRawFd;
+                let mut b = [0u8; 512];
+                let iov = libc::iovec { iov_base: b.as_mut_ptr().cast(), iov_len: rb };
+                let at = (offset + r as u64 * rb as u64) as libc::off_t;
+                let n = unsafe { libc::preadv2(file.as_raw_fd(), &iov, 1, at, libc::RWF_NOWAIT) };
+                if n != rb as isize {
+                    return Ok(false);
+                }
+                dequant(self.ty, &b[..rb], out).map(|_| true)
+            }
+            _ => Ok(false),
+        }
     }
 }
 
