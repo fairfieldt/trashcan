@@ -126,6 +126,12 @@ def simulate(steps, mode, rng):
         while kept < k:
             c, _ = s[kept]
             drafted += 1
+            if mode == 'include':
+                # session 1's rule: an unsure draft is verified as the round's last
+                kept += 1
+                if c < U and not refresh:
+                    break
+                continue
             if mode != 'main':
                 pol.sure(c >= U)
             if mode != 'main' and c < U and not refresh:
@@ -159,7 +165,7 @@ def simulate(steps, mode, rng):
 
 
 print(f'T {T}: draft {D} ms, rounds {V} ms, plain {a.plain} ms, unsure below {U}')
-for mode in ('main', 'drop', 'two-rate'):
+for mode in ('main', 'include', 'drop', 'two-rate'):
     rates = {}
     for p, st in traces.items():
         reps = 1 if T == 0 else 20
