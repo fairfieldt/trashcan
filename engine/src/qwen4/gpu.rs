@@ -1930,7 +1930,7 @@ impl GpuStage {
     /// Dispatch times of the graph that ran `n` tokens at `pos` last (`TRASHCAN_Q4_PROFILE=1`): per dispatch its
     /// label, GPU milliseconds from its start to the end of all work before it, and the gap before its start.
     pub fn dispatch_profile(&self, pos: usize, n: usize) -> Result<Vec<(String, f64, f64)>> {
-        let Some(graph) = self.graphs.get(&(n, partitions(pos, n), false)) else { return Ok(Vec::new()) };
+        let Some(graph) = self.graphs.get(&(n, partitions(pos, n), false, Mode::Plain)) else { return Ok(Vec::new()) };
         let Some((pool, labels)) = &graph.stamps else { return Ok(Vec::new()) };
         let mut t = vec![0u64; labels.len()];
         unsafe {
