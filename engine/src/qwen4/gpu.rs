@@ -370,6 +370,21 @@ fn q8_decode_shaders(rows: usize) -> (&'static str, &'static str, usize) {
     }
 }
 
+/// UNFINISHED experiment switch (TRASHCAN_VFY_MIX=rows; results/qwen4/verify-batches-20261012): the lane-per-row
+/// mixer kernels for batches of 2-8 tokens (`n1`: TRASHCAN_VFY_N1=1, single tokens too). To be kept only with a
+/// measured end-to-end gain, or removed.
+#[derive(Clone, Copy, Debug)]
+struct Vfy {
+    mix: bool,
+    n1: bool,
+}
+impl Vfy {
+    fn from_env() -> Self {
+        let get = |k: &str| std::env::var(k).unwrap_or_default();
+        Self { mix: get("TRASHCAN_VFY_MIX") == "rows", n1: get("TRASHCAN_VFY_N1") == "1" }
+    }
+}
+
 /// The f32 projection kernel: up to four tokens issue all their loads at once (qwen4_matf32).
 fn matf32_shader(n: usize) -> &'static str {
     match n {
@@ -1015,6 +1030,7 @@ impl GpuStage {
             stamps: None,
         };
         let cmd = current.get();
+        let vfy = Vfy::from_env();
         if std::env::var_os("TRASHCAN_Q4_PROFILE").is_some() {
             let pool = unsafe {
                 gpu.dev.create_query_pool(
@@ -1188,6 +1204,60 @@ impl GpuStage {
         };
         // A mixer: sublayer input in u and, with an inject matrix, write weights in w (or the fused output).
         let mixer = |graph: &mut Graph, m: &Mix, pending: bool, tag: &str| -> Result<()> {
+            let lanes = vfy.mix && fused && (n > 1 || vfy.n1) && hc == 4 && d == 2560 && c.hc_rank == 320;
+            if let (true, Some(Dense::Q8(fb, fst)), Dense::Q8(ub, ust)) = (lanes, &m.fused, &m.up) {
+                // Lane-per-row mixer: the pending combine, gamma * x and the sums of squares, then both halves
+                // reading their matrices once for up to four tokens.
+                let (cur, next) = (mo_cur.get(), 1 - mo_cur.get());
+                let (mo_next, mo_prev) = (&self.mo[next], &self.mo[cur]);
+                let (cc, groups) = (n.min(4), n.div_ceil(4));
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[2] = c.hc_rank as u32;
+                u[11] = u32::from(pending);
+                gpu.dispatch(
+                    current.get(),
+                    "qwen4_mix_prep",
+                    push(
+                        [self.x.address, self.y.address, self.xn.address, mo_prev.address, m.norm.address, self.psum.address],
+                        u,
+                    ),
+                    (w / 256) as u32,
+                    n as u32,
+                );
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[1] = w as u32;
+                u[2] = c.hc_rank as u32;
+                u[3] = *fst;
+                u[12] = eps;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    ["qwen4_mix_rows_down_c1", "qwen4_mix_rows_down_c2", "qwen4_mix_rows_down_c3", "qwen4_mix_rows_down_c4"]
+                        [cc - 1],
+                    push([0, self.xn.address, self.mp.address, self.psum.address, 0, mo_next.address], u)
+                        .with_extra(self.mcount.address),
+                    (c.hc_rank + 4).div_ceil(64) as u32,
+                    (groups * (w / SPLIT)) as u32,
+                    fb,
+                )?;
+                let mut u = [0; 16];
+                u[0] = d as u32;
+                u[2] = c.hc_rank as u32;
+                u[3] = *ust;
+                gpu.dispatch_matrix(
+                    current.get(),
+                    ["qwen4_mix_rows_up_c1", "qwen4_mix_rows_up_c2", "qwen4_mix_rows_up_c3", "qwen4_mix_rows_up_c4"][cc - 1],
+                    push([self.x.address, mo_next.address, self.u.address, 0, m.norm.address, 0], u),
+                    (d / 16) as u32,
+                    groups as u32,
+                    ub,
+                )?;
+                capture(graph, format!("hc_mixed{tag}"), &self.u, d)?;
+                mo_cur.set(next);
+                wloc.set((mo_next.address, (c.hc_rank + 8) as u32, c.hc_rank as u32));
+                return Ok(());
+            }
             if let (true, Some(fm)) = (fused, &m.fused) {
                 let (cur, next) = (mo_cur.get(), 1 - mo_cur.get());
                 let (mo_next, mo_prev) = (&self.mo[next], &self.mo[cur]);

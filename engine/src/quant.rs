@@ -28,12 +28,13 @@ pub fn repack_q4(
     out
 }
 
-/// Q4_0 blocks as stored (f16 scale, 16 bytes of nibbles) split into all f16 scales, padded to 16 bytes, then
-/// the 16-byte blocks: 18 bytes per 32 weights, the GGUF size (`repack_q4` widens scales to f32, 20 bytes).
+/// Q4_0 blocks as stored (f16 scale, 16 bytes of nibbles) split into all f16 scales, padded to 64 bytes (whole
+/// cache lines), then the 16-byte blocks: 18 bytes per 32 weights, the GGUF size (`repack_q4` widens scales to f32,
+/// 20 bytes).
 /// Returns the bytes and the offset of the blocks in u32 words.
 pub fn repack_q4h(src: &[u8]) -> (Vec<u8>, usize) {
     let count = src.len() / 18;
-    let blocks_at = (count * 2).next_multiple_of(16);
+    let blocks_at = (count * 2).next_multiple_of(64);
     let mut out = vec![0u8; blocks_at + count * 16];
     for (i, b) in src.chunks_exact(18).enumerate() {
         out[i * 2..i * 2 + 2].copy_from_slice(&b[..2]);
@@ -43,11 +44,12 @@ pub fn repack_q4h(src: &[u8]) -> (Vec<u8>, usize) {
 }
 
 /// IQ4_XS superblocks (256 weights: f16 d, u16 high scale bits, 4 bytes of low scale bits, 128 bytes of nibbles)
-/// split into all 8-byte headers, padded to 16 bytes, then the nibbles: 136 bytes per 256 weights, as stored.
+/// split into all 8-byte headers, padded to 64 bytes (whole cache lines), then the nibbles: 136 bytes per 256
+/// weights, as stored.
 /// The nibbles of each 32-weight sub-block keep the Q4_0 order. Returns the bytes and the blocks' word offset.
 pub fn repack_iq4xs(src: &[u8]) -> (Vec<u8>, usize) {
     let count = src.len() / 136;
-    let blocks_at = (count * 8).next_multiple_of(16);
+    let blocks_at = (count * 8).next_multiple_of(64);
     let mut out = vec![0u8; blocks_at + count * 128];
     for (i, b) in src.chunks_exact(136).enumerate() {
         out[i * 8..i * 8 + 8].copy_from_slice(&b[..8]);
@@ -56,11 +58,11 @@ pub fn repack_iq4xs(src: &[u8]) -> (Vec<u8>, usize) {
     (out, blocks_at / 4)
 }
 
-/// Q8_0 blocks split into all f16 scales, padded to 16 bytes, then the 32-byte blocks: 34 bytes per 32 weights,
-/// as stored. Returns the bytes and the offset of the blocks in u32 words.
+/// Q8_0 blocks split into all f16 scales, padded to 64 bytes (whole cache lines), then the 32-byte blocks: 34 bytes
+/// per 32 weights, as stored. Returns the bytes and the offset of the blocks in u32 words.
 pub fn repack_q8h(src: &[u8]) -> (Vec<u8>, usize) {
     let count = src.len() / 34;
-    let blocks_at = (count * 2).next_multiple_of(16);
+    let blocks_at = (count * 2).next_multiple_of(64);
     let mut out = vec![0u8; blocks_at + count * 32];
     for (i, b) in src.chunks_exact(34).enumerate() {
         out[i * 2..i * 2 + 2].copy_from_slice(&b[..2]);

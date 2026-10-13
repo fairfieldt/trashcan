@@ -1,0 +1,21 @@
+#version 460
+#include "common.glsl"
+// Input of the lane-per-row mixer kernels (qwen4_mix_rows_down, qwen4_mix_rows_up): applies the pending combine
+// x_s += w_s * y in place (flags & 1), writes gamma_s * x_s, the first half's input, and the sum of squares of each
+// 256 residual values. One workgroup per 256 values of the residual and token.
+// a: x [t][hc][n], b: y [t][n], c: g [t][hc][n], d: previous mixer out (write weights at m), e: gamma [hc][n],
+// f: sums of squares [t][hc * n / 256]. p.n = stream width, p.m = bottleneck rows.
+layout(local_size_x=256) in;
+shared float part[4];
+void main(){
+uint t=gl_WorkGroupID.y;
+if(t>=batch())return;
+uint tid=gl_LocalInvocationID.x,j=gl_WorkGroupID.x*256+tid,s=j/p.n,i=j%p.n,at=t*4*p.n+j;
+float x=a_f.v[at],w=d_f.v[t*(p.m+8)+p.m+s],y=b_f.v[t*p.n+i],gm=e_f.v[j];
+if((p.flags&1)!=0){x=fma(w,y,x);a_f.v[at]=x;}
+c_f.v[at]=x*gm;
+float q=subgroupAdd(x*x);
+if(gl_SubgroupInvocationID==0)part[gl_SubgroupID]=q;
+barrier();
+if(tid==0)f_f.v[t*(4*p.n/256)+gl_WorkGroupID.x]=(part[0]+part[1])+(part[2]+part[3]);
+}

@@ -511,6 +511,9 @@ impl Device {
             ("qwen4_mix_act", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_act.spv")).as_slice()),
             ("qwen4_mix_down_sk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk.spv")).as_slice()),
             ("qwen4_mix_down_sk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk4.spv")).as_slice()),
+            ("qwen4_mix_prep", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_prep.spv")).as_slice()),
+            ("qwen4_mix_rows_down", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_rows_down.spv")).as_slice()),
+            ("qwen4_mix_rows_up", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_rows_up.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -583,6 +586,18 @@ impl Device {
                 "qwen4_mix_up" => &[("qwen4_mix_up", Some(0)), ("qwen4_mix_up_q8", Some(1))],
                 "qwen4_mix_down_sk" => &[("qwen4_mix_down_sk", Some(0)), ("qwen4_mix_down_sk_q8", Some(1))],
                 "qwen4_mix_down_sk4" => &[("qwen4_mix_down_sk4", Some(0)), ("qwen4_mix_down_sk4_q8", Some(1))],
+                "qwen4_mix_rows_down" => &[
+                    ("qwen4_mix_rows_down_c1", Some(1)),
+                    ("qwen4_mix_rows_down_c2", Some(2)),
+                    ("qwen4_mix_rows_down_c3", Some(3)),
+                    ("qwen4_mix_rows_down_c4", Some(4)),
+                ],
+                "qwen4_mix_rows_up" => &[
+                    ("qwen4_mix_rows_up_c1", Some(1)),
+                    ("qwen4_mix_rows_up_c2", Some(2)),
+                    ("qwen4_mix_rows_up_c3", Some(3)),
+                    ("qwen4_mix_rows_up_c4", Some(4)),
+                ],
                 "qwen4_attention_sparse" => &[
                     ("qwen4_attention_sparse", None),
                     ("qwen4_attention_sparse8", Some(8)),
@@ -713,14 +728,16 @@ impl Device {
         if req.size > CHUNK / 2 {
             return Ok(None);
         }
-        let fits = |c: &Chunk| c.ty == ty && c.used.next_multiple_of(req.alignment) + req.size <= c.size;
+        // Whole 64-byte cache lines: the lane-per-row kernels load matrix rows a line at a time.
+        let align = req.alignment.max(64);
+        let fits = |c: &Chunk| c.ty == ty && c.used.next_multiple_of(align) + req.size <= c.size;
         if !chunks.iter().any(fits) {
             let ai = vk::MemoryAllocateInfo::default().allocation_size(CHUNK).memory_type_index(ty);
             let memory = unsafe { self.dev.allocate_memory(&ai, None)? };
             chunks.push(Chunk { memory, ty, size: CHUNK, used: 0 });
         }
         let c = chunks.iter_mut().find(|c| fits(c)).unwrap();
-        let offset = c.used.next_multiple_of(req.alignment);
+        let offset = c.used.next_multiple_of(align);
         c.used = offset + req.size;
         unsafe { self.dev.bind_buffer_memory(buf, c.memory, offset)? };
         Ok(Some((c.memory, offset)))
