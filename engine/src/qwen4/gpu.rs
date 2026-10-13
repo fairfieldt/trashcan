@@ -840,9 +840,8 @@ impl GpuStage {
         Ok(())
     }
 
-    /// Score the hidden state at `input` with this stage's head rows: logits, chunk top-k, merged top-k in `hd.top`.
-    /// Score the hidden states of `cols` rows of `hd.h`: logits row by row (each exactly as a single row's), then the
-    /// chunk top-k and the merge of every row at once.
+    /// Score the hidden states of `cols` rows of `hd.h` with this stage's head rows: logits row by row (each exactly as
+    /// a single row's), then the chunk top-k and the merge of every row at once into `hd.top`.
     fn score_head(&self, graph: &mut Graph, cmd: vk::CommandBuffer, hd: &Head, cols: usize, dump: bool) -> Result<()> {
         let gpu = &self.gpu;
         let d = self.c.d;

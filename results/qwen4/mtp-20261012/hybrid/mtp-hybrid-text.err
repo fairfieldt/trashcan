@@ -1,0 +1,6 @@
+plan: [[(0, 3), (3, 6)], [(6, 48)]]
+GPU0: layers 0..3
+GPU0: 4247.8 MiB allocated; device-local heap 4248 of 5888 MiB used, budget 5868
+GPU1: layers 3..6
+GPU1: 4202.8 MiB allocated; device-local heap 4203 of 5888 MiB used, budget 5850
+draft block loaded in 4.0 s

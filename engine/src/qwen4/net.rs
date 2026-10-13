@@ -323,7 +323,8 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
 
 // A batch that keeps rows (`"keep": "verify"` or `"rows"`): every machine passes the final hidden states up (all
 // rows of a verification batch, the last row otherwise) with the batch's residual rows from the machine that ends the
-// model (the driver's MTP block reads them while the head rows are scored), then the candidates of every row follow.
+// model (the driver's MTP block reads them; after a prompt's last chunk it starts while the head rows are scored), then
+// the candidates of every row follow.
 
 fn send_kept_hidden(up: &mut Conn, h: &[f32], rows: &[f32]) -> Result<()> {
     let mut blob = bytemuck::cast_slice::<f32, u8>(h).to_vec();

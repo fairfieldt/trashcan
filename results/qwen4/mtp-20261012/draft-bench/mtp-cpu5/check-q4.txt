@@ -1,0 +1,5 @@
+prompt (14 tokens): output residual rel 2.638e-1
+prompt: draft logits rel 2.174e-1 cos 0.977495, argmax 9419 / 9419
+step 0: draft logits rel 1.684e-1 cos 0.985869, argmax 0 / 0
+step 1: draft logits rel 2.125e-1 cos 0.980380, argmax 2500 / 2500
+step 2: draft logits rel 1.698e-1 cos 0.985501, argmax 628 / 628
