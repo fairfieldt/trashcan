@@ -1,9 +1,11 @@
 //! Bounds for work submitted ahead (`GpuStage::presubmit`): such a command buffer waits on the GPU for a host-set
-//! event, and amdgpu resets a GPU whose job runs past its timeout (about 10 s), waiting included. Work is submitted
-//! ahead only once its input is on the way, so a gate is normally released within one decode step; a watchdog thread
-//! releases any gate armed for longer than `DEADLINE` (the GPU then computes garbage and the stage refuses to go on, so
-//! its session ends), and a SIGINT, SIGTERM or SIGHUP sets every gate before the process ends
-//! (`qwen::gpu::register_gate`, as for the 27B's tensor-parallel gates).
+//! event, and amdgpu resets a GPU whose job runs past its timeout, waiting included (`lockup_timeout`, 2 s by default
+//! on the Macs' 7.2 kernels; the reset loses VRAM). Work is submitted ahead only once its input is on
+//! the way, so a gate is normally released within one decode step; a watchdog thread releases any gate armed for
+//! longer than `DEADLINE`, well inside the kernel's timeout (the GPU then computes garbage and the stage refuses to go
+//! on, so its session ends), and a SIGINT, SIGTERM or SIGHUP sets every gate before the process ends
+//! (`qwen::gpu::register_gate`, as for the 27B's tensor-parallel gates). A process killed otherwise leaves its gates
+//! armed, and the kernel resets the GPU.
 use crate::vulkan::Device;
 use anyhow::{bail, Result};
 use ash::vk;
@@ -12,8 +14,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-/// Longest a gate may stay armed.
-pub const DEADLINE: Duration = Duration::from_secs(2);
+/// Longest a gate may stay armed: half the kernel's 2 s job timeout (the watchdog looks every 50 ms).
+pub const DEADLINE: Duration = Duration::from_secs(1);
 
 struct Gate {
     dev: vk::Device,
