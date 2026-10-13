@@ -24,3 +24,15 @@ for name, v in SCENARIOS.items():
     print('draft ms\t' + '\t'.join(f'k={k}' for k in ROUNDS))
     for dm in DRAFT_MS:
         print(f'{dm}\t\t' + '\t'.join(f'{1000 * ROUNDS[k] / (k * dm + v[k + 1]):.1f}' for k in ROUNDS))
+
+# The engine's choice of drafts per round (`spec::Policy`): the k with the most expected tokens per ms, a round of k
+# drafts yielding 1 + a + ... + a^k tokens at per-draft acceptance a (k = 0: a plain step).
+print('\nbest k by per-draft acceptance (6 ms draft steps)')
+print('a\t' + '\t\t'.join(SCENARIOS))
+for a in [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+    cells = []
+    for v in SCENARIOS.values():
+        rate = {k: sum(a ** i for i in range(k + 1)) / (k * 6.0 + v[k + 1]) for k in range(4)}
+        k = max(rate, key=rate.get)
+        cells.append(f'k={k} {1000 * rate[k]:.1f} tok/s')
+    print(f'{a}\t' + '\t\t'.join(cells))
