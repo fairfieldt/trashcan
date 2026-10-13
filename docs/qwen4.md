@@ -320,10 +320,10 @@ short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 1.39 s, **369 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 512 | ~0.25 s | 1.39 s, **369 tok/s** (measured; 1024 tokens: 512 tok/s) | ~1.2 s, ~430 tok/s |
 | 2048 | ~0.8 s | 3.4 s, **598 tok/s** (measured) | ~3 s, ~660 tok/s |
-| 4K | ~1.5 s, 2,800 tok/s | ~6.5 s, ~630 tok/s | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | 13.2 s, **618 tok/s** (measured before the split-K mixers) | ~9 s, ~920 tok/s |
+| 4K | ~1.5 s, 2,800 tok/s | 6.3 s, **650 tok/s** (measured) | ~5 s, ~820 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | 11.6 s, **707 tok/s** (measured) | ~9 s, ~920 tok/s |
 | 32K | ~11 s, 3,150 tok/s | ~40 s, ~820 tok/s | ~35 s, ~950 tok/s |
 | 128K | ~42 s | ~3.4 min, ~650 tok/s | ~2.5 min, ~900 tok/s |
 | 200K | ~65 s | ~5.8 min, ~590 tok/s | ~4 min, ~850 tok/s |

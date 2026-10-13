@@ -633,14 +633,19 @@ impl Chain {
         Ok((self.extend(&ids[start..])?, start))
     }
 
-    /// Prefill chunk size for `n` tokens. The last chunk's result is back after (chunks + stages - 1) chunk times and
-    /// a chunk costs about as much as 16 more tokens (results/qwen4/prefill-chunks-20261012), so the best size is about
-    /// sqrt(16 n / (stages - 1)): the nearest power of two from 16 up to the configured batch.
+    /// Prefill chunk size for `n` tokens. The last chunk's result is back after (chunks + stages - 1) chunk times, so
+    /// short prompts take small chunks and long ones large chunks. Measured on six Macs (12 stages,
+    /// results/qwen4/prefill-chunks-20261012): 32-token chunks were best at 256 and 512 tokens, 64 from 1024 to 4096
+    /// tokens and 128 at 6144 and 8192; the bands are in tokens per stage after the first, up to the configured batch.
     pub fn chunk_size(&self, n: usize) -> usize {
         let stages: usize = self.plans.iter().map(Vec::len).sum();
-        let best = (16. * n as f64 / stages.saturating_sub(1).max(1) as f64).sqrt();
-        let pow = 1usize << best.max(1.).log2().round() as u32;
-        pow.max(16).min(self.max_batch)
+        let chunk = match n / stages.saturating_sub(1).max(1) {
+            0..12 => 16,
+            12..70 => 32,
+            70..450 => 64,
+            _ => 128,
+        };
+        chunk.min(self.max_batch)
     }
 
     /// Process `ids` at the current position in chunks; only the final chunk waits for its result.
