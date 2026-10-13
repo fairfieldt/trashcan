@@ -2,7 +2,8 @@
 
 Follows [results/qwen4/mtp-20261012](../mtp-20261012/README.md) (the MTP block drafting on the driver's CPU, adaptive
 rounds of 0-3 drafts, greedy chat replies 18.3 -> 21.6 tok/s on six Macs). Branch `worktree-agent-a173c86cfe38f66c7`,
-started from main `4c1346d` (session 1), measured on main `7da6f93` (session 2), rebased on main `2293550` (session 3).
+started from main `4c1346d` (session 1), measured on main `7da6f93` (session 2), `2293550` (session 3) and `eb4dbeb`
+(session 4: the 1-4-token verification kernels).
 
 ## Sampling (`spec::Draws`)
 
@@ -166,6 +167,17 @@ plain step with that draft standing in for its shadow draft; an unsure later dra
 (their confidence from all 64K draft rows) feed both rates; rounds that measure a batch size's cost (`REFRESH`) verify
 all their drafts.
 
+The policy reads the batch costs from its own measurements, so cheaper verification needs no change there; the
+threshold is fixed. With main `eb4dbeb`'s 1-4-token kernels (49.4 / 67 / 83 / 106 ms rounds, plain 49.2 ms;
+`tools/policysim-eb4dbeb.sh`, `gate/policysim-eb4dbeb.txt`) 0.6 is still the best threshold at T = 0 (28.80 tok/s
+against 28.53 at 0.5, 28.17 at 0.7, 27.94-28.15 at 0.3-0.4) and as good as 0.5 at T = 1 (27.20 / 27.29). Gates that
+weigh each draft against the measured cost of verifying it (`gate/policysim2.py`: keep draft j while P g(c_j) >= R
+(V(j) - V(j-1)), g the drafter's confidence scaled by the running ratio of accepted drafts to their confidence, P the
+product over the round's earlier drafts, R the running tokens per ms; or always 3 drafts with that gate) do no better:
+28.05-28.63 against 28.80 at T = 0, 27.29-27.55 against 27.20 at T = 1, and the 3-draft variant loses 8-10% on the
+reference prompt (`gate/policysim2-eb4dbeb.txt`). Against main's drafting with its own costs (5.85 ms draft steps,
+k = 0 rounds 2 ms over a plain step) the replays expect +5.5% at T = 0 (27.26 -> 28.77) and +2.1% at T = 1.
+
 ## End to end (six Macs)
 
 `qwen4 mtp spec MODEL --gpus 0,1 --nodes indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071
@@ -207,8 +219,8 @@ turned many rounds into 1-draft rounds (water at 0.6: 29 against 3), which sessi
 Every run of session 1 gave plain decoding's tokens (greedy, T = 0.6, 0.8, 1.0, and 30 seeds at T = 1 on the reference
 prompt, 24 tokens each, 14 distinct outputs). The server (`tools/q4serve-test.sh ... --mtp mtp-G-iq4.gguf
 --draft-tokens 3`, default temperature 1): every `scripts/test-server.py` check passes, seeded sampling reproducible
-included; `q4-turns.py` 57 tokens in 2.72 s, then 64 (78 of 99 prompt tokens reused) in 2.51 s (session 4: 2.83 and
-2.53 s).
+included; `q4-turns.py` 57 tokens in 2.72 s, then 64 (78 of 99 prompt tokens reused) in 2.51 s (main's MTP in the
+previous README's session 4: 2.83 and 2.53 s).
 
 **Session 2** (`chain2/`, this branch on main `7da6f93`: everything above with unsure drafts dropped and the two-rate
 policy; `tools/mtp2-chain2.sh`). The same binary with every draft counted sure (`no-gate`: main's pooled policy, every
@@ -262,16 +274,18 @@ sampling/study.sh                                   # accept --temperature T --d
 python3 sampling/sampling.py DIR [--top-k 20] [--draft-scale 0.9] [--csv steps.csv]
 python3 gate/confsim.py DIR; python3 gate/confsim2.py DIR 1.0     # unsure drafts: fixed rules on the traces
 python3 gate/policysim.py DIR --t 0 [--verify 40,52,60,70]          # the engine's policy variants on the traces
+tools/policysim-eb4dbeb.sh DIR      # eb4dbeb's round costs: thresholds, cost-aware gates (gate/policysim2.py)
 # Mac: two-process CPU chain (identity, greedy and sampled); the drafter's candidates against main's
 tools/cpu2.sh 0 1; tools/same.sh
 # incite (under a lease): draft-step timing, main and this branch alternating; the instrumented profile
 tools/mtp2-db-ab2.sh; python3 tools/instrument2.py WORKTREE   # temporary timers, then draft-bench
 # x86 unit tests (the SSSE3/AVX drafter kernels) built in the kbuild VM and run on incite
 tools/xtest.sh; ./trashcan-mtp2-tests qwen4::draft qwen4::spec
-# six Macs (sessions 1-3; DRY=1 prints session 3's commands)
+# six Macs (sessions 1-4; DRY=1 prints the commands of sessions 3 and 4)
 chain6.sh mtp2-chain1 50 OWNER -- tools/mtp2-chain1.sh; tools/fetch_session.sh chain1 NAMES...
 chain6.sh mtp2-chain2 35 OWNER -- tools/mtp2-chain2.sh; chain6.sh mtp2-chain3 8 OWNER -- tools/mtp2-chain3.sh
-python3 summary.py chain1/*.json
+chain6.sh mtp2-chain4 4 OWNER -- tools/mtp2-chain4.sh
+python3 summary.py chain1/*.json; tools/valcmp.sh mtp2s4     # validation dumps against the CPU references and main's
 ```
 
 ## What is left
