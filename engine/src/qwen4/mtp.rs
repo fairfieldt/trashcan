@@ -215,8 +215,9 @@ pub enum Cmd {
         #[arg(long, default_value_t = 0)]
         skip_head_rows: usize,
     },
-    /// Speculative decoding on the chain: for every prompt, greedy decoding without and with MTP drafts, `runs` times
-    /// alternating; the outputs must be identical. Prints one JSON line per run.
+    /// Speculative decoding on the chain: for every prompt, decoding without and with MTP drafts, `runs` times
+    /// alternating (greedy, or sampled with seed `seed + run`); the outputs must be identical. Prints one JSON line per
+    /// run.
     Spec {
         model: std::path::PathBuf,
         #[command(flatten)]
@@ -236,6 +237,15 @@ pub enum Cmd {
         tg: usize,
         #[arg(long, default_value_t = 1)]
         runs: usize,
+        /// Sampling (`spec::Draws`); temperature 0 decodes greedily.
+        #[arg(long, default_value_t = 0.)]
+        temperature: f32,
+        #[arg(long, default_value_t = 64)]
+        top_k: usize,
+        #[arg(long, default_value_t = 0.95)]
+        top_p: f32,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
         /// Prompts (token id files); default the 14-token reference prompt.
         prompts: Vec<std::path::PathBuf>,
     },
@@ -260,6 +270,10 @@ pub enum Cmd {
         /// keep the chained drafts' values (no rewrite with the trunk's rows); prints tokens per round.
         #[arg(long)]
         rounds: bool,
+        /// Feed every chain the run's own tokens (the drafts a round reaches when the earlier ones were accepted)
+        /// and save each draft's top candidates (fast draft; acceptance of sampled drafts, `sampling.py`).
+        #[arg(long)]
+        teacher: bool,
     },
     /// Greedy decoding on the CPU reference, drafting `depth` tokens with the MTP block before every step; writes
     /// the generated ids and each step's drafts as JSON (acceptance of greedy drafts).
@@ -276,7 +290,22 @@ pub enum Cmd {
         /// Run the block over only the last `window` prompt tokens (it attends to nothing before them).
         #[arg(long)]
         window: Option<usize>,
+        /// Sample the run from the trunk at this temperature (top-k, top-p, seed) instead of decoding greedily; the
+        /// trunk's top candidates of every step are saved.
+        #[arg(long, default_value_t = 0.)]
+        temperature: f32,
+        #[arg(long, default_value_t = 64)]
+        top_k: usize,
+        #[arg(long, default_value_t = 0.95)]
+        top_p: f32,
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
     },
+}
+
+/// Candidates as JSON pairs `[logit, id]`.
+fn tops_json(top: &[(f32, u32)]) -> serde_json::Value {
+    serde_json::json!(top.iter().map(|(s, id)| serde_json::json!([s, id])).collect::<Vec<_>>())
 }
 
 /// Prompt rows `accept` saves before the generated ones (enough for a `replay` window of 128 tokens).
@@ -301,8 +330,13 @@ pub fn run(cmd: Cmd) -> Result<()> {
             draft_threads,
             tg,
             runs,
+            temperature,
+            top_k,
+            top_p,
+            seed,
             prompts,
         } => {
+            super::spec::Draws::new(temperature, top_k, top_p, seed)?;
             let mut chain = run.chain(&model)?;
             chain.enable_verify(draft_tokens + 1)?;
             let t0 = std::time::Instant::now();
@@ -320,12 +354,14 @@ pub fn run(cmd: Cmd) -> Result<()> {
             };
             let mut failed = false;
             for i in 0..runs {
+                let draws = super::spec::Draws::new(temperature, top_k, top_p, seed + i as u64)?;
                 for (name, ids) in &prompts {
-                    let (plain, pre0, dec0) = super::spec::greedy(&mut chain, None, ids, tg)?;
+                    let (plain, pre0, dec0) = super::spec::decode(&mut chain, None, ids, tg, &draws)?;
                     let mut row = serde_json::json!({"run": i, "prompt": name, "prompt_tokens": ids.len(), "tg": tg,
                         "plain_tok_s": (tg - 1) as f64 / dec0, "plain_prefill_s": pre0,
-                        "draft_tokens": draft_tokens, "draft_vocab": spec.draft.vocab()});
-                    let (fast, pre1, dec1) = super::spec::greedy(&mut chain, Some(&mut spec), ids, tg)?;
+                        "draft_tokens": draft_tokens, "draft_vocab": spec.draft.vocab(),
+                        "sampling": {"temperature": temperature, "top_k": top_k, "top_p": top_p, "seed": draws.seed}});
+                    let (fast, pre1, dec1) = super::spec::decode(&mut chain, Some(&mut spec), ids, tg, &draws)?;
                     let same = plain == fast;
                     failed |= !same;
                     let st = &spec.stats;
@@ -343,7 +379,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                     println!("{row}");
                 }
             }
-            ensure!(!failed, "speculative output differs from greedy decoding");
+            ensure!(!failed, "speculative output differs from plain decoding");
             Ok(())
         }
         Cmd::Replay {
@@ -357,6 +393,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             reference,
             threads: th,
             rounds,
+            teacher,
         } => {
             let r: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&run)?)?;
             let ids = |v: &serde_json::Value| -> Vec<u32> {
@@ -415,6 +452,29 @@ pub fn run(cmd: Cmd) -> Result<()> {
                     "tokens": gen.len() - 1, "tokens_per_round": (gen.len() - 1) as f64 / count as f64});
                 std::fs::write(&out, o.to_string())?;
                 println!("{o}");
+                return Ok(());
+            }
+            if teacher {
+                // Step i drafts the tokens after gen[i] from the trunk row before it; chained steps read the run's
+                // tokens, as a round does once the drafts before were accepted.
+                let f = fast.as_mut().context("--teacher needs the fast draft")?;
+                let t0 = std::time::Instant::now();
+                let mut tops = Vec::new();
+                for i in 0..gen.len() - 1 {
+                    let pos = n + i;
+                    let mut h = row(pos - 1).to_vec();
+                    let mut step = Vec::new();
+                    for j in 0..depth.min(gen.len() - 1 - i) {
+                        let (y, _) = f.forward(&[gen[i + j]], &h, pos + j, false)?;
+                        step.push(tops_json(&crate::qwen::pipeline::top_k(&f.logits(&y))));
+                        h = y;
+                    }
+                    tops.push(step);
+                }
+                let o = serde_json::json!({"prompt_tokens": n, "depth": depth, "window": window, "vocab": vocab,
+                    "tokens": gen, "draft_tops": tops, "draft_s": t0.elapsed().as_secs_f64()});
+                std::fs::write(&out, serde_json::to_string(&o)?)?;
+                println!("{} steps replayed with the run's tokens", tops.len());
                 return Ok(());
             }
             let t0 = std::time::Instant::now();
@@ -629,7 +689,12 @@ pub fn run(cmd: Cmd) -> Result<()> {
             steps,
             depth,
             window,
+            temperature,
+            top_k,
+            top_p,
+            seed,
         } => {
+            let mut sampler = crate::generation::Sampler::new(temperature, top_k, top_p, seed)?;
             let g = Gguf::open(&model)?;
             let mg = Gguf::open(&mtp)?;
             let c = Config::new(&g)?;
@@ -647,7 +712,9 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let prefill_s = t0.elapsed().as_secs_f64();
             eprintln!("prompt: {n} tokens, {prefill_s:.1} s");
             let mut h = x[(n - 1) * w..].to_vec();
-            let mut tok = argmax(&logits);
+            let top = crate::qwen::pipeline::top_k(&logits);
+            let mut tok = sampler.sample(&top);
+            let mut targets = vec![tops_json(&top)];
             let mut history = tokens.clone();
             // The trunk's residual rows from position n - SAVED_ROWS on, for `replay`.
             let from = n.saturating_sub(SAVED_ROWS);
@@ -670,7 +737,9 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 let mut x1 = super::embed(&g, &c, &[tok])?;
                 let ple = super::ple_rows(&g, &c, &history, &[tok])?;
                 stage.forward(&g, &mut x1, ple.as_deref(), pos, 1, &mut None)?;
-                let next = argmax(&stage.logits(&g, &x1, &mut None)?);
+                let top = crate::qwen::pipeline::top_k(&stage.logits(&g, &x1, &mut None)?);
+                let next = sampler.sample(&top);
+                targets.push(tops_json(&top));
                 target_s += t1.elapsed().as_secs_f64();
                 gen.push(tok);
                 drafts.push(ds);
@@ -684,10 +753,12 @@ pub fn run(cmd: Cmd) -> Result<()> {
             }
             gen.push(tok);
             let r = serde_json::json!({"prompt_tokens": n, "depth": depth, "window": window, "tokens": gen, "drafts": drafts,
-                "prefill_s": prefill_s, "target_s": target_s, "draft_s": draft_s, "prompt": tokens, "rows_from": from});
+                "prefill_s": prefill_s, "target_s": target_s, "draft_s": draft_s, "prompt": tokens, "rows_from": from,
+                "sampling": {"temperature": temperature, "top_k": top_k, "top_p": top_p, "seed": seed},
+                "targets": targets});
             std::fs::write(&out, serde_json::to_string(&r)?)?;
             std::fs::write(out.with_extension("rows.f32"), bytemuck::cast_slice(&rows))?;
-            let ok = (0..drafts.len()).filter(|&i| gen.get(i + 1) == Some(&drafts[i][0])).count();
+            let ok = (0..drafts.len()).filter(|&i| depth > 0 && gen.get(i + 1) == Some(&drafts[i][0])).count();
             println!(
                 "{} steps, first draft right {ok}/{} ({:.3}); {:.2} s per target step, {:.3} s per draft step",
                 drafts.len(),

@@ -253,7 +253,8 @@ impl Backend for Qwen4 {
     }
     fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value> {
         let p = request.sampling;
-        let mut sampler = Sampler::new(p.temperature, p.top_k, p.top_p, p.seed)?;
+        // Plain and speculative decoding pick the same tokens for a seed (`Draws`).
+        let draws = crate::qwen4::spec::Draws::new(p.temperature, p.top_k, p.top_p, p.seed)?;
         let e = &mut self.chain;
         if options.no_prefix_cache {
             e.forget();
@@ -264,7 +265,7 @@ impl Backend for Qwen4 {
         };
         let mut native = qwen::native::QwenOutput::new(self.tokens, request.thinking);
         let budget = p.max_tokens.min(e.context - e.pos);
-        let mut queue = std::collections::VecDeque::from([sampler.sample(&top)]);
+        let mut queue = std::collections::VecDeque::from([draws.pick(&top, e.pos)]);
         let (mut generated, mut stopped) = (0, false);
         while generated < budget {
             let pending = queue.pop_front().context("no pending token")?;
@@ -288,12 +289,12 @@ impl Backend for Qwen4 {
                 // A round's tokens were all processed but its last, as in decoding them one at a time.
                 Some(s) => {
                     let max = budget - generated - 1;
-                    let (toks, _) = s.round(e, pending, max, &mut |t| sampler.sample(t), &self.stop)?;
+                    let (toks, _) = s.round(e, pending, max, &draws, &self.stop)?;
                     queue.extend(toks);
                 }
                 None => {
                     let top = e.forward(&[pending], true, None)?.context("missing candidates")?;
-                    queue.push_back(sampler.sample(&top));
+                    queue.push_back(draws.pick(&top, e.pos));
                 }
             }
         }

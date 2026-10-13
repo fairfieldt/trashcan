@@ -786,6 +786,24 @@ impl Draft {
         }
     }
 
+    /// The top candidates (logit, token id; best first) of the CPU head rows, as a head slice returns them.
+    pub fn head_top(&self, hn: &[f32]) -> Vec<(f32, u32)> {
+        if self.head.rows() == 0 {
+            return Vec::new();
+        }
+        let logits = matvec(&self.pool, &self.head, &Act::new(hn, self.c.d), 256);
+        let row0 = self.head_row0 as u32;
+        crate::qwen::pipeline::top_k(&logits).into_iter().map(|(s, id)| (s, id + row0)).collect()
+    }
+
+    /// The top candidates of all draft head rows, on the CPU.
+    pub fn top_all(&self, hn: &[f32]) -> Vec<(f32, u32)> {
+        let lo = self.head_lo.as_ref().map_or_else(Vec::new, |m| {
+            crate::qwen::pipeline::top_k(&matvec(&self.pool, m, &Act::new(hn, self.c.d), 256))
+        });
+        super::gpu::merge_top(lo, self.head_top(hn))
+    }
+
     fn mix(&self, m: &Mix, x: &[f32], n: usize) -> (Vec<f32>, Option<Vec<f32>>) {
         let c = &self.c;
         let (d, hc, w) = (c.d, c.hc, c.width());
