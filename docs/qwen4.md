@@ -521,6 +521,10 @@ trashcan qwen4 stage-bench S-q2dn.gguf --ranges 0:4 --gpus 0 --context 204800 --
 trashcan qwen4 stage-bench MODEL --ranges 4:5 --gpus 0 --head-rows 0:20736 --decode 4 --prefill 0 --batch 16
 trashcan qwen4 stage-bench MODEL --ranges 0:4,4:8 --gpus 0,1 --context 32768 --batch 16,32,64,128 --decode 0
 trashcan qwen4 ngram-bench META_SHARD TABLE_SHARD --mode ram-q4|direct|buffered-cold [--ids IDS]
+trashcan qwen4 head-topk-check [--gpu 0]   # the head's candidate kernels against qwen35's topk/merge, bit for bit
+# a decode step's timeline: give every process of the chain the same prefix, then (results/qwen4/decode-host-20261013)
+TRASHCAN_Q4_TRACE=results/trace trashcan qwen4 bench ...
+python3 results/qwen4/decode-host-20261013/tools/timeline.py trace-DRIVER.json trace-NODE1.json ... trace-NODE5.json
 python3 tools/qwen4_budget.py [--context N] [--batch N] [--head-split N] [--lean] [--kv q8] [--q2-down rco]
 python3 tools/qwen4_budget.py --grid --context 204800   # six Macs, long-context options
 python3 tools/qwen4_budget.py --check
