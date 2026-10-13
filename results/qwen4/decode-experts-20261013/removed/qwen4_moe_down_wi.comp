@@ -1,0 +1,32 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+// TEMPORARY variant of qwen4_moe_down_w that loads the next pair's expert id and routing weight while a pair
+// computes, so a step's weight loads do not wait for its id. Same per-lane sums (the same bits).
+#define BLOCKS 20
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+void main(){
+init_lut();
+uint lane=gl_SubgroupInvocationID,h=lane&1u,w=gl_SubgroupID,t=gl_WorkGroupID.y;
+if(t>=batch())return;
+uint first=gl_WorkGroupID.x*16+w*4,pairs=p.m*BLOCKS;
+uint f=lane>>1,j=f/BLOCKS,b=f%BLOCKS;
+vec4 acc=vec4(0);
+uint e=d_u.v[t*p.m+min(j,p.m-1)];float wt=e_f.v[t*p.m+min(j,p.m-1)];
+for(uint i=0;i*32<pairs;i++){
+    bool on=f<pairs;uint jj=min(j,p.m-1);
+    uint ce=e;float cw=on?wt:0.0;
+    uint blk=(ce*p.n+first)*BLOCKS+b,xo=(t*p.m+jj)*(BLOCKS*8)+b*8+h*2;
+    vec4 c0=b_v4.v[xo],c1=b_v4.v[xo+1],c2=b_v4.v[xo+4],c3=b_v4.v[xo+5];
+    uvec2 q[4];uint sc[4];
+    [[unroll]]for(uint r=0;r<4;r++){q[r]=ww2.v[p.stride/2+(blk+r*BLOCKS)*2+h];sc[r]=uint(wh.halves[blk+r*BLOCKS]);}
+    f+=32;b+=12;j+=1;if(b>=BLOCKS){b-=BLOCKS;j++;}
+    uint jn=min(j,p.m-1);e=d_u.v[t*p.m+jn];wt=e_f.v[t*p.m+jn];
+    [[unroll]]for(uint r=0;r<4;r++)
+        acc[r]=fma(dot(qlo(q[r].x),c0)+dot(qlo(q[r].y),c1)+dot(qhi(q[r].x),c2)+dot(qhi(q[r].y),c3),
+            unpackHalf2x16(sc[r]).x*cw,acc[r]);
+}
+acc=subgroupAdd(acc);
+if(lane==0)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[t*p.n+first+r]=acc[r];
+}

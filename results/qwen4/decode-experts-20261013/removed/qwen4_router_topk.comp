@@ -1,0 +1,75 @@
+#version 460
+#include "common.glsl"
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_shuffle : require
+// qwen4_router (logits of p.n = 513 rows, the same bits) and then qwen4_topk2 in the last workgroup to finish
+// (counted in extra, which it resets): wave t picks token t's experts (up to 4 tokens) from the logits the other
+// workgroups wrote, so top-k needs no dispatch of its own and reads the logits from L2.
+// W in set 0, x in b, c: logits [t][p.n] (coherent), d: ids [t][p.m + 1] (u32), e: weights [t][p.m + 1],
+// extra: counter (u32). p.n rows (experts + 1), p.k row length, p.m picks.
+layout(local_size_x=256) in;
+layout(constant_id=0) const uint COLS=1;
+const uint U=COLS==1?20:8;
+layout(set=2,binding=2,std430) coherent buffer Logits { float v[]; } lg;
+layout(set=2,binding=7,std430) coherent buffer Counter { uint v[]; } cnt;
+shared bool last;
+shared uint sid[4][64],sk[4][64];
+void main(){uint lane=gl_SubgroupInvocationID,w=gl_SubgroupID,row=gl_WorkGroupID.x*4+w,nb=batch();
+if(row<p.n){
+    float s[COLS];[[unroll]]for(uint z=0;z<COLS;z++)s[z]=0;
+    uint wr=row*p.k;
+    for(uint i0=lane;i0<p.k;i0+=64*U){
+        float wv[20],x[COLS][20];
+        [[unroll]]for(uint u=0;u<U;u++){wv[u]=uintBitsToFloat(ww.words[wr+i0+64*u]);
+            [[unroll]]for(uint z=0;z<COLS;z++)x[z][u]=b_f.v[min(z,nb-1)*p.k+i0+64*u];}
+        [[unroll]]for(uint u=0;u<U;u++)[[unroll]]for(uint z=0;z<COLS;z++)s[z]=fma(wv[u],x[z][u],s[z]);
+    }
+    [[unroll]]for(uint z=0;z<COLS;z++){float v=subgroupAdd(s[z]);if(lane==0&&z<nb)lg.v[z*p.n+row]=v;}
+}
+memoryBarrierBuffer();
+barrier();
+if(gl_LocalInvocationID.x==0)last=atomicAdd(cnt.v[0],1u)==gl_NumWorkGroups.x-1u;
+barrier();
+if(!last)return;
+memoryBarrierBuffer();
+if(gl_LocalInvocationID.x==0)cnt.v[0]=0;
+uint t=w,l=lane;if(t>=nb)return;
+// qwen4_topk2 for token t (experts p.n - 1, the shared gate last).
+uint ne=p.n-1,rowt=t*p.n,per=ne/64,K=p.m,slots=p.m+1;float v[8];float mx=-1e30;
+[[unroll]]for(uint j=0;j<8;j++)v[j]=lg.v[rowt+min(j,per-1)*64+l];
+float gate=lg.v[rowt+ne];
+[[unroll]]for(uint j=0;j<8;j++){v[j]=j<per?v[j]:-1e30;mx=max(mx,v[j]);}
+mx=subgroupMax(mx);float sum=0;
+[[unroll]]for(uint j=0;j<8;j++){v[j]=j<per?exp(v[j]-mx):-1.0;sum+=max(v[j],0.0);}
+sum=subgroupAdd(sum);
+[[unroll]]for(uint j=0;j<8;j++)if(j<per)v[j]/=sum;
+uint u[8],mk=0;
+[[unroll]]for(uint j=0;j<8;j++){u[j]=j<per?floatBitsToUint(v[j])+1u:0u;mk=max(mk,u[j]);}
+uint thr=0;
+for(int bit=31;bit>=0;bit--){uint cand=thr|(1u<<bit);if(subgroupBallotBitCount(subgroupBallot(mk>=cand))>=K)thr=cand;}
+uint cn=0;
+[[unroll]]for(uint j=0;j<8;j++)cn+=subgroupBallotBitCount(subgroupBallot(u[j]>=thr));
+uint budget=64;
+if(cn>64){thr=0;
+    for(int bit=31;bit>=0;bit--){uint cand=thr|(1u<<bit),c=0;
+        [[unroll]]for(uint j=0;j<8;j++)c+=subgroupBallotBitCount(subgroupBallot(u[j]>=cand));
+        if(c>=K)thr=cand;}
+    uint gt=0;
+    [[unroll]]for(uint j=0;j<8;j++)gt+=subgroupBallotBitCount(subgroupBallot(u[j]>thr));
+    budget=K-gt;}
+uint before=0,pos=0;
+[[unroll]]for(uint j=0;j<8;j++){uvec4 eq=subgroupBallot(u[j]==thr);
+    bool s=u[j]>thr||(u[j]==thr&&before+subgroupBallotExclusiveBitCount(eq)<budget);
+    before+=subgroupBallotBitCount(eq);
+    uvec4 b=subgroupBallot(s);
+    if(s){uint k=pos+subgroupBallotExclusiveBitCount(b);sid[w][k]=j*64+l;sk[w][k]=u[j];}
+    pos+=subgroupBallotBitCount(b);}
+subgroupMemoryBarrierShared();
+uint me=l<pos?sk[w][l]:0u,id=l<pos?sid[w][l]:0u,r=0;
+for(uint i=0;i<pos;i++){uint o=subgroupShuffle(me,i);r+=o>me||(o==me&&i<l)?1u:0u;}
+if(l>=pos)r=64;
+float val=uintBitsToFloat(me-1u),tot=0;
+for(uint k=0;k<K;k++)tot+=subgroupShuffle(val,subgroupBallotFindLSB(subgroupBallot(r==k)));
+tot=max(tot,6.103515625e-5);
+if(r<K){d_u.v[t*slots+r]=id;e_f.v[t*slots+r]=val/tot;}
+if(l==0){d_u.v[t*slots+K]=ne;e_f.v[t*slots+K]=1.0/(1.0+exp(-gate));}}

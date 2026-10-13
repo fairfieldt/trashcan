@@ -1,0 +1,68 @@
+diff --git a/engine/build.rs b/engine/build.rs
+index 21fb58b..c285c3c 100644
+--- a/engine/build.rs
++++ b/engine/build.rs
+@@ -72,6 +72,7 @@ fn main() {
+         "qwen4_moe_down_w",
+         "qwen4_router",
+         "qwen4_router_gemm",
++        "qwen4_topk3",
+         "qwen4_ple_gate",
+         "qwen4_ple_sums",
+         "qwen4_combine",
+diff --git a/engine/shaders/qwen4_topk.comp b/engine/shaders/qwen4_topk.comp
+index 5f6ffcc..fcd3d93 100644
+--- a/engine/shaders/qwen4_topk.comp
++++ b/engine/shaders/qwen4_topk.comp
+@@ -18,18 +18,22 @@ void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())retur
+ uint row=t*(p.n+1),per=p.n/64,slots=p.m+1,K=p.m;float v[8];float mx=-1e30;
+ [[unroll]]for(uint j=0;j<8;j++)v[j]=a_f.v[row+min(j,per-1)*64+l];
+ float gate=a_f.v[row+p.n];
++if((p.flags&1u)!=0){float z=gate;[[unroll]]for(uint j=0;j<8;j++)z+=v[j];if(l==0)d_f.v[t*slots]=z;return;}
+ uint parts=max(p.k,1u),ps=batch()*(p.n+1);
+ for(uint s=1;s<parts;s++){[[unroll]]for(uint j=0;j<8;j++)v[j]+=a_f.v[s*ps+row+min(j,per-1)*64+l];gate+=a_f.v[s*ps+row+p.n];}
+ if(parts>1){[[unroll]]for(uint j=0;j<8;j++)if(j<per)a_f.v[row+j*64+l]=v[j];if(l==0)a_f.v[row+p.n]=gate;}
+ [[unroll]]for(uint j=0;j<8;j++){v[j]=j<per?v[j]:-1e30;mx=max(mx,v[j]);}
+ mx=subgroupMax(mx);float sum=0;
++if((p.flags&2u)!=0){if(l==0)d_f.v[t*slots]=mx;return;}
+ [[unroll]]for(uint j=0;j<8;j++){v[j]=j<per?exp(v[j]-mx):-1.0;sum+=max(v[j],0.0);}
+ sum=subgroupAdd(sum);
+ [[unroll]]for(uint j=0;j<8;j++)if(j<per)v[j]/=sum;
++if((p.flags&4u)!=0){if(l==0)d_f.v[t*slots]=v[0];return;}
+ uint u[8],mk=0;
+ [[unroll]]for(uint j=0;j<8;j++){u[j]=j<per?floatBitsToUint(v[j])+1u:0u;mk=max(mk,u[j]);}
+ uint thr=0;
+ for(int bit=31;bit>=0;bit--){uint cand=thr|(1u<<bit);if(subgroupBallotBitCount(subgroupBallot(mk>=cand))>=K)thr=cand;}
++if((p.flags&8u)!=0){if(l==0)c_u.v[t*slots]=thr;return;}
+ uint cnt=0;
+ [[unroll]]for(uint j=0;j<8;j++)cnt+=subgroupBallotBitCount(subgroupBallot(u[j]>=thr));
+ uint budget=64;
+diff --git a/engine/src/qwen4/gpu.rs b/engine/src/qwen4/gpu.rs
+index 7455992..6ae5451 100644
+--- a/engine/src/qwen4/gpu.rs
++++ b/engine/src/qwen4/gpu.rs
+@@ -1794,9 +1794,11 @@ impl GpuStage {
+             u[1] = if gemm { parts as u32 } else { 1 };
+             u[2] = c.used as u32;
+             u[15] = nb;
++            let xab = std::env::var("TRASHCAN_MOE_X").unwrap_or_default();
++            u[11] = xab.strip_prefix("tkp").and_then(|v| v.parse().ok()).unwrap_or(0);
+             gpu.dispatch(
+                 current.get(),
+-                "qwen4_topk",
++                if xab == "tk3" { "qwen4_topk3" } else { "qwen4_topk" },
+                 push([logits.address, 0, self.ids.address, self.wts.address, 0, 0], u),
+                 1,
+                 n as u32,
+diff --git a/engine/src/vulkan.rs b/engine/src/vulkan.rs
+index eb60c8d..59d66be 100644
+--- a/engine/src/vulkan.rs
++++ b/engine/src/vulkan.rs
+@@ -486,6 +486,7 @@ impl Device {
+             ("qwen4_moe_down_w", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_down_w.spv")).as_slice()),
+             ("qwen4_router", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_router.spv")).as_slice()),
+             ("qwen4_router_gemm", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_router_gemm.spv")).as_slice()),
++            ("qwen4_topk3", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_topk3.spv")).as_slice()),
+             ("qwen4_ple_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_gate.spv")).as_slice()),
+             ("qwen4_ple_sums", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_ple_sums.spv")).as_slice()),
+             ("qwen4_combine", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_combine.spv")).as_slice()),

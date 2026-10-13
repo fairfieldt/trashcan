@@ -1,0 +1,3 @@
+#version 460
+#define CMAX 4
+#include "qwen4_moe_gu3m_body.glsl"

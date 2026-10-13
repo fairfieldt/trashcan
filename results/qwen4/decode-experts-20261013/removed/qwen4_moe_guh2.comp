@@ -1,0 +1,66 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+// qwen4_moe_guh with two rows pairs per loop step (the next pair's loads go to the other register set, no copies),
+// incremented load indices and one multiply-add chain per row. P row pairs per group (even).
+#ifndef P
+#define P 8
+#endif
+#define HB 160
+#define TP (2 * HB / (4 * P))
+layout(local_size_x=2*HB) in;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+shared float red[4 * P][HB + TP];
+shared float red2[4 * P][TP];
+vec4 xa0,xa1,xb0,xb1;
+uint ib;
+float hscale(uint blk,uvec2 hd){
+    if(FMT==2){uint ls=((hd.y>>(4u*ib))&15u)|(((hd.x>>(16u+2u*ib))&3u)<<4);
+        return unpackHalf2x16(hd.x).x*float(int(ls)-32);}
+    return unpackHalf2x16(uint(wh.halves[blk])).x;
+}
+float dot16(uvec2 q){
+    vec4 a=qlo(q.x),c=qlo(q.y),bb=qhi(q.x),d=qhi(q.y);
+    float s=a.x*xa0.x;s=fma(a.y,xa0.y,s);s=fma(a.z,xa0.z,s);s=fma(a.w,xa0.w,s);
+    s=fma(c.x,xa1.x,s);s=fma(c.y,xa1.y,s);s=fma(c.z,xa1.z,s);s=fma(c.w,xa1.w,s);
+    s=fma(bb.x,xb0.x,s);s=fma(bb.y,xb0.y,s);s=fma(bb.z,xb0.z,s);s=fma(bb.w,xb0.w,s);
+    s=fma(d.x,xb1.x,s);s=fma(d.y,xb1.y,s);s=fma(d.z,xb1.z,s);s=fma(d.w,xb1.w,s);
+    return s;
+}
+void main(){
+init_lut();
+uint l=gl_LocalInvocationID.x,g=l/HB,hb=l%HB,b=hb/2,h=hb%2,ts=gl_WorkGroupID.y,t=ts/p.m;
+if(t>=batch())return;
+uint e=d_u.v[ts],blocks=p.k/32;
+ib=b&7u;
+uint x4=t*(p.k/4)+b*8+2*h;
+xa0=b_v4.v[x4];xa1=b_v4.v[x4+1];xb0=b_v4.v[x4+4];xb1=b_v4.v[x4+5];
+uint i0=gl_WorkGroupID.x*2*P+g*P;
+// Block of gate row i0; nibble pairs (uvec2) at iq + 2 * blocks per row, headers at ih + blocks / 8 per row.
+uint bg=(e*2*p.n+i0)*blocks+b,du=p.n*blocks;
+uint iq=p.stride/2+bg*2+h,ih=bg>>3,dq=2*du,dh=du>>3,rq=2*blocks,rh=blocks>>3;
+uvec2 g0=ww2.v[iq],u0=ww2.v[iq+dq],hg0=uvec2(0),hu0=uvec2(0);
+if(FMT==2){hg0=ww2.v[ih];hu0=ww2.v[ih+dh];}
+uvec2 g1,u1,hg1=uvec2(0),hu1=uvec2(0);
+[[dont_unroll]]for(uint j=0;j<P;j+=2){
+    g1=ww2.v[iq+rq];u1=ww2.v[iq+rq+dq];
+    if(FMT==2){hg1=ww2.v[ih+rh];hu1=ww2.v[ih+rh+dh];}
+    float sg=hscale(bg,hg0),su=hscale(bg+du,hu0);
+    red[(g*P+j)*2][hb]=dot16(g0)*sg;red[(g*P+j)*2+1][hb]=dot16(u0)*su;
+    if(j+2<P){iq+=2*rq;ih+=2*rh;g0=ww2.v[iq];u0=ww2.v[iq+dq];
+        if(FMT==2){hg0=ww2.v[ih];hu0=ww2.v[ih+dh];}}
+    sg=hscale(bg+blocks,hg1);su=hscale(bg+blocks+du,hu1);
+    red[(g*P+j+1)*2][hb]=dot16(g1)*sg;red[(g*P+j+1)*2+1][hb]=dot16(u1)*su;
+    bg+=2*blocks;
+}
+barrier();
+uint rs=l/TP,part=l%TP;
+float s=0;
+[[unroll]]for(uint i=0;i<HB/TP;i++)s+=red[rs][part+TP*i];
+red2[rs][part]=s;
+barrier();
+if(l<2*P){float a=0,c=0;
+    [[unroll]]for(uint i=0;i<TP;i++){a+=red2[2*l][i];c+=red2[2*l+1][i];}
+    uint row=gl_WorkGroupID.x*2*P+l;
+    if(row<p.n)c_f.v[ts*p.n+row]=a/(1.0+exp(-a))*c;}
+}

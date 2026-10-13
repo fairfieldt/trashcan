@@ -1,0 +1,8 @@
+== moe-s6-dump-tk4-c1 vs moe-s4-dump-new-c1: 98 of 98 tensors identical
+   differing router/top-k tensors: 0 
+== moe-s6-dump-tk4-c3 vs moe-s4-dump-new-c3: 98 of 98 tensors identical
+   differing router/top-k tensors: 0 
+== moe-s6-dump-tk4-c5 vs moe-s4-dump-new-c5: 98 of 98 tensors identical
+   differing router/top-k tensors: 0 
+== moe-s6-dump-tk4-p16 vs moe-s4-dump-new-p16: 98 of 98 tensors identical
+   differing router/top-k tensors: 0 

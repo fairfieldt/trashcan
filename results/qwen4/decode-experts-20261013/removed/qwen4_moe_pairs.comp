@@ -1,0 +1,32 @@
+#version 460
+#include "common.glsl"
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_KHR_shader_subgroup_shuffle : require
+#extension GL_KHR_shader_subgroup_arithmetic : require
+// Pairs of a small batch's slots that share an expert, for qwen4_moe_gu3s: one wave, slot s = lane (at most 64
+// slots). Each expert's slots in slot order make items of two (and one of one when their count is odd); the items
+// follow the order of each expert's first slot. c: items [1 + 2 * items] (u32, count first; item j: its first slot
+// and the second slot or ~0). a: ids [t][slots] (u32). p.m = slots per token.
+layout(local_size_x=64) in;
+shared uint base[64];
+void main(){uint l=gl_LocalInvocationID.x,ns=batch()*p.m;
+uint id=l<ns?a_u.v[l]:0xffffffffu;
+// The lanes holding this lane's expert.
+uvec2 same=uvec2(0);
+for(uint k=0;k<ns;k++){uint e=subgroupShuffle(id,k);uvec4 m=subgroupBallot(id==e);if(id==e)same=m.xy;}
+uvec2 lt=gl_SubgroupLtMask.xy;
+uint rank=bitCount(same.x&lt.x)+bitCount(same.y&lt.y),cnt=bitCount(same.x)+bitCount(same.y);
+bool first=l<ns&&rank==0;
+// Items before this expert's: the exclusive sum of ceil(count / 2) over first slots, read back at the first slot.
+uint mine=first?(cnt+1)/2:0u;
+uint before=subgroupExclusiveAdd(mine),total=subgroupAdd(mine);
+base[l]=before;
+subgroupMemoryBarrierShared();
+uint f=same.x!=0u?findLSB(same.x):32+findLSB(same.y);
+if(l<ns&&rank%2==0){
+    // The next slot of this expert, if any.
+    uvec2 rest=same&~(lt|(l<32?uvec2(1u<<l,0u):uvec2(0u,1u<<(l-32))));
+    uint nx=rest.x!=0u?findLSB(rest.x):rest.y!=0u?32+findLSB(rest.y):0xffffffffu;
+    uint j=base[f]+rank/2;
+    c_u.v[1+2*j]=l;c_u.v[2+2*j]=nx;}
+if(l==0)c_u.v[0]=total;}

@@ -1,0 +1,39 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+#extension GL_KHR_shader_subgroup_quad : require
+// TEMPORARY variant of qwen4_moe_gu with 2 gate and 2 up rows per wave (fewer registers, more waves): one workgroup
+// per 8 rows of one (token, slot). Same per-lane sums (the same bits).
+#define BLOCKS 80
+#define RW (BLOCKS * 4)
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+float xscale(uvec2 hd,uint ib){
+    uint ls=((hd.y>>(4u*ib))&15u)|(((hd.x>>(16u+2u*ib))&3u)<<4);
+    return unpackHalf2x16(hd.x).x*float(int(ls)-32);
+}
+void main(){
+init_lut();
+uint lane=gl_SubgroupInvocationID,part=lane&3u,bl=lane>>2,w=gl_SubgroupID,ts=gl_WorkGroupID.y,t=ts/p.m;
+if(t>=batch())return;
+uint e=d_u.v[ts],first=gl_WorkGroupID.x*8+w*2,uoff=p.n*RW;
+uint wi=p.stride+((e*2*p.n+first)*BLOCKS+bl)*4+part;
+uint sb=(e*2*p.n+first+(part&1u))*BLOCKS+bl,ub=p.n*BLOCKS,ib=bl&7u;
+uint xi=t*(BLOCKS*8)+bl*8+part;
+vec2 g=vec2(0),u=vec2(0);
+[[dont_unroll]]for(uint i=0;i<BLOCKS/16;i++){
+    uint cg[2],cu[2];vec4 c0=b_v4.v[xi],c1=b_v4.v[xi+4];uvec2 dg,du;uint csb=sb;
+    [[unroll]]for(uint r=0;r<2;r++){cg[r]=ww.words[wi+r*RW];cu[r]=ww.words[wi+uoff+r*RW];}
+    if(FMT==2){dg=ww2.v[sb>>3];du=ww2.v[(sb+ub)>>3];}
+    wi+=64;sb+=16;xi+=128;
+    float sgm=FMT==2?xscale(dg,ib):unpackHalf2x16(uint(wh.halves[csb])).x;
+    float sum=FMT==2?xscale(du,ib):unpackHalf2x16(uint(wh.halves[csb+ub])).x;
+    [[unroll]]for(uint r=0;r<2;r++){
+        float sg=subgroupQuadBroadcast(sgm,r),su=subgroupQuadBroadcast(sum,r);
+        g[r]=fma(dot(qlo(cg[r]),c0)+dot(qhi(cg[r]),c1),sg,g[r]);
+        u[r]=fma(dot(qlo(cu[r]),c0)+dot(qhi(cu[r]),c1),su,u[r]);
+    }
+}
+g=subgroupAdd(g);u=subgroupAdd(u);
+if(lane==0)[[unroll]]for(uint r=0;r<2;r++)if(first+r<p.n){float a=g[r];c_f.v[ts*p.n+first+r]=a/(1.0+exp(-a))*u[r];}
+}

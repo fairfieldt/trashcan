@@ -1,0 +1,50 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+#extension GL_KHR_shader_subgroup_quad : require
+// qwen4_moe_gu3 for batches of 2-5 tokens, one item (one or two slots of one expert, from qwen4_moe_pairs) per
+// workgroup row: the expert's rows are read and decoded once for both slots; each slot's result is the same bits as
+// qwen4_moe_gu3's. b: u [t][k], c: act [t][slots][ff], d: ids [t][slots] (u32), e: items (qwen4_moe_pairs).
+#define BLOCKS 80
+#define RW (BLOCKS * 4)
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+float xscale(uvec2 hd,uint ib){
+    uint ls=((hd.y>>(4u*ib))&15u)|(((hd.x>>(16u+2u*ib))&3u)<<4);
+    return unpackHalf2x16(hd.x).x*float(int(ls)-32);
+}
+void main(){
+init_lut();
+uint y=gl_WorkGroupID.y;
+if(y>=e_u.v[0])return;
+uint sa=e_u.v[1+2*y],sb2=e_u.v[2+2*y];bool two=sb2!=0xffffffffu;uint sbb=two?sb2:sa;
+uint lane=gl_SubgroupInvocationID,part=lane&3u,bl=lane>>2,w=gl_SubgroupID;
+uint e=d_u.v[sa],first=gl_WorkGroupID.x*16+w*4,uoff=p.n*RW;
+uint wi=p.stride+((e*2*p.n+first)*BLOCKS+bl)*4+part;
+uint sb=(e*2*p.n+first+part)*BLOCKS+bl,ub=p.n*BLOCKS,ib=bl&7u;
+uint xa=(sa/p.m)*640+bl*8+part,xb=(sbb/p.m)*640+bl*8+part;
+vec4 ga=vec4(0),ua=vec4(0),gb=vec4(0),ubv=vec4(0);
+[[dont_unroll]]for(uint i=0;i<BLOCKS/16;i++){
+    uint cg[4],cu[4];
+    [[unroll]]for(uint r=0;r<4;r++){cg[r]=ww.words[wi+r*RW];cu[r]=ww.words[wi+uoff+r*RW];}
+    vec4 a0=b_v4.v[xa],a1=b_v4.v[xa+4],b0=b_v4.v[xb],b1=b_v4.v[xb+4];
+    uvec2 dg,du;uint csb=sb;
+    if(FMT==2){dg=ww2.v[sb>>3];du=ww2.v[(sb+ub)>>3];}
+    wi+=64;sb+=16;xa+=128;xb+=128;
+    float sgm=FMT==2?xscale(dg,ib):unpackHalf2x16(uint(wh.halves[csb])).x;
+    float sum=FMT==2?xscale(du,ib):unpackHalf2x16(uint(wh.halves[csb+ub])).x;
+    [[unroll]]for(uint r=0;r<4;r++){
+        float sg=subgroupQuadBroadcast(sgm,r),su=subgroupQuadBroadcast(sum,r);
+        vec4 gl=qlo(cg[r]),gh=qhi(cg[r]);
+        ga[r]=fma(dot(gl,a0)+dot(gh,a1),sg,ga[r]);
+        if(two)gb[r]=fma(dot(gl,b0)+dot(gh,b1),sg,gb[r]);
+        vec4 ul=qlo(cu[r]),uh=qhi(cu[r]);
+        ua[r]=fma(dot(ul,a0)+dot(uh,a1),su,ua[r]);
+        if(two)ubv[r]=fma(dot(ul,b0)+dot(uh,b1),su,ubv[r]);
+    }
+}
+ga=subgroupAdd(ga);ua=subgroupAdd(ua);
+if(lane==0)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n){float a=ga[r];c_f.v[sa*p.n+first+r]=a/(1.0+exp(-a))*ua[r];}
+if(two){gb=subgroupAdd(gb);ubv=subgroupAdd(ubv);
+    if(lane==0)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n){float a=gb[r];c_f.v[sbb*p.n+first+r]=a/(1.0+exp(-a))*ubv[r];}}
+}

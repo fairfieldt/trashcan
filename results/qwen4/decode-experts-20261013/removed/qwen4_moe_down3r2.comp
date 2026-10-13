@@ -1,0 +1,4 @@
+#version 460
+#define PF 0
+#define ROWS 2
+#include "qwen4_moe_down3_body.glsl"

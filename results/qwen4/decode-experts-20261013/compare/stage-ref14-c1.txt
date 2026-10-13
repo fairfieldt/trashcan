@@ -1,0 +1,2 @@
+== moe-s4-dump-new-c1 vs moe-s4-dump-base-c1: 98 of 98 tensors identical
+   differing router/top-k tensors: 0 

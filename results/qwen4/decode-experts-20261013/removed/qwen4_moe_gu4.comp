@@ -1,0 +1,40 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+#extension GL_KHR_shader_subgroup_clustered : require
+// Gate and up projections with SwiGLU for batches below 16 tokens: one workgroup per 16 gate/up row pairs of one
+// (token, slot); lane (rp, bl) of a wave owns row pair rp (of 4) and walks blocks bl + 16 i (i < 5) of its gate and
+// up rows, a whole 32-weight block (one uvec4) per row and step, decoding the block scale itself; 16 lanes per row
+// pair sum at the end. Weights as qwen4_moe_gu3 (p.k = 2560). p.r1 / p.r0 as qwen4_moe_gu3 (shared expert alone).
+#define BLOCKS 80
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+float xscale(uvec2 hd,uint ib){
+    uint ls=((hd.y>>(4u*ib))&15u)|(((hd.x>>(16u+2u*ib))&3u)<<4);
+    return unpackHalf2x16(hd.x).x*float(int(ls)-32);
+}
+void main(){
+init_lut();
+uvec2 wg=(p.flags&2u)!=0?gl_WorkGroupID.yx:gl_WorkGroupID.xy;
+uint ts=p.r1==0?wg.y:p.r1==1?wg.y*p.m+p.m-1:(wg.y/(p.m-1))*p.m+wg.y%(p.m-1);
+uint lane=gl_SubgroupInvocationID,bl=lane&15u,rp=lane>>4,w=gl_SubgroupID,t=ts/p.m;
+if(t>=batch())return;
+uint e=p.r1==1?p.r0-1:d_u.v[ts],row=wg.x*16+w*4+rp;
+// Block bl of gate row `row` and of its up row.
+uint bg=(e*2*p.n+row)*BLOCKS+bl,bu=bg+p.n*BLOCKS,ib=bl&7u,xb=t*640+bl*8;
+float g=0,u=0;
+[[dont_unroll]]for(uint i=0;i<BLOCKS/16;i++){
+    uvec4 qg=wq.q[p.stride/4+bg],qu=wq.q[p.stride/4+bu];
+    float sg,su;
+    if(FMT==2){sg=xscale(ww2.v[bg>>3],ib);su=xscale(ww2.v[bu>>3],ib);}
+    else{sg=unpackHalf2x16(uint(wh.halves[bg])).x;su=unpackHalf2x16(uint(wh.halves[bu])).x;}
+    float dg=0,du=0;
+    [[unroll]]for(uint k=0;k<4;k++){vec4 x0=b_v4.v[xb+k],x1=b_v4.v[xb+4+k];
+        dg+=dot(qlo(qg[k]),x0)+dot(qhi(qg[k]),x1);du+=dot(qlo(qu[k]),x0)+dot(qhi(qu[k]),x1);}
+    g=fma(dg,sg,g);u=fma(du,su,u);
+    bg+=16;bu+=16;xb+=128;
+}
+g=subgroupClusteredAdd(g,16);u=subgroupClusteredAdd(u,16);
+if(bl==0&&row<p.n)c_f.v[ts*p.n+row]=g/(1.0+exp(-g))*u;
+}
