@@ -210,7 +210,36 @@ prompt, 24 tokens each, 14 distinct outputs). The server (`tools/q4serve-test.sh
 included; `q4-turns.py` 57 tokens in 2.72 s, then 64 (78 of 99 prompt tokens reused) in 2.51 s (session 4: 2.83 and
 2.53 s).
 
-**Session 2**: DRAFT
+**Session 2** (`chain2/`, this branch on main `7da6f93`: everything above with unsure drafts dropped and the two-rate
+policy; `tools/mtp2-chain2.sh`). The same binary with every draft counted sure (`no-gate`: main's pooled policy, every
+chosen draft verified) and with greedy drafts as well (`main's drafting`) ran through a temporary switch
+(`TRASHCAN_MTP_AB`, removed after the session); main `7da6f93` alongside:
+
+| run | plain tok/s | MTP tok/s | gain | water / csv / transformer | rounds k = 0/1/2/3 (chat: water) | dropped drafts (matching the next token where it was reached) |
+|---|---|---|---|---|---|---|
+| chat, greedy, main | 18.43 | 21.68 | +17.6% | 20.31 / 24.52 / 20.21 | 46/4/141/59 | |
+| chat, greedy, this branch, no-gate | 18.38 | 21.89 | +19.1% | 20.49 / 24.81 / 20.37 | 31/4/131/74 | |
+| **chat, greedy, this branch** | 18.41 | **23.11** | **+25.5%** | 21.84 / 25.27 / 22.22 | 50/22/80/82 | 194 (32) |
+| reference (64 tokens), main | 18.65 | 18.00 | -3.5% | | 158/1/12/2 | |
+| **reference, this branch** | 18.50 | 18.21 | **-1.6%** | | 154/3/5/8 | 5 (0) |
+| 3K-token document, main | 16.14 | 16.10 | -0.3% | | 73/1/46/5 | |
+| **3K-token document, this branch** | 16.27 | **17.16** | **+5.5%** | | 66/12/29/10 | 35 (3) |
+
+Sampled (top-k 64, top-p 0.95, seeds 11-13 at T = 1, 11-12 below; the keyed sampler gives both drafting methods the
+same replies; accepted/draft counts the verified drafts, which for this branch are the ones the drafter was sure of):
+
+| T | plain | main's drafting | **this branch** | gain | accepted/draft, main's drafting / this branch (water, csv, transformer) |
+|---|---|---|---|---|---|
+| 0.6 | 18.41-18.43 | 20.98 (+14.0%) | **22.13 (+20.0%)** | +5.5% | 0.61 / 0.72, 0.82 / 0.87, 0.68 / 0.78 |
+| 0.8 | 18.27-18.41 | 21.35 (+16.0%) | **22.06 (+20.7%)** | +3.3% | 0.65 / 0.73, 0.80 / 0.90, 0.71 / 0.75 |
+| 1.0 | 18.36-18.41 | 20.77 (+13.1%) | **22.01 (+19.5%)** | +6.0% | 0.61 / 0.78, 0.78 / 0.85, 0.67 / 0.75 |
+
+Dropping unsure drafts with the two-rate policy added 5.6% to greedy chat replies (21.89 -> 23.11; simulated +5.8%),
+and the whole branch 6.6% over main (21.68 -> 23.11): 13% of the drafts were dropped (14% at T = 1), and 83% of the
+verified ones were accepted. A k = 0 round cost 54.19 ms against 54.05 ms per plain token (main: 54.60 against 53.62);
+draft steps 4.95-5.21 ms against main's 5.84-7.31. Every run gave plain decoding's tokens. The server (`tools/q4serve-test.sh`):
+every `scripts/test-server.py` check passes; up after 27 s (parallel setup); `q4-turns.py` 57 tokens in 2.64 s, then 64
+in 2.50 s.
 
 ## Reproduction
 
