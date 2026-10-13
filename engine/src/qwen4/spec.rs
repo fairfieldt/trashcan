@@ -209,6 +209,9 @@ pub struct Stats {
     pub verify_ms_by_k: [f64; super::gpu::VERIFY_MAX],
     /// Shadow drafts that matched the next token.
     pub shadow_hits: usize,
+    /// Unsure drafts (not verified; `UNSURE`), and those after kept drafts that matched the next token.
+    pub dropped: usize,
+    pub dropped_hits: usize,
 }
 
 /// Weight older drafts keep at each new one: the acceptance of about the last 16 drafts.
@@ -219,8 +222,9 @@ const COST_WEIGHT: f64 = 0.2;
 /// avoids keep a current cost (e.g. a shorter context in the next request).
 const REFRESH: usize = 256;
 /// A draft whose top candidate has less probability than this (softmax at temperature 1 over the drafter's
-/// candidates) ends the round's drafting: such drafts are accepted about half the time against 0.99 above 0.99 (greedy
-/// chat replies), and rounds that stop there were simulated 2-3% faster at every temperature (results/qwen4/mtp-rounds-20261013).
+/// candidates) is not verified and ends the round's drafting: such drafts are accepted about half the time against
+/// 0.99 above 0.99 (greedy chat replies); rounds that drop them were simulated 3-6% faster on the replays at every
+/// temperature, verifying them as a round's last draft 2-3% (results/qwen4/mtp-rounds-20261013).
 const UNSURE: f32 = 0.6;
 
 /// How many drafts the next round makes: the count with the most expected tokens per millisecond, from the recent
@@ -260,11 +264,15 @@ impl Policy {
         *v = Some(v.map_or(ms, |v| v + COST_WEIGHT * (ms - v)));
     }
 
-    /// A round of `k` drafts took `draft_ms` drafting and `verify_ms` verifying (and rolling back).
-    fn measured(&mut self, k: usize, draft_ms: f64, verify_ms: f64) {
-        if k > 0 {
-            Self::update(&mut self.draft_ms, draft_ms / k as f64);
+    /// `steps` draft steps took `ms`.
+    fn drafted(&mut self, steps: usize, ms: f64) {
+        if steps > 0 {
+            Self::update(&mut self.draft_ms, ms / steps as f64);
         }
+    }
+
+    /// A round verified `k` drafts in `verify_ms` (with the rollback).
+    fn measured(&mut self, k: usize, verify_ms: f64) {
         Self::update(&mut self.verify_ms[k], verify_ms);
         for a in &mut self.age {
             *a += 1;
@@ -374,10 +382,10 @@ impl Speculator {
     }
 
     /// One round after the chain has processed every token but `pending` (at position `chain.pos`): draft up to `max`
-    /// tokens (as many as `Policy` expects to pay, up to `self.k`), verify them with `pending` in one batch, keep the
-    /// drafts that equal `draws`' pick at their row (the picks are plain decoding's, see `Draws`); a pick in `stop`
-    /// ends the round. Returns the tokens the round produced (the kept drafts and the next pending token) and the
-    /// candidates of the next pending token.
+    /// tokens (as many as `Policy` expects to pay, up to `self.k`, fewer when a draft is unsure: `UNSURE`), verify them
+    /// with `pending` in one batch, keep the drafts that equal `draws`' pick at their row (the picks are plain
+    /// decoding's, see `Draws`); a pick in `stop` ends the round. Returns the tokens the round produced (the kept
+    /// drafts and the next pending token) and the candidates of the next pending token.
     ///
     /// The block's rows at accepted drafts keep the chained drafts' values: rewriting them with the trunk's rows
     /// raised acceptance by about 3% at k = 3 but cost a 3-token step per round (results/qwen4/mtp-20261012).
@@ -394,25 +402,34 @@ impl Speculator {
         let k = self.k.min(max).min(chain.context.saturating_sub(pos + 1)).min(super::gpu::VERIFY_MAX - 1);
         let (k, refresh) = self.policy.choose(k);
         if k == 0 {
-            return self.shadow_round(chain, pending, draws);
+            return self.shadow_round(chain, pending, draws, None);
         }
         let t0 = std::time::Instant::now();
         let mut drafts: Vec<u32> = Vec::with_capacity(k);
         let mut h = std::mem::take(&mut self.last);
+        // A draft the drafter is unsure of is not verified and ends the drafting (a round that measures its batch
+        // size's cost verifies them all).
+        let mut unsure = None;
         while drafts.len() < k {
             let tok = drafts.last().copied().unwrap_or(pending);
             let (draft, confidence, y) = self.step(chain, tok, &h, pos + drafts.len(), draws)?;
-            drafts.push(draft);
-            h = y;
-            // A draft the drafter is unsure of is the round's last (it is still verified); a round that measures its
-            // batch size's cost drafts them all.
             if confidence < UNSURE && !refresh && !ab_no_gate() {
+                unsure = Some(draft);
                 break;
             }
+            drafts.push(draft);
+            h = y;
         }
-        let k = drafts.len();
         let draft_ms = t0.elapsed().as_secs_f64() * 1e3;
         self.stats.draft_ms += draft_ms;
+        self.stats.dropped += unsure.is_some() as usize;
+        self.policy.drafted(drafts.len() + unsure.is_some() as usize, draft_ms);
+        if drafts.is_empty() {
+            // An unsure first draft: a plain step, with that draft as its shadow draft.
+            self.last = h;
+            return self.shadow_round(chain, pending, draws, unsure);
+        }
+        let k = drafts.len();
         let t0 = std::time::Instant::now();
         let mut batch = vec![pending];
         batch.extend_from_slice(&drafts);
@@ -445,8 +462,12 @@ impl Speculator {
         if a < drafts.len() {
             // A draft equal to a stop token was right; the round only ended there.
             self.policy.tested(next == drafts[a]);
+        } else if let Some(u) = unsure {
+            // Every draft was kept: the next token is at the unsure draft's position, so it is tested too.
+            self.policy.tested(next == u);
+            self.stats.dropped_hits += (next == u) as usize;
         }
-        self.policy.measured(k, draft_ms, verify_ms + rollback_ms);
+        self.policy.measured(k, verify_ms + rollback_ms);
         self.stats.verify_ms_by_k[k] += verify_ms + rollback_ms;
         self.last = rows[a * w..(a + 1) * w].to_vec();
         let mut out = drafts[..a].to_vec();
@@ -456,14 +477,23 @@ impl Speculator {
 
     /// A round without drafts: `pending` alone through the chain while the block drafts the token after it on the
     /// CPU once this machine's stages are done (its whole draft vocabulary there), which keeps the block's keys
-    /// complete and measures the acceptance.
-    fn shadow_round(&mut self, chain: &mut Chain, pending: u32, draws: &Draws) -> Result<(Vec<u32>, Vec<(f32, u32)>)> {
+    /// complete and measures the acceptance; `drafted` is that draft when the round already made it.
+    fn shadow_round(
+        &mut self,
+        chain: &mut Chain,
+        pending: u32,
+        draws: &Draws,
+        drafted: Option<u32>,
+    ) -> Result<(Vec<u32>, Vec<(f32, u32)>)> {
         let w = chain.local.c.width();
         let pos = chain.pos;
         let t0 = std::time::Instant::now();
         let (h, draft) = (std::mem::take(&mut self.last), &mut self.draft);
-        let mut shadow = Ok(None);
+        let mut shadow = Ok(drafted);
         let (tops, rows) = chain.verify_with(&[pending], || {
+            if drafted.is_some() {
+                return;
+            }
             shadow = draft.forward(&[pending], &h, pos, false).map(|(y, _)| {
                 let hn = draft.final_hidden(&y);
                 if draws.temperature == 0. || ab_greedy_drafts() {
@@ -479,7 +509,7 @@ impl Speculator {
         self.stats.verify_ms += ms;
         self.stats.rounds += 1;
         self.stats.by_k[0] += 1;
-        self.policy.measured(0, 0., ms);
+        self.policy.measured(0, ms);
         self.stats.verify_ms_by_k[0] += ms;
         let next = draws.pick(&tops[0], pos + 1);
         if let Some(d) = shadow {
