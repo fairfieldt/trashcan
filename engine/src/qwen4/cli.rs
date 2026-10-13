@@ -104,6 +104,14 @@ pub enum Cmd {
         #[arg(long)]
         out: Option<PathBuf>,
     },
+    /// Check the head's candidate kernels (qwen4_head_topk, qwen4_head_merge) against qwen35's topk and merge on
+    /// random logits with ties, bit for bit, and time both on GPU `gpu`.
+    HeadTopkCheck {
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 200)]
+        iterations: u32,
+    },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
         #[arg(long, default_value_t = 64)]
@@ -297,6 +305,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             }
             Ok(())
         }
+        Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
             // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.

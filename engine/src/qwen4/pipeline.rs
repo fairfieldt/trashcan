@@ -352,10 +352,13 @@ impl Local {
     }
 
     /// Whether `n`-token forwards run gated (`forward_gated`): GPU stages only, nothing in flight.
-    fn gated(&self, n: usize) -> bool {
-        n <= GATED_MAX
-            && self.stages.iter().all(|s| matches!(s, Stage::Gpu(_)))
-            && self.flight.iter().all(Option::is_none)
+    pub(crate) fn gated(&self, n: usize) -> bool {
+        n <= GATED_MAX && self.stages.iter().all(|s| matches!(s, Stage::Gpu(_))) && self.idle()
+    }
+
+    /// No prompt chunks in flight: every chunk started here has been handed on.
+    pub fn idle(&self) -> bool {
+        self.flight.iter().all(Option::is_none)
     }
 
     /// Run a forward of up to `GATED_MAX` tokens on GPU stages that wait for their input on the GPU
@@ -385,32 +388,33 @@ impl Local {
                 g.presubmit(pos, n, mode)?;
             }
         }
-        for i in 0..k {
-            let g = gpu(&mut self.stages[i])?;
-            let out = g.collect(None)?;
-            if let (Mode::Verify, Output::Final(_)) = (mode, &out) {
-                self.rows = g.residual(n)?;
-            }
-            match out {
-                Output::Hidden(h) if i + 1 < k => gpu(&mut self.stages[i + 1])?.submit_mode(&h, None, pos, n, false, mode)?,
-                Output::Final(_) if i + 1 < k => bail!("a stage before the last ends the model"),
-                out => return Ok(out),
-            }
+        for i in 0..k - 1 {
+            let (a, b) = self.stages.split_at_mut(i + 1);
+            gpu(&mut a[i])?.collect_into(gpu(&mut b[0])?, pos, mode)?;
         }
-        bail!("no local stages")
+        let g = gpu(&mut self.stages[k - 1])?;
+        let out = g.collect(None)?;
+        if let (Mode::Verify, Output::Final(_)) = (mode, &out) {
+            self.rows = g.residual(n)?;
+        }
+        Ok(out)
     }
 
     /// Submit an `n`-token forward at `pos` ahead on every GPU stage (`GpuStage::presubmit`); the forward that follows
-    /// starts each stage without the submission's cost. Only when its input is on the way (see `gate`); nothing
-    /// happens when such forwards do not run gated.
+    /// starts each stage without the submission's cost. On the machine that ends the model the head scoring of its
+    /// final hidden states follows it. Only when the input is on the way (see `gate`); nothing happens when such
+    /// forwards do not run gated.
     pub fn presubmit(&mut self, pos: usize, n: usize, mode: Mode) -> Result<()> {
         if !self.gated(n) {
             return Ok(());
         }
+        let rows = if mode == Mode::Verify { n } else { 1 };
+        let ends = self.ends();
         let r = self.stages.iter_mut().try_for_each(|s| match s {
             Stage::Gpu(g) if !g.presubmitted() => g.presubmit(pos, n, mode),
             _ => Ok(()),
         });
+        let r = r.and_then(|_| if ends { self.presubmit_heads(rows) } else { Ok(()) });
         if r.is_err() {
             self.abandon();
         }

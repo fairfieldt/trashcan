@@ -21,6 +21,7 @@ use ash::vk;
 use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = crate::qwen::gpu::TOP_K;
+const _: () = assert!(TOP_K == 64, "qwen4_head_topk and qwen4_head_merge give 64 candidates");
 const GRAPH_CACHE_CAPACITY: usize = 6;
 /// Phase timestamps per layer (n-gram module, two mixers, sublayer (sparse QSA: projections, block selection,
 /// attention), router, experts).
@@ -356,6 +357,8 @@ pub struct GpuStage {
     hstart: vk::Event,
     hdone: vk::Event,
     head_fence: vk::Fence,
+    /// Timestamps of the head scoring (`head_stamps`).
+    head_queries: vk::QueryPool,
     /// A forward submitted ahead that waits for its input: position, tokens, mode.
     ahead: Option<(usize, usize, Mode)>,
     /// Head scoring submitted ahead that waits for its hidden states: rows.
@@ -696,6 +699,12 @@ impl GpuStage {
         let head_fence = unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
         let event = || unsafe { gpu.dev.create_event(&vk::EventCreateInfo::default(), None) };
         let (start, done, hstart, hdone) = (event()?, event()?, event()?, event()?);
+        let head_queries = unsafe {
+            gpu.dev.create_query_pool(
+                &vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(4),
+                None,
+            )?
+        };
         let queries = unsafe {
             gpu.dev.create_query_pool(
                 &vk::QueryPoolCreateInfo::default()
@@ -783,6 +792,7 @@ impl GpuStage {
             hstart,
             hdone,
             head_fence,
+            head_queries,
             ahead: None,
             head_ahead: None,
             head_pending: false,
@@ -912,6 +922,12 @@ impl GpuStage {
             ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, 0],
             u,
         };
+        // Timestamps: start, logits done, chunk candidates done, merged (`head_stamps`).
+        let stamp = |i: u32, end: bool| unsafe {
+            let stage = if end { vk::PipelineStageFlags::BOTTOM_OF_PIPE } else { vk::PipelineStageFlags::TOP_OF_PIPE };
+            gpu.dev.cmd_write_timestamp(cmd, stage, self.head_queries, i);
+        };
+        stamp(0, false);
         for row in 0..cols {
             let mut u = [0; 16];
             u[0] = hd.rows as u32;
@@ -949,6 +965,9 @@ impl GpuStage {
             };
             graph.captures.push((name, host, hd.rows));
         }
+        stamp(1, true);
+        // The 64 best of every chunk of 1024 rows, then of all chunks: qwen35's `topk` and `merge` results through
+        // bitonic networks (`qwen4 head-topk-check`).
         let mut u = [0; 16];
         u[0] = hd.rows as u32;
         u[1] = TOP_K as u32;
@@ -956,22 +975,43 @@ impl GpuStage {
         u[15] = cols as u32;
         gpu.dispatch(
             cmd,
-            "topk",
+            "qwen4_head_topk",
             push([hd.logits.address, 0, hd.scratch.address, 0, 0, 0], u),
             hd.chunks as u32,
             cols as u32,
         );
+        stamp(2, true);
         let mut u = [0; 16];
         u[0] = (hd.chunks * TOP_K) as u32;
         u[1] = TOP_K as u32;
         u[15] = cols as u32;
         gpu.dispatch(
             cmd,
-            "merge",
+            "qwen4_head_merge",
             push([hd.scratch.address, 0, hd.top.address, 0, 0, 0], u),
             1,
             cols as u32,
         );
+        stamp(3, true);
+        Ok(())
+    }
+
+    /// The head scoring's GPU timestamps in host time (`TRASHCAN_Q4_TRACE`): start, logits, chunk candidates, merged.
+    fn head_stamps(&self) -> Result<()> {
+        let Some((tick, host)) = super::trace::on().then(|| self.gpu.calibrate()).flatten() else { return Ok(()) };
+        let mut t = [0u64; 4];
+        unsafe {
+            self.gpu.dev.get_query_pool_results(
+                self.head_queries,
+                0,
+                &mut t,
+                vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+            )?
+        };
+        let ns = self.gpu.period as f64;
+        for (name, v) in ["hgpu0", "hgpu1", "hgpu2", "hgpu3"].into_iter().zip(t) {
+            super::trace::mark_at(name, self.first as u64, (host as f64 + (v as i64 - tick as i64) as f64 * ns) as u64);
+        }
         Ok(())
     }
 
@@ -1006,9 +1046,9 @@ impl GpuStage {
     /// submitted ahead (`head_presubmit`) for as many rows.
     pub fn head_submit(&mut self, h: &[f32], dump: bool) -> Result<bool> {
         let d = self.c.d;
-        let Some(hd) = self.head.as_ref() else {
+        if self.head.is_none() {
             return Ok(false);
-        };
+        }
         ensure!(self.pending.is_none(), "the stage is still working on a forward");
         // Several rows (a verification batch) are scored one after another.
         let rows = h.len() / d;
@@ -1017,10 +1057,14 @@ impl GpuStage {
             "hidden state length mismatch"
         );
         super::trace::mark("hsub0", self.first as u64);
+        if self.head_ahead.is_some_and(|a| a != rows || dump) {
+            // Scoring announced for other rows: let it run on what is there.
+            let _ = self.abandon();
+        }
+        let hd = self.head.as_ref().context("no head rows")?;
         hd.h.write(bytemuck::cast_slice(h))?;
         self.head_n = rows;
-        if let Some(ahead) = self.head_ahead.take() {
-            ensure!(ahead == rows && !dump, "head scoring of {rows} rows does not match the {ahead} submitted ahead");
+        if self.head_ahead.take().is_some() {
             self.release(self.hstart)?;
         } else {
             self.head_launch((dump, rows), false)?;
@@ -1030,13 +1074,13 @@ impl GpuStage {
     }
 
     /// Submit the scoring of `rows` final hidden states ahead of them (`head_submit` releases it); false when the
-    /// stage holds no head rows.
+    /// stage holds no head rows. It may follow a forward that is still to run (it waits behind it on the GPU).
     pub fn head_presubmit(&mut self, rows: usize) -> Result<bool> {
         if self.head.is_none() {
             return Ok(false);
         }
         ensure!((1..=VERIFY_MAX).contains(&rows), "head scoring of {rows} rows");
-        ensure!(self.pending.is_none() && !self.head_pending, "the stage is still working");
+        ensure!(!self.head_pending, "the stage is still scoring");
         self.head_launch((false, rows), true)?;
         self.head_ahead = Some(rows);
         Ok(true)
@@ -1054,6 +1098,7 @@ impl GpuStage {
                 marks: Vec::new(),
                 stamps: None,
             };
+            unsafe { self.gpu.dev.cmd_reset_query_pool(cmd, self.head_queries, 0, 4) };
             self.gpu.wait_host_event(cmd, self.hstart);
             self.gpu.barrier(cmd);
             self.score_head(&mut graph, cmd, hd, key.1, key.0)?;
@@ -1086,7 +1131,7 @@ impl GpuStage {
         ensure!(std::mem::take(&mut self.head_pending), "no head scoring submitted");
         self.head_unretired = !self.wait_done(self.hdone, self.head_fence)?;
         super::trace::mark("hfence", self.first as u64);
-        Ok(())
+        self.head_stamps()
     }
 
     /// Wait for `head_submit` and return its candidates (with vocabulary ids).
@@ -1148,7 +1193,9 @@ impl GpuStage {
     /// the stage is idle.
     pub fn abandon(&mut self) -> Result<()> {
         let mut first = Ok(());
-        if self.ahead.take().is_some() {
+        if let Some((pos, n, _)) = self.ahead.take() {
+            // At the announced position, not over the one before it.
+            first = first.and(self.params_host.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0])));
             first = first.and(self.release(self.start));
         }
         if self.head_ahead.take().is_some() {
@@ -2376,11 +2423,13 @@ impl GpuStage {
             (Some(_), Some(_)) => anyhow::bail!("n-gram rows length mismatch"),
             (Some(_), None) => anyhow::bail!("this stage needs the n-gram rows"),
         };
-        if let Some(ahead) = self.ahead.take() {
-            ensure!(
-                ahead == (pos, n, mode) && !dump,
-                "a forward of {n} tokens at {pos} does not match the one submitted ahead ({ahead:?})"
-            );
+        if let Some(ahead) = self.ahead.filter(|&a| a != (pos, n, mode) || dump) {
+            // The forward announced did not come (an error elsewhere): it may only be followed by a new sequence,
+            // whose start resets every recurrent state the abandoned forward advances.
+            ensure!(pos == 0, "a forward of {n} tokens at {pos} does not match the one submitted ahead ({ahead:?})");
+            let _ = self.abandon();
+        }
+        if self.ahead.take().is_some() {
             self.write_input(x, ple, pos, n)?;
             self.release(self.start)?;
         } else {
@@ -2473,6 +2522,36 @@ impl GpuStage {
     /// Wait for the forward started by `submit`; its output (with the captures when it was submitted with `dump`).
     pub fn collect(&mut self, dump: Option<&mut Captures>) -> Result<Output> {
         let (d, w) = (self.c.d, self.c.width());
+        let n = self.finish(dump)?;
+        let rows = if self.last_verify.is_some() { n } else { 1 };
+        let out = match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
+            Some(hd) => Output::Final(read_f32(&hd.h, rows * d)?),
+            None => Output::Hidden(read_f32(&self.output, n * w)?),
+        };
+        super::trace::mark("col", self.first as u64);
+        Ok(out)
+    }
+
+    /// `collect` for a stage that does not end the model, starting `next` (`submit`, which releases a forward
+    /// submitted ahead) on the output, copied from this GPU's host buffer straight into the next one's.
+    pub fn collect_into(&mut self, next: &mut GpuStage, pos: usize, mode: Mode) -> Result<()> {
+        ensure!(!self.ends_model(), "the stage ends the model");
+        let n = self.finish(None)?;
+        let len = n * self.c.width();
+        ensure!(!self.output.ptr.is_null() && len * 4 <= self.output.size, "invalid host read");
+        super::trace::mark("col", self.first as u64);
+        // The output buffer is not written again before this stage's next submission.
+        let x = unsafe { std::slice::from_raw_parts(self.output.ptr as *const f32, len) };
+        next.submit_mode(x, None, pos, n, false, mode)
+    }
+
+    /// Whether this stage runs the final mixer (its output is the final hidden state).
+    pub fn ends_model(&self) -> bool {
+        self.head.as_ref().is_some_and(|hd| hd.mix.is_some())
+    }
+
+    /// Wait for the forward started by `submit`, keep its timings (and captures); its tokens.
+    fn finish(&mut self, dump: Option<&mut Captures>) -> Result<usize> {
         ensure!(self.ahead.is_none(), "a forward submitted ahead has no input yet");
         let (key, n) = self.pending.take().context("no forward submitted")?;
         if key.0 <= GATED_MAX {
@@ -2526,16 +2605,9 @@ impl GpuStage {
                 m.insert(name.clone(), v);
             }
         }
-        let verify = key.3 == Mode::Verify;
-        self.last_verify = verify.then_some(n);
+        self.last_verify = (key.3 == Mode::Verify).then_some(n);
         self.last_n = n;
-        let rows = if verify { n } else { 1 };
-        let out = match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
-            Some(hd) => Output::Final(read_f32(&hd.h, rows * d)?),
-            None => Output::Hidden(read_f32(&self.output, n * w)?),
-        };
-        super::trace::mark("col", self.first as u64);
-        Ok(out)
+        Ok(n)
     }
 }
 
@@ -2565,6 +2637,7 @@ impl Drop for GpuStage {
                 self.gpu.dev.destroy_event(e, None);
             }
             self.gpu.dev.destroy_query_pool(self.queries, None);
+            self.gpu.dev.destroy_query_pool(self.head_queries, None);
         }
     }
 }

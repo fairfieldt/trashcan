@@ -14,7 +14,7 @@ use crate::{gguf::Gguf, qwen::pipeline::Devices};
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, ErrorKind, IoSlice, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
     path::Path,
     sync::mpsc,
@@ -22,7 +22,7 @@ use std::{
 
 struct Conn {
     r: BufReader<TcpStream>,
-    w: BufWriter<TcpStream>,
+    w: TcpStream,
     /// Toward the driver (trace marks only).
     up: bool,
 }
@@ -30,11 +30,7 @@ struct Conn {
 impl Conn {
     fn new(s: TcpStream, up: bool) -> Result<Self> {
         s.set_nodelay(true)?;
-        Ok(Self {
-            r: BufReader::with_capacity(1 << 20, s.try_clone()?),
-            w: BufWriter::with_capacity(1 << 20, s),
-            up,
-        })
+        Ok(Self { r: BufReader::with_capacity(1 << 20, s.try_clone()?), w: s, up })
     }
     /// Connect to the next machine, retrying for up to a minute while it is still starting (its port refuses).
     fn connect(addr: &str) -> Result<Self> {
@@ -51,31 +47,58 @@ impl Conn {
     }
     fn send(&mut self, header: &Value, blob: &[u8]) -> Result<()> {
         trace::mark(if self.up { "tx_up0" } else { "tx_dn0" }, blob.len() as u64);
-        let h = serde_json::to_vec(header)?;
-        self.w.write_all(&(h.len() as u32).to_le_bytes())?;
-        self.w.write_all(&(blob.len() as u64).to_le_bytes())?;
-        self.w.write_all(&h)?;
-        self.w.write_all(blob)?;
-        self.w.flush()?;
+        write_frame(&mut self.w, header, blob)?;
         trace::mark(if self.up { "tx_up1" } else { "tx_dn1" }, blob.len() as u64);
         Ok(())
     }
-    fn recv(&mut self) -> Result<(Value, Vec<u8>)> {
+    fn recv(&mut self) -> Result<(Value, Vec<f32>)> {
         read_frame(&mut self.r, !self.up).map(|(h, b, _)| (h, b))
+    }
+    /// `recv` for a frame expected shortly (a decode step's reply): watch for it before sleeping.
+    fn recv_hot(&mut self) -> Result<(Value, Vec<f32>)> {
+        if self.r.buffer().is_empty() {
+            spin_readable(self.r.get_ref(), HOT);
+        }
+        self.recv()
     }
 }
 
-/// A frame and the host time it had arrived completely. `down`: from the next machine (trace marks only).
-fn read_frame(r: &mut impl Read, down: bool) -> Result<(Value, Vec<u8>, u64)> {
+/// Write a frame: the lengths and the header from one buffer, the blob straight from the caller's memory, in one
+/// vectored write when the transport takes it whole.
+fn write_frame(w: &mut impl Write, header: &Value, blob: &[u8]) -> Result<()> {
+    let h = serde_json::to_vec(header)?;
+    let mut head = Vec::with_capacity(12 + h.len());
+    head.extend_from_slice(&(h.len() as u32).to_le_bytes());
+    head.extend_from_slice(&(blob.len() as u64).to_le_bytes());
+    head.extend_from_slice(&h);
+    let (mut a, mut b) = (&head[..], blob);
+    while !a.is_empty() || !b.is_empty() {
+        match w.write_vectored(&[IoSlice::new(a), IoSlice::new(b)]) {
+            Ok(0) => return Err(std::io::Error::from(ErrorKind::WriteZero).into()),
+            Ok(k) => {
+                let first = k.min(a.len());
+                (a, b) = (&a[first..], &b[k - first..]);
+            }
+            Err(e) if e.kind() == ErrorKind::Interrupted => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(())
+}
+
+/// A frame (its blob as 4-byte words: floats, or candidate pairs) and the host time it had arrived completely.
+/// `down`: from the next machine (trace marks only).
+fn read_frame(r: &mut impl Read, down: bool) -> Result<(Value, Vec<f32>, u64)> {
     let mut len = [0u8; 12];
     r.read_exact(&mut len)?;
     let t0 = trace::now();
     let h = u32::from_le_bytes(len[..4].try_into()?) as usize;
     let b = u64::from_le_bytes(len[4..].try_into()?) as usize;
+    ensure!(b % 4 == 0, "frame of {b} bytes");
     let mut header = vec![0u8; h];
     r.read_exact(&mut header)?;
-    let mut blob = vec![0u8; b];
-    r.read_exact(&mut blob)?;
+    let mut blob = vec![0f32; b / 4];
+    r.read_exact(bytemuck::cast_slice_mut(&mut blob))?;
     let t1 = trace::now();
     trace::mark_at(if down { "rx_dn0" } else { "rx_up0" }, b as u64, t0);
     trace::mark_at(if down { "rx_dn1" } else { "rx_up1" }, b as u64, t1);
@@ -86,7 +109,7 @@ fn read_frame(r: &mut impl Read, down: bool) -> Result<(Value, Vec<u8>, u64)> {
     Ok((header, blob, t1))
 }
 
-type Requests = mpsc::Receiver<Result<(Value, Vec<u8>, u64)>>;
+type Requests = mpsc::Receiver<Result<(Value, Vec<f32>, u64)>>;
 
 /// Read the previous machine's requests on a thread of their own, so that it can send the next prompt chunk (MiBs,
 /// more than the socket buffers take) while this machine's GPUs work.
@@ -96,11 +119,44 @@ fn requests(s: &TcpStream) -> Result<Requests> {
     std::thread::spawn(move || loop {
         let m = read_frame(&mut r, false);
         let end = m.is_err();
+        // After the notice of a decode step its forward is due shortly: watch for it instead of sleeping.
+        let notice = matches!(&m, Ok((h, _, _)) if h.get("next").is_some());
         if tx.send(m).is_err() || end {
             break;
         }
+        if notice && r.buffer().is_empty() {
+            spin_readable(r.get_ref(), HOT);
+        }
     });
     Ok(rx)
+}
+
+/// How long a thread expecting a decode step's next frame spins before it sleeps: the frames of a decode step follow
+/// each other within tens of milliseconds, and a sleeping thread wakes tens of microseconds after its data arrived.
+const HOT: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Spin until `s` has data to read, or for at most `limit`.
+fn spin_readable(s: &impl std::os::unix::io::AsRawFd, limit: std::time::Duration) {
+    let start = std::time::Instant::now();
+    let mut fd = libc::pollfd { fd: s.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+    while unsafe { libc::poll(&mut fd, 1, 0) } == 0 && start.elapsed() < limit {
+        std::hint::spin_loop();
+    }
+}
+
+/// The next request; a frame expected shortly (`hot`) is watched for before sleeping.
+fn next_request(requests: &Requests, hot: bool) -> std::result::Result<Result<(Value, Vec<f32>, u64)>, mpsc::RecvError> {
+    if hot {
+        let start = std::time::Instant::now();
+        while start.elapsed() < HOT {
+            match requests.try_recv() {
+                Ok(m) => return Ok(m),
+                Err(mpsc::TryRecvError::Disconnected) => return Err(mpsc::RecvError),
+                Err(mpsc::TryRecvError::Empty) => std::hint::spin_loop(),
+            }
+        }
+    }
+    requests.recv()
 }
 
 /// Offset of the next machine's clock from this machine's (ns) and the round trip, from the fastest of `k`
@@ -148,9 +204,18 @@ fn pass_on(next: Option<&mut Conn>, d: Done) -> Result<()> {
     }
 }
 
-fn floats(b: &[u8]) -> Vec<f32> {
-    b.chunks_exact(4)
-        .map(|s| f32::from_le_bytes(s.try_into().unwrap()))
+/// Candidates as (score, id) pairs of little-endian words, as frames carry them.
+fn put_top(blob: &mut Vec<u8>, top: &[(f32, u32)]) {
+    for (s, id) in top {
+        blob.extend_from_slice(&s.to_le_bytes());
+        blob.extend_from_slice(&id.to_le_bytes());
+    }
+}
+
+fn get_top(words: &[f32]) -> Vec<(f32, u32)> {
+    bytemuck::cast_slice::<f32, u32>(words)
+        .chunks_exact(2)
+        .map(|p| (f32::from_bits(p[0]), p[1]))
         .collect()
 }
 
@@ -176,20 +241,21 @@ fn send_hidden(up: &mut Conn, h: &[f32]) -> Result<()> {
 }
 
 fn recv_hidden(down: &mut Conn) -> Result<Vec<f32>> {
-    let (header, blob) = down.recv()?;
+    let (header, blob) = down.recv_hot()?;
     let n = header["h"].as_u64().context("missing hidden state")? as usize;
-    ensure!(blob.len() == n * 4, "hidden state length mismatch");
-    Ok(floats(&blob))
+    ensure!(blob.len() == n, "hidden state length mismatch");
+    Ok(blob)
 }
 
-/// The second frame of a forward reply: the candidates so far and any captures.
+/// The second frame of a forward reply: the candidates so far (binary pairs) and any captures.
 fn result(top: &[(f32, u32)], caps: &Captures) -> (Value, Vec<u8>) {
     let names: Vec<Value> = caps.iter().map(|(n, v)| json!([n, v.len()])).collect();
-    let blob: Vec<u8> = caps.values().flat_map(|v| bytemuck::cast_slice::<f32, u8>(v).to_vec()).collect();
-    (
-        json!({"top": top.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>(), "captures": names}),
-        blob,
-    )
+    let mut blob = Vec::with_capacity(top.len() * 8 + caps.values().map(|v| v.len() * 4).sum::<usize>());
+    put_top(&mut blob, top);
+    for v in caps.values() {
+        blob.extend_from_slice(bytemuck::cast_slice(v));
+    }
+    (json!({"top": top.len(), "captures": names}), blob)
 }
 
 /// Head rows per stage for each machine, as sent in a setup request.
@@ -217,27 +283,17 @@ fn heads_of(v: &Value) -> Result<Vec<Option<(usize, usize)>>> {
         .collect()
 }
 
-fn decode_result(header: &Value, blob: &[u8], caps: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
-    let top = header["top"]
-        .as_array()
-        .context("missing top candidates")?
-        .iter()
-        .map(|p| {
-            Ok((
-                p[0].as_f64().context("score")? as f32,
-                p[1].as_u64().context("id")? as u32,
-            ))
-        })
-        .collect::<Result<Vec<_>>>()?;
+fn decode_result(header: &Value, blob: &[f32], caps: Option<&mut Captures>) -> Result<Vec<(f32, u32)>> {
+    let k = header["top"].as_u64().context("missing top candidates")? as usize;
+    ensure!(blob.len() >= 2 * k, "candidates length mismatch");
+    let top = get_top(&blob[..2 * k]);
     if let Some(m) = caps {
-        let mut at = 0;
+        let mut at = 2 * k;
         for c in header["captures"].as_array().into_iter().flatten() {
             let len = c[1].as_u64().context("capture length")? as usize;
-            m.insert(
-                c[0].as_str().context("capture name")?.into(),
-                floats(&blob[at..at + len * 4]),
-            );
-            at += len * 4;
+            ensure!(at + len <= blob.len(), "capture length mismatch");
+            m.insert(c[0].as_str().context("capture name")?.into(), blob[at..at + len].to_vec());
+            at += len;
         }
     }
     Ok(top)
@@ -257,7 +313,7 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
         }
         // The reader thread holds the socket too: close it as dropping `up` alone did.
-        let _ = up.w.get_ref().shutdown(Shutdown::Both);
+        let _ = up.w.shutdown(Shutdown::Both);
         trace::write("node", Value::Null);
     }
     Ok(())
@@ -266,8 +322,9 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
 fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) -> Result<()> {
     let mut down: Option<Conn> = None;
     let mut local: Option<Local> = None;
+    let mut hot = false;
     loop {
-        let (header, blob, arrived) = match requests.recv() {
+        let (header, blob, arrived) = match next_request(requests, std::mem::take(&mut hot)) {
             Ok(Ok(m)) => m,
             Ok(Err(e)) if e.downcast_ref::<std::io::Error>().is_none() => return Err(e),
             _ => return Ok(()),
@@ -275,14 +332,20 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
         if header.get("ping").is_some() {
             up.send(&json!({"pong": [arrived, trace::now()]}), &[])?;
         } else if let Some(f) = header.get("next") {
-            // A forward follows: pass the notice on, then submit this machine's stages ahead of the input.
-            if let Some(d) = down.as_mut() {
-                d.send(&header, &[])?;
-            }
+            // The forward follows: pass the notice on, then submit this machine's stages ahead of the input. Only when
+            // no prompt chunks are in flight here, so that the forward is the next frame on every link below (each
+            // machine before this one was idle too when it passed the notice on).
             let l = local.as_mut().context("forward before setup")?;
-            let pos = f["pos"].as_u64().context("pos")? as usize;
-            let n = f["n"].as_u64().context("n")? as usize;
-            l.presubmit(pos, n, Mode::Plain)?;
+            if l.idle() {
+                if let Some(d) = down.as_mut() {
+                    d.send(&header, &[])?;
+                }
+                let pos = f["pos"].as_u64().context("pos")? as usize;
+                let n = f["n"].as_u64().context("n")? as usize;
+                let mode = if f["verify"].as_bool().unwrap_or(false) { Mode::Verify } else { Mode::Plain };
+                l.presubmit(pos, n, mode)?;
+            }
+            hot = true;
         } else if let Some(k) = header.get("clocks") {
             let all = clocks(down.as_mut(), k.as_u64().context("clocks")? as usize)?;
             up.send(&json!({"offsets": all.iter().map(|(o, r)| json!([o, r])).collect::<Vec<_>>()}), &[])?;
@@ -344,12 +407,12 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
             } else {
                 let d = down.as_mut().context("no machine ends the model")?;
                 d.send(&header, &[])?;
-                floats(&d.recv()?.1)
+                d.recv()?.1
             };
             up.send(&json!({"rows": rows.len()}), bytemuck::cast_slice(&rows))?;
         } else if let Some(f) = header.get("forward").filter(|f| f.get("verify").is_some()) {
             let l = local.as_mut().context("forward before setup")?;
-            verify_node(l, down.as_mut(), up, f, &blob)?;
+            verify_node(l, down.as_mut(), up, f, blob)?;
         } else if let Some(f) = header.get("forward") {
             let l = local.as_mut().context("forward before setup")?;
             let pos = f["pos"].as_u64().context("pos")? as usize;
@@ -358,7 +421,7 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
             let dump = f["dump"].as_bool().unwrap_or(false);
             trace::mark("fwd", pos as u64);
             let mut caps = Captures::new();
-            let x = floats(&blob);
+            let x = blob;
             // Prompt chunks without a reply stream through this machine's stages, which work on consecutive chunks at
             // the same time; a chunk with a reply waits for all of them.
             let out = if dump {
@@ -395,7 +458,7 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
             send_hidden(up, &h)?;
             let mut top = l.head_slices(&h, dump.then_some(&mut caps))?;
             if let Some(d) = rest {
-                let (hd, b) = d.recv()?;
+                let (hd, b) = d.recv_hot()?;
                 top = merge_top(top, decode_result(&hd, &b, Some(&mut caps))?);
             }
             let (hd, b) = result(&top, &caps);
@@ -417,30 +480,34 @@ fn send_kept_hidden(up: &mut Conn, h: &[f32], rows: &[f32]) -> Result<()> {
 }
 
 fn recv_kept_hidden(down: &mut Conn) -> Result<(Vec<f32>, Vec<f32>)> {
-    let (header, blob) = down.recv()?;
+    let (header, mut blob) = down.recv_hot()?;
     let n = header["h"].as_u64().context("missing hidden state")? as usize;
     let r = header["rows"].as_u64().context("missing rows")? as usize;
-    ensure!(blob.len() == (n + r) * 4, "hidden state length mismatch");
-    let all = floats(&blob);
-    Ok((all[..n].to_vec(), all[n..].to_vec()))
+    ensure!(blob.len() == n + r, "hidden state length mismatch");
+    let rows = blob.split_off(n);
+    Ok((blob, rows))
 }
 
+/// The candidates of every row of a verification batch (binary pairs, row after row).
 fn kept_result(tops: &[Vec<(f32, u32)>]) -> (Value, Vec<u8>) {
-    let tops: Vec<Value> = tops.iter().map(|t| json!(t.iter().map(|(s, id)| json!([s, id])).collect::<Vec<_>>())).collect();
-    (json!({"tops": tops}), Vec::new())
+    let mut blob = Vec::with_capacity(tops.iter().map(|t| t.len() * 8).sum());
+    for t in tops {
+        put_top(&mut blob, t);
+    }
+    (json!({"tops": tops.iter().map(Vec::len).collect::<Vec<_>>()}), blob)
 }
 
-fn decode_kept(header: &Value) -> Result<Vec<Vec<(f32, u32)>>> {
+fn decode_kept(header: &Value, blob: &[f32]) -> Result<Vec<Vec<(f32, u32)>>> {
+    let mut at = 0;
     header["tops"]
         .as_array()
         .context("missing candidates")?
         .iter()
-        .map(|t| {
-            t.as_array()
-                .context("candidates")?
-                .iter()
-                .map(|p| Ok((p[0].as_f64().context("score")? as f32, p[1].as_u64().context("id")? as u32)))
-                .collect::<Result<Vec<_>>>()
+        .map(|k| {
+            let k = k.as_u64().context("candidates")? as usize;
+            ensure!(at + 2 * k <= blob.len(), "candidates length mismatch");
+            at += 2 * k;
+            Ok(get_top(&blob[at - 2 * k..at]))
         })
         .collect::<Result<Vec<_>>>()
 }
@@ -450,17 +517,19 @@ fn merge_rows(a: Vec<Vec<(f32, u32)>>, b: Vec<Vec<(f32, u32)>>) -> Result<Vec<Ve
     Ok(a.into_iter().zip(b).map(|(x, y)| merge_top(x, y)).collect())
 }
 
-fn verify_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value, blob: &[u8]) -> Result<()> {
+fn verify_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value, blob: Vec<f32>) -> Result<()> {
     let pos = f["pos"].as_u64().context("pos")? as usize;
     let n = f["n"].as_u64().context("n")? as usize;
     trace::mark("vfy", pos as u64);
     let mut down = down;
     // Prompt chunks still in flight go on first.
     l.drain(|d| pass_on(down.as_deref_mut(), d))?;
-    let out = l.verify(floats(blob), None, pos, n)?;
+    let out = l.verify(blob, None, pos, n)?;
     if let Output::Hidden(x) = &out {
         let d = down.as_mut().context("the last machine has no LM head")?;
         d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
+        // The scoring of every row is submitted ahead while the machines after this one work.
+        l.presubmit_heads(n)?;
     }
     let (h, rows) = match out {
         Output::Final(h) => {
@@ -472,8 +541,8 @@ fn verify_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value,
     send_kept_hidden(up, &h, &rows)?;
     let mut tops = l.head_rows(&h)?;
     if let Some(d) = down {
-        let (hd, _) = d.recv()?;
-        tops = merge_rows(tops, decode_kept(&hd)?)?;
+        let (hd, b) = d.recv_hot()?;
+        tops = merge_rows(tops, decode_kept(&hd, &b)?)?;
     }
     let (hd, b) = kept_result(&tops);
     up.send(&hd, &b)
@@ -653,8 +722,9 @@ impl Chain {
             self.history.clear();
         }
         trace::mark("fwd", self.pos as u64);
-        // A decode step: the other machines submit their stages ahead while this one works (`Local::presubmit`).
-        let ahead = reply && dump.is_none() && n <= GATED_MAX;
+        // A decode step: the other machines submit their stages ahead while this one works (`Local::presubmit`). Not
+        // while prompt chunks are in flight here: they reach the next machine after the notice would.
+        let ahead = reply && dump.is_none() && n <= GATED_MAX && self.local.idle();
         if let (true, Some(conn)) = (ahead, self.next.as_mut()) {
             conn.send(&json!({"next": {"pos": self.pos, "n": n}}), &[])?;
         }
@@ -700,7 +770,7 @@ impl Chain {
         };
         let mut top = self.local.head_slices(&h, dump.as_deref_mut())?;
         if let Some(conn) = rest {
-            let (hd, b) = conn.recv()?;
+            let (hd, b) = conn.recv_hot()?;
             top = merge_top(top, decode_result(&hd, &b, dump.as_deref_mut())?);
         }
         if let Some(m) = dump {
@@ -790,6 +860,12 @@ impl Chain {
         }
         ensure!(self.pos > 0, "a verification batch continues a sequence");
         trace::mark("vfy", self.pos as u64);
+        // The other machines submit their stages ahead while this one works (`Local::presubmit`); not while prompt
+        // chunks are in flight here (see `forward`).
+        let ahead = n <= GATED_MAX && self.local.idle();
+        if let (true, Some(conn)) = (ahead, self.next.as_mut()) {
+            conn.send(&json!({"next": {"pos": self.pos, "n": n, "verify": true}}), &[])?;
+        }
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let ple = self.ple(tokens)?;
         trace::mark("ple", self.pos as u64);
@@ -802,6 +878,9 @@ impl Chain {
         if let Output::Hidden(x) = &out {
             let conn = self.next.as_mut().context("no machine holds the LM head")?;
             conn.send(&json!({"forward": {"pos": pos, "n": n, "reply": true, "verify": true}}), bytemuck::cast_slice(x))?;
+            if ahead {
+                self.local.presubmit_heads(n)?;
+            }
         }
         during();
         let (h, rows, remote) = match out {
@@ -813,8 +892,8 @@ impl Chain {
         };
         let mut tops = self.local.head_rows(&h)?;
         if remote {
-            let (hd, _) = self.next.as_mut().unwrap().recv()?;
-            tops = merge_rows(tops, decode_kept(&hd)?)?;
+            let (hd, b) = self.next.as_mut().unwrap().recv_hot()?;
+            tops = merge_rows(tops, decode_kept(&hd, &b)?)?;
         }
         trace::mark("done", pos as u64);
         Ok((tops, rows))
@@ -827,7 +906,7 @@ impl Chain {
         }
         let conn = self.next.as_mut().context("no machine ends the model")?;
         conn.send(&json!({"tail": m}), &[])?;
-        Ok(floats(&conn.recv()?.1))
+        Ok(conn.recv()?.1)
     }
 
     /// Keep tokens `0..keep` of the latest verification batch on every machine.
@@ -844,5 +923,73 @@ impl Chain {
         }
         self.verified = keep;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pair() -> (Conn, Conn) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let address = listener.local_addr().unwrap().to_string();
+        let accepted = std::thread::spawn(move || listener.accept().unwrap().0);
+        let a = Conn::connect(&address).unwrap();
+        let b = Conn::new(accepted.join().unwrap(), true).unwrap();
+        (a, b)
+    }
+
+    fn bits(top: &[(f32, u32)]) -> Vec<(u32, u32)> {
+        top.iter().map(|(s, id)| (s.to_bits(), *id)).collect()
+    }
+
+    #[test]
+    fn frames_carry_headers_floats_and_candidates() {
+        let (mut a, mut b) = pair();
+        let x: Vec<f32> = (0..40960 / 4).map(|i| i as f32 * 0.5 - 7.25).collect();
+        a.send(&json!({"forward": {"pos": 3}}), bytemuck::cast_slice(&x)).unwrap();
+        let (h, blob) = b.recv().unwrap();
+        assert_eq!(h["forward"]["pos"], 3);
+        assert_eq!(blob, x);
+        // Candidates keep their scores' bits (-0, values JSON would round) and every id.
+        let top = vec![(f32::MAX, 0), (1.0e-38, 7), (-0.0, 248319), (0.1, u32::MAX)];
+        let mut caps = Captures::new();
+        caps.insert("result_output@0".into(), vec![1.5, -2.5]);
+        let (hd, blob) = result(&top, &caps);
+        b.send(&hd, &blob).unwrap();
+        let (hd, blob) = a.recv().unwrap();
+        let mut got = Captures::new();
+        assert_eq!(bits(&decode_result(&hd, &blob, Some(&mut got)).unwrap()), bits(&top));
+        assert_eq!(got["result_output@0"], vec![1.5, -2.5]);
+        let rows = vec![top.clone(), Vec::new(), top[1..].to_vec()];
+        let (hd, blob) = kept_result(&rows);
+        a.send(&hd, &blob).unwrap();
+        let (hd, blob) = b.recv().unwrap();
+        let back = decode_kept(&hd, &blob).unwrap();
+        assert_eq!(back.len(), 3);
+        assert_eq!(bits(&back[0]), bits(&top));
+        assert!(back[1].is_empty());
+        assert_eq!(bits(&back[2]), bits(&top[1..]));
+    }
+
+    #[test]
+    fn a_large_frame_survives_partial_writes() {
+        // More than the socket buffers hold at once: the vectored send resumes mid-blob.
+        let (mut a, mut b) = pair();
+        let x: Vec<f32> = (0..(16 << 20) / 4).map(|i| (i % 1000) as f32).collect();
+        let reader = std::thread::spawn(move || b.recv().unwrap());
+        a.send(&json!({"forward": {"n": 128}}), bytemuck::cast_slice(&x)).unwrap();
+        let (h, blob) = reader.join().unwrap();
+        assert_eq!(h["forward"]["n"], 128);
+        assert_eq!(blob, x);
+    }
+
+    #[test]
+    fn frames_must_hold_whole_words() {
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&2u32.to_le_bytes());
+        bytes.extend_from_slice(&3u64.to_le_bytes());
+        bytes.extend_from_slice(b"{}abc");
+        assert!(read_frame(&mut &bytes[..], false).is_err());
     }
 }
