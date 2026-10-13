@@ -102,6 +102,8 @@ fn main() {
         "qwen4_mix_down_sk4",
         "qwen4_head_topk",
         "qwen4_head_merge",
+        "qwen4_gate",
+        "qwen4_gate_clock",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",

@@ -1,0 +1,35 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_ARB_shader_clock : require
+// `qwen4_gate` bounded by the shader clock as well: at most p.n polls and p.k << 16 clock ticks (subgroup clock,
+// VK_KHR_shader_clock). Word 1: 1 opened, 2 out of polls, 3 out of time; word 2 the polls; words 3-4 the ticks spent.
+layout(local_size_x=1) in;
+layout(set=2,binding=0,std430) coherent volatile buffer Gate { uint v[]; } g;
+layout(push_constant, std430) uniform Push {
+    uint64_t a,b,c,d,e,f,params,extra;
+    uint n,k,m,stride,heads,kvheads,dim,cap,window,kind,offset,flags,r0,r1,r2,r3;
+} p;
+
+bool open() {
+    return ((p.flags & 1u) != 0u ? atomicOr(g.v[0], 0u) : g.v[0]) != 0u;
+}
+
+void main() {
+    uint64_t t0 = clockARB(), limit = uint64_t(p.k) << 16;
+    uint i = 0, how = 1;
+    while (!open()) {
+        if (++i >= p.n) {
+            how = 2;
+            break;
+        }
+        if (clockARB() - t0 >= limit) {
+            how = 3;
+            break;
+        }
+    }
+    uint64_t spent = clockARB() - t0;
+    g.v[1] = how;
+    g.v[2] = i;
+    g.v[3] = uint(spent);
+    g.v[4] = uint(spent >> 32);
+}

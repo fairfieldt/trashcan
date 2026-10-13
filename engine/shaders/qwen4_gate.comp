@@ -1,0 +1,28 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+// A gate for work submitted ahead of its input, bounded on the GPU: one lane polls word 0 of `g` (host memory) until
+// the host sets it to 1, for at most p.n polls, then the work behind it runs whatever happened. Word 1 says how the
+// wait ended (1: opened, 2: out of polls), word 2 counts the polls. p.flags bit 0: poll with an atomic instead of a
+// volatile load.
+layout(local_size_x=1) in;
+layout(set=2,binding=0,std430) coherent volatile buffer Gate { uint v[]; } g;
+layout(push_constant, std430) uniform Push {
+    uint64_t a,b,c,d,e,f,params,extra;
+    uint n,k,m,stride,heads,kvheads,dim,cap,window,kind,offset,flags,r0,r1,r2,r3;
+} p;
+
+bool open() {
+    return ((p.flags & 1u) != 0u ? atomicOr(g.v[0], 0u) : g.v[0]) != 0u;
+}
+
+void main() {
+    uint i = 0, how = 1;
+    while (!open()) {
+        if (++i >= p.n) {
+            how = 2;
+            break;
+        }
+    }
+    g.v[1] = how;
+    g.v[2] = i;
+}

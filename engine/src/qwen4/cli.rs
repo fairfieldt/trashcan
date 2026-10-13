@@ -112,6 +112,17 @@ pub enum Cmd {
         #[arg(long, default_value_t = 200)]
         iterations: u32,
     },
+    /// Check the bounded gate for work submitted ahead (qwen4_gate, qwen4_gate_clock) on GPU `gpu`: host writes seen
+    /// by a polling lane, release latency, the cost of an open gate, and the bounds (every wait ends by itself).
+    GateCheck {
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 200)]
+        reps: usize,
+        /// Hold the clocks up as the engine does while it works.
+        #[arg(long)]
+        high: bool,
+    },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
         #[arg(long, default_value_t = 64)]
@@ -306,6 +317,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
+        Cmd::GateCheck { gpu, reps, high } => super::bench::gate_check(gpu, reps, high),
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
             // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.

@@ -135,6 +135,234 @@ pub fn head_topk_check(gpu: usize, iterations: u32) -> Result<()> {
     Ok(())
 }
 
+/// The bounded gate for work submitted ahead (`qwen4_gate`, `qwen4_gate_clock`) on GPU `gpu`: whether one lane
+/// polling host memory sees the host's write, how soon the work behind the gate starts, what an open gate costs, and
+/// how long the bounds hold the GPU when the host never writes. Safe against amdgpu's job timeout (2 s) by
+/// construction: every submission ends by its polls (and clock ticks) whatever the host does, the first bounds last
+/// milliseconds, and a larger bound is submitted only when the rates measured so far predict it ends within `CAP`.
+/// `high`: hold the GPU clocks (and CPUs) up as the engine does while working. One JSON line per measurement.
+pub fn gate_check(gpu: usize, reps: usize, high: bool) -> Result<()> {
+    use anyhow::{bail, ensure, Context};
+    use ash::vk;
+    use serde_json::json;
+    use std::time::{Duration, Instant};
+    /// Longest any submission may be predicted to wait; the gate's target is `TARGET`.
+    const CAP: f64 = 0.5;
+    const TARGET: f64 = 0.25;
+    let clocks = if high { crate::clocks::Clocks::new() } else { None };
+    let busy = || {
+        if let Some(c) = &clocks {
+            c.busy();
+        }
+    };
+    let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("no such GPU")?;
+    let d = crate::vulkan::Device::new(inst, pd)?;
+    let gate = d.buffer(64, true, false, None)?;
+    let q = unsafe {
+        d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(2), None)?
+    };
+    let event = || unsafe { d.dev.create_event(&vk::EventCreateInfo::default(), None) };
+    let (started, done) = (event()?, event()?);
+    let fence = unsafe { d.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
+    let word = |i: usize| unsafe { std::ptr::read_volatile((gate.ptr as *const u32).add(i)) };
+    let open = || unsafe {
+        std::ptr::write_volatile(gate.ptr as *mut u32, 1);
+        std::sync::atomic::fence(std::sync::atomic::Ordering::SeqCst);
+    };
+    // The command buffer of a gate (`shader` None: the same commands without it) and what one run of it gave.
+    let record = |shader: Option<&str>, polls: u32, ticks: u32, flags: u32| -> Result<vk::CommandBuffer> {
+        let cmd = d.begin()?;
+        unsafe {
+            d.dev.cmd_reset_query_pool(cmd, q, 0, 2);
+            d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
+            d.dev.cmd_set_event(cmd, started, vk::PipelineStageFlags::TOP_OF_PIPE);
+        }
+        if let Some(s) = shader {
+            let mut p = crate::vulkan::Push::default();
+            p.ptr[0] = gate.address;
+            (p.u[0], p.u[1], p.u[11]) = (polls, ticks, flags);
+            d.dispatch(cmd, s, p, 1, 1);
+        }
+        // As a stage would before reading the input the host wrote.
+        d.barrier(cmd);
+        d.host_barrier(cmd, false);
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+        d.host_barrier(cmd, true);
+        unsafe {
+            d.dev.cmd_set_event(cmd, done, vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER)
+        };
+        d.finish(cmd)?;
+        Ok(cmd)
+    };
+    struct Run {
+        how: u32,
+        polls: u32,
+        ticks: u64,
+        gpu_s: f64,
+        release_us: Option<f64>,
+        started_us: f64,
+        started_to_done_us: Option<f64>,
+    }
+    // One submission: the gate closed (or `opened` before it), opened by the host `after` its start when given.
+    let run = |cmd: vk::CommandBuffer, opened: bool, after: Option<Duration>| -> Result<Run> {
+        busy();
+        gate.write(&[0u8; 64])?;
+        if opened {
+            open();
+        }
+        unsafe {
+            d.dev.reset_event(started)?;
+            d.dev.reset_event(done)?;
+            d.dev.reset_fences(&[fence])?;
+        }
+        let t0 = Instant::now();
+        d.submit(cmd, None, None, fence)?;
+        // The command processor sets `started` just before the gate.
+        while !unsafe { d.dev.get_event_status(started)? } {
+            ensure!(t0.elapsed() < Duration::from_secs(1), "the gate's command buffer did not start");
+            std::hint::spin_loop();
+        }
+        let started_at = Instant::now();
+        let started_us = (started_at - t0).as_secs_f64() * 1e6;
+        let mut release = None;
+        if let Some(a) = after {
+            let at = Instant::now();
+            while at.elapsed() < a {
+                std::hint::spin_loop();
+            }
+            release = Some(Instant::now());
+            open();
+        }
+        let mut seen = None;
+        let wait = Instant::now();
+        while wait.elapsed() < Duration::from_secs_f64(CAP + 0.5) {
+            if unsafe { d.dev.get_event_status(done)? } {
+                seen = Some(Instant::now());
+                break;
+            }
+            std::hint::spin_loop();
+        }
+        unsafe { d.dev.wait_for_fences(&[fence], true, 10_000_000_000)? };
+        let mut t = [0u64; 2];
+        unsafe { d.dev.get_query_pool_results(q, 0, &mut t, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+        Ok(Run {
+            how: word(1),
+            polls: word(2),
+            ticks: word(3) as u64 | (word(4) as u64) << 32,
+            gpu_s: (t[1] - t[0]) as f64 * d.period as f64 / 1e9,
+            release_us: release.zip(seen).map(|(r, s)| (s - r).as_secs_f64() * 1e6),
+            started_us,
+            started_to_done_us: seen.map(|s| (s - started_at).as_secs_f64() * 1e6),
+        })
+    };
+    let median = |mut v: Vec<f64>| -> f64 {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[v.len() / 2]
+    };
+    let p99 = |mut v: Vec<f64>| -> f64 {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[(v.len() * 99 / 100).min(v.len() - 1)]
+    };
+    let mut cmds = Vec::new();
+    let result = (|| -> Result<()> {
+        println!("{}", json!({"gpu": gpu, "shader_clock": d.shader_clock, "high": high, "timestamp_ns": d.period}));
+        // 1. The poll bound alone, the gate never opened: 1,000 polls, then 10x more while predicted within CAP.
+        let mut per_poll = [0f64; 2];
+        for flags in [0u32, 1] {
+            let mut polls = 100u32;
+            loop {
+                let cmd = record(Some("qwen4_gate"), polls, 0, flags)?;
+                cmds.push(cmd);
+                let r = run(cmd, false, None)?;
+                ensure!(r.how == 2 && r.polls == polls, "a closed gate ended with {} after {} of {polls} polls", r.how, r.polls);
+                let rate = r.gpu_s / polls as f64;
+                per_poll[flags as usize] = per_poll[flags as usize].max(rate);
+                println!("{}", json!({"phase": "polls", "atomic": flags == 1, "polls": polls, "gpu_ms": r.gpu_s * 1e3,
+                    "us_per_poll": rate * 1e6}));
+                let next = polls.saturating_mul(10);
+                if next as f64 * per_poll[flags as usize] > CAP / 2. || polls >= 100_000 {
+                    break;
+                }
+                polls = next;
+            }
+        }
+        // 2. Release: the host opens the gate 200 µs after the command processor reached it.
+        let mut sees = [false; 2];
+        for flags in [0u32, 1] {
+            let polls = (TARGET / per_poll[flags as usize]) as u32;
+            ensure!(polls as f64 * per_poll[flags as usize] <= CAP, "poll bound");
+            let cmd = record(Some("qwen4_gate"), polls, 0, flags)?;
+            cmds.push(cmd);
+            let (mut lat, mut gpu_ms, mut start) = (Vec::new(), Vec::new(), Vec::new());
+            for i in 0..reps {
+                let r = run(cmd, false, Some(Duration::from_micros(200)))?;
+                if r.how != 1 {
+                    println!("{}", json!({"phase": "release", "atomic": flags == 1, "rep": i, "how": r.how,
+                        "polls": r.polls, "gpu_ms": r.gpu_s * 1e3, "seen": false}));
+                    break;
+                }
+                lat.push(r.release_us.context("done never seen")?);
+                gpu_ms.push(r.gpu_s * 1e3);
+                start.push(r.started_us);
+            }
+            sees[flags as usize] = lat.len() == reps;
+            if sees[flags as usize] {
+                println!("{}", json!({"phase": "release", "atomic": flags == 1, "reps": reps, "polls_bound": polls,
+                    "open_to_done_us_median": median(lat.clone()), "open_to_done_us_p99": p99(lat),
+                    "gpu_ms_median": median(gpu_ms), "submit_to_started_us_median": median(start)}));
+            }
+        }
+        // 3. What the gate costs when it is open already, against the same commands without it.
+        for (name, shader) in [("none", None), ("qwen4_gate", Some("qwen4_gate"))] {
+            let cmd = record(shader, 1000, 0, 0)?;
+            cmds.push(cmd);
+            let (mut gpu_us, mut host_us) = (Vec::new(), Vec::new());
+            for _ in 0..reps {
+                let r = run(cmd, true, None)?;
+                ensure!(shader.is_none() || r.how == 1, "an open gate ended with {}", r.how);
+                gpu_us.push(r.gpu_s * 1e6);
+                host_us.push(r.started_to_done_us.context("done never seen")?);
+            }
+            println!("{}", json!({"phase": "open", "gate": name, "reps": reps, "gpu_us_median": median(gpu_us.clone()),
+                "gpu_us_p99": p99(gpu_us), "started_to_done_us_median": median(host_us.clone()),
+                "started_to_done_us_p99": p99(host_us)}));
+        }
+        // 4. The clock bound: 2^20 ticks with the poll bound behind it, then the ticks for TARGET at the rate seen.
+        if d.shader_clock {
+            let flags = if sees[0] { 0 } else { 1 };
+            let polls = (CAP / per_poll[flags as usize]) as u32;
+            let cmd = record(Some("qwen4_gate_clock"), polls, 16, flags)?;
+            cmds.push(cmd);
+            let r = run(cmd, false, None)?;
+            println!("{}", json!({"phase": "clock", "ticks_bound": 16u64 << 16, "how": r.how, "ticks": r.ticks,
+                "polls": r.polls, "gpu_ms": r.gpu_s * 1e3}));
+            if r.how != 3 {
+                bail!("the clock bound did not end the wait (how {})", r.how);
+            }
+            let rate = r.ticks as f64 / r.gpu_s;
+            let ticks = ((TARGET * rate) as u64 >> 16).max(1) as u32;
+            let cmd = record(Some("qwen4_gate_clock"), polls, ticks, flags)?;
+            cmds.push(cmd);
+            let r = run(cmd, false, None)?;
+            println!("{}", json!({"phase": "clock", "ticks_per_s": rate, "ticks_bound": (ticks as u64) << 16,
+                "how": r.how, "ticks": r.ticks, "polls": r.polls, "gpu_ms": r.gpu_s * 1e3}));
+        }
+        Ok(())
+    })();
+    // Whatever happened, nothing may wait on the gate.
+    open();
+    unsafe {
+        let _ = d.dev.device_wait_idle();
+        d.dev.free_command_buffers(d.pool, &cmds);
+        d.dev.destroy_fence(fence, None);
+        d.dev.destroy_event(started, None);
+        d.dev.destroy_event(done, None);
+        d.dev.destroy_query_pool(q, None);
+    }
+    result
+}
+
 /// Run a prompt through the local stages only (chunks of `batch`), writing the last chunk's last-token
 /// activations in the reference dump format, for comparing a layer range against `qwen4 ref`.
 pub fn stage_dump(local: &mut Local, out: &std::path::Path, tokens: &[u32], batch: usize) -> Result<()> {

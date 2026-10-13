@@ -36,6 +36,8 @@ pub struct Device {
     /// Timestamp recorder of the graph being recorded, when profiling (`Stamps`).
     pub stamps: RefCell<Option<Stamps>>,
     calibrated: Option<ash::ext::calibrated_timestamps::Device>,
+    /// Shaders can read the subgroup clock (VK_KHR_shader_clock; `qwen4_gate_clock`).
+    pub shader_clock: bool,
     /// Device-local memory shared by many buffers, once `use_arena` is called.
     arena: RefCell<Option<Vec<Chunk>>>,
     /// An `Uploader` has copies in flight: a buffer dropped meanwhile (an error while loading) waits for them.
@@ -214,6 +216,19 @@ impl Device {
         if calibrate {
             extensions.push(ash::ext::calibrated_timestamps::NAME.as_ptr());
         }
+        let mut clock_features = vk::PhysicalDeviceShaderClockFeaturesKHR::default();
+        let shader_clock = unsafe { inst.instance.enumerate_device_extension_properties(pd)? }
+            .iter()
+            .any(|e| e.extension_name_as_c_str() == Ok(ash::khr::shader_clock::NAME))
+            && {
+                let mut f = vk::PhysicalDeviceFeatures2::default().push_next(&mut clock_features);
+                unsafe { inst.instance.get_physical_device_features2(pd, &mut f) };
+                clock_features.shader_subgroup_clock == vk::TRUE
+            };
+        if shader_clock {
+            extensions.push(ash::khr::shader_clock::NAME.as_ptr());
+        }
+        let mut clock = vk::PhysicalDeviceShaderClockFeaturesKHR::default().shader_subgroup_clock(true);
         let mut f11 =
             vk::PhysicalDeviceVulkan11Features::default().storage_buffer16_bit_access(true);
         let mut f12 = vk::PhysicalDeviceVulkan12Features::default()
@@ -228,6 +243,7 @@ impl Device {
             .enabled_features(&features)
             .push_next(&mut f11)
             .push_next(&mut f12);
+        let ci = if shader_clock { ci.push_next(&mut clock) } else { ci };
         let dev = unsafe { inst.instance.create_device(pd, &ci, None)? };
         let calibrated = calibrate.then(|| ash::ext::calibrated_timestamps::Device::new(&inst.instance, &dev));
         let queue = unsafe { dev.get_device_queue(family, 0) };
@@ -522,6 +538,8 @@ impl Device {
             ("qwen4_mix_down_sk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk4.spv")).as_slice()),
             ("qwen4_head_topk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_topk.spv")).as_slice()),
             ("qwen4_head_merge", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_merge.spv")).as_slice()),
+            ("qwen4_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate.spv")).as_slice()),
+            ("qwen4_gate_clock", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_clock.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -531,6 +549,9 @@ impl Device {
                 !bytes.is_empty(),
                 "shaders missing: build with glslc on incite"
             );
+            if name == "qwen4_gate_clock" && !shader_clock {
+                continue;
+            }
             let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))?;
             let module = unsafe {
                 dev.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&words), None)?
@@ -709,6 +730,7 @@ impl Device {
             dummy_memory,
             stamps: RefCell::new(None),
             calibrated,
+            shader_clock,
             arena: RefCell::new(None),
             uploading: Cell::new(false),
         }))
