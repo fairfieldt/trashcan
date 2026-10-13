@@ -30,4 +30,5 @@ The Mac Pros' D700s (incite, invite, indite, enlight, inflight, alight) are shar
 `ssh MACHINE 'gpuq run ID -- CMD'`, and release promptly. For benchmarks, wrap the command in
 `scripts/with-clocks.sh CLOCKLOG CMD` to record sustained clocks. Never write into `~/trashcan` on incite (another
 checkout); use a `~/trashcan-exp/NAME` workspace. Build with `scripts/cross-build.sh` in the kbuild VM, not on
-the Macs. amdgpu kills a GPU job after about 10 s, so keep each queue submission short.
+the Macs. amdgpu resets the GPU when one job runs or waits longer than 2 s (`lockup_timeout` default on 7.2.9-p2p), so
+keep each queue submission well under that, and never leave GPU work waiting on a host event without a bound.
