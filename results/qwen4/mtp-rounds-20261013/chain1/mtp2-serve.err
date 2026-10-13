@@ -1,0 +1,3 @@
+CPU latency request: 0 us, scoped to this command
+server up after 109 s
+[clocks] 500 samples card0 (02:00.0) sclk/mclk: 850/1370 x140 300/150 x360  max 52C card1 (06:00.0) sclk/mclk: 850/1370 x138 650/1370 x2 300/150 x360  max 51C  log=results/clocks/mtp2-serve.txt
