@@ -3,7 +3,7 @@
 //! driver's; the last stage of the last machine owns the final mixer and the LM head.
 use super::{
     cpu::{Captures, CpuStage},
-    gpu::{merge_top, GpuStage, KvCache, Output},
+    gpu::{merge_top, GpuStage, KvCache, Mode, Output, POLLED_MAX},
     Config,
 };
 use crate::{gguf::Gguf, gpu::Instance, qwen::pipeline::Devices, vulkan::Device};
@@ -306,6 +306,7 @@ impl Local {
                 top = merge_top(top, m);
             }
         }
+        super::trace::mark("top", 0);
         Ok(top)
     }
 
@@ -321,6 +322,9 @@ impl Local {
     ) -> Result<Output> {
         if let Some(c) = &self.clocks {
             c.busy();
+        }
+        if dump.is_none() && self.direct(n) {
+            return self.forward_direct(x, ple, pos, n, Mode::Plain);
         }
         let mut end = None;
         for stage in self.stages.iter_mut() {
@@ -345,6 +349,38 @@ impl Local {
             }
         }
         Ok(end.unwrap_or(Output::Hidden(x)))
+    }
+
+    /// Whether an `n`-token forward runs as `forward_direct`: a decode step or verification batch on GPU stages only,
+    /// with no prompt chunks in flight.
+    pub(crate) fn direct(&self, n: usize) -> bool {
+        n <= POLLED_MAX
+            && self.stages.iter().all(|s| matches!(s, Stage::Gpu(_)))
+            && self.flight.iter().all(Option::is_none)
+    }
+
+    /// Run a forward of up to `POLLED_MAX` tokens on GPU stages, each starting on the previous one's output copied
+    /// straight from that GPU's host buffer into its own. In verification mode the stage that ends the model also
+    /// leaves the batch's residual rows in `rows`.
+    pub(crate) fn forward_direct(&mut self, x: Vec<f32>, ple: Option<&[f32]>, pos: usize, n: usize, mode: Mode) -> Result<Output> {
+        fn gpu(s: &mut Stage) -> Result<&mut GpuStage> {
+            match s {
+                Stage::Gpu(g) => Ok(g),
+                Stage::Cpu(_) => bail!("direct forwards run on GPU stages only"),
+            }
+        }
+        let k = self.stages.len();
+        gpu(&mut self.stages[0])?.submit_mode(&x, ple, pos, n, false, mode)?;
+        for i in 0..k - 1 {
+            let (a, b) = self.stages.split_at_mut(i + 1);
+            gpu(&mut a[i])?.collect_into(gpu(&mut b[0])?, pos, mode)?;
+        }
+        let g = gpu(&mut self.stages[k - 1])?;
+        let out = g.collect(None)?;
+        if let (Mode::Verify, Output::Final(_)) = (mode, &out) {
+            self.rows = g.residual(n)?;
+        }
+        Ok(out)
     }
 }
 

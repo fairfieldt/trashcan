@@ -207,7 +207,7 @@ impl Device {
             ash::khr::external_semaphore_fd::NAME.as_ptr(),
         ];
         // Profiling aligns GPU timestamps with host time.
-        let calibrate = std::env::var_os("TRASHCAN_TP_PROFILE").is_some()
+        let calibrate = (std::env::var_os("TRASHCAN_TP_PROFILE").is_some() || std::env::var_os("TRASHCAN_Q4_TRACE").is_some())
             && unsafe { inst.instance.enumerate_device_extension_properties(pd)? }
                 .iter()
                 .any(|e| e.extension_name_as_c_str() == Ok(ash::ext::calibrated_timestamps::NAME));
@@ -520,6 +520,8 @@ impl Device {
             ("qwen4_mix_act", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_act.spv")).as_slice()),
             ("qwen4_mix_down_sk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk.spv")).as_slice()),
             ("qwen4_mix_down_sk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_mix_down_sk4.spv")).as_slice()),
+            ("qwen4_head_topk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_topk.spv")).as_slice()),
+            ("qwen4_head_merge", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_merge.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),

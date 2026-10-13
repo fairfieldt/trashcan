@@ -1,0 +1,73 @@
+#version 460
+#include "common.glsl"
+// LM head candidates, step 2: the 64 best of p.n / 64 sorted lists of 64 (higher score first, ties to the lower id),
+// sorted: the result of `merge` (k = 64), from pairwise bitonic merges in shared memory (seven steps per merge, 16
+// lists at a time) instead of 64 rounds of workgroup reductions. a: (score, id) pairs [t][p.n]; c: [t][64] pairs.
+layout(local_size_x=256) in;
+const uint SLOTS = 16;
+shared uint key[SLOTS * 64], id[SLOTS * 64];
+shared float val[SLOTS * 64];
+
+uint order(float v) {
+    if (isnan(v)) return 0u;
+    uint b = v == 0.0 ? 0u : floatBitsToUint(v);
+    return (b & 0x80000000u) != 0u ? ~b : b | 0x80000000u;
+}
+
+bool better(uint a, uint b) {
+    return key[a] > key[b] || (key[a] == key[b] && id[a] < id[b]);
+}
+
+void copy_entry(uint to, uint from) {
+    key[to] = key[from]; id[to] = id[from]; val[to] = val[from];
+}
+
+void main() {
+    uint l = gl_LocalInvocationID.x, t = gl_WorkGroupID.y;
+    if (t >= batch()) return;
+    uint lists = p.n / 64;
+    // Slot 0 keeps the best so far; each round fills the other slots with the next lists and merges them in.
+    for (uint first = 0; first < lists; first += (first == 0 ? SLOTS : SLOTS - 1)) {
+        uint from = first == 0 ? 0 : 1;
+        for (uint e = from * 64 + l; e < SLOTS * 64; e += 256) {
+            uint list = first + e / 64 - from;
+            if (list < lists) {
+                uint src = (t * p.n + list * 64 + e % 64) * 2;
+                val[e] = a_f.v[src];
+                id[e] = a_u.v[src + 1];
+                key[e] = order(val[e]);
+            } else {
+                // Empty slots lose against every candidate.
+                val[e] = -1e30; id[e] = 0xffffffffu; key[e] = 0u;
+            }
+        }
+        barrier();
+        for (uint count = SLOTS; count > 1; count >>= 1) {
+            uint half_ = count >> 1;
+            // Pair slot s with slot s + half_: the better of A[i] and B[63 - i] (bitonic, holding the best 64), ...
+            for (uint e = l; e < half_ * 64; e += 256) {
+                uint a = e, b = (e / 64 + half_) * 64 + 63 - e % 64;
+                if (better(b, a)) {
+                    copy_entry(a, b);
+                }
+            }
+            barrier();
+            // ... then a bitonic merge puts it in order.
+            for (uint stride = 32; stride > 0; stride >>= 1) {
+                for (uint q = l; q < half_ * 32; q += 256) {
+                    uint i = 2 * q - (q & (stride - 1)), j = i + stride;
+                    if (better(j, i)) {
+                        uint k = key[i]; key[i] = key[j]; key[j] = k;
+                        uint d = id[i]; id[i] = id[j]; id[j] = d;
+                        float v = val[i]; val[i] = val[j]; val[j] = v;
+                    }
+                }
+                barrier();
+            }
+        }
+    }
+    if (l < 64) {
+        c_f.v[(t * 64 + l) * 2] = val[l];
+        c_u.v[(t * 64 + l) * 2 + 1] = id[l];
+    }
+}

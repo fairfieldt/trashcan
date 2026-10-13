@@ -100,6 +100,8 @@ fn main() {
         "qwen4_mix_act",
         "qwen4_mix_down_sk",
         "qwen4_mix_down_sk4",
+        "qwen4_head_topk",
+        "qwen4_head_merge",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",
