@@ -10,6 +10,12 @@
 # coincided with the peer Mac resetting (results/kernel/tb-nodes-20261006). `tblink reload` reloads the
 # Thunderbolt modules on this node; run it on the stuck node's neighbour first, then on the node.
 #
+# Every working link also gets a USB4STREAM, `trashcan`, under its XDomain's stream service (configfs), with input
+# and output HopID 15 at both ends (thunderbolt_net takes the lowest free HopIDs from 8), so neither end needs the
+# other's: the engine's links find it from the TCP connection's interface and move their data to it (engine/src/
+# link). The stream is created again whenever it is missing (module reload, controller reset, reconnect) or sits
+# under a service name that is no longer the stream service (the .0/.1 index follows discovery order).
+#
 # usage: tblink run      (tblink.service)
 #        tblink status   (for people)
 #        tblink links    (for programs: tab-separated, header line, one line per link)
@@ -18,6 +24,8 @@ set -u
 NODES=/etc/tblink/nodes.tsv
 STATE=/run/tblink
 DEVS=/sys/bus/thunderbolt/devices
+CFG=/sys/kernel/config/thunderbolt/stream
+STREAM=trashcan HOPID=15
 INTERVAL=5 GRACE=90
 APPLE_FIRMWARE=0xa27
 
@@ -48,6 +56,63 @@ links() {
     done
 }
 
+# The XDomain's stream service (the peer advertises it once its thunderbolt_stream is loaded), e.g. 0-3.1.
+stream_service() {
+    local s
+    for s in "$DEVS/$1/$1".*; do
+        [ "$(cat "$s/key" 2>/dev/null)" = stream ] && { basename "$s"; return 0; }
+    done
+    return 1
+}
+
+# The link's stream device, if its stream exists under the current stream service.
+stream_device() {
+    local svc
+    svc=$(stream_service "$1") || { echo -; return; }
+    if [ -r "$CFG/$svc/$STREAM/index" ]; then echo "/dev/tbstream$(cat "$CFG/$svc/$STREAM/index")"; else echo -; fi
+}
+
+# Create the link's stream if it is missing; prints its configfs group (messages go to stderr). A new stream may
+# already have the peer's HopIDs (the driver copies them from the peer's XDomain properties), and writing a HopID it
+# holds fails, so only values that differ are written.
+ensure_stream() {
+    local xd=$1 svc g d max a new=0
+    svc=$(stream_service "$xd") || return 1
+    g=$CFG/$svc d=$CFG/$svc/$STREAM
+    if [ ! -d "$d" ]; then
+        max=$(cat "$DEVS/$xd/maxhopid" 2>/dev/null || echo 0)
+        if (( max < HOPID )); then
+            log "$xd: peer's highest HopID is $max; no stream" >&2
+            return 1
+        fi
+        mkdir -p "$d" 2>/dev/null || { log "$xd: cannot create $d" >&2; return 1; }
+        new=1
+    fi
+    for a in in_hopid out_hopid; do
+        [ "$(cat "$d/$a" 2>/dev/null)" = "$HOPID" ] && continue
+        if ! echo "$HOPID" > "$d/$a" 2>/dev/null; then
+            log "$xd: cannot set $a $HOPID for $svc (now $(cat "$d/$a" 2>/dev/null))$( [ "$new" = 1 ] && echo '; no stream')" >&2
+            [ "$new" = 1 ] && rmdir "$d" "$g" 2>/dev/null
+            return 1
+        fi
+    done
+    [ "$new" = 1 ] && log "$xd: stream $svc/$STREAM, /dev/tbstream$(cat "$d/index"), HopIDs $HOPID/$HOPID" >&2
+    echo "$svc"
+}
+
+# Remove stream groups that are not a working link's current stream service (they cannot carry anything), and empty
+# groups. Other streams in a group (set up by hand) are left alone.
+prune_streams() { # wanted groups, space separated
+    local g name
+    for g in "$CFG"/*; do
+        [ -d "$g" ] || continue
+        name=$(basename "$g")
+        [[ " $1 " == *" $name "* ]] && continue
+        [ -d "$g/$STREAM" ] && rmdir "$g/$STREAM" 2>/dev/null && log "$name: removed stale stream"
+        rmdir "$g" 2>/dev/null
+    done
+}
+
 # Addresses for a link: prints "local/30 peer"
 addresses() { # me lbus peer rbus
     local a=$1 da=$2 b=$3 db=$4 net host lo hi
@@ -65,10 +130,13 @@ update_hosts() { # block
 }
 
 once() {
-    local me xd nhi lbus rindex rhost rbus iface vendor addr peer bad first now hosts=""
+    local me xd nhi lbus rindex rhost rbus iface vendor addr peer bad first now svc hosts="" groups=""
     me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
     [ -n "$me" ] || return
     now=$(date +%s)
+    if [ ! -d /sys/module/thunderbolt_stream ] && [ -d /sys/module/thunderbolt ]; then
+        modprobe thunderbolt_stream && log "loaded thunderbolt_stream"
+    fi
     while read -r xd nhi lbus rindex rhost rbus iface vendor; do
         bad=""
         if [ "$vendor" = "$APPLE_FIRMWARE" ]; then
@@ -86,6 +154,7 @@ once() {
             ip link set "$iface" up
             hosts+="$peer $rhost.tb$lbus"$'\n'
             [ "$(cat "/sys/class/net/$iface/carrier" 2>/dev/null)" = 1 ] || bad="no carrier"
+            [ -z "$bad" ] && [ -d "$CFG" ] && svc=$(ensure_stream "$xd") && groups+="$svc "
         fi
         if [ -n "$bad" ]; then
             first=$(cat "$STATE/bad-$xd" 2>/dev/null || { echo "$now" > "$STATE/bad-$xd"; echo "$now"; })
@@ -97,29 +166,34 @@ once() {
             rm -f "$STATE/bad-$xd" "$STATE/reported-$xd"
         fi
     done < <(links)
+    [ -d "$CFG" ] && prune_streams "$groups"
     update_hosts "$( [ -n "$hosts" ] && printf '# BEGIN tblink\n%s# END tblink' "$hosts")"
 }
 
 case ${1:-} in
     run)
         mkdir -p "$STATE"
-        while :; do once; sleep "$INTERVAL"; done
+        # One pass at a time with `tblink reload` (and tb-reset.sh, which stops this service).
+        while :; do
+            { flock 9; once; } 9> "$STATE/lock"
+            sleep "$INTERVAL"
+        done
         ;;
     status)
         me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
         echo "node $(hostname) index ${me:-unknown} ($NODES)"
         links | while read -r xd nhi lbus rindex rhost rbus iface vendor; do
             lanes=$(cat "$DEVS/$xd/rx_lanes" 2>/dev/null)
-            echo "$xd bus $lbus -> $rhost bus $rbus, ${lanes:-?} lane(s), $iface $(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}') carrier $(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo -)$( [ "$vendor" = "$APPLE_FIRMWARE" ] && echo ', Mac firmware')"
+            echo "$xd bus $lbus -> $rhost bus $rbus, ${lanes:-?} lane(s), $iface $(ip -4 -o addr show dev "$iface" 2>/dev/null | awk '{print $4}') carrier $(cat "/sys/class/net/$iface/carrier" 2>/dev/null || echo -), stream $(stream_device "$xd")$( [ "$vendor" = "$APPLE_FIRMWARE" ] && echo ', Mac firmware')"
         done
         sed -n '/^# BEGIN tblink$/,/^# END tblink$/p' /etc/hosts | grep -v '^#' || true  # no links yet
         ;;
     links)
         me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
-        printf 'xdomain\tpeer\tlocal_bus\tpeer_bus\tlanes\tstate\tiface\taddress\tpeer_address\n'
+        printf 'xdomain\tpeer\tlocal_bus\tpeer_bus\tlanes\tstate\tiface\taddress\tpeer_address\tstream\n'
         links | while read -r xd nhi lbus rindex rhost rbus iface vendor; do
             lanes=$(cat "$DEVS/$xd/rx_lanes" 2>/dev/null || echo 0)
-            addr=- peer=-
+            addr=- peer=- stream=-
             if [ "$vendor" = "$APPLE_FIRMWARE" ]; then
                 state=firmware
             elif [ "$rindex" = 0 ] || [ -z "$me" ]; then
@@ -130,23 +204,28 @@ case ${1:-} in
                 read -r addr peer < <(addresses "$me" "$lbus" "$rindex" "$rbus")
                 addr=${addr%/*}
                 if [ "$iface" = - ]; then state=no_interface
-                elif [ "$(cat "/sys/class/net/$iface/carrier" 2>/dev/null)" = 1 ]; then state=up
+                elif [ "$(cat "/sys/class/net/$iface/carrier" 2>/dev/null)" = 1 ]; then state=up; stream=$(stream_device "$xd")
                 else state=no_carrier; fi
             fi
-            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$xd" "$rhost" "$lbus" "$rbus" "$lanes" "$state" "$iface" "$addr" "$peer"
+            printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$xd" "$rhost" "$lbus" "$rbus" "$lanes" "$state" "$iface" "$addr" "$peer" "$stream"
         done
         ;;
     reload)
-        # Empty user-created port groups retain thunderbolt_stream references
-        # even after the peer disconnected. Active named streams remain intact.
-        for group in /sys/kernel/config/thunderbolt/stream/*; do
-            [ -d "$group" ] && rmdir "$group" 2>/dev/null
+        mkdir -p "$STATE"
+        exec 9> "$STATE/lock"
+        flock 9
+        # Configfs groups hold thunderbolt_stream; an open stream device holds it too (the engine falls back to TCP
+        # once its stream is gone, but the process must close the device before the module can go).
+        for g in "$CFG"/*; do
+            [ -d "$g" ] || continue
+            [ -d "$g/$STREAM" ] && rmdir "$g/$STREAM" 2>/dev/null
+            rmdir "$g" 2>/dev/null
         done
         if ! modprobe -r thunderbolt_stream thunderbolt_net; then
-            echo "close and remove active Thunderbolt streams before reloading" >&2
+            echo "a Thunderbolt stream or interface is still in use: $(fuser /dev/tbstream* 2>&1 | tr -s ' ')" >&2
             exit 1
         fi
-        modprobe -r thunderbolt && modprobe thunderbolt_net && echo "Thunderbolt modules reloaded"
+        modprobe -r thunderbolt && modprobe thunderbolt_net && modprobe thunderbolt_stream && echo "Thunderbolt modules reloaded"
         ;;
     *) echo "usage: tblink run|status|links|reload" >&2; exit 2 ;;
 esac

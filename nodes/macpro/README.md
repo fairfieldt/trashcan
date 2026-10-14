@@ -62,7 +62,7 @@ against 940 Mb/s on the LAN. The 8 GB default models took 70 s over the LAN to i
 | `packages` | Build tools, AMD firmware, Mesa Vulkan, `glslc`, kernel build dependencies, `iperf3`, `sockperf` |
 | `tailscale` | Tailscale's apt repository and `tailscaled`, with `fairfieldt` as operator |
 | `rust` | rustup with the stable toolchain |
-| `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, `tblink`, `thunderbolt_net throttling=32000`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
+| `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, `tblink` with the links' streams and their udev rule, `thunderbolt_net throttling=32000`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
 | `tblink` | Records the node's Thunderbolt controller UUIDs in `tblink/nodes.tsv` (commit it) and copies the table to every node |
 | `kernel` | Installs the `7.2.9-p2p` image and headers and pins `GRUB_DEFAULT` to that entry by id |
 | `workspace` | `HOST=NEW_HOST scripts/sync.sh push`, then `cargo build --release` and `make -C bench/xgpu` |
@@ -121,11 +121,22 @@ to every node. For nodes a < b on buses da and db, the link is 10.99.(16a+b).(4(
 `<peer>.tb<local bus>` in `/etc/hosts`:
 
 ```bash
-ssh incite tblink status        # links, lanes, addresses, carrier; flags a link still showing the Mac firmware
+ssh incite tblink status        # links, lanes, addresses, carrier, stream; flags a link still showing the Mac firmware
 ping invite.tb1                 # from incite: the bus 1 cable
 /usr/local/sbin/tblink links    # for programs: tab-separated with a header; state is up, no_carrier,
-                                # no_interface, firmware (stuck on a rebooted peer), loop or unknown
+                                # no_interface, firmware (stuck on a rebooted peer), loop or unknown;
+                                # stream is the link's /dev/tbstreamN or -
 ```
+
+tblink also gives every working link a USB4STREAM, `trashcan`, under the link's XDomain stream service in configfs
+(`/sys/kernel/config/thunderbolt/stream/0-3.1/trashcan`), with input and output HopID 15 at both ends, so neither
+end needs the other's values; it loads `thunderbolt_stream` when needed, creates the stream again whenever it is
+missing (after a module reload, a controller reset, a reconnect) or sits under a service name that is no longer the
+stream service (the `.0`/`.1` index follows discovery order), and removes the streams of links that went away. The
+engine moves each link's data to its stream by itself and falls back to TCP without it (`engine/src/link`).
+`/etc/udev/rules.d/70-tbstream.rules` gives the devices to `render` (mode 0660). `tblink reload` removes the streams
+before it unloads the modules (a process with a stream open keeps `thunderbolt_stream` loaded: stop it first), and
+`scripts/tb-reset.sh` stops tblink on the Macs it resets and starts it again afterwards.
 
 **After a node reboots, replug its neighbours' ends of the cables.** While a Mac reboots, its firmware answers on
 the link (`Apple, Inc. Macintosh`), and the neighbour keeps that stale peer after Linux takes over: no carrier, and

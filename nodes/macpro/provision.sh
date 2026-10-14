@@ -181,6 +181,9 @@ touch "/home/$USER_NAME/trashcan-exp/.lock" && chown "$USER_NAME:" "/home/$USER_
 
 sysctl -q --system
 systemctl daemon-reload
+# Stream devices that exist already get the rule's group and mode too.
+udevadm control --reload
+udevadm trigger --action=change --sysname-match='tbstream*'
 systemctl enable -q netconsole.service fancurve.service tblink.service system-crash-capture.service
 systemctl restart systemd-journald.service
 journalctl --flush
