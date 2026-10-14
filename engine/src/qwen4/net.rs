@@ -183,6 +183,39 @@ fn clocks(down: Option<&mut Conn>, k: usize) -> Result<Vec<(i64, i64)>> {
     Ok(all)
 }
 
+/// How each link from this machine on carries its data: this machine's link to the next (`Link::report`, with
+/// `from`), then those after it.
+fn links_down(down: Option<&mut Conn>) -> Result<Vec<Value>> {
+    let Some(d) = down else { return Ok(Vec::new()) };
+    let mut mine = d.w.report();
+    mine["from"] = json!(crate::link::hostname());
+    d.send(&json!({"links": true}), &[])?;
+    let (reply, _) = d.recv()?;
+    let mut all = vec![mine];
+    all.extend(reply["links"].as_array().context("missing links")?.iter().cloned());
+    Ok(all)
+}
+
+/// The links' transports by name (`{"incite->inflight": "stream", ...}`), also written to stderr in one line.
+pub fn link_summary(links: &[Value]) -> Value {
+    let mut map = serde_json::Map::new();
+    let mut line = Vec::new();
+    for l in links {
+        let name = format!("{}->{}", l["from"].as_str().unwrap_or("?"), l["to"].as_str().unwrap_or("?"));
+        let transport = l["transport"].as_str().unwrap_or("?");
+        let detail = match l["first_up_ms"].as_f64() {
+            Some(ms) if transport == "stream" => format!("up in {ms:.0} ms"),
+            Some(ms) => format!("up in {ms:.0} ms after {} failed epochs and {} fallbacks", l["failed_epochs"], l["fallbacks"]),
+            None if l["stream_at_both_ends"] == json!(false) => "no stream at both ends".into(),
+            None => format!("{} failed epochs", l["failed_epochs"]),
+        };
+        line.push(format!("{name} {transport} ({detail})"));
+        map.insert(name, json!(transport));
+    }
+    eprintln!("links: {}", line.join(", "));
+    Value::Object(map)
+}
+
 /// Send a prompt chunk that left this machine's stages on to the next machine. On the machine that ends the model it
 /// is done: nobody waits for its candidates.
 fn pass_on(next: Option<&mut Conn>, d: Done) -> Result<()> {
@@ -353,6 +386,9 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests, 
         } else if let Some(k) = header.get("clocks") {
             let all = clocks(down.as_mut(), k.as_u64().context("clocks")? as usize)?;
             up.send(&json!({"offsets": all.iter().map(|(o, r)| json!([o, r])).collect::<Vec<_>>()}), &[])?;
+        } else if header.get("links").is_some() {
+            let all = links_down(down.as_mut())?;
+            up.send(&json!({"links": all}), &[])?;
         } else if header.get("trace").is_some() {
             // Write the trace now: the runner may stop the nodes as soon as the driver ends.
             trace::write("node", Value::Null);
@@ -702,6 +738,11 @@ impl Chain {
     /// `k` ping-pongs per link (`TRASHCAN_Q4_TRACE`).
     pub fn sync_clocks(&mut self, k: usize) -> Result<Vec<(i64, i64)>> {
         clocks(self.next.as_mut(), k)
+    }
+
+    /// How every link of the chain carries its data, from this machine's on (see `links_down`).
+    pub fn links(&mut self) -> Result<Vec<Value>> {
+        links_down(self.next.as_mut())
     }
 
     /// Have every other machine write its trace now (`TRASHCAN_Q4_TRACE`).

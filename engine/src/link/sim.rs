@@ -23,6 +23,11 @@ pub struct Faults {
     pub dead: bool,
     pub refuse_open: bool,
     pub hold: usize,
+    /// Opening this side's end waits this long (as an open waits for an earlier close of the device).
+    pub slow_open: Option<(usize, std::time::Duration)>,
+    /// This side's first open reads nothing of what the other side writes (one direction of an epoch dead, as seen
+    /// on the Mac Pros); its next open works.
+    pub deaf_once: Option<usize>,
 }
 
 enum Frame {
@@ -52,6 +57,8 @@ pub struct Wire {
     ring: usize,
     pub faults: Faults,
     pub counts: Counts,
+    /// Opens of the `deaf_once` side so far.
+    deaf_opens: u32,
 }
 
 /// The cable; `end(side)` opens one end.
@@ -59,7 +66,14 @@ pub struct Pair(Mutex<Wire>);
 
 impl Pair {
     pub fn new(ring: usize) -> Arc<Pair> {
-        Arc::new(Pair(Mutex::new(Wire { dirs: Default::default(), open: [false; 2], ring, faults: Faults::default(), counts: Counts::default() })))
+        Arc::new(Pair(Mutex::new(Wire {
+            dirs: Default::default(),
+            open: [false; 2],
+            ring,
+            faults: Faults::default(),
+            counts: Counts::default(),
+            deaf_opens: 0,
+        })))
     }
 
     pub fn set_faults(&self, f: Faults) {
@@ -72,12 +86,22 @@ impl Pair {
 
     /// Open end `side`; what waited for it arrives (and is lost beyond the ring).
     pub fn end(self: &Arc<Self>, side: usize) -> io::Result<End> {
+        let slow = self.0.lock().unwrap().faults.slow_open.filter(|(s, _)| *s == side);
+        if let Some((_, wait)) = slow {
+            std::thread::sleep(wait);
+        }
         let mut w = self.0.lock().unwrap();
         if w.faults.refuse_open {
             return Err(io::Error::other("simulated open failure"));
         }
         if w.open[side] {
             return Err(io::Error::new(ErrorKind::AddrInUse, "simulated device in use"));
+        }
+        if w.faults.deaf_once == Some(side) {
+            w.deaf_opens += 1;
+            if w.deaf_opens > 1 {
+                w.faults.deaf_once = None;
+            }
         }
         w.open[side] = true;
         let ring = w.ring;
@@ -164,7 +188,7 @@ impl Frames for End {
             w.counts.frames += 1;
             let k = d.count;
             let f = w.faults;
-            if f.dead || (f.drop_every > 0 && k.is_multiple_of(f.drop_every)) {
+            if f.dead || f.deaf_once == Some(peer) || (f.drop_every > 0 && k.is_multiple_of(f.drop_every)) {
                 w.counts.dropped += 1;
                 taken += chunk.len();
                 continue;

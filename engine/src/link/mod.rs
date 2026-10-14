@@ -145,7 +145,16 @@ impl Inner {
                     self.lock().no_stream(job.epoch, &why, Instant::now());
                     return;
                 }
-                _ => self.streams.open(&found).map(|d| (d, found)),
+                _ => {
+                    let t = Instant::now();
+                    let r = self.streams.open(&found).map(|d| (d, found));
+                    let waited = t.elapsed();
+                    if waited > Duration::from_millis(100) {
+                        // The driver holds an open back while an earlier close of the device runs (0.5 s or more).
+                        eprintln!("link {}: opening the stream device took {waited:.0?}", self.lock().label);
+                    }
+                    r
+                }
             },
         };
         self.lock().install(job.epoch, r, Instant::now());
@@ -160,7 +169,8 @@ pub struct Link {
     _owner: Arc<Owner>,
 }
 
-fn hostname() -> String {
+/// This machine's host name.
+pub fn hostname() -> String {
     let mut b = [0u8; 256];
     // SAFETY: gethostname writes at most b.len() bytes.
     if unsafe { libc::gethostname(b.as_mut_ptr() as *mut libc::c_char, b.len()) } != 0 {
@@ -317,9 +327,12 @@ impl Link {
         sock.set_read_timeout(None)?;
         sock.set_write_timeout(None)?;
         sock.set_nonblocking(true)?;
-        let label = format!("{} ({addr})", w["host"].as_str().unwrap_or("?"));
-        let st = State::new(session, true, label, o.tune.clone(), sock, random_u64() as u32)?;
-        Ok((Link::start(st, o.streams.clone()), same_cable(&mine, &w["stream"])))
+        let host = w["host"].as_str().unwrap_or("?");
+        let mut st = State::new(session, true, format!("{host} ({addr})"), o.tune.clone(), sock, random_u64() as u32)?;
+        let same = same_cable(&mine, &w["stream"]);
+        st.peer = host.to_owned();
+        st.expects_stream = same;
+        Ok((Link::start(st, o.streams.clone()), same))
     }
 
     /// The connecting side, right after the handshake: with a stream at both ends, open the first epoch and give it
@@ -391,13 +404,15 @@ impl Link {
         }
         ensure!(h.kind == kind::HELLO, "{peer}: unexpected handshake record {}", h.kind);
         let mine = stream_info(o, &sock);
-        let _ = same_cable(&mine, &hello["stream"]);
+        let same = same_cable(&mine, &hello["stream"]);
         hs_send(&mut sock, kind::WELCOME, session, &json!({"v": VERSION, "host": me, "stream": mine}))?;
         sock.set_read_timeout(None)?;
         sock.set_write_timeout(None)?;
         sock.set_nonblocking(true)?;
-        let label = format!("{} ({peer})", hello["host"].as_str().unwrap_or("?"));
-        let st = State::new(session, false, label, o.tune.clone(), sock, 0)?;
+        let host = hello["host"].as_str().unwrap_or("?");
+        let mut st = State::new(session, false, format!("{host} ({peer})"), o.tune.clone(), sock, 0)?;
+        st.peer = host.to_owned();
+        st.expects_stream = same;
         let link = Link::start(st, o.streams.clone());
         {
             let mut a = ACCEPTED.lock().unwrap_or_else(|e| e.into_inner());
@@ -421,6 +436,21 @@ impl Link {
 
     pub fn stats(&self) -> Stats {
         self.inner.lock().stats
+    }
+
+    /// How this link carries its data, for run reports. `transport`: "stream" (on its stream since the first epoch),
+    /// "retried" (on its stream now, after a failed epoch or a fallback) or "tcp".
+    pub fn report(&self) -> Value {
+        let st = self.inner.lock();
+        let s = st.stats;
+        let transport = match st.path() {
+            "stream" if s.failed_epochs == 0 && s.fallbacks == 0 => "stream",
+            "stream" => "retried",
+            _ => "tcp",
+        };
+        json!({"to": st.peer, "transport": transport, "stream_at_both_ends": st.expects_stream,
+            "first_up_ms": s.first_up_ms, "epochs": s.epochs, "failed_epochs": s.failed_epochs,
+            "fallbacks": s.fallbacks, "sent_stream": s.sent_stream, "sent_tcp": s.sent_tcp})
     }
 
     /// The protocol state, for messages.

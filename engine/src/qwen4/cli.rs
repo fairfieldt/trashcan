@@ -377,6 +377,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             let tokens = prompt(tokens_file.as_deref(), &[])?;
             let mut chain = run.chain(&model)?;
             let ids = validate(&mut chain, &out, &tokens, greedy)?;
+            super::net::link_summary(&chain.links()?);
             println!("greedy: {ids:?}");
             Ok(())
         }
@@ -565,9 +566,11 @@ fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_j
             _ => None,
         })
         .collect();
+    let links = e.links()?;
     Ok(
         serde_json::json!({"pp": pp, "pp_seconds": pp_s, "pp_tok_s": pp as f64 / pp_s, "tg": tg, "tg_seconds": tg_s,
         "tg_tok_s": tg as f64 / tg_s, "plans": e.plans, "local_device_mib": mib,
-        "prefill_last_chunk_layer_ms": prefill_ms, "decode_layer_ms": decode_ms}),
+        "prefill_last_chunk_layer_ms": prefill_ms, "decode_layer_ms": decode_ms,
+        "links": super::net::link_summary(&links), "link_details": links}),
     )
 }

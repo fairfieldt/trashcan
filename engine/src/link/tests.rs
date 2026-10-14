@@ -452,3 +452,65 @@ fn read_and_write_traits_frame_like_a_socket() {
     drop(a);
     peer.join().unwrap();
 }
+
+#[test]
+fn an_epoch_comes_up_soon_after_a_late_open() {
+    // The accepting side's device opens 700 ms late (past the fast probes), and every receiver holds its last three
+    // frames: probes and their pushes must bring the epoch up within a few ms of the open.
+    let p = Pair::new(256);
+    p.set_faults(Faults { hold: 3, slow_open: Some((1, Duration::from_millis(700))), ..Default::default() });
+    let (a, b) = link_pair(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() });
+    wait_for("both on the stream", Duration::from_secs(3), || a.path() == "stream" && b.path() == "stream");
+    let (ua, ub) = (a.stats().first_up_ms.unwrap(), b.stats().first_up_ms.unwrap());
+    assert!(ua > 690. && ua < 760., "the connecting side up after {ua} ms");
+    assert!(ub < 760., "the accepting side up after {ub} ms");
+    assert_eq!(a.stats().failed_epochs + b.stats().failed_epochs, 0);
+}
+
+#[test]
+fn an_epoch_that_carries_one_way_is_given_up_at_once() {
+    // The accepting side's first device reads nothing the connecting side writes (a whole epoch dead one way, as the
+    // one-cable churn saw): the connecting side gives the epoch up after ONE_WAY and its next epoch, opened at once,
+    // comes up.
+    let p = Pair::new(256);
+    p.set_faults(Faults { deaf_once: Some(1), hold: 3, ..Default::default() });
+    let (a, b) = link_pair(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() });
+    wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
+    let s = a.stats();
+    assert_eq!(s.failed_epochs, 1, "{s:?}");
+    assert!(s.first_up_ms.is_some_and(|ms| (50. ..250.).contains(&ms)), "{s:?}");
+}
+
+#[test]
+fn reports_say_how_a_link_carried_its_data() {
+    // On the stream from its first epoch.
+    let p = Pair::new(256);
+    let (a, b) = link_pair(Some(&p), 256, fast());
+    wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
+    for r in [a.report(), b.report()] {
+        assert_eq!(r["transport"], "stream", "{r}");
+        assert_eq!(r["stream_at_both_ends"], true, "{r}");
+        assert!(r["first_up_ms"].as_f64().is_some_and(|ms| ms < 1000.), "{r}");
+    }
+    // A device that does not open at first: on TCP, said so after `tcp_warn`, then on the stream after failed
+    // epochs.
+    let p = Pair::new(256);
+    p.set_faults(Faults { refuse_open: true, ..Default::default() });
+    let (a, b) = link_pair(Some(&p), 256, Tuning { tcp_warn: Duration::from_millis(100), ..fast() });
+    assert_eq!(a.report()["transport"], "tcp");
+    assert!(a.report()["first_up_ms"].is_null());
+    wait_for("the warning", Duration::from_secs(2), || a.stats().tcp_warnings == 1);
+    p.set_faults(Faults::default());
+    wait_for("the stream", Duration::from_secs(5), || a.path() == "stream" && b.path() == "stream");
+    let r = a.report();
+    assert_eq!(r["transport"], "retried", "{r}");
+    assert!(r["failed_epochs"].as_u64().is_some_and(|n| n >= 1), "{r}");
+    assert_eq!(a.stats().tcp_warnings, 1, "one warning per stretch on TCP");
+    // No stream at both ends: TCP, and no warning.
+    let (a, _b) = link_pair(None, 256, Tuning { tcp_warn: Duration::from_millis(50), ..fast() });
+    thread::sleep(Duration::from_millis(150));
+    let r = a.report();
+    assert_eq!(r["transport"], "tcp");
+    assert_eq!(r["stream_at_both_ends"], false);
+    assert_eq!(a.stats().tcp_warnings, 0);
+}

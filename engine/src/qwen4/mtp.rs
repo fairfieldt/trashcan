@@ -376,6 +376,9 @@ pub fn run(cmd: Cmd) -> Result<()> {
                             "rollback": st.rollback_ms / r},
                         "ids": fast});
                     row["plain_ids"] = serde_json::json!(plain);
+                    let links = chain.links()?;
+                    row["links"] = super::net::link_summary(&links);
+                    row["link_details"] = serde_json::json!(links);
                     println!("{row}");
                 }
             }
