@@ -64,9 +64,10 @@ MTP on chat 22.3/26.1/21.2 -> 26.2/29.9/25.7.
 
 The first six-Mac run of the day, on the new ring order (incite, inflight, alight, indite, invite, enlight, read from
 the live links by `results/qwen4/chain-20261012/tools/ring.py`), passed val14, val100 and pp512-1 (rc 0). Then all
-six Mac Pros, and the workstation, lost power at the same moment, during the start of pp512-2:
+six Mac Pros lost power at the same moment, during the start of pp512-2:
 - every Mac's journal ends at 11:04:52-53 with no shutdown sequence;
-- netconsole shows no kernel error from any Mac before it.
+- netconsole shows no kernel error from any Mac before it;
+- the workstation restarted too: it booted at 11:08:48, with no clean-shutdown record in `last`.
 
 Wall power from the SMC (`power-loss-20261014-pstr.csv`, PSTR per Mac, one sample per second):
 
