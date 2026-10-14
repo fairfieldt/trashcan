@@ -1,0 +1,10 @@
+turn 1: 22 prompt tokens, cached 0, ttft 0.37 s, 57 tokens in 2.17 s; 'The Danube flows through ten countries, making it the second-longest river in Europe.\nThe Rhine is a major waterway that connects the Swiss Alps to the North Sea.\nThe Volga is the longest river in Europe, draining into the Caspian Sea.'
+turn 2: 99 prompt tokens, cached 78, ttft 0.29 s, 64 tokens in 2.08 s; 'The **Volga** is the longest of the three, with a length of approximately 3,530 kilometers (2,193 miles).\n\nFor comparison:\n*   **Volga**: ~3,530 km\n*   **Danube**: ~2,850 km'
+PASS: the second turn reused the first turn's state
+PASS: discovery, JSON, SSE, deterministic parity and persistent HTTP
+PASS: alternating greedy/stochastic graphs and seeded parity
+PASS: token-limit terminal event and separate reasoning
+PASS: invalid requests and prompt overflow
+PASS: native function call and full-history tool continuation
+PASS: namespaces, single-call control, custom tools and client tool search
+Responses server checks passed

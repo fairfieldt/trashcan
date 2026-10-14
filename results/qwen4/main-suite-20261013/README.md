@@ -39,3 +39,23 @@ Measured right after invite's power cycle and the reboots of alight, enlight and
 | `trashcan serve` test with MTP | 7 checks pass; server up after 10 s |
 
 The whole suite took 3.6 min (validate runs 6 s once the page cache was warm). Raw outputs: `ms-adf8cfd/`.
+
+## e9f34e6 (verify batches, prefill split fix, long-context round), 2026-10-13 17:05
+
+Measured after invite's reboot cleared its GPU 0 thermal DPM latch. Every GPU held 850/1370 MHz, including invite's
+GPU 0 through the 30K prefill.
+
+| item | result |
+|---|---|
+| validate, 14-token reference prompt | greedy tokens the CPU reference's (10/10); logits rel 2.79e-4, top-10 10/10 |
+| validate, p100 | greedy tokens the CPU reference's (10/10); logits rel 3.48e-2, top-10 10/10 |
+| decode, 128 tokens after a 512-token prompt | 20.67, 20.51 tok/s |
+| prefill 512 tokens | 520.5, 519.5 tok/s |
+| prefill 2048 (decode after it) | 887.7 tok/s (20.10 tok/s) |
+| prefill 8192 | 1123.0 tok/s (19.14 tok/s) |
+| prefill 30000 | 1246.9 tok/s (19.37 tok/s) |
+| MTP, chat prompts | water 26.24, csv 29.94, transformer 25.71 tok/s (plain 20.19-20.48); output identical to plain |
+| `trashcan serve` test with MTP | 7 checks pass |
+
+Against adf8cfd: prefill 466 -> 520 at 512, 677 -> 888 at 2K, 796 -> 1123 at 8K, 850 -> 1247 at 30K; decode 19.4 -> 20.6;
+MTP on chat 22.3/26.1/21.2 -> 26.2/29.9/25.7.
