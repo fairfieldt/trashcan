@@ -64,6 +64,12 @@ impl Instance {
         })
     }
 
+    /// The PCI address of `pd` as sysfs names it (`0000:06:00.0`).
+    pub fn pci_address(&self, pd: vk::PhysicalDevice) -> Result<String> {
+        let p = self.pci(pd)?;
+        Ok(pci_address(p.pci_domain, p.pci_bus, p.pci_device, p.pci_function))
+    }
+
     pub fn extensions(&self, pd: vk::PhysicalDevice) -> Result<Vec<String>> {
         let exts = unsafe { self.instance.enumerate_device_extension_properties(pd)? };
         Ok(exts
@@ -96,6 +102,11 @@ impl Drop for Instance {
     fn drop(&mut self) {
         unsafe { self.instance.destroy_instance(None) };
     }
+}
+
+/// A PCI address as sysfs names it: `domain:bus:device.function` in hex.
+fn pci_address(domain: u32, bus: u32, device: u32, function: u32) -> String {
+    format!("{domain:04x}:{bus:02x}:{device:02x}.{function:x}")
 }
 
 fn mib(b: u64) -> f64 {
@@ -288,4 +299,15 @@ pub fn report() -> Result<()> {
         }
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn pci_addresses_read_as_sysfs_names_them() {
+        // alight's two GPUs, and a Thunderbolt bridge.
+        assert_eq!(super::pci_address(0, 2, 0, 0), "0000:02:00.0");
+        assert_eq!(super::pci_address(0, 6, 0, 0), "0000:06:00.0");
+        assert_eq!(super::pci_address(0, 0x5c, 3, 0), "0000:5c:03.0");
+    }
 }

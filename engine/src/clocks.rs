@@ -1,7 +1,10 @@
-//! Hold this machine's amdgpu GPUs at the `high` DPM level while work arrives, and return them to `auto` after
+//! Hold this process's amdgpu GPUs at the `high` DPM level while work arrives, and return them to `auto` after
 //! `IDLE` without any. In a pipeline of many stages each GPU works a few milliseconds of every decode token; on `auto`
 //! it falls to 300/150 MHz in between and every layer starts slow (Flash-Next on six Macs: 8.1 against 13.5 tok/s,
 //! results/qwen4/chain-20261012). Held high, an idle D700 draws about 35 W more, hence the timeout.
+//!
+//! Only the GPUs the process uses: two engine processes on one Mac, one per GPU, each holding both levels, set each
+//! other's GPU to `auto` when one started, went idle or ended, while the other was still working.
 //!
 //! The level file belongs to root, so writes go through `sudo -n tee` (about 20 ms; the clocks are up when it
 //! returns). They run on a background thread: `busy` never blocks the caller.
@@ -26,8 +29,8 @@ pub struct Clocks {
     worker: Option<thread::JoinHandle<()>>,
 }
 
-/// The DPM level files of every amdgpu device.
-fn level_files() -> Vec<PathBuf> {
+/// The DPM level files of the amdgpu devices at the PCI addresses `pci` (as sysfs names them, `0000:06:00.0`).
+fn level_files(pci: &[String]) -> Vec<PathBuf> {
     let Ok(cards) = std::fs::read_dir("/sys/class/drm") else { return Vec::new() };
     let mut files: Vec<PathBuf> = cards
         .flatten()
@@ -35,6 +38,10 @@ fn level_files() -> Vec<PathBuf> {
         .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("card") && !n.contains('-')))
         .filter(|p| {
             std::fs::read_link(p.join("device/driver")).is_ok_and(|d| d.file_name().is_some_and(|n| n == "amdgpu"))
+        })
+        .filter(|p| {
+            std::fs::canonicalize(p.join("device"))
+                .is_ok_and(|d| d.file_name().and_then(|n| n.to_str()).is_some_and(|n| pci.iter().any(|a| a == n)))
         })
         .map(|p| p.join("device/power_dpm_force_performance_level"))
         .filter(|f| f.exists())
@@ -60,9 +67,10 @@ fn set(files: &[PathBuf], level: &str) -> bool {
 }
 
 impl Clocks {
-    /// None when this machine has no amdgpu devices or the level cannot be written (reported once).
-    pub fn new() -> Option<Self> {
-        let files = level_files();
+    /// Hold the GPUs at the PCI addresses `pci` (`Instance::pci_address`). None when none of them is an amdgpu device
+    /// or the level cannot be written (reported once).
+    pub fn new(pci: &[String]) -> Option<Self> {
+        let files = level_files(pci);
         if files.is_empty() {
             return None;
         }

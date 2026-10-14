@@ -1,0 +1,2 @@
+GPU1: layers 3..6
+GPU1: 4248.9 MiB allocated in 0.91 s; device-local heap 4249 of 5888 MiB used, budget 5870

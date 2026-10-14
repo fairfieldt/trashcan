@@ -156,9 +156,14 @@ impl Local {
                 stages.push(Stage::Cpu(CpuStage::new(&c, first, last, context, last == c.layers)));
             }
             Devices::Gpus(indices) => {
-                clocks = crate::clocks::Clocks::new();
                 let inst = Rc::new(Instance::new()?);
                 let all = inst.amd_gpus()?;
+                // The clocks of this process's GPUs only (another process may run on the others).
+                let pci = indices[..ranges.len()]
+                    .iter()
+                    .map(|&i| inst.pci_address(*all.get(i).ok_or_else(|| anyhow::anyhow!("GPU {i} not found"))?))
+                    .collect::<Result<Vec<_>>>()?;
+                clocks = crate::clocks::Clocks::new(&pci);
                 for (i, &(first, last)) in ranges.iter().enumerate() {
                     let pd = *all
                         .get(indices[i])

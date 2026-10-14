@@ -1,0 +1,12 @@
+kernel 7.3.0-rc7-p2p; kernel log matches before (baseline): 11
+Hint: You are currently not seeing messages from other users and the system.
+      Users in groups 'adm', 'systemd-journal' can see all messages.
+      Pass -q to turn off this notice.
+A: level writes: 10, of them naming both GPUs: 6
+A: GPU 1's level in the samples after the short process ended:     129 auto 
+Hint: You are currently not seeing messages from other users and the system.
+      Users in groups 'adm', 'systemd-journal' can see all messages.
+      Pass -q to turn off this notice.
+B: level writes: 6, of them naming both GPUs: 0
+B: GPU 1's level in the samples after the short process ended:      64 high 
+levels now: GPU 0 auto, GPU 1 auto; kernel log matches 11 (baseline 11)
