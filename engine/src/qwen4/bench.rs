@@ -215,6 +215,9 @@ pub struct GateCheck {
     pub sweep_kib: usize,
     pub stride: usize,
     pub max_fail: usize,
+    /// The release step opens each gate 200 µs plus a uniformly random 0-`jitter_us` µs after it started, so that
+    /// releases fall at every phase of the sweep and poll cycle.
+    pub jitter_us: u64,
 }
 
 /// One run of the gate check: how the gate ended and what it measured.
@@ -312,6 +315,15 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
     };
     // Where the gate writes how it ended: words 1-4 (the first line) or, for the sweep shaders, words 16-25.
     let at = if sweep { 16 } else { 1 };
+    let seed = std::cell::Cell::new(crate::vulkan::host_ns() | 1);
+    let jitter = || {
+        let mut x = seed.get();
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        seed.set(x);
+        if c.jitter_us == 0 { 0 } else { x % (c.jitter_us + 1) }
+    };
     let run = |cmd: vk::CommandBuffer, release: bool, preopen: bool| -> Result<GateRun> {
         gate.write(&[0u8; 128])?;
         if preopen {
@@ -334,7 +346,8 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
         let mut released = None;
         let mut write_us = None;
         if release {
-            while start_seen.elapsed() < Duration::from_micros(200) {
+            let delay = Duration::from_micros(200 + jitter());
+            while start_seen.elapsed() < delay {
                 std::hint::spin_loop();
             }
             let (when, ns) = (Instant::now(), crate::vulkan::host_ns());
@@ -430,7 +443,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
         calibration = json!({"polls": 16, "gate_us": r.gate_us, "us_per_poll": per_poll_s * 1e6, "ticks": r.ticks});
     }
     let cmd = record(polls)?;
-    let base = json!({"gpu": c.gpu, "step": c.step, "shader": c.shader, "memory": memory, "fence": format!("{:?}", c.fence),
+    let base = json!({"gpu": c.gpu, "step": c.step, "jitter_us": c.jitter_us, "shader": c.shader, "memory": memory, "fence": format!("{:?}", c.fence),
         "bound_ms": c.bound_ms, "polls_bound": polls, "ticks_bound": (ticks as u64) << 16,
         "sweep": if sweep { json!({"kib": c.sweep_kib, "stride": c.stride, "lines": lines}) } else { serde_json::Value::Null },
         "calibration": calibration});

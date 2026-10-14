@@ -144,6 +144,9 @@ pub enum Cmd {
         /// The release step stops after this many runs whose gate ran to its bound.
         #[arg(long, default_value_t = 3)]
         max_fail: usize,
+        /// The release step opens each gate 200 µs plus a random 0-jitter_us µs after it started.
+        #[arg(long, default_value_t = 0)]
+        jitter_us: u64,
     },
     /// Print the gate shaders' machine code and statistics as RADV compiles them on GPU `gpu` (or RADV's null device
     /// with RADV_FORCE_FAMILY, which needs no GPU).
@@ -346,7 +349,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
-        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps, fence, sweep_kib, stride, max_fail } => {
+        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps, fence, sweep_kib, stride, max_fail, jitter_us } => {
             anyhow::ensure!(memory == "cached" || memory == "uncached", "memory cached or uncached");
             super::bench::gate_check(&super::bench::GateCheck {
                 gpu,
@@ -359,6 +362,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 sweep_kib,
                 stride,
                 max_fail,
+                jitter_us,
             })
         }
         Cmd::GateIsa { gpu, shaders } => {
