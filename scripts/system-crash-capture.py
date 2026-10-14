@@ -73,6 +73,12 @@ class Recorder:
             selector.write_text(previous)
             fcntl.flock(self.smc_lock, fcntl.LOCK_UN)
 
+    def fan_file(self, name):
+        # applesmc keeps its fan files in the device directory before Linux 7.3 and in hwmon/hwmonN from 7.3.
+        if (self.smc / name).exists():
+            return self.smc / name
+        return next((self.smc / 'hwmon').glob('hwmon*/' + name), self.smc / name)
+
     def smc_values(self):
         result = {}
         selector = self.smc / 'key_at_index'
@@ -132,7 +138,7 @@ class Recorder:
             aer[port] = counters
         smc = self.smc_values()
         self.emit('telemetry', gpu=gpu, aer=aer, smc=smc,
-                  fan_rpm=read(self.smc / 'fan1_input'),
+                  fan_rpm=read(self.fan_file('fan1_input')),
                   load=read('/proc/loadavg'), sample_ms=round((time.monotonic()-started)*1000, 2))
 
     def dumps(self, source_root='/sys/class/devcoredump'):

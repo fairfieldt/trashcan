@@ -120,6 +120,12 @@ One SMC fan (`applesmc`) cools both D700s and the CPU; the GPUs' own `pwm1` driv
 `FAN_RPM` in the unit's environment changes the floor, `FAN_RPM=0` follows the SMC maximum alone). It reads
 `fan1_max` every two seconds and reasserts manual mode and the exact target if the SMC changes either.
 
+Linux 7.3 moved the fan files. Before 7.3 they are in `/sys/devices/platform/applesmc.768/`, with manual mode as
+`fan1_manual` (1 manual, 0 automatic) and the target as `fan1_output`. From 7.3 they are hwmon attributes in
+`/sys/devices/platform/applesmc.768/hwmon/hwmonN/`: `pwm1_enable` (1 manual, 2 automatic), `fan1_target`, and
+`fan1_input`, `fan1_min` and `fan1_max` as before. `fancurve.sh` and the telemetry (`system-crash-capture.py`) use
+whichever layout is there. Without the service, the SMC runs the fan at about 790 RPM on its own.
+
 The SMC's maximum is not fixed. It reads 1900 RPM at boot; on 2026-10-09 it then rose in 50 RPM steps to
 2359 (incite) and 2382 (indite) within 40 minutes and drifted back to about 1910 over the next six hours.
 After the 2026-10-12 boots it stayed at 1900 for over an hour on both Macs, through 95 °C GPU load. The
