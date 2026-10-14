@@ -519,3 +519,149 @@ pub fn barrier_bench(gpu: usize, iterations: u32) -> Result<()> {
     unsafe { d.dev.destroy_query_pool(q, None) };
     Ok(())
 }
+
+/// How a graph whose gate gave up skips its work, on GPU `gpu` (`qwen4 gate-skip-check`): `k` small dispatches, each
+/// followed by the barrier a stage's dispatches have, timed (a) alone, (b) behind a gate (`qwen4_gate`), (c) behind a
+/// gate under conditional rendering on its predicate, and (d) behind a gate, each reading the predicate itself. With
+/// the gate open every dispatch must run, with the gate given up none of (c) and (d). Then (c) alternates open and
+/// given-up gates `2 x reps` times: the command processor must see every predicate the gate wrote. One JSON line.
+pub fn gate_skip_check(gpu: usize, k: usize, reps: usize) -> Result<()> {
+    use anyhow::{ensure, Context};
+    use ash::vk;
+    let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("no such GPU")?;
+    let d = crate::vulkan::Device::new(inst, pd)?;
+    ensure!(d.shader_clock, "the device has no shader clock");
+    let conditional = d.conditional();
+    let page = d.buffer(4096, true, false, None)?;
+    let pred = if conditional { d.predicate_buffer(64)? } else { d.buffer(64, false, false, None)? };
+    let count = d.buffer(64, true, false, None)?;
+    let q = unsafe {
+        d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(2), None)?
+    };
+    let push = |a: u64, b: u64, c: u64| {
+        let mut p = crate::vulkan::Push::default();
+        (p.ptr[0], p.ptr[1], p.ptr[2]) = (a, b, c);
+        p
+    };
+    // A gate that gives up after its first poll (or a millisecond at 300 MHz), without a sweep.
+    let gate = |cmd: vk::CommandBuffer| {
+        let mut p = push(page.address, 0, pred.address);
+        (p.u[0], p.u[1]) = (1, (300_000u64 >> 16) as u32 + 1);
+        d.dispatch(cmd, "qwen4_gate", p, 1, 1);
+    };
+    let to_predicate = |cmd: vk::CommandBuffer| unsafe {
+        let b = [vk::MemoryBarrier::default()
+            .src_access_mask(vk::AccessFlags::SHADER_WRITE)
+            .dst_access_mask(vk::AccessFlags::CONDITIONAL_RENDERING_READ_EXT)];
+        d.dev.cmd_pipeline_barrier(
+            cmd,
+            vk::PipelineStageFlags::COMPUTE_SHADER,
+            vk::PipelineStageFlags::CONDITIONAL_RENDERING_EXT,
+            vk::DependencyFlags::empty(),
+            &b,
+            &[],
+            &[],
+        );
+    };
+    let names = ["alone", "gate", "conditional", "flag"];
+    let mut cmds = Vec::new();
+    for (v, name) in names.iter().enumerate() {
+        if v == 2 && !conditional {
+            continue;
+        }
+        let cmd = d.begin()?;
+        unsafe {
+            d.dev.cmd_reset_query_pool(cmd, q, 0, 2);
+            d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
+        }
+        if v > 0 {
+            gate(cmd);
+        }
+        if v == 2 {
+            to_predicate(cmd);
+            d.begin_conditional(cmd, &pred, 0)?;
+        }
+        for _ in 0..k {
+            let mut p = push(count.address, pred.address, 0);
+            p.u[11] = u32::from(v == 3);
+            d.dispatch(cmd, "qwen4_count", p, 1, 1);
+        }
+        if v == 2 {
+            d.end_conditional(cmd)?;
+        }
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+        d.host_barrier(cmd, true);
+        d.finish(cmd)?;
+        cmds.push((*name, cmd));
+    }
+    let mut ticket = 0u32;
+    // One run: the dispatches that counted and the GPU µs from the first timestamp to the last.
+    let mut run = |cmd: vk::CommandBuffer, open: bool| -> Result<(u32, f64)> {
+        ticket += 1;
+        let mut words = [0u32; 32];
+        words[16] = ticket;
+        words[0] = if open { ticket } else { ticket - 1 };
+        page.write(bytemuck::cast_slice(&words))?;
+        count.write(&[0u8; 64])?;
+        d.run_reusable(cmd)?;
+        let mut t = [0u64; 2];
+        unsafe { d.dev.get_query_pool_results(q, 0, &mut t, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+        let c = u32::from_le_bytes(count.read(4)?[..4].try_into()?);
+        Ok((c, t[1].wrapping_sub(t[0]) as f64 * d.period as f64 / 1e3))
+    };
+    let median = |mut v: Vec<f64>| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        v[v.len() / 2]
+    };
+    let mut variants = serde_json::Map::new();
+    let mut open_us = std::collections::HashMap::new();
+    for &(name, cmd) in &cmds {
+        let mut out = serde_json::Map::new();
+        for open in [true, false] {
+            let skips = name == "conditional" || name == "flag";
+            let want = if open || !skips { k as u32 } else { 0 };
+            let (mut us, mut wrong) = (Vec::new(), 0);
+            for _ in 0..reps {
+                let (c, t) = run(cmd, open)?;
+                wrong += usize::from(c != want);
+                us.push(t);
+            }
+            let m = median(us);
+            if open {
+                open_us.insert(name, m);
+            }
+            out.insert(
+                (if open { "open" } else { "given_up" }).into(),
+                serde_json::json!({"gpu_us": m, "wrong_counts": wrong, "expected": want}),
+            );
+        }
+        variants.insert(name.into(), out.into());
+    }
+    let mut alternating = serde_json::Value::Null;
+    if let Some(&(_, cmd)) = cmds.iter().find(|c| c.0 == "conditional") {
+        let mut wrong = 0;
+        for i in 0..2 * reps {
+            let open = i % 2 == 0;
+            let (c, _) = run(cmd, open)?;
+            wrong += usize::from(c != if open { k as u32 } else { 0 });
+        }
+        alternating = serde_json::json!({"runs": 2 * reps, "wrong_counts": wrong});
+    }
+    let per = |name: &str| open_us.get(name).zip(open_us.get("gate")).map(|(a, b)| (a - b) / k as f64);
+    println!(
+        "{}",
+        serde_json::json!({"gpu": gpu, "conditional_rendering": conditional, "dispatches": k, "reps": reps,
+            "variants": variants, "alternating": alternating,
+            "per_dispatch_us": {"conditional": per("conditional"), "flag": per("flag")},
+            "gate_open_us": open_us.get("gate").zip(open_us.get("alone")).map(|(a, b)| a - b)})
+    );
+    unsafe {
+        let _ = d.dev.device_wait_idle();
+        for (_, cmd) in cmds {
+            d.dev.free_command_buffers(d.pool, &[cmd]);
+        }
+        d.dev.destroy_query_pool(q, None);
+    }
+    Ok(())
+}

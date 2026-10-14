@@ -193,6 +193,16 @@ impl Local {
                     );
                     stages.push(Stage::Gpu(stage));
                 }
+                // The gates of graphs submitted ahead, checked with the clocks held up (the check sizes their bounds).
+                if let Some(c) = &clocks {
+                    c.busy();
+                    std::thread::sleep(std::time::Duration::from_millis(50));
+                }
+                for (s, &i) in stages.iter_mut().zip(indices.iter()) {
+                    if let Stage::Gpu(g) = s {
+                        g.probe_gate(&format!("GPU{i}"))?;
+                    }
+                }
             }
         }
         Ok(Self {
@@ -377,6 +387,68 @@ impl Local {
         Ok(end.unwrap_or(Output::Hidden(x)))
     }
 
+    /// Whether no prompt chunks are in flight.
+    pub fn idle(&self) -> bool {
+        self.flight.iter().all(|f| f.is_empty())
+    }
+
+    /// Submit the graphs of an `n`-token forward at `pos` ahead of its input on every GPU stage that can (a decode
+    /// step or verification batch that runs as `forward_direct`, which releases each stage as its input arrives).
+    /// For the machines after the driver, on the driver's notice that the forward follows.
+    pub fn presubmit(&mut self, pos: usize, n: usize, mode: Mode) -> Result<()> {
+        if !self.direct(n) {
+            return Ok(());
+        }
+        let r = self.stages.iter_mut().try_for_each(|s| match s {
+            Stage::Gpu(g) if !g.presubmitted() => g.presubmit(pos, n, mode).map(|_| ()),
+            _ => Ok(()),
+        });
+        if r.is_err() {
+            self.abandon();
+        }
+        r
+    }
+
+    /// Submit the scoring of `rows` final hidden states ahead on every GPU stage with head rows (`head_slices` and
+    /// `head_rows_submit` release it): once this machine's stages are done and the hidden states are on their way.
+    pub fn presubmit_heads(&mut self, rows: usize) -> Result<()> {
+        let r = self.stages.iter_mut().try_for_each(|s| match s {
+            Stage::Gpu(g) => g.head_presubmit(rows).map(|_| ()),
+            Stage::Cpu(_) => Ok(()),
+        });
+        if r.is_err() {
+            self.abandon();
+        }
+        r
+    }
+
+    /// Abandon work submitted ahead (after an error, or when the state is discarded): its graphs skip their work.
+    /// Every GPU stage is idle afterwards.
+    pub fn abandon(&mut self) {
+        for s in &mut self.stages {
+            if let Stage::Gpu(g) = s {
+                if let Err(e) = g.abandon() {
+                    eprintln!("qwen4: {e:#}");
+                }
+            }
+        }
+    }
+
+    /// What every GPU stage's gates did, and the gates that gave up in this process.
+    pub fn gate_stats(&self) -> serde_json::Value {
+        let stages: Vec<serde_json::Value> = self
+            .stages
+            .iter()
+            .filter_map(|s| match s {
+                Stage::Gpu(g) => Some(serde_json::json!({"layers": [g.first, g.last], "gated": g.gated(),
+                    "stats": g.gate_stats.json()})),
+                Stage::Cpu(_) => None,
+            })
+            .collect();
+        serde_json::json!({"stages": stages,
+            "timeouts": super::gate::TIMEOUTS.load(std::sync::atomic::Ordering::Relaxed)})
+    }
+
     /// Whether an `n`-token forward runs as `forward_direct`: a decode step or verification batch on GPU stages only,
     /// with no prompt chunks in flight.
     pub(crate) fn direct(&self, n: usize) -> bool {
@@ -386,9 +458,19 @@ impl Local {
     }
 
     /// Run a forward of up to `POLLED_MAX` tokens on GPU stages, each starting on the previous one's output copied
-    /// straight from that GPU's host buffer into its own. In verification mode the stage that ends the model also
-    /// leaves the batch's residual rows in `rows`.
+    /// straight from that GPU's host buffer into its own. Stages submitted ahead (`presubmit`) are released as their
+    /// input arrives; the others after the first are submitted ahead while the first one runs, so that only the first
+    /// stage's submission is on the critical path. In verification mode the stage that ends the model also leaves the
+    /// batch's residual rows in `rows`.
     pub(crate) fn forward_direct(&mut self, x: Vec<f32>, ple: Option<&[f32]>, pos: usize, n: usize, mode: Mode) -> Result<Output> {
+        let r = self.forward_direct_inner(x, ple, pos, n, mode);
+        if r.is_err() {
+            self.abandon();
+        }
+        r
+    }
+
+    fn forward_direct_inner(&mut self, x: Vec<f32>, ple: Option<&[f32]>, pos: usize, n: usize, mode: Mode) -> Result<Output> {
         fn gpu(s: &mut Stage) -> Result<&mut GpuStage> {
             match s {
                 Stage::Gpu(g) => Ok(g),
@@ -397,6 +479,12 @@ impl Local {
         }
         let k = self.stages.len();
         gpu(&mut self.stages[0])?.submit_mode(&x, ple, pos, n, false, mode)?;
+        for s in &mut self.stages[1..] {
+            let g = gpu(s)?;
+            if !g.presubmitted() {
+                g.presubmit(pos, n, mode)?;
+            }
+        }
         for i in 0..k - 1 {
             let (a, b) = self.stages.split_at_mut(i + 1);
             gpu(&mut a[i])?.collect_into(gpu(&mut b[0])?, pos, mode)?;

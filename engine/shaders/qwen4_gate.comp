@@ -1,0 +1,89 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_ARB_shader_clock : require
+// The gate of a graph submitted ahead of its input (`GpuStage::presubmit`): one wave waits until the host writes this
+// submission's ticket into the gate word, then the graph runs. It gives up after p.n polls or p.k << 16 shader-clock
+// ticks (the host counts them at the top DPM level's clock), and the graph's dispatches then skip (the predicate,
+// conditional rendering) until the host redoes the stage.
+// On Tahiti a line of host memory stays in the GPU's L2 while a wave polls it, so the wave never sees the host's
+// write: between polls it reads p.m lines of device-local memory p.stride dwords apart, which evicts the gate's line
+// (results/qwen4/gate-shader-20261014). A sweep that takes more than p.heads ticks read memory outside VRAM (evicted
+// to system memory): the gate gives up at once and does not sweep again.
+// g, a page of host memory: word 0 the gate, word 16 the ticket to wait for (the gate also ends at once when the host
+// writes the ticket with bit 31 set: work abandoned), and how the wait ended (read by the host): 32 how (1 opened,
+// 2 out of polls, 3 out of time, 4 abandoned, 5 sweep too slow), 33 polls, 34-35 ticks spent, 36-37 ticks in poll
+// loads, 38 the fewest ticks of one poll load, 39 the most, 40 the last word it read, 41 the ticket it read, 42 the
+// most ticks of one sweep.
+// q: word 0 the predicate (1 opened), device-local.
+layout(local_size_x=64) in;
+layout(set=2,binding=0,std430) coherent volatile buffer Gate { uint v[]; } g;
+layout(set=2,binding=1,std430) volatile readonly buffer Sweep { uint w[]; } s;
+layout(set=2,binding=2,std430) buffer Predicate { uint v[]; } q;
+layout(push_constant, std430) uniform Push {
+    uint64_t a,b,c,d,e,f,params,extra;
+    uint n,k,m,stride,heads,kvheads,dim,cap,window,kind,offset,flags,r0,r1,r2,r3;
+} p;
+
+void main() {
+    uint lane = gl_LocalInvocationIndex, step = p.stride;
+    uint ticket = g.v[16];
+    uint64_t t0 = clockARB(), limit = uint64_t(p.k) << 16, load_ticks = 0;
+    uint fewest = 0xffffffffu, most = 0u, slowest = 0u, i = 0u, how = 1u, acc = 0u, x = 0u;
+    for (;;) {
+        uint64_t a = clockARB();
+        x = g.v[0];
+        memoryBarrierBuffer();
+        uint64_t b = clockARB();
+        uint dt = uint(b - a);
+        load_ticks += dt;
+        fewest = min(fewest, dt);
+        most = max(most, dt);
+        if (x == ticket) {
+            break;
+        }
+        if (x == (ticket | 0x80000000u)) {
+            how = 4u;
+            break;
+        }
+        if (++i >= p.n) {
+            how = 2u;
+            break;
+        }
+        if (b - t0 >= limit) {
+            how = 3u;
+            break;
+        }
+        for (uint j = lane; j < p.m; j += 512u) {
+            uint o = j * step;
+            acc += s.w[o] + s.w[o + 64u * step] + s.w[o + 128u * step] + s.w[o + 192u * step]
+                + s.w[o + 256u * step] + s.w[o + 320u * step] + s.w[o + 384u * step] + s.w[o + 448u * step];
+        }
+        memoryBarrierBuffer();
+        uint64_t c = clockARB();
+        uint sweep = uint(min(c - b, uint64_t(0xffffffffu)));
+        slowest = max(slowest, sweep);
+        if (sweep > p.heads) {
+            how = 5u;
+            break;
+        }
+    }
+    uint64_t spent = clockARB() - t0;
+    // Practically never true; keeps the sweep's loads.
+    if (acc == 0x9e3779b9u) {
+        g.v[47] = acc;
+    }
+    if (lane == 0u) {
+        q.v[0] = how == 1u ? 1u : 0u;
+        g.v[32] = how;
+        g.v[33] = i;
+        g.v[34] = uint(spent);
+        g.v[35] = uint(spent >> 32);
+        g.v[36] = uint(load_ticks);
+        g.v[37] = uint(load_ticks >> 32);
+        g.v[38] = fewest;
+        g.v[39] = most;
+        g.v[40] = x;
+        g.v[41] = ticket;
+        g.v[42] = slowest;
+    }
+}

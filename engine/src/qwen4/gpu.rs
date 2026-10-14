@@ -11,7 +11,11 @@
 //! `idx_budget + kpool - 1` visible tokens; with longer contexts (or a Q8 K/V cache) the indexer scores blocks, picks
 //! the best `idx_budget / kpool` per token and the grouped kernels attend to those (`qwen4_attention_grouped*`).
 //! Prefill chunks may be queued behind the running one: host inputs, fences and timestamps come in two slots.
-use super::{cpu::Captures, Config};
+use super::{
+    cpu::Captures,
+    gate::{self, Gate},
+    Config,
+};
 use crate::{
     gguf::{GgmlType, Gguf, TensorInfo},
     quant::{Kind, Planes},
@@ -27,7 +31,8 @@ const _: () = assert!(TOP_K == 64, "qwen4_head_topk and qwen4_head_merge give 64
 const GRAPH_CACHE_CAPACITY: usize = 8;
 /// A recorded graph: batch size, attention partitions, captures, mode and the submission slot whose host inputs,
 /// fence and timestamps it uses.
-type Key = (usize, u32, bool, Mode, usize);
+/// A forward's graph: tokens, attention partitions, dump, mode, submission slot, and whether it starts with a gate.
+type Key = (usize, u32, bool, Mode, usize, bool);
 /// Phase timestamps per layer (n-gram module, two mixers, sublayer (sparse QSA: projections, block selection,
 /// attention), router, experts).
 const MARKS: usize = 8;
@@ -266,6 +271,9 @@ pub const POLLED_MAX: usize = 8;
 const END_STAGES: vk::PipelineStageFlags = vk::PipelineStageFlags::from_raw(
     vk::PipelineStageFlags::COMPUTE_SHADER.as_raw() | vk::PipelineStageFlags::TRANSFER.as_raw(),
 );
+/// Forwards of up to this many tokens and head scoring can be submitted ahead of their input, behind a gate
+/// (`presubmit`, `head_presubmit`, `gate.rs`): a decode step's or verification batch's graph, one command buffer.
+pub const GATED_MAX: usize = POLLED_MAX;
 /// How long the host spins on an end event before it waits for the fence instead.
 const SPIN: std::time::Duration = std::time::Duration::from_millis(50);
 
@@ -354,8 +362,8 @@ pub struct GpuStage {
     pending: std::collections::VecDeque<(Key, usize)>,
     /// The graph and batch of a forward that `wait` waited for and whose output `output` has not read yet.
     done: Option<(Key, usize)>,
-    /// Command buffers scoring given hidden states with this stage's head rows (by dump and row count).
-    head_graphs: HashMap<(bool, usize), Graph>,
+    /// Command buffers scoring given hidden states with this stage's head rows (by dump, row count and gate).
+    head_graphs: HashMap<(bool, usize, bool), Graph>,
     /// Rows scored by the last `head_submit`.
     head_n: usize,
     /// Forwards of up to `POLLED_MAX` tokens set their slot's `ends` event at their end, and head scoring `hend`; the
@@ -363,7 +371,7 @@ pub struct GpuStage {
     ends: [vk::Event; 2],
     hend: vk::Event,
     head_fence: vk::Fence,
-    /// Timestamps of the head scoring (`head_stamps`).
+    /// Timestamps of the head scoring (`head_stamps`), then of its gate.
     head_queries: vk::QueryPool,
     /// Head scoring submitted and not collected yet.
     head_pending: bool,
@@ -380,6 +388,24 @@ pub struct GpuStage {
     /// Tokens of the latest batch (`tail`).
     last_n: usize,
     queries: [vk::QueryPool; 2],
+    /// Graphs of up to `GATED_MAX` tokens and head scoring can be submitted ahead of their input behind a gate
+    /// (`presubmit`, `head_presubmit`): its parameters, once `probe_gate` found a sweep (of the first layer's expert
+    /// weights, `sweep_memory`) that works on this GPU.
+    gating: Option<gate::Params>,
+    /// The gates of forwards (slot 0) and of head scoring.
+    fwd_gate: Gate,
+    head_gate: Gate,
+    /// A forward submitted ahead that waits for its input: position, tokens, mode.
+    ahead: Option<(usize, usize, Mode)>,
+    /// Head scoring submitted ahead that waits for its hidden states: rows.
+    head_ahead: Option<usize>,
+    /// When the pending gated forward was released (host ns) and its position; when the head scoring was, and
+    /// whether the scoring pending is gated.
+    released: Option<(u64, usize)>,
+    head_released: Option<u64>,
+    head_gated: bool,
+    /// What this stage's gates did.
+    pub gate_stats: gate::Stats,
     /// GPU milliseconds of each layer's submission in the last forward (the last includes the head or output).
     pub profile: Vec<f64>,
     /// GPU milliseconds per (layer index in the stage, phase) in the last forward.
@@ -733,7 +759,7 @@ impl GpuStage {
             gpu.dev.create_query_pool(
                 &vk::QueryPoolCreateInfo::default()
                     .query_type(vk::QueryType::TIMESTAMP)
-                    .query_count((2 + MARKS) as u32 * layers.len() as u32),
+                    .query_count((2 + MARKS) as u32 * layers.len() as u32 + 2),
                 None,
             )
         };
@@ -743,10 +769,11 @@ impl GpuStage {
         let (ends, hend) = ([event()?, event()?], event()?);
         let head_queries = unsafe {
             gpu.dev.create_query_pool(
-                &vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(4),
+                &vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(6),
                 None,
             )?
         };
+        let (fwd_gate, head_gate) = (Gate::new(&gpu)?, Gate::new(&gpu)?);
         let stage = Self {
             first,
             last,
@@ -835,6 +862,15 @@ impl GpuStage {
             last_verify: None,
             last_n: 0,
             queries,
+            gating: None,
+            fwd_gate,
+            head_gate,
+            ahead: None,
+            head_ahead: None,
+            released: None,
+            head_released: None,
+            head_gated: false,
+            gate_stats: gate::Stats::default(),
             profile: Vec::new(),
             phases: Vec::new(),
             window: None,
@@ -1065,13 +1101,12 @@ impl GpuStage {
 
     /// Start scoring `h` with this stage's head rows; false when the stage has none to score (see `head_slice`).
     /// Stages on different GPUs can score at the same time; `head_collect` waits for the result.
+    /// Releases head scoring submitted ahead (`head_presubmit`) for as many rows.
     pub fn head_submit(&mut self, h: &[f32], dump: bool) -> Result<bool> {
         let d = self.c.d;
         let Some(hd) = self.head.as_ref() else {
             return Ok(false);
         };
-        ensure!(self.pending.is_empty(), "the stage is still working on a forward");
-        ensure!(!self.head_pending, "the stage is still scoring");
         // Several rows (a verification batch) are scored one after another.
         let rows = h.len() / d;
         ensure!(
@@ -1079,9 +1114,42 @@ impl GpuStage {
             "hidden state length mismatch"
         );
         super::trace::mark("hsub0", self.first as u64);
+        if let Some(ahead) = self.head_ahead.take() {
+            ensure!(ahead == rows && !dump, "head scoring of {rows} rows does not match the {ahead} submitted ahead");
+            hd.h.write(bytemuck::cast_slice(h))?;
+            self.head_n = rows;
+            self.head_released = Some(crate::vulkan::host_ns());
+            self.head_gate.release();
+            super::trace::mark("hsub", self.first as u64);
+            return Ok(true);
+        }
+        ensure!(self.pending.is_empty(), "the stage is still working on a forward");
+        ensure!(!self.head_pending, "the stage is still scoring");
         hd.h.write(bytemuck::cast_slice(h))?;
         self.head_n = rows;
-        let key = (dump, rows);
+        self.head_launch((dump, rows, false))?;
+        super::trace::mark("hsub", self.first as u64);
+        Ok(true)
+    }
+
+    /// Submit the scoring of `rows` final hidden states ahead of them, behind the head's gate (`head_submit` writes
+    /// them and releases it). False when the stage holds no head rows or has no gate, or gates are off (`gate::resident`
+    /// turns them off when amdgpu moved VRAM out).
+    pub fn head_presubmit(&mut self, rows: usize) -> Result<bool> {
+        if self.head.is_none() || self.gating.is_none() || !gate::enabled() || !gate::resident() {
+            return Ok(false);
+        }
+        ensure!((1..=VERIFY_MAX).contains(&rows), "head scoring of {rows} rows");
+        ensure!(self.pending.is_empty() && self.ahead.is_none(), "the stage is still working on a forward");
+        ensure!(!self.head_pending && self.head_ahead.is_none(), "the stage is still scoring");
+        self.head_launch((false, rows, true))?;
+        self.head_ahead = Some(rows);
+        Ok(true)
+    }
+
+    /// Record the head graph `key` (dump, rows, gated) if needed and submit it; a gated one waits for `head_submit`.
+    fn head_launch(&mut self, key: (bool, usize, bool)) -> Result<()> {
+        let hd = self.head.as_ref().context("no head rows")?;
         if !self.head_graphs.contains_key(&key) {
             let cmd = self.gpu.begin()?;
             let mut graph = Graph {
@@ -1091,9 +1159,16 @@ impl GpuStage {
                 marks: Vec::new(),
                 stamps: None,
             };
-            unsafe { self.gpu.dev.cmd_reset_query_pool(cmd, self.head_queries, 0, 4) };
+            unsafe { self.gpu.dev.cmd_reset_query_pool(cmd, self.head_queries, 0, 6) };
+            if key.2 {
+                let params = self.gating.as_ref().context("no gate")?;
+                gate::record(&self.gpu, cmd, params, &self.head_gate, self.sweep_memory()?, self.head_queries, 4)?;
+            }
             self.gpu.barrier(cmd);
-            self.score_head(&mut graph, cmd, hd, rows, dump)?;
+            self.score_head(&mut graph, cmd, hd, key.1, key.0)?;
+            if key.2 {
+                self.gpu.end_conditional(cmd)?;
+            }
             self.gpu.host_barrier(cmd, true);
             unsafe { self.gpu.dev.cmd_set_event(cmd, self.hend, END_STAGES) };
             self.gpu.finish(cmd)?;
@@ -1104,25 +1179,91 @@ impl GpuStage {
             self.gpu.dev.reset_fences(&[self.head_fence])?;
             self.gpu.dev.reset_event(self.hend)?;
         }
+        if key.2 {
+            self.head_gate.arm();
+        }
         self.gpu.submit(self.head_graphs[&key].cmds[0], None, None, self.head_fence)?;
         self.head_pending = true;
-        super::trace::mark("hsub", self.first as u64);
-        Ok(true)
+        self.head_gated = key.2;
+        Ok(())
     }
 
-    /// Wait for the head scoring in progress.
+    /// Wait for the head scoring in progress. A gated one whose gate gave up skipped its work: it runs again, without a
+    /// gate (its hidden states are written).
     fn head_wait(&mut self) -> Result<()> {
+        ensure!(self.head_ahead.is_none(), "head scoring submitted ahead has no hidden states yet");
         ensure!(std::mem::take(&mut self.head_pending), "no head scoring submitted");
         self.head_unretired = !self.wait_end(self.hend, self.head_fence)?;
         super::trace::mark("hfence", self.first as u64);
+        if std::mem::take(&mut self.head_gated) {
+            let mut t = [0u64; 2];
+            unsafe {
+                self.gpu.dev.get_query_pool_results(
+                    self.head_queries,
+                    4,
+                    &mut t,
+                    vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+                )?
+            };
+            let released = self.head_released.take().context("gated head scoring never released")?;
+            let o = self.head_gate.outcome();
+            let expected = self.head_gate.ticket();
+            if !self.gate_outcome(o, t, released, expected, "head scoring")? {
+                self.head_launch((false, self.head_n, false))?;
+                return self.head_wait();
+            }
+        }
         self.head_stamps()
+    }
+
+    /// How a gate's wait went, from its outcome and the GPU timestamps `t` around it, into the statistics; false when
+    /// the gate gave up (its graph skipped its work: the caller runs it again without a gate). A wait that broke the
+    /// gate's bound or clock checks, or a sweep slower than VRAM, turns gates off for the process.
+    fn gate_outcome(&mut self, o: gate::Outcome, t: [u64; 2], released: u64, expected: u32, what: &str) -> Result<bool> {
+        let period = self.gpu.period as f64;
+        let gpu_us = t[1].wrapping_sub(t[0]) as f64 * period / 1e3;
+        let latency = self.gpu.calibrate().map(|(now, ns)| {
+            let past = ns as f64 - now.wrapping_sub(t[1]) as f64 * period;
+            (past - released as f64) / 1e3
+        });
+        self.gate_stats.add(&o, gpu_us, latency);
+        if let Err(e) = gate::check(&o, gpu_us) {
+            gate::disable(&format!("layers {}..{}: {e:#}", self.first, self.last));
+        }
+        ensure!(o.how != 4, "{what} submitted ahead was abandoned");
+        if o.opened() {
+            return Ok(true);
+        }
+        if o.how == 5 {
+            gate::disable(&format!(
+                "layers {}..{}: a sweep of the gate of {what} took {} shader-clock ticks, slower than VRAM: the memory it \
+                 reads was moved out of VRAM",
+                self.first, self.last, o.slowest_sweep
+            ));
+            return Ok(false);
+        }
+        let count = gate::TIMEOUTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+        eprintln!(
+            "qwen4: layers {}..{}: the gate of {what} gave up after {:.0} ms ({} polls, poll loads {}-{} ticks; it read \
+             {:#x} last and ticket {:#x}, released with {expected:#x}) without its input; running it again ({count} so \
+             far)",
+            self.first,
+            self.last,
+            gpu_us / 1e3,
+            o.polls,
+            o.fewest,
+            o.most,
+            o.last,
+            o.ticket
+        );
+        Ok(false)
     }
 
     /// Wait for `head_submit` and return its candidates (with vocabulary ids).
     pub fn head_collect(&mut self, dump: Option<&mut Captures>) -> Result<Option<Vec<(f32, u32)>>> {
         self.head_wait()?;
         if let Some(m) = dump {
-            for (name, host, width) in &self.head_graphs[&(true, 1)].captures {
+            for (name, host, width) in &self.head_graphs[&(true, 1, false)].captures {
                 m.insert(name.clone(), bytemuck::cast_slice(&host.read(width * 4)?).to_vec());
             }
         }
@@ -1172,7 +1313,7 @@ impl GpuStage {
         self.gpu.device_bytes.get() as f64 / 1048576.
     }
 
-    fn record(&self, n: usize, parts: u32, dump: bool, mode: Mode, slot: usize) -> Result<Graph> {
+    fn record(&self, n: usize, parts: u32, dump: bool, mode: Mode, slot: usize, gated: bool) -> Result<Graph> {
         let verify = mode == Mode::Verify;
         let gpu = &self.gpu;
         let c = &self.c;
@@ -1210,8 +1351,14 @@ impl GpuStage {
         };
         unsafe {
             gpu.dev
-                .cmd_reset_query_pool(cmd, self.queries[slot], 0, (2 + MARKS) as u32 * self.layers.len() as u32)
+                .cmd_reset_query_pool(cmd, self.queries[slot], 0, (2 + MARKS) as u32 * self.layers.len() as u32 + 2)
         };
+        // A graph submitted ahead waits for its input behind the gate; its work runs only when the gate opened.
+        if gated {
+            ensure!(n <= GATED_MAX && !dump, "only decode-sized graphs without captures are gated");
+            let params = self.gating.as_ref().context("no gate")?;
+            gate::record(gpu, cmd, params, &self.fwd_gate, self.sweep_memory()?, self.queries[slot], self.gate_slot())?;
+        }
         let base = 2 * self.layers.len();
         let mark = |graph: &mut Graph, layer: usize, name: &'static str| {
             stamp(current.get(), base + graph.marks.len(), true);
@@ -2225,6 +2372,9 @@ impl GpuStage {
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
             gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
         }
+        if gated {
+            gpu.end_conditional(current.get())?;
+        }
         stamp(current.get(), 2 * self.layers.len() - 1, true);
         if n <= POLLED_MAX {
             gpu.host_barrier(current.get(), true);
@@ -2238,7 +2388,8 @@ impl GpuStage {
     /// Dispatch times of the graph that ran `n` tokens at `pos` last (`TRASHCAN_Q4_PROFILE=1`): per dispatch its
     /// label, GPU milliseconds from its start to the end of all work before it, and the gap before its start.
     pub fn dispatch_profile(&self, pos: usize, n: usize) -> Result<Vec<(String, f64, f64)>> {
-        let Some(graph) = self.graphs.get(&(n, partitions(pos, n), false, Mode::Plain, 0)) else { return Ok(Vec::new()) };
+        let key = |gated| (n, partitions(pos, n), false, Mode::Plain, 0, gated);
+        let Some(graph) = self.graphs.get(&key(false)).or_else(|| self.graphs.get(&key(true))) else { return Ok(Vec::new()) };
         let Some((pool, labels)) = &graph.stamps else { return Ok(Vec::new()) };
         let mut t = vec![0u64; labels.len()];
         unsafe {
@@ -2401,9 +2552,28 @@ impl GpuStage {
         self.submit_mode(x, ple, pos, n, dump, Mode::Plain)
     }
 
+    /// Releases a forward submitted ahead (`presubmit`) for the same position, tokens and mode.
     pub(crate) fn submit_mode(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize, dump: bool, mode: Mode) -> Result<()> {
         let (d, w) = (self.c.d, self.c.width());
         super::trace::mark("sub0", self.first as u64);
+        ensure!(x.len() == n * w, "residual length mismatch");
+        let ple = match (&self.ple, ple) {
+            (None, _) => None,
+            (Some(_), Some(p)) if p.len() == n * d => Some(p),
+            (Some(_), Some(_)) => anyhow::bail!("n-gram rows length mismatch"),
+            (Some(_), None) => anyhow::bail!("this stage needs the n-gram rows"),
+        };
+        if let Some(ahead) = self.ahead.take() {
+            ensure!(
+                ahead == (pos, n, mode) && !dump,
+                "a forward of {n} tokens at {pos} ({mode:?}) does not match the one submitted ahead ({ahead:?})"
+            );
+            self.write_input(0, x, ple, pos, n)?;
+            self.released = Some((crate::vulkan::host_ns(), pos));
+            self.fwd_gate.release();
+            super::trace::mark("sub1", self.first as u64);
+            return Ok(());
+        }
         ensure!(
             mode == Mode::Plain || n <= self.verify_max,
             "verification batch of {n} exceeds the enabled {}",
@@ -2417,15 +2587,75 @@ impl GpuStage {
         let slot = self.pending.front().map_or(0, |p| 1 - p.0 .4);
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(pos + n <= self.context, "context exhausted");
-        ensure!(x.len() == n * w, "residual length mismatch");
+        self.write_input(slot, x, ple, pos, n)?;
+        self.launch((n, partitions(pos, n), dump, mode, slot, false), n)?;
+        super::trace::mark("sub1", self.first as u64);
+        Ok(())
+    }
+
+    fn write_input(&self, slot: usize, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize) -> Result<()> {
         self.input[slot].write(bytemuck::cast_slice(x))?;
-        if self.ple.is_some() {
-            let p = ple.context("this stage needs the n-gram rows")?;
-            ensure!(p.len() == n * d, "n-gram rows length mismatch");
+        if let Some(p) = ple {
             self.ple_in[slot].write(bytemuck::cast_slice(p))?;
         }
-        self.params_host[slot].write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump, mode, slot);
+        self.params_host[slot].write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))
+    }
+
+    /// Submit the graph of a forward of `n` tokens at `pos` ahead of its input, behind its gate: it waits on the GPU
+    /// until `submit` with the same position, tokens and mode writes the input and releases it, so the submission's
+    /// own cost (0.1-0.2 ms on the D700s) overlaps earlier work. False when the stage has no gate, the forward is
+    /// larger than `GATED_MAX`, or gates are off (`gate::resident` turns them off when amdgpu moved VRAM out).
+    pub fn presubmit(&mut self, pos: usize, n: usize, mode: Mode) -> Result<bool> {
+        if self.gating.is_none() || n > GATED_MAX || !gate::enabled() || !gate::resident() {
+            return Ok(false);
+        }
+        ensure!(mode == Mode::Plain || n <= self.verify_max, "verification batch of {n} exceeds the enabled {}", self.verify_max);
+        ensure!(self.pending.is_empty() && self.done.is_none() && self.ahead.is_none(), "the stage is still working on a forward");
+        ensure!(!self.head_pending && self.head_ahead.is_none(), "the stage is still scoring");
+        ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
+        ensure!(pos + n <= self.context, "context exhausted");
+        super::trace::mark("pre0", self.first as u64);
+        self.launch((n, partitions(pos, n), false, mode, 0, true), n)?;
+        self.ahead = Some((pos, n, mode));
+        super::trace::mark("pre1", self.first as u64);
+        Ok(true)
+    }
+
+    /// Whether a forward was submitted ahead of its input.
+    pub fn presubmitted(&self) -> bool {
+        self.ahead.is_some()
+    }
+
+    /// Whether forwards and head scoring can be submitted ahead (the gate check passed).
+    pub fn gated(&self) -> bool {
+        self.gating.is_some()
+    }
+
+    /// The startup check of this stage's gate (`gate::probe`; `label` names the stage in log lines): after it,
+    /// decode-sized forwards and head scoring can be submitted ahead. A check that fails leaves the stage without a
+    /// gate (logged); it never fails the stage.
+    pub fn probe_gate(&mut self, label: &str) -> Result<()> {
+        ensure!(self.pending.is_empty() && !self.head_pending, "the stage is working");
+        ensure!(self.graphs.is_empty() && self.head_graphs.is_empty(), "graphs recorded before the gate check");
+        let sweep = &self.layers.first().context("a stage without layers")?.gate_up;
+        self.gating = gate::probe(&self.gpu, label, sweep, [&mut self.fwd_gate, &mut self.head_gate]);
+        Ok(())
+    }
+
+    /// The device-local memory a gate reads between polls to evict its line from the L2: the first layer's expert
+    /// weights (hundreds of MiB, only read).
+    fn sweep_memory(&self) -> Result<&Buffer> {
+        Ok(&self.layers.first().context("a stage without layers")?.gate_up)
+    }
+
+    /// The first timestamp query of a forward's gate (after the layers' and the phases').
+    fn gate_slot(&self) -> u32 {
+        (2 + MARKS) as u32 * self.layers.len() as u32
+    }
+
+    /// Record the graph `key` if needed and submit it (a gated one with a new ticket).
+    fn launch(&mut self, key: Key, n: usize) -> Result<()> {
+        let slot = key.4;
         // A fence or command buffers may be reused below.
         self.retire()?;
         if !self.graphs.contains_key(&key) {
@@ -2440,10 +2670,9 @@ impl GpuStage {
                     .unwrap();
                 self.graphs.remove(&victim);
             }
-            let graph = self.record(n, key.1, key.2, key.3, slot)?;
+            let graph = self.record(n, key.1, key.2, key.3, slot, key.5)?;
             self.graphs.insert(key, graph);
         }
-        let graph = &self.graphs[&key];
         let fence = self.fence[slot];
         unsafe {
             self.gpu.dev.reset_fences(&[fence])?;
@@ -2451,13 +2680,16 @@ impl GpuStage {
                 self.gpu.dev.reset_event(self.ends[slot])?;
             }
         }
+        if key.5 {
+            self.fwd_gate.arm();
+        }
+        let graph = &self.graphs[&key];
         for (i, &cmd) in graph.cmds.iter().enumerate() {
             let last = i + 1 == graph.cmds.len();
             self.gpu
                 .submit(cmd, None, None, if last { fence } else { vk::Fence::null() })?;
         }
         self.pending.push_back((key, n));
-        super::trace::mark("sub1", self.first as u64);
         Ok(())
     }
 
@@ -2470,6 +2702,7 @@ impl GpuStage {
     /// Wait for the oldest forward started by `submit` and read its timestamps. Its output stays readable (`output`)
     /// until the next forward on this stage ends, which may already be queued.
     pub fn wait(&mut self) -> Result<()> {
+        ensure!(self.ahead.is_none(), "a forward submitted ahead has no input yet");
         let (key, n) = self.pending.pop_front().context("no forward submitted")?;
         if key.0 <= POLLED_MAX {
             self.unretired[key.4] = !self.wait_end(self.ends[key.4], self.fence[key.4])?;
@@ -2479,6 +2712,26 @@ impl GpuStage {
             }
         }
         super::trace::mark("fence", self.first as u64);
+        if key.5 {
+            // A gated forward: how its gate's wait went (timestamps after the layers' and the phases').
+            let mut t = [0u64; 2];
+            unsafe {
+                self.gpu.dev.get_query_pool_results(
+                    self.queries[key.4],
+                    self.gate_slot(),
+                    &mut t,
+                    vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
+                )?;
+            }
+            let (released, pos) = self.released.take().context("gated forward never released")?;
+            let o = self.fwd_gate.outcome();
+            let expected = self.fwd_gate.ticket();
+            if !self.gate_outcome(o, t, released, expected, &format!("the forward at {pos}"))? {
+                // Its work was skipped: run it again now that its input is written, without a gate.
+                self.launch((key.0, key.1, key.2, key.3, key.4, false), n)?;
+                return self.wait();
+            }
+        }
         let graph = &self.graphs[&key];
         let mut times = vec![0u64; 2 * self.layers.len() + graph.marks.len()];
         unsafe {
@@ -2560,6 +2813,27 @@ impl GpuStage {
         next.submit_mode(x, None, pos, n, false, mode)
     }
 
+    /// Abandon work submitted ahead (after an error elsewhere): its gates end at their next poll and its graphs skip
+    /// their work. Waits until the stage is idle.
+    pub fn abandon(&mut self) -> Result<()> {
+        if self.ahead.take().is_some() {
+            self.fwd_gate.cancel();
+        }
+        if self.head_ahead.take().is_some() {
+            self.head_gate.cancel();
+        }
+        unsafe { self.gpu.dev.queue_wait_idle(self.gpu.queue)? };
+        self.pending.clear();
+        self.done = None;
+        self.head_pending = false;
+        self.head_gated = false;
+        self.unretired = [false; 2];
+        self.head_unretired = false;
+        self.released = None;
+        self.head_released = None;
+        Ok(())
+    }
+
     /// Whether this stage runs the final mixer (its output is the final hidden state).
     pub fn ends_model(&self) -> bool {
         self.head.as_ref().is_some_and(|hd| hd.mix.is_some())
@@ -2576,6 +2850,13 @@ fn read_f32(b: &Buffer, count: usize) -> Result<Vec<f32>> {
 
 impl Drop for GpuStage {
     fn drop(&mut self) {
+        // Work submitted ahead skips at once instead of waiting out its gate.
+        if self.ahead.is_some() {
+            self.fwd_gate.cancel();
+        }
+        if self.head_ahead.is_some() {
+            self.head_gate.cancel();
+        }
         unsafe {
             let _ = self.gpu.dev.device_wait_idle();
         }

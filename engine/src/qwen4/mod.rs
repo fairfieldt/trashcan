@@ -9,6 +9,7 @@ pub mod bench;
 pub mod cli;
 pub mod cpu;
 pub mod draft;
+pub mod gate;
 pub mod gpu;
 pub mod mtp;
 pub mod net;

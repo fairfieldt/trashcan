@@ -113,6 +113,8 @@ fn main() {
         "qwen4_stream_probe",
         "qwen4_cache_probe",
         "qwen4_moe_gu2",
+        "qwen4_gate",
+        "qwen4_count",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",

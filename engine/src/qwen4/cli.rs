@@ -119,6 +119,16 @@ pub enum Cmd {
         #[arg(long, default_value_t = 400)]
         iterations: u32,
     },
+    /// How a graph whose gate gave up skips its dispatches (conditional rendering, or a flag each dispatch reads) and
+    /// what that costs per dispatch, on GPU `gpu`.
+    GateSkipCheck {
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 100)]
+        dispatches: usize,
+        #[arg(long, default_value_t = 200)]
+        reps: usize,
+    },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
         #[arg(long, default_value_t = 64)]
@@ -314,6 +324,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
         Cmd::BarrierBench { gpu, iterations } => super::bench::barrier_bench(gpu, iterations),
+        Cmd::GateSkipCheck { gpu, dispatches, reps } => super::bench::gate_skip_check(gpu, dispatches, reps),
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
             // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.
@@ -510,6 +521,7 @@ fn validate(e: &mut super::net::Chain, out: &Path, tokens: &[u32], greedy: usize
         out.join("greedy.txt"),
         ids.iter().map(|x| format!("{x}\n")).collect::<String>(),
     )?;
+    eprintln!("gate: {}", e.local.gate_stats());
     Ok(ids)
 }
 
@@ -569,7 +581,7 @@ fn bench(e: &mut super::net::Chain, prompt: &[u32], tg: usize) -> Result<serde_j
     let links = e.links()?;
     Ok(
         serde_json::json!({"pp": pp, "pp_seconds": pp_s, "pp_tok_s": pp as f64 / pp_s, "tg": tg, "tg_seconds": tg_s,
-        "tg_tok_s": tg as f64 / tg_s, "plans": e.plans, "local_device_mib": mib,
+        "tg_tok_s": tg as f64 / tg_s, "plans": e.plans, "local_device_mib": mib, "gate": e.local.gate_stats(),
         "prefill_last_chunk_layer_ms": prefill_ms, "decode_layer_ms": decode_ms,
         "links": super::net::link_summary(&links), "link_details": links}),
     )

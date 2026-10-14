@@ -36,6 +36,10 @@ pub struct Device {
     /// Timestamp recorder of the graph being recorded, when profiling (`Stamps`).
     pub stamps: RefCell<Option<Stamps>>,
     calibrated: Option<ash::ext::calibrated_timestamps::Device>,
+    /// Shaders can read the shader clock (VK_KHR_shader_clock): the gate of a graph submitted ahead bounds its wait.
+    pub shader_clock: bool,
+    /// VK_EXT_conditional_rendering: a gate that gave up skips the dispatches of its graph.
+    cond: Option<ash::ext::conditional_rendering::Device>,
     /// Device-local memory shared by many buffers, once `use_arena` is called.
     arena: RefCell<Option<Vec<Chunk>>>,
     /// An `Uploader` has copies in flight: a buffer dropped meanwhile (an error while loading) waits for them.
@@ -250,6 +254,30 @@ impl Device {
         if calibrate {
             extensions.push(ash::ext::calibrated_timestamps::NAME.as_ptr());
         }
+        // The gate of graphs submitted ahead (qwen4): the shader clock bounds its wait, conditional rendering skips the
+        // graph's dispatches when it gave up.
+        let supported = unsafe { inst.instance.enumerate_device_extension_properties(pd)? };
+        let has = |name: &std::ffi::CStr| supported.iter().any(|e| e.extension_name_as_c_str() == Ok(name));
+        let mut clock_features = vk::PhysicalDeviceShaderClockFeaturesKHR::default();
+        let mut cond_features = vk::PhysicalDeviceConditionalRenderingFeaturesEXT::default();
+        if has(ash::khr::shader_clock::NAME) {
+            let mut f = vk::PhysicalDeviceFeatures2::default().push_next(&mut clock_features);
+            unsafe { inst.instance.get_physical_device_features2(pd, &mut f) };
+        }
+        if has(ash::ext::conditional_rendering::NAME) {
+            let mut f = vk::PhysicalDeviceFeatures2::default().push_next(&mut cond_features);
+            unsafe { inst.instance.get_physical_device_features2(pd, &mut f) };
+        }
+        let shader_clock = clock_features.shader_subgroup_clock == vk::TRUE;
+        let conditional = cond_features.conditional_rendering == vk::TRUE;
+        if shader_clock {
+            extensions.push(ash::khr::shader_clock::NAME.as_ptr());
+        }
+        if conditional {
+            extensions.push(ash::ext::conditional_rendering::NAME.as_ptr());
+        }
+        let mut clock = vk::PhysicalDeviceShaderClockFeaturesKHR::default().shader_subgroup_clock(true);
+        let mut cond = vk::PhysicalDeviceConditionalRenderingFeaturesEXT::default().conditional_rendering(true);
         let mut f11 =
             vk::PhysicalDeviceVulkan11Features::default().storage_buffer16_bit_access(true);
         let mut f12 = vk::PhysicalDeviceVulkan12Features::default()
@@ -264,8 +292,11 @@ impl Device {
             .enabled_features(&features)
             .push_next(&mut f11)
             .push_next(&mut f12);
+        let ci = if shader_clock { ci.push_next(&mut clock) } else { ci };
+        let ci = if conditional { ci.push_next(&mut cond) } else { ci };
         let dev = unsafe { inst.instance.create_device(pd, &ci, None)? };
         let calibrated = calibrate.then(|| ash::ext::calibrated_timestamps::Device::new(&inst.instance, &dev));
+        let cond = conditional.then(|| ash::ext::conditional_rendering::Device::new(&inst.instance, &dev));
         let queue = unsafe { dev.get_device_queue(family, 0) };
         let queue2 = if queues > 1 { unsafe { dev.get_device_queue(family, 1) } } else { queue };
         let pool = unsafe {
@@ -566,6 +597,8 @@ impl Device {
             ("qwen4_stream_probe", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_stream_probe.spv")).as_slice()),
             ("qwen4_cache_probe", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_cache_probe.spv")).as_slice()),
             ("qwen4_moe_gu2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu2.spv")).as_slice()),
+            ("qwen4_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate.spv")).as_slice()),
+            ("qwen4_count", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_count.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -575,6 +608,9 @@ impl Device {
                 !bytes.is_empty(),
                 "shaders missing: build with glslc on incite"
             );
+            if name == "qwen4_gate" && !shader_clock {
+                continue;
+            }
             let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))?;
             let module = unsafe {
                 dev.create_shader_module(&vk::ShaderModuleCreateInfo::default().code(&words), None)?
@@ -789,6 +825,8 @@ impl Device {
             dummy_memory,
             stamps: RefCell::new(None),
             calibrated,
+            shader_clock,
+            cond,
             arena: RefCell::new(None),
             uploading: Cell::new(false),
             light: Cell::new(false),
@@ -865,6 +903,27 @@ impl Device {
     ) -> Result<Buffer> {
         self.buffer_impl(size, host, external, import)
     }
+    /// A small device-local buffer whose words can predicate dispatches (`begin_conditional`).
+    pub fn predicate_buffer(self: &Rc<Self>, size: usize) -> Result<Buffer> {
+        self.buffer_with(size, false, false, None, vk::BufferUsageFlags::CONDITIONAL_RENDERING_EXT)
+    }
+    /// Whether the device can skip dispatches on a predicate (`begin_conditional`).
+    pub fn conditional(&self) -> bool {
+        self.cond.is_some()
+    }
+    /// Run the dispatches recorded until `end_conditional` only when the word at `offset` of `pred` (a
+    /// `predicate_buffer`) is nonzero when they come up. Copies and timestamps always run.
+    pub fn begin_conditional(&self, cmd: vk::CommandBuffer, pred: &Buffer, offset: u64) -> Result<()> {
+        let c = self.cond.as_ref().context("no conditional rendering")?;
+        let info = vk::ConditionalRenderingBeginInfoEXT::default().buffer(pred.buf).offset(offset);
+        unsafe { (c.fp().cmd_begin_conditional_rendering_ext)(cmd, &info) };
+        Ok(())
+    }
+    pub fn end_conditional(&self, cmd: vk::CommandBuffer) -> Result<()> {
+        let c = self.cond.as_ref().context("no conditional rendering")?;
+        unsafe { (c.fp().cmd_end_conditional_rendering_ext)(cmd) };
+        Ok(())
+    }
     fn buffer_impl(
         self: &Rc<Self>,
         size: usize,
@@ -872,13 +931,24 @@ impl Device {
         external: bool,
         import: Option<i32>,
     ) -> Result<Buffer> {
+        self.buffer_with(size, host, external, import, vk::BufferUsageFlags::empty())
+    }
+    fn buffer_with(
+        self: &Rc<Self>,
+        size: usize,
+        host: bool,
+        external: bool,
+        import: Option<i32>,
+        usage: vk::BufferUsageFlags,
+    ) -> Result<Buffer> {
         let size = size.max(4).next_multiple_of(4);
         let mut ext = vk::ExternalMemoryBufferCreateInfo::default()
             .handle_types(vk::ExternalMemoryHandleTypeFlags::DMA_BUF_EXT);
         let mut ci = vk::BufferCreateInfo::default().size(size as u64).usage(
             vk::BufferUsageFlags::STORAGE_BUFFER
                 | vk::BufferUsageFlags::TRANSFER_SRC
-                | vk::BufferUsageFlags::TRANSFER_DST,
+                | vk::BufferUsageFlags::TRANSFER_DST
+                | usage,
         );
         if external {
             ci = ci.push_next(&mut ext);
@@ -967,6 +1037,7 @@ impl Device {
             ptr,
             device_bytes,
             owned,
+            device_local: !host && import.is_none(),
         })
     }
     pub fn begin(&self) -> Result<vk::CommandBuffer> {
@@ -1850,6 +1921,8 @@ pub struct Buffer {
     device_bytes: u64,
     /// The memory is this buffer's own (not an arena chunk).
     owned: bool,
+    /// Allocated from a device-local memory type (VRAM, unless amdgpu evicts it).
+    pub device_local: bool,
 }
 impl Buffer {
     pub fn copy_host(&self, other: &Buffer, size: usize) -> Result<()> {

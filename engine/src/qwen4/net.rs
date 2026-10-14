@@ -5,7 +5,7 @@
 use super::{
     cpu::Captures,
     embed,
-    gpu::{merge_top, KvCache, Output, POLLED_MAX},
+    gpu::{merge_top, KvCache, Mode, Output, GATED_MAX, POLLED_MAX},
     ngram,
     pipeline::{assemble_logits, head_rows, plan, tl, Done, Local},
     trace, Config,
@@ -129,7 +129,31 @@ fn requests(link: &Link) -> Requests {
 /// the next request follows within a step.
 fn decode_step(header: &Value) -> bool {
     header.get("rollback").is_some()
+        || header.get("next").is_some()
         || header.get("forward").and_then(|f| f["n"].as_u64()).is_some_and(|n| n as usize <= POLLED_MAX)
+}
+
+/// The notice of a decode step or verification batch the driver sends down the chain before the forward itself, so
+/// that every machine submits its stages ahead of their input (`Local::presubmit`): position, tokens, verification.
+fn notice(pos: usize, n: usize, verify: bool) -> Value {
+    json!({"next": {"pos": pos, "n": n, "verify": verify}})
+}
+
+/// `TRASHCAN_Q4_STALL=POS:MS[:heads]` (tests of the gates): the driver pauses MS ms after the notice of the forward at
+/// POS (with `heads`: after submitting its head scoring ahead), so that gates waiting for that forward give up first.
+fn stall(pos: usize, heads: bool) {
+    static STALL: std::sync::OnceLock<Option<(usize, u64, bool)>> = std::sync::OnceLock::new();
+    let s = STALL.get_or_init(|| {
+        let v = std::env::var("TRASHCAN_Q4_STALL").ok()?;
+        let mut f = v.split(':');
+        Some((f.next()?.parse().ok()?, f.next()?.parse().ok()?, f.next() == Some("heads")))
+    });
+    if let Some((at, ms, h)) = *s {
+        if at == pos && h == heads {
+            eprintln!("qwen4: stall at {pos}{} for {ms} ms", if heads { " after the head scoring" } else { "" });
+            std::thread::sleep(std::time::Duration::from_millis(ms));
+        }
+    }
 }
 
 /// How long a thread expecting a decode step's next frame spins before it sleeps: the frames of a decode step follow
@@ -350,9 +374,13 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
         let requests = requests(&link);
         let mut up = Conn::new(link, true);
         let mut traced = false;
-        if let Err(e) = session(model, &devices, &mut up, &requests, &mut traced) {
+        let mut local = None;
+        if let Err(e) = session(model, &devices, &mut up, &requests, &mut traced, &mut local) {
             eprintln!("qwen4 node: session ended: {e:#}");
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
+        }
+        if let Some(l) = local.take() {
+            eprintln!("qwen4 node: gate: {}", l.gate_stats());
         }
         // The reader thread holds the link too: end it for both.
         up.w.shutdown();
@@ -364,9 +392,15 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
 }
 
 /// `traced`: the driver had this machine write its trace (`Chain::write_traces`).
-fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests, traced: &mut bool) -> Result<()> {
+fn session(
+    model: &Path,
+    devices: &Devices,
+    up: &mut Conn,
+    requests: &Requests,
+    traced: &mut bool,
+    local: &mut Option<Local>,
+) -> Result<()> {
     let mut down: Option<Conn> = None;
-    let mut local: Option<Local> = None;
     let mut hot = false;
     loop {
         let waited = std::time::Instant::now();
@@ -383,6 +417,20 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests, 
         hot = decode_step(&header);
         if header.get("ping").is_some() {
             up.send(&json!({"pong": [arrived, trace::now()]}), &[])?;
+        } else if let Some(f) = header.get("next") {
+            // The forward follows: pass the notice on, then submit this machine's stages ahead of its input. Only when
+            // no prompt chunks are in flight here, so that the forward is the next frame on every link below (each
+            // machine before this one was idle too when it passed the notice on).
+            let l = local.as_mut().context("notice before setup")?;
+            if l.idle() {
+                if let Some(d) = down.as_mut() {
+                    d.send(&header, &[])?;
+                }
+                let pos = f["pos"].as_u64().context("pos")? as usize;
+                let n = f["n"].as_u64().context("n")? as usize;
+                let mode = if f["verify"].as_bool().unwrap_or(false) { Mode::Verify } else { Mode::Plain };
+                l.presubmit(pos, n, mode)?;
+            }
         } else if let Some(k) = header.get("clocks") {
             let all = clocks(down.as_mut(), k.as_u64().context("clocks")? as usize)?;
             up.send(&json!({"offsets": all.iter().map(|(o, r)| json!([o, r])).collect::<Vec<_>>()}), &[])?;
@@ -430,7 +478,7 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests, 
                     &[],
                 )?;
             }
-            local = Some(Local::new(model, devices, &mine, &my_heads, context, batch, kv)?);
+            *local = Some(Local::new(model, devices, &mine, &my_heads, context, batch, kv)?);
             if let Some(d) = down.as_mut() {
                 d.recv()?;
             }
@@ -492,10 +540,14 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests, 
                 continue;
             }
             // The final hidden state goes on up first; then this machine's stages score their head rows, and the
-            // candidates follow, merged with those of the machines after it.
+            // candidates follow, merged with those of the machines after it. While the machines after this one work,
+            // the scoring is submitted ahead.
             let (h, rest) = match out {
                 Output::Final(h) => (h, None),
                 Output::Hidden(_) => {
+                    if !dump && n <= GATED_MAX {
+                        l.presubmit_heads(1)?;
+                    }
                     let d = down.as_mut().context("the last machine has no LM head")?;
                     (recv_hidden(d)?, Some(d))
                 }
@@ -570,6 +622,8 @@ fn verify_node(l: &mut Local, down: Option<&mut Conn>, up: &mut Conn, f: &Value,
     if let Output::Hidden(x) = &out {
         let d = down.as_mut().context("the last machine has no LM head")?;
         d.send(&json!({"forward": f}), bytemuck::cast_slice(x))?;
+        // The scoring of every row is submitted ahead while the machines after this one work.
+        l.presubmit_heads(n)?;
     }
     let h = match out {
         Output::Final(h) => {
@@ -783,6 +837,16 @@ impl Chain {
         }
         tl("drv", 0, self.pos, 0., 0.);
         trace::mark("fwd", self.pos as u64);
+        // A decode step: the other machines submit their stages ahead while this one works (`Local::presubmit`), and
+        // this one its head scoring while they work. Not while prompt chunks are in flight here: they reach the next
+        // machine after the notice would.
+        let ahead = reply && dump.is_none() && n <= GATED_MAX && self.local.idle();
+        if ahead {
+            if let Some(conn) = self.next.as_mut() {
+                conn.send(&notice(self.pos, n, false), &[])?;
+            }
+            stall(self.pos, false);
+        }
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let ple = self.ple(tokens)?;
         tl("ple", 0, self.pos, 0., 0.);
@@ -817,6 +881,10 @@ impl Chain {
         let (h, rest) = match out {
             Output::Final(h) => (h, None),
             Output::Hidden(_) => {
+                if ahead {
+                    self.local.presubmit_heads(1)?;
+                    stall(pos, true);
+                }
                 let conn = self.next.as_mut().context("no machine holds the LM head")?;
                 (recv_hidden(conn)?, Some(conn))
             }
@@ -879,8 +947,10 @@ impl Chain {
 
     /// Discard the live state: the next prompt starts from position 0.
     pub fn forget(&mut self) {
-        // Chunks still in flight after an error are dropped with the rest of the state.
+        // Chunks still in flight after an error are dropped with the rest of the state, and so is work submitted
+        // ahead.
         let _ = self.local.drain(|_| Ok(()));
+        self.local.abandon();
         self.pos = 0;
         self.history.clear();
     }
@@ -911,6 +981,13 @@ impl Chain {
         }
         ensure!(self.pos > 0, "a verification batch continues a sequence");
         trace::mark("vfy", self.pos as u64);
+        let ahead = n <= GATED_MAX && self.local.idle();
+        if ahead {
+            if let Some(conn) = self.next.as_mut() {
+                conn.send(&notice(self.pos, n, true), &[])?;
+            }
+            stall(self.pos, false);
+        }
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let ple = self.ple(tokens)?;
         trace::mark("ple", self.pos as u64);
@@ -923,6 +1000,10 @@ impl Chain {
         if let Output::Hidden(x) = &out {
             let conn = self.next.as_mut().context("no machine holds the LM head")?;
             conn.send(&json!({"forward": {"pos": pos, "n": n, "reply": true, "verify": true}}), bytemuck::cast_slice(x))?;
+            if ahead {
+                self.local.presubmit_heads(n)?;
+                stall(pos, true);
+            }
         }
         during();
         let remote = matches!(out, Output::Hidden(_));

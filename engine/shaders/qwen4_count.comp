@@ -1,0 +1,22 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+// `qwen4 gate-skip-check`: count the workgroups that ran (word 0 of a). With p.flags bit 0 a workgroup first reads the
+// gate's predicate (word 0 of b) and returns when it is 0: the cost of a skip flag read by every dispatch. The flag is
+// written earlier in the submission, so it is read coherently (a vector load past the L1), never through the scalar
+// cache (tools/coherence_audit.py of results/qwen4/decode-kernels-20261014).
+layout(local_size_x=64) in;
+layout(set=2,binding=0,std430) buffer Count { uint v[]; } a;
+layout(set=2,binding=1,std430) coherent readonly buffer Flag { uint v[]; } b;
+layout(push_constant, std430) uniform Push {
+    uint64_t pa,pb,pc,pd,pe,pf,params,extra;
+    uint n,k,m,stride,heads,kvheads,dim,cap,window,kind,offset,flags,r0,r1,r2,r3;
+} p;
+
+void main() {
+    if ((p.flags & 1u) != 0u && b.v[0] == 0u) {
+        return;
+    }
+    if (gl_LocalInvocationIndex == 0u) {
+        atomicAdd(a.v[0], 1u);
+    }
+}
