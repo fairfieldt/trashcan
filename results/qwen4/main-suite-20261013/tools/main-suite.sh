@@ -9,7 +9,9 @@ TAG=${TAG:-ms-${BIN#trashcan-}}
 W=/home/fairfieldt/trashcan-exp/flashnext
 M=/home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf
 MTP=/home/fairfieldt/models/qwen3.8-flash-next/mtp/mtp-G-iq4.gguf
-N=indite.tb0:7071,inflight.tb1:7071,alight.tb0:7071,invite.tb1:7071,enlight.tb0:7071
+# Chain order and node addresses from the live Thunderbolt links (tools/ring.py), so recabling needs no edit here.
+eval "$(python3 tools/ring.py)" || exit 1
+N=$ADDRS
 C="--gpus 0,1 --nodes $N --head-split 12 --context 32768 --batch 128 --ngram disk"
 P=$W/mtp-prompts
 run() { # name driver-args [extra q4run args]
@@ -17,7 +19,7 @@ run() { # name driver-args [extra q4run args]
     if [ "${DRY:-0}" = 1 ]; then echo "run $TAG-$name: $driver" | cut -c1-150; return; fi
     local s=$(date +%s)
     python3 tools/q4run.py --tickets "$TICKETS" --binary "$BIN" --name "$TAG-$name" --driver-host incite \
-        --nodes indite,inflight,alight,invite,enlight "$@" --driver "$driver" > /dev/null 2>&1
+        --nodes "$NODES" "$@" --driver "$driver" > /dev/null 2>&1
     echo "$TAG-$name rc $? $(( $(date +%s) - s )) s"
 }
 run val14 "validate results/$TAG-val14 $C --greedy 10"

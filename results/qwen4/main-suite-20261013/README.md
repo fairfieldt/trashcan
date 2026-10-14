@@ -59,3 +59,22 @@ GPU 0 through the 30K prefill.
 
 Against adf8cfd: prefill 466 -> 520 at 512, 677 -> 888 at 2K, 796 -> 1123 at 8K, 850 -> 1247 at 30K; decode 19.4 -> 20.6;
 MTP on chat 22.3/26.1/21.2 -> 26.2/29.9/25.7.
+
+## 15e5457 morning check, 2026-10-14: lost to a power loss at 11:04:53
+
+The first six-Mac run of the day, on the new ring order (incite, inflight, alight, indite, invite, enlight, read from
+the live links by `results/qwen4/chain-20261012/tools/ring.py`), passed val14, val100 and pp512-1 (rc 0). Then all
+six Mac Pros, and the workstation, lost power at the same moment, during the start of pp512-2:
+- every Mac's journal ends at 11:04:52-53 with no shutdown sequence;
+- netconsole shows no kernel error from any Mac before it.
+
+Wall power from the SMC (`power-loss-20261014-pstr.csv`, PSTR per Mac, one sample per second):
+
+| time | per Mac | six Macs |
+|---|---|---|
+| 11:03:30 (idle) | 71-82 W | ~460 W |
+| 11:04:06 | 157-243 W | ~1.16 kW |
+| 11:04:22-34 | 227-259 W | ~1.45-1.5 kW |
+
+The power went about 30 s after the six reached ~1.5 kW. The 2026-10-09 strip trip went the same way: about 45 s at
+~1.65 kW on one strip ([results/qwen/tp8-mesh-20261009](../../qwen/tp8-mesh-20261009)). The cause is not confirmed.
