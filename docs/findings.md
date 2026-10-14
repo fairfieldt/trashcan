@@ -2,6 +2,20 @@
 
 Newest first. Numbers are from incite unless noted; raw outputs are under `results/`.
 
+## 2026-10-14: Linux 7.3 on all six Macs
+
+All six Macs moved to Linux 7.3-rc7 (`7.3.0-rc7-p2p`, [kernel.md](kernel.md)) for USB4STREAM busy polling;
+`7.2.9-p2p` stays installed as the fallback (`results/kernel/linux-7.3-20261014/`).
+
+- Patches: the VFCT, P2PDMA and `thunderbolt_net` throttling patches carry over unchanged; the SI `GPIO_DC` fix is
+  upstream in 7.3; USB4STREAM without Tx E2E is rebased onto 7.3's busy-poll `stream.c`.
+- Same binaries on inflight, 7.2.9 then 7.3: P2P verify and bandwidth, Flash-Next stage times (194.1 against 194.3 ms
+  per 128-token chunk, 7.89 against 7.88 ms per decode step) and `scripts/test-engine.sh` (the same errors) match.
+- Six-Mac main suite with this morning's binary: validation dumps byte-identical to 7.2.9's, prefill and MTP the
+  same, serve 7/7; decode after 512 tokens 1.4% lower but the other decode rates within ±1.5% both ways.
+- 7.3 moved applesmc's fan files into hwmon, so `fancurve.service` stopped starting and the fan fell to the SMC's
+  790 RPM; `fancurve.sh` and the telemetry now handle both layouts. amdgpu's job timeout is still 2 s.
+
 ## 2026-10-09: TP8 round 2: row geometry of the decode kernels, the exchange's parts
 
 `results/qwen/tp8-round2-20261009/`: Qwen3.8-27B TP8 over the six-cable cluster, decode 37.1 → 40.7 tok/s (+9.6%,

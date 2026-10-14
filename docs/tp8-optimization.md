@@ -99,7 +99,7 @@ balanced, so halving either one alone gains only a few percent; prefill needs bo
   added in the same pairs everywhere, so all machines keep bitwise-identical residuals.
 - **Lanes** (`link.rs`): non-blocking `read`/`write` on `/dev/tbstreamN`, polled by the calling thread. A 64 B
   exchange takes 13.5 µs, a 20 KiB one over three streams 21.8 µs (results/qwen/tp4-viability-20261006); the
-  receive side of USB4STREAM on 7.2.9 is interrupt driven (linux-next has since added busy polling).
+  receive side of USB4STREAM on 7.2.9 is interrupt driven (7.3, in use since 2026-10-14, adds busy polling).
 
 The data path of one decode all-reduce:
 
@@ -232,10 +232,10 @@ workgroup barrier. The comparisons are the old kernel's, so the candidates are i
 
 ## Follow-ups that need the machines, the kernel or the driver
 
-- **X1, USB4STREAM busy polling.** linux-next's `drivers/thunderbolt/stream.c` gained receive polling and busy
-  polling (`RING_FLAG_NO_INTERRUPT`); `kernel/upstream/usb4stream-falcon-ridge/README.md` notes it. Backporting it
-  to 7.2.9 should remove the interrupt and wake-up from each of the 256 one-way trips per decode token. Measure
-  `tbstream-bench pingpong` first: a 64 B round trip is 25 µs today.
+- **X1, USB4STREAM busy polling.** 7.3 (in use since 2026-10-14, `docs/kernel.md`) has busy polling: `busy_poll`
+  in a stream's configfs group, set before it is opened, runs its rings without interrupts (`RING_FLAG_NO_INTERRUPT`).
+  It should remove the interrupt and wake-up from each of the 256 one-way trips per decode token. Measure
+  `tbstream-bench pingpong` with and without it: a 64 B round trip is 25 µs with interrupts.
 - **X2, GFX6 barrier flushes.** RADV's `can_skip_buffer_l2_flushes` is false before GFX9, so every compute barrier
   writes back and invalidates the 768 KB L2. A patched `libvulkan_radeon.so` (loaded through `VK_ICD_FILENAMES`,
   nothing installed) that treats compute-to-compute buffer barriers as GFX9 does (partial flush and L1

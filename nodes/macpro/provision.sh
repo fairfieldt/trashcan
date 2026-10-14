@@ -7,7 +7,8 @@
 #   other steps:   reboot (reboots into the new kernel and waits), models, verify, itable (finishes ext4
 #                  inode-table zeroing that `disk` paused; run while the node is idle)
 #   first run:     provision.sh HOST && provision.sh HOST models reboot verify itable
-# env: KVER (7.2.9-p2p), DEBS (~/dev/claude-work/trashcan-kbuild, from kernel/cross-build-7.2.sh),
+# env: KVER (7.3.0-rc7-p2p; 7.2.9-p2p is the fallback), DEBS (~/dev/claude-work/trashcan-kbuild, from
+#      kernel/cross-build-7.3.sh or -7.2.sh),
 #      MODELS ("gemma-4-12b-qat-gguf gemma-4-12b-assistant"), MODEL_SRC (incite)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
@@ -15,7 +16,7 @@ repo=$(cd "$here/../.." && pwd)
 host=${1:?usage: provision.sh HOST [STEP...]}
 shift
 steps=${*:-check disk packages tailscale rust system tblink kernel workspace}
-KVER=${KVER:-7.2.9-p2p}
+KVER=${KVER:-7.3.0-rc7-p2p}
 DEBS=${DEBS:-$HOME/dev/claude-work/trashcan-kbuild}
 MODELS=${MODELS:-gemma-4-12b-qat-gguf gemma-4-12b-assistant}
 MODEL_SRC=${MODEL_SRC:-incite}
@@ -247,14 +248,15 @@ step_kernel() {
     img=$(ls -t "$DEBS"/linux-image-${KVER}_*_amd64.deb 2>/dev/null | head -1)
     hdr=$(ls -t "$DEBS"/linux-headers-${KVER}_*_amd64.deb 2>/dev/null | head -1)
     if [ -z "$img" ] || [ -z "$hdr" ]; then
-        echo "no $KVER packages in $DEBS; build them with kernel/cross-build-7.2.sh" >&2; exit 1
+        echo "no $KVER packages in $DEBS; build them with kernel/cross-build-7.3.sh (or -7.2.sh)" >&2; exit 1
     fi
     echo "packages: $(basename "$img") $(basename "$hdr")"
-    ssh "$host" 'mkdir -p ~/kernel/7.2/debs'
-    rsync -a "$img" "$hdr" "$host":kernel/7.2/debs/
-    as_root KVER="$KVER" IMG="$(basename "$img")" HDR="$(basename "$hdr")" USER_NAME="$USER_NAME" <<'EOF'
+    kdir=kernel/$(echo "$KVER" | cut -d. -f1-2)/debs    # kernel/7.3/debs, as kernel/cross-build-7.3.sh copies them
+    ssh "$host" "mkdir -p ~/$kdir"
+    rsync -a "$img" "$hdr" "$host":"$kdir"/
+    as_root KVER="$KVER" KDIR="$kdir" IMG="$(basename "$img")" HDR="$(basename "$hdr")" USER_NAME="$USER_NAME" <<'EOF'
 set -e
-cd /home/$USER_NAME/kernel/7.2/debs
+cd /home/$USER_NAME/$KDIR
 want=$(dpkg-deb -f "$IMG" Version)
 # Both packages fully installed at this version (an interrupted install leaves them half-installed).
 have=$(dpkg-query -W -f '${Version} ${Status},' "linux-image-$KVER" "linux-headers-$KVER" 2>/dev/null || true)

@@ -1,6 +1,6 @@
 # Setting up a Mac Pro 6,1 node
 
-`provision.sh` turns a Mac Pro 6,1 with a fresh Debian 13 install into a node like incite: kernel `7.2.9-p2p`
+`provision.sh` turns a Mac Pro 6,1 with a fresh Debian 13 install into a node like incite: kernel `7.3.0-rc7-p2p`
 (`docs/kernel.md`), the D700 GPU setup, crash capture and recovery, the fan curve, the Rust toolchain, and the
 trashcan workspace built and checked. It runs from this Mac over SSH, every step is idempotent, and running it
 against incite changes nothing.
@@ -32,7 +32,7 @@ against incite changes nothing.
    ssh-copy-id fairfieldt@NEW_HOST
    ```
 
-4. Have the kernel packages ready: `REV=2 kernel/cross-build-7.2.sh` leaves them in
+4. Have the kernel packages ready: `REV=1 kernel/cross-build-7.3.sh` leaves them in
    `~/dev/claude-work/trashcan-kbuild/` (they are already there unless the kernel changed).
 5. Unplug any Thunderbolt cable that loops the machine's own controllers; the firmware hangs on reboot otherwise.
 
@@ -64,7 +64,7 @@ against 940 Mb/s on the LAN. The 8 GB default models took 70 s over the LAN to i
 | `rust` | rustup with the stable toolchain |
 | `system` | Installs `root/` (panic sysctls, netconsole, `emergency-reboot`, `tblink` with the links' streams and their udev rule, `thunderbolt_net throttling=32000`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; points netconsole at this Mac's current address; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds `fairfieldt` to `render`; creates `~/trashcan-exp/.lock` |
 | `tblink` | Records the node's Thunderbolt controller UUIDs in `tblink/nodes.tsv` (commit it) and copies the table to every node |
-| `kernel` | Installs the `7.2.9-p2p` image and headers and pins `GRUB_DEFAULT` to that entry by id |
+| `kernel` | Installs the `7.3.0-rc7-p2p` image and headers (`KVER=7.2.9-p2p` for the fallback) and pins `GRUB_DEFAULT` to that entry by id |
 | `workspace` | `HOST=NEW_HOST scripts/sync.sh push`, then `cargo build --release` and `make -C bench/xgpu` |
 | `reboot` | Reboots and waits for SSH (up to 5 minutes) |
 | `models` | Copies `MODELS` (default: the Gemma 4 12B QAT GGUF and its assistant) from `MODEL_SRC` (default incite), streamed through this Mac with `tar`; skips directories whose size already matches |

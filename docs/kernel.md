@@ -1,96 +1,107 @@
-# incite's kernel
+# The Mac Pros' kernel
 
-incite runs **Linux 7.2.9 from kernel.org, built as `7.2.9-p2p`**, with five local patches and a few config
-changes. Debian's `6.12.111-p2p` build (`kernel/build.sh`, `kernel/patches/`) stays installed as the fallback, and
-the stock Debian kernel `6.12.111+deb13-amd64` is still in the GRUB menu.
+All six Mac Pros run **Linux 7.3 from kernel.org, now 7.3-rc7, built as `7.3.0-rc7-p2p`**, with four local patches
+and 7.2.9's config. `7.2.9-p2p` stays installed as the fallback, and Debian's own kernels are still in the GRUB menu.
 
-7.2 is needed for USB4STREAM (`/dev/tbstreamX`, new in 7.2). On the D700s it is at least as good as 6.12: same
-VBIOS selection and clocks, P2P passes, the engine test suite passes, and pp512 prefill is about 2% faster
-(`results/kernel/linux-7.2-20261006/`).
+7.3 is needed for USB4STREAM busy polling (`busy_poll` in each stream's configfs group). On the D700s it measures the
+same as 7.2.9: same VBIOS selection and clocks, P2P passes, the engine test suite passes with the same errors, and
+Flash-Next's stage times, P2P bandwidth and the six-Mac main suite match 7.2.9's (`results/kernel/linux-7.3-20261014/`).
 
-## Patches (`kernel/patches-7.2/`)
+## Patches (`kernel/patches-7.3/`)
 
 | Patch | What it does | Why we need it | Upstream |
 |---|---|---|---|
 | 0001 `amdgpu-vfct-exact-match-first` | Pick the VFCT VBIOS image whose PCI bus matches exactly, before mainline's soft filter | Otherwise both D700s get 02:00.0's VBIOS and the second card misbehaves | Prepared in `kernel/upstream/vfct-exact-match/`, not sent |
-| 0002 `si-dpm-gpio-dc-mobile-only` | Set `PPSMC_SYSTEMFLAG_GPIO_DC` only on mobile SI parts | Without it the cards stay in the DC (battery) power state at 300/150 MHz | Backport of Timur Kristóf's cd883d0a3937: in mainline 7.3-rc6 and tagged for stable, not in 7.2.9. Drop it when the 7.2.x in use has it (the build stops at this patch then) |
 | 0003 `p2pdma-whitelist-ivy-bridge-ep` | Add the Xeon E5 v2 host bridge (8086:0e00) to the P2PDMA whitelist | Without it dma-buf imports between the D700s migrate to system memory | Prepared in `kernel/upstream/p2pdma-ivy-bridge-ep/`, not sent |
 | 0004 `thunderbolt-net-throttling-param` | `thunderbolt_net` ring interrupt throttle as the `throttling` module parameter (default 128000 ns) | 128 us sets back-to-back latency; 32000 gives 40 us round trips at the same throughput | Local tuning knob |
-| 0005 `thunderbolt-stream-no-tx-e2e` | USB4STREAM Tx ring without E2E flow control (Rx keeps it) | With Tx-side E2E the Falcon Ridge NHI wedges and stops answering config reads | Prepared in `kernel/upstream/usb4stream-falcon-ridge/` (with a HopID fix), not sent; same failure upstream fixed in `thunderbolt_net` with revert 1881f2efbf7f |
+| 0005 `thunderbolt-stream-no-tx-e2e` | USB4STREAM Tx ring without E2E flow control (Rx keeps it) | With Tx-side E2E the Falcon Ridge NHI wedges and stops answering config reads | `kernel/upstream/usb4stream-falcon-ridge/` 0001 rebased onto 7.3's `stream.c`, not sent; same failure upstream fixed in `thunderbolt_net` with revert 1881f2efbf7f |
 
-0001 and 0003 are the upstream-form versions of the 6.12 patches of the same names. 0002 is unchanged from 6.12 and
-identical to the upstream commit. 7.2 already has the related upstream fix 86b6cf8387a4 ("Fix AC/DC switch
-notification"); the companion 08c9100f6529 ("Fix updating clock limits on AC/DC", 7.3-rc6) isn't needed on the D700s.
+The numbers follow `kernel/patches-7.2/`, the fallback's patches. Its 0002 (`si-dpm-gpio-dc-mobile-only`, without
+which the cards stay in the DC power state at 300/150 MHz) is upstream in 7.3 as cd883d0a3937, with its companion
+08c9100f6529 ("Fix updating clock limits on AC/DC"). The status of each patch on 7.3 is in
+`results/kernel/linux-7.3-20261014/README.md`.
 
 ## Config
 
-`kernel/configs/6.12.111-p2p.config` (incite's 6.12 build: Debian's config with `PCI_P2PDMA`,
-`DMABUF_MOVE_NOTIFY` and no debug info) run through `make olddefconfig`, plus:
+`kernel/configs/7.2.9-p2p.config` (7.2.9's build config) run through `make olddefconfig`; the result is
+`kernel/configs/7.3.0-rc7-p2p.config`. `kernel/build-7.3.sh` reasserts the settings below and stops if an option we
+rely on is missing (amdgpu with SI, `DRM_VGEM`, netconsole, the USB4 modules, P2PDMA).
 
 | Option | Value | Why |
 |---|---|---|
 | `PCI_P2PDMA` | `y` | P2P DMA between the D700s' BARs |
 | `USB4_STREAM` | `m` | USB4STREAM |
 | `DEBUG_INFO_*`, `DEBUG_INFO_BTF` | off | Halves build time |
-| `LOCALVERSION` | `-p2p` | Kernel release `7.2.9-p2p` |
-
-6.12 also needed `DMABUF_MOVE_NOTIFY=y`; 7.2 has no such option and always behaves as if it were set.
+| `LOCALVERSION` | `-p2p` | Kernel release `7.3.0-rc7-p2p` |
 
 ## Building
 
 On the Mac, in the Lima VM `kbuild` (Debian 13 arm64 with Debian's `gcc-x86-64-linux-gnu` 14.2.0-19, the same
-compiler version as incite's native one):
+compiler version as the Mac Pros' own; one-time setup in `kernel/cross-build-7.2.sh`):
 
 ```bash
-REV=2 kernel/cross-build-7.2.sh
+REV=1 HOSTS="incite invite" kernel/cross-build-7.3.sh
 ```
 
-It copies `kernel/build-7.2.sh`, `kernel/patches-7.2/` and `kernel/configs/` into the VM, builds
-`linux-{image,headers}-7.2.9-p2p_7.2.9-${REV}p2p_amd64.deb`, keeps them in `~/dev/claude-work/trashcan-kbuild/`
-and copies them to `incite:~/kernel/7.2/debs/`. It takes about 5 minutes on an idle Mac (about 30 natively on
-incite); when the Mac is busy, set `JOBS=12` or so, since 30 VM threads competing with other work slow it tenfold.
-`kernel/build-7.2.sh` also runs natively on incite. Bump `REV` for every rebuild so `dpkg -i` upgrades in place.
-The headers package contains x86-64 host tools, so out-of-tree modules build on incite.
+It copies `kernel/build-7.3.sh`, `kernel/patches-7.3/` and `kernel/configs/` into the VM, builds
+`linux-{image,headers}-7.3.0-rc7-p2p_7.3.0~rc7-${REV}p2p_amd64.deb`, keeps them and the config in
+`~/dev/claude-work/trashcan-kbuild/`, and copies the packages to each of `HOSTS` in `~/kernel/7.3/debs/`. It takes
+about 5 minutes on an idle Mac; when the Mac is busy, set `JOBS=12` or so, since 30 VM threads competing with other
+work slow it tenfold. Bump `REV` for every rebuild so `dpkg -i` upgrades in place. For 7.3 final (or a later 7.3.N),
+add the tarball's sha256 from kernel.org's signed `sha256sums.asc` to the table in `kernel/build-7.3.sh` and set
+`VER=7.3`. The headers package contains x86-64 host tools, so out-of-tree modules build on the Macs.
 
 ## Installing and booting
 
-For a new Mac Pro, `nodes/macpro/provision.sh` does all of this (`nodes/macpro/README.md`). By hand:
+For a new Mac Pro, `nodes/macpro/provision.sh` does all of this (`nodes/macpro/README.md`). On a node, with
+`results/kernel/linux-7.3-20261014/kernel-boot.sh` copied there:
 
 ```bash
-cd ~/kernel/7.2/debs && sudo dpkg -i linux-image-7.2.9-p2p_*.deb linux-headers-7.2.9-p2p_*.deb
+./kernel-boot.sh once 7.3.0-rc7-p2p      # dpkg -i the image and headers from ~/kernel/7.3/debs, then grub-reboot
+sudo systemctl reboot
+./kernel-boot.sh default 7.3.0-rc7-p2p   # once it checks out: pin GRUB_DEFAULT to it
 ```
 
-Don't install `linux-libc-dev`; it would replace Debian's userspace kernel headers.
+Don't install `linux-libc-dev`; it would replace Debian's userspace kernel headers. `kernel-boot.sh` runs `dpkg`
+with `--force-unsafe-io`, since the original Apple SSDs take seconds per cache flush.
 
 GRUB's default is pinned by entry id in `/etc/default/grub` (`GRUB_DEFAULT`), so installing a kernel never changes
-what boots. Try a new kernel once with:
-
-```bash
-sudo grub-reboot "gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-7.2.9-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"
-sudo systemctl reboot
-```
-
-If that boot fails, a power cycle returns to the default. `GRUB_DEFAULT` has pointed at `7.2.9-p2p` since
-2026-10-06. To boot the 6.12 fallback once, use the same command with `6.12.111-p2p` in place of `7.2.9-p2p`. The
-kernel command line is `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`.
+what boots, and a one-time boot that fails goes back to the default after a power cycle. `GRUB_DEFAULT` has pointed
+at `7.3.0-rc7-p2p` on all six Macs since 2026-10-14. The kernel command line is
+`quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`.
 
 **Unplug Thunderbolt cables that loop the machine's own controllers before rebooting.** With three cables forming a
 triangle between the three controllers, the Mac hangs in firmware before the startup chime, rebooting from 6.12 and
 7.2 alike; unplugging them lets it chime and boot at once. One cable between two controllers reboots normally. Linux
-shuts down cleanly either way.
+shuts down cleanly either way. After a reboot, the Mac's Thunderbolt links to the other Macs need a reset of all of
+them together (`scripts/tb-reset.sh`, `docs/hardware.md`).
+
+## Fallback: 7.2.9-p2p
+
+`7.2.9-p2p` (package `7.2.9-2p2p`: `kernel/build-7.2.sh`, `kernel/patches-7.2/`, `results/kernel/linux-7.2-20261006/`)
+is still installed on every Mac. To boot it once, find its entry id and pass it to `grub-reboot`:
+
+```bash
+sudo grep -o "gnulinux-advanced-[^']*\|gnulinux-7.2.9-p2p-advanced-[^']*" /boot/grub/grub.cfg | sort -u
+sudo grub-reboot "gnulinux-advanced-ROOT>gnulinux-7.2.9-p2p-advanced-ROOT"    # ROOT: the ids printed above
+sudo systemctl reboot
+```
+
+On incite that is `gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-7.2.9-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b`.
+To go back to it for good, `DEBS=~/kernel/7.2/debs ./kernel-boot.sh default 7.2.9-p2p`. 7.2.9 has the old applesmc
+layout and no `busy_poll`; everything else in our tools works on both.
 
 ## Checking a new kernel
 
-1. Each card's VBIOS: `cat /sys/bus/pci/devices/0000:0{2,6}:00.0/vbios_version` gives `113-C3861XA-028` and
-   `113-C3861XB-028`.
-2. Clocks reach 850/1370 MHz under load (`scripts/clockmon.sh`).
-3. `TAG=name results/kernel/linux-7.2-20261006/run.sh` (from `~/trashcan`, takes the shared lock): `xgpu p2p-verify`
-   x3, `xgpu p2p-wall` and four pp512 benches with the pinned engine binary. Compare with the directories there.
-4. `scripts/test-engine.sh`.
-5. For Thunderbolt, copy `results/kernel/tb-loopback-20261006/` to incite, build `tbstream-bench.c`, and run
-   `bench.sh` and `stream-run.sh` through `locked.sh` on a cross-controller cable.
+In `results/kernel/linux-7.3-20261014/`: `run.sh`, under the Mac's gpuq lease, records the system state and each
+card's VBIOS (`113-C3861XA-028` on 02:00.0, `113-C3861XB-028` on 06:00.0), forces DPM high and back, and runs `xgpu
+p2p-verify` x3, `xgpu p2p-wall`, a Flash-Next stage benchmark and `scripts/test-engine.sh`; `check.sh` is its short
+form for a rollout; `tb.sh` checks the Thunderbolt links, streams and netconsole. Compare with the directories there,
+then run the six-Mac main suite (`results/qwen4/main-suite-20261013/`) against the last kernel's numbers. For one
+cable's stream throughput and latency, `results/kernel/tb-loopback-20261006/` has `tbstream-bench.c`, `bench.sh` and
+`stream-run.sh`.
 
-## Thunderbolt on 7.2
+## Thunderbolt
 
 - `thunderbolt_net`: nodes load it with `throttling=32000` (`/etc/modprobe.d/thunderbolt-net.conf`, from
   `nodes/macpro/root/`) for 40 us round trips; the kernel default of 128000 gives 128 us. NetworkManager
@@ -107,7 +118,10 @@ shuts down cleanly either way.
   echo 15 | sudo tee $cfg/0-3.1/NAME/in_hopid $cfg/0-3.1/NAME/out_hopid $cfg/1-3.1/NAME/in_hopid $cfg/1-3.1/NAME/out_hopid
   ```
 
-  `index` in each directory gives the `/dev/tbstreamX` number. The engine's links (`engine/src/link`) find a link's
+  `index` in each directory gives the `/dev/tbstreamX` number. Each group also has `ring_size`, `throttling` (the
+  rings' interrupt throttle, 8192 ns by default, separate from `thunderbolt_net`'s) and, new in 7.3, `busy_poll`
+  (0 by default): set before the stream is opened, it runs the stream's rings without interrupts, `read()` and
+  `write()` poll them, and `poll()` returns `EPOLLERR`. The engine's links (`engine/src/link`) find a link's
   stream from the TCP connection's interface and move their data to it, with their own sequence numbers,
   acknowledgements, CRC32C, credits and retransmission, falling back to TCP
   (`results/kernel/usb4stream-reliable-20261013/`). Measured on a loopback cable: 25 us round trip for 64 B, 9.6-9.7
@@ -124,7 +138,7 @@ shuts down cleanly either way.
   lost), and every close sends a CLOSE, so the end that closes last leaves one waiting at the other, which reads it as
   end of file at its next open (main's TP lanes then fail their handshake); every close takes 500-530 ms (it waits for the receive ring to drain, which never happens); an fd kept open
   across an XDomain reconnect stays valid but carries nothing; a stream's configfs group is named after the service
-  (`0-3.1`), whose index can change at a reconnect.
+  (`0-3.1`), whose index can change at a reconnect. 7.3 changes none of this unless `busy_poll` is set.
 - Between two Macs with the engine's links (link-test, every byte checked, three extra frames after every write): a
   64 B ping-pong takes 32-47 us p50 on a stream against 40-95 us over TCP, a 40 KiB exchange 79-88 us against 169-219,
   a chain token (40 KiB on, 10 KiB back) 121-160 us against 283-351, and 5 MiB one way runs at 556-604 MB/s against
@@ -144,6 +158,12 @@ shuts down cleanly either way.
   The second and third are compile-checked diffs in `results/kernel/usb4stream-reliable-20261013/proposed/`.
 - Known upstream bug: removing a stream directory after a failed start warns in `ida_free` from
   `tbstream_dev_release` (fix drafted in `kernel/upstream/usb4stream-falcon-ridge/`, not applied locally).
+
+## 7.3 and our tools
+
+7.3 moved applesmc's fan files into hwmon (`docs/hardware.md`, "Fan control"); `fancurve.sh` and the telemetry
+handle both layouts. The other sysfs and debugfs paths our tools use are unchanged (`results/kernel/linux-7.3-20261014/`,
+"7.3 sysfs changes"), and amdgpu's job timeout is still 2 s.
 
 ## When something goes wrong
 
@@ -168,11 +188,11 @@ shuts down cleanly either way.
   did not bring them back, and the reset of all six Macs that followed hung inflight in a NULL pointer dereference in
   `tb_xdp_handle_request` after "failed to allocate host router" (`results/kernel/usb4stream-reliable-20261013/`); it
   needed a power cycle.
-- After hard power cuts on 2026-10-06 the left Ethernet port (`enp12s0`) stopped getting a link; the cable is now
-  in `enp11s0` (DHCP).
+- After hard power cuts on 2026-10-06 incite's left Ethernet port (`enp12s0`) stopped getting a link; the cable is
+  now in `enp11s0` (DHCP).
 
-## Fallback: 6.12.111-p2p
+## Older kernels
 
-`kernel/build.sh` builds Debian's `linux-source-6.12` with `kernel/patches/0001-0003` on incite (about 28 minutes).
-It has no USB4STREAM; its `thunderbolt_net` uses a fixed 128 us NHI throttle (`results/kernel/tb-loopback-20261006/`
-shows a 32 us out-of-tree build).
+`6.12.111-p2p`: `kernel/build.sh` builds Debian's `linux-source-6.12` with `kernel/patches/0001-0003` on a Mac Pro
+(about 28 minutes). It has no USB4STREAM; its `thunderbolt_net` uses a fixed 128 us NHI throttle
+(`results/kernel/tb-loopback-20261006/` shows a 32 us out-of-tree build). It is still installed on incite.
