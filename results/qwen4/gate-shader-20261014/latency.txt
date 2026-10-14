@@ -1,0 +1,22 @@
+8M/4K-gpu0-cached: seen 1200/1200; to GPU past gate (us): p10 6.3 p50 11.6 p90 16.7 p99 18.4 max 24.0; mean 11.5
+                   to the gate's open poll (us): p10 4.6 p50 10.1 p90 15.3 p99 17.3 max 22.6; mean 10.0
+8M/4K-gpu1-cached: seen 600/600; to GPU past gate (us): p10 6.3 p50 11.4 p90 17.0 p99 19.0 max 19.9; mean 11.5
+                   to the gate's open poll (us): p10 4.4 p50 9.8 p90 15.4 p99 18.1 max 18.5; mean 10.0
+8M/4K-gpu0-wc-sfence: seen 400/400; to GPU past gate (us): p10 7.0 p50 11.9 p90 17.3 p99 19.1 max 39.9; mean 12.1
+                      to the gate's open poll (us): p10 5.2 p50 10.3 p90 15.4 p99 17.9 max 38.5; mean 10.5
+8M/4K-gpu0-nt: seen 200/200; to GPU past gate (us): p10 9.8 p50 14.8 p90 19.6 p99 21.2 max 21.5; mean 14.6
+               to the gate's open poll (us): p10 5.6 p50 10.7 p90 15.3 p99 17.7 max 18.0; mean 10.6
+6M/4K: seen 200/200; to GPU past gate (us): p10 6.0 p50 9.9 p90 13.9 p99 15.1 max 15.6; mean 9.8
+       to the gate's open poll (us): p10 4.3 p50 8.5 p90 12.4 p99 14.7 max 14.8; mean 8.4
+12M/4K: seen 200/200; to GPU past gate (us): p10 6.6 p50 14.8 p90 21.6 p99 24.1 max 24.9; mean 14.3
+        to the gate's open poll (us): p10 5.1 p50 13.2 p90 20.2 p99 22.6 max 22.8; mean 12.7
+16M/4K: seen 200/200; to GPU past gate (us): p10 7.3 p50 16.8 p90 26.9 p99 30.8 max 31.8; mean 17.1
+        to the gate's open poll (us): p10 5.9 p50 15.1 p90 25.8 p99 29.8 max 30.3; mean 15.6
+4M/2K: seen 200/200; to GPU past gate (us): p10 6.2 p50 11.6 p90 16.8 p99 18.1 max 18.5; mean 11.5
+       to the gate's open poll (us): p10 4.8 p50 9.9 p90 15.7 p99 17.6 max 18.0; mean 10.1
+32M/16K: seen 200/200; to GPU past gate (us): p10 6.5 p50 12.5 p90 17.4 p99 19.3 max 19.3; mean 12.2
+         to the gate's open poll (us): p10 4.9 p50 11.3 p90 16.1 p99 18.5 max 18.8; mean 10.7
+1M/64B: seen 200/200; to GPU past gate (us): p10 12.7 p50 34.2 p90 50.4 p99 54.5 max 56.6; mean 32.2
+        to the gate's open poll (us): p10 10.8 p50 32.4 p90 48.5 p99 54.5 max 54.6; mean 30.8
+8M/4K-gpu0-low-level: seen 100/100; to GPU past gate (us): p10 16.3 p50 38.1 p90 60.3 p99 64.5 max 64.5; mean 38.4
+                      to the gate's open poll (us): p10 16.3 p50 38.1 p90 60.3 p99 64.5 max 64.5; mean 38.4
