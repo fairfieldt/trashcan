@@ -13,8 +13,11 @@ kernel.org's snapshot tarball (sha256 `f789fc0d…2523`, its pax header names th
 `REV=1 JOBS=24 kernel/cross-build-7.3.sh` in the kbuild VM in 5 min 19 s. `build/` has the start and end of the
 build log and the packages' checksums.
 
-For 7.3 final: add its sha256 to the table in `kernel/build-7.3.sh` and run `VER=7.3 REV=1 kernel/cross-build-7.3.sh`.
-The patches and the config should carry over unchanged.
+For 7.3 final: add the tarball's sha256 (from `https://cdn.kernel.org/pub/linux/kernel/v7.x/sha256sums.asc`, which
+is signed) to the table in `kernel/build-7.3.sh` and run `VER=7.3 REV=1 kernel/cross-build-7.3.sh`. The packages are
+then `linux-image-7.3.0-p2p` (a new package name, so the rc stays installed until removed), and `kernel-boot.sh` takes
+`7.3.0-p2p`. The patches and the config should carry over unchanged; the build stops on a patch that no longer
+applies.
 
 ## Patches
 
@@ -100,6 +103,56 @@ state over its uptime. The coordinator's two reset rounds (`dmesg-tb-end.txt`, `
 reloaded the Thunderbolt modules on 7.3 without a warning; the first round left both links at `error waiting for link
 width to become 14`, the second brought them up on two lanes, as on 7.2.9.
 
+## Rollout to the six Macs
+
+First the fixed `fancurve` and telemetry on all six, still on 7.2.9 (`install-fan.sh`: every Mac then held 2348-2352
+RPM and reported `fan_rpm` again). Then on each Mac under its own lease: `kernel-boot.sh once 7.3.0-rc7-p2p`, reboot,
+`check.sh` (outputs in `checks/`).
+
+| Mac | Booted 7.3 | ssh after | VBIOS 02 / 06 | DPM high, auto | `p2p-verify` | Fan (`fancurve`) | dmesg WARNING |
+|---|---|---|---|---|---|---|---|
+| inflight | 12:29 (first, `run.sh`) | ~70 s | XA / XB | ok | 3/3 PASS | 2349 RPM (by hand, then fixed `fancurve` at 12:36) | apple-gmux only |
+| alight | 12:47 | 60 s | XA / XB | ok | PASS | 2346 RPM | apple-gmux only |
+| indite | 12:52 | 61 s | XA / XB | ok | PASS | 2347 RPM | apple-gmux only |
+| incite | 13:01 | 76 s | XA / XB | ok | PASS | 2326 RPM | apple-gmux only |
+| invite | 13:01 | ~75 s | XA / XB | ok | PASS | 2350 RPM | apple-gmux only |
+| enlight | 13:01 | ~75 s | XA / XB | ok | PASS | 2347 RPM | apple-gmux only |
+
+Every card linked at 8 GT/s x16, ran at 850/1370 MHz under `p2p-verify`, and `amdgpu.lockup_timeout` was unset. The
+coordinator reset Thunderbolt on all six three times: after inflight's boot and after alight's and indite's (two
+rounds each), and after the last three (one round). Each time all 12 link ends came up on two lanes, the ring order
+was unchanged, and `tblink` recreated both streams on every Mac.
+
+## Six-Mac main suite on 7.3
+
+All six on 7.3.0-rc7-p2p, after the last Thunderbolt reset: `results/qwen4/main-suite-20261013/tools/main-suite.sh`
+under `chain6.sh` with `BIN=trashcan-15e5457`, the binary of this morning's 7.2.9 main suite, so only the kernel
+differs. The copy that ran writes into this directory instead of the main suite's (`main-suite/ms-15e5457-k73/`,
+with each Mac's node and clock logs in `nodes/`); `msval.sh` makes the validation rows. Ring order incite, inflight,
+alight, indite, invite, enlight, as this morning.
+
+| item | 7.2.9-p2p (ms-15e5457, 2026-10-14 11:17) | 7.3.0-rc7-p2p (13:13-13:16) |
+|---|---|---|
+| validate, 14-token reference prompt | CPU reference's 10 greedy tokens; logits rel 2.79e-4, top-10 10/10 | same; all 693 dump files byte-identical to 7.2.9's |
+| validate, p100 | 10/10; logits rel 3.48e-2, top-10 10/10 | same; all 598 dump files byte-identical |
+| decode, 128 tokens after a 512-token prompt | 21.09, 21.20 tok/s | 20.76, 20.93 tok/s |
+| prefill 512 tokens | 522.9, 523.3 tok/s | 523.0, 523.3 tok/s |
+| prefill 2048 (decode after it) | 889.8 (20.56) tok/s | 891.8 (20.45) tok/s |
+| prefill 8192 | 1118.0 (19.68) tok/s | 1123.8 (19.75) tok/s |
+| prefill 30000 | 1249.3 (19.80) tok/s | 1246.4 (20.10) tok/s |
+| MTP, chat prompts (192 tokens, 3 drafts) | water 28.92, csv 31.64, transformer 29.27 (plain 20.37-20.72) | water 28.66, csv 32.26, transformer 28.85 (plain 20.60-20.67); same tokens and acceptance |
+| `trashcan serve` test with MTP | 7 checks pass | 7 checks pass |
+| GPUs | 850/1370 through the 30K prefill; 54-61 °C, invite's GPU 0 74 °C | 850/1370 through the 30K prefill; 55-67 °C, invite's GPU 0 76 °C |
+
+The two kernels compute the same bits, and prefill and MTP match. Decode after 512 tokens was 1.4% lower in both runs
+on 7.3, but the other decode rates don't follow it: plain decode in the MTP runs averaged 20.62 against 20.60 tok/s,
+and decode after 2K, 8K and 30K tokens moved -0.5%, +0.4% and +1.5%. Main's decode rate moves about 1% between
+sessions, so this suite shows no kernel effect; an alternated pair would need a reboot per arm. The driver's own GPU
+time per decode token is the same (7.23 against 7.22 ms).
+
+The suite passed, so GRUB_DEFAULT points at `7.3.0-rc7-p2p` on all six since 13:18 (`kernel-boot.sh default`);
+`7.2.9-p2p` stays installed.
+
 ## amdgpu job timeout
 
 Still 2 s. `amdgpu_device_get_job_timeout_settings()` is identical in 7.2.9 and 7.3-rc7: every queue defaults to
@@ -118,7 +171,7 @@ Compared on inflight (7.3) and alight (7.2.9):
 | `power_dpm_force_performance_level` | `high`/`auto` | unchanged: `echo high` raises both cards from 300/150 to 850/1370 MHz | engine `clocks.rs`, `dpm-run.sh`, `q4run.py` |
 | debugfs `dri/` | `0000:02:00.0`, `0000:06:00.0`, with `0`, `1`, `128`, `129` linking to them | unchanged | |
 | `amdgpu_pm_info` | `power level N    sclk: … mclk: … vddc: … vddci: … pcie gen: 3` | unchanged | thermal-latch checks |
-| Thunderbolt sysfs | `unique_id`, `vendor`, `maxhopid`, `rx_lanes`, services `0-3.0`/`0-3.1` with `key` | unchanged | `tblink`, `tbstream-up.sh` |
+| Thunderbolt sysfs | `unique_id`, `vendor`, `maxhopid`, `rx_lanes`, services `0-3.0`/`0-3.1` with `key` | unchanged | `tblink` |
 | Stream configfs group | `index`, `in_hopid`, `out_hopid`, `ring_size`, `throttling` | adds `busy_poll` (0 by default) | `tblink`, `tb-reset.sh` |
 
 Without the fix, 7.3 skips `fancurve.service` (its condition was `fan1_manual`) and the SMC runs the fan at about
@@ -143,8 +196,14 @@ Not checked here: data through the streams and busy polling itself (the USB4STRE
 
 - `kernel-boot.sh once|default KREL`: install a kernel from `~/kernel/7.3/debs` and boot it once, or make it GRUB's
   default.
-- `run.sh [TAG]`: the GPU-side checks, under the Mac's lease; `tb.sh [TAG]`: Thunderbolt and netconsole.
-- `sbsum.py`, `p2psum.py`: summaries of `run.sh`'s stage-bench and xgpu outputs.
-- `inflight-7.2.9-p2p/`, `inflight-7.3.0-rc7-p2p/`: outputs (`clocks/` from `clockmon.sh`; full dmesg not kept, it
-  has MAC addresses). `test-engine-provision-20261007.log` is inflight's 7.2.9 test-engine run from provisioning.
+- `run.sh [TAG]`: the GPU-side checks, under the Mac's lease; `check.sh`: their short form for a rollout; `tb.sh
+  [TAG]`: Thunderbolt and netconsole.
+- `install-fan.sh HOST...`: install the fixed `fancurve` and telemetry on running nodes.
+- `sbsum.py`, `p2psum.py`: summaries of `run.sh`'s stage-bench and xgpu outputs; `msval.sh TAG`: the main suite's
+  validation against the CPU references and against 7.2.9's dumps.
+- `inflight-7.2.9-p2p/`, `inflight-7.3.0-rc7-p2p/`: `run.sh` and `tb.sh` outputs (`clocks/` from `clockmon.sh`; full
+  dmesg not kept, it has MAC addresses). `test-engine-provision-20261007.log` is inflight's 7.2.9 test-engine run from
+  provisioning.
+- `checks/`: `check.sh` outputs of the other five Macs.
+- `main-suite/ms-15e5457-k73/`: the six-Mac main suite on 7.3.
 - `build/`: build log excerpt, package checksums, config differences.

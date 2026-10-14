@@ -1,14 +1,13 @@
 #!/bin/bash
 # From this Mac: install the repo's fancurve.sh, fancurve.service and system-crash-capture.py on each HOST (only these,
 # as docs/hardware.md says; the full `provision.sh HOST system` restarts unrelated services) and restart the two
-# services. Refuses a host whose installed copies differ from the previous commit's (a local change we'd overwrite),
-# unless FORCE=1. Prints the fan state afterwards.
+# services. Refuses a host whose installed copies are neither the versions before the hwmon-layout fix nor the
+# current ones (a local change we'd overwrite), unless FORCE=1. Prints the fan state afterwards.
 # usage: results/kernel/linux-7.3-20261014/install-fan.sh HOST...
 set -euo pipefail
 repo=$(cd "$(dirname "$0")/../../.." && pwd)
-base=${BASE:-7de407f1~1}    # the commit before the hwmon-layout fix
-want_old=$(cd "$repo" && for f in scripts/fancurve.sh scripts/fancurve.service scripts/system-crash-capture.py; do
-    git show "$base:$f" | shasum -a 256 | cut -d' ' -f1; done | xargs)
+# sha256 of fancurve.sh, fancurve.service and system-crash-capture.py before the fix (as installed on all six Macs)
+want_old="287d42b0b455dc836f28cca3e59ad9af6f2d30a9b000fb7c6fe49f2cfb9687c5 b182f321c6638876c3d0f6bb91acd9f19c1aede01917a8b9f26128a9b8f1416b e11f2533c95a366c7aa957eac89b63bd4eed7d9f8857f397c923c5cc12d00dd9"
 for h in "$@"; do
     have=$(ssh "$h" 'sha256sum /usr/local/sbin/fancurve.sh /etc/systemd/system/fancurve.service /usr/local/sbin/system-crash-capture.py' |
         cut -d' ' -f1 | xargs)

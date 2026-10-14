@@ -1,0 +1,102 @@
+[    0.441019] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441023] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441027] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441031] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441035] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441038] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441041] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441044] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441049] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441053] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441057] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441060] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441064] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441067] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441071] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441074] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441185] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441188] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441192] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441195] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441199] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441202] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441205] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441208] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441212] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441216] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441219] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441223] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441226] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441230] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441233] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441236] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441338] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441341] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441345] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441348] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441352] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441355] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441358] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441362] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441365] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441369] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441372] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441376] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441379] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441383] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441386] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441390] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.529775] RAS: Correctable Errors collector initialized.
+[    1.242700] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.261267] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.268515] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[   11.614093] amdgpu 0000:02:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   11.614101] amdgpu 0000:02:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   12.307086] amdgpu 0000:06:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   12.307091] amdgpu 0000:06:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   13.760729] thunderbolt 0-3: failed request link state change, aborting
+[   14.282715] systemd[1]: bpf-restrict-fs: Failed to load BPF object: No such process
+[   14.784730] thunderbolt 0-3: failed request link state change, aborting
+[   15.183437] WARNING: drivers/platform/x86/apple-gmux.c:884 at gmux_probe.cold+0x65/0x3d6 [apple_gmux], CPU#7: (udev-worker)/618
+[   15.183558] CPU: 7 UID: 0 PID: 618 Comm: (udev-worker) Not tainted 7.3.0-rc7-p2p #1p2p PREEMPT(lazy) 
+[   15.183616] Call Trace:
+[   15.266118] Error: Driver 'pcspkr' is already registered, aborting...
+[   15.812654] thunderbolt 0-3: failed request link state change, aborting
+[   15.924825] b43 bcma0:1: probe with driver b43 failed with error -95
+[   16.836742] thunderbolt 0-3: failed request link state change, aborting
+[   17.856762] thunderbolt 0-3: failed request link state change, aborting
+[   18.880764] thunderbolt 0-3: failed request link state change, aborting
+[   19.904768] thunderbolt 0-3: failed request link state change, aborting
+[   20.928765] thunderbolt 0-3: failed request link state change, aborting
+[   21.952748] thunderbolt 0-3: failed request link state change, aborting
+[   22.976759] thunderbolt 0-3: failed request link state change, aborting
+[   24.000666] thunderbolt 0-3: failed request link state change, aborting
+[   25.024666] thunderbolt 0-3: failed request link state change, aborting
+[   26.048671] thunderbolt 0-3: failed request link state change, aborting
+[   27.072709] thunderbolt 0-3: failed request link state change, aborting
+[   28.096669] thunderbolt 0-3: failed request link state change, aborting
+[   29.120742] thunderbolt 0-3: failed request link state change, aborting
+[   30.144727] thunderbolt 0-3: failed request link state change, aborting
+[   31.168753] thunderbolt 0-3: failed request link state change, aborting
+[   32.192721] thunderbolt 0-3: failed request link state change, aborting
+[   33.216748] thunderbolt 0-3: failed request link state change, aborting
+[   34.240756] thunderbolt 0-3: failed request link state change, aborting
+[   35.264736] thunderbolt 0-3: failed request link state change, aborting
+[   36.288755] thunderbolt 0-3: failed request link state change, aborting
+[   37.312746] thunderbolt 0-3: failed request link state change, aborting
+[   38.336693] thunderbolt 0-3: failed request link state change, aborting
+[   39.360632] thunderbolt 0-3: failed request link state change, aborting
+[   40.388657] thunderbolt 0-3: failed request link state change, aborting
+[   40.512547] thunderbolt 1-3: failed read XDomain properties from af1100f3-a0be-895c-812f-78c8d8a1648f
+[   41.408704] thunderbolt 0-3: failed request link state change, aborting
+[   42.432681] thunderbolt 0-3: failed request link state change, aborting
+[   43.456721] thunderbolt 0-3: failed request link state change, aborting
+[   44.480662] thunderbolt 0-3: failed request link state change, aborting
+[   45.504668] thunderbolt 0-3: failed request link state change, aborting
+[   46.532744] thunderbolt 0-3: failed request link state change, aborting
+[   47.552763] thunderbolt 0-3: failed request link state change, aborting
+[   48.576741] thunderbolt 0-3: failed request link state change, aborting
+[   49.600939] thunderbolt 0-3: failed request link state change, aborting
+[   50.624853] thunderbolt 0-3: failed request link state change, aborting
+[   51.648881] thunderbolt 0-3: failed request link state change, aborting
+[   52.672748] thunderbolt 0-3: failed request link state change, aborting
