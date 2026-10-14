@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 53C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 55C  log=results/gate3/clocks/t2-sweep-2048k-s64.txt

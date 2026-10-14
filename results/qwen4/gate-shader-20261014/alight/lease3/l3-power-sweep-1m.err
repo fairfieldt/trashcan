@@ -1,0 +1,1 @@
+[clocks] 57 samples card0 (02:00.0) sclk/mclk: 850/1370 x57  max 46C card1 (06:00.0) sclk/mclk: 300/150 x57  max 43C  log=results/gate3/clocks/l3-power-sweep-1m.txt

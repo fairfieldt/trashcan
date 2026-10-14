@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 43C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 44C  log=results/gate3/clocks/l2-rob-nt-1.txt

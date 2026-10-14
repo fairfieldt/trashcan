@@ -1,0 +1,2 @@
+Error: the shader clock disagrees with the GPU timestamps (300.5 against 862.5 us): stop
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 43C card1 (06:00.0) sclk/mclk: 300/150 x1  max 43C  log=results/gate3/clocks/l2-never-sweep-gpu1-50.txt

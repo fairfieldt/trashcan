@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 300/150 x1  max 42C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 43C  log=results/gate3/clocks/l3-low-never-sweep-50.txt

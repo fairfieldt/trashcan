@@ -1,0 +1,1 @@
+[clocks] 4 samples card0 (02:00.0) sclk/mclk: 850/1370 x4  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x4  max 61C  log=results/clocks/host-gate1-alight-1.txt
