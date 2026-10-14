@@ -1,0 +1,12 @@
+T 1.0: D 5.1 V [55.0, 91.0, 108.0, 128.0]
+fixed 2            mean  21.55 csv 23.72 transformer 20.61 water 20.32
+fixed 3            mean  21.53 csv 25.05 transformer 19.90 water 19.63
+gate T=1 0.4       mean  21.72 csv 25.01 transformer 20.17 water 19.98
+gate T=1 0.5       mean  21.95 csv 25.30 transformer 20.45 water 20.11
+gate T=1 0.6       mean  22.24 csv 25.38 transformer 20.86 water 20.48
+gate T=1.0 0.4     mean  21.75 csv 25.01 transformer 20.20 water 20.06
+gate T=1.0 0.5     mean  21.95 csv 25.28 transformer 20.37 water 20.20
+gate T=1.0 0.6     mean  22.21 csv 25.37 transformer 20.75 water 20.53
+drop T=1 0.5       mean  22.12 csv 25.24 transformer 20.88 water 20.25
+drop T=1 0.6       mean  22.56 csv 25.38 transformer 21.63 water 20.67
+drop T=1 0.7       mean  22.68 csv 25.36 transformer 21.83 water 20.83

@@ -1,0 +1,6 @@
+csv          acceptance by depth 0.95 0.91 0.92 0.89 0.88 0.86 0.82 | K=2: now 30.50 tok/s (2.84/round), pipelined 31.56 (2.71/round, 72% rounds pre-drafted), +3.5%
+transformer  acceptance by depth 0.86 0.81 0.77 0.78 0.70 0.71 0.72 | K=2: now 27.59 tok/s (2.57/round), pipelined 27.38 (2.42/round, 46% rounds pre-drafted), -0.8%
+water        acceptance by depth 0.83 0.76 0.75 0.77 0.71 0.65 0.71 | K=2: now 26.00 tok/s (2.42/round), pipelined 27.29 (2.42/round, 43% rounds pre-drafted), +5.0%
+csv          acceptance by depth 0.95 0.91 0.92 0.89 0.88 0.86 0.82 | K=3: now 30.43 tok/s (3.69/round), pipelined 29.15 (3.29/round, 55% rounds pre-drafted), -4.2%
+transformer  acceptance by depth 0.86 0.81 0.77 0.78 0.70 0.71 0.72 | K=3: now 25.03 tok/s (3.04/round), pipelined 23.64 (2.74/round, 36% rounds pre-drafted), -5.6%
+water        acceptance by depth 0.83 0.76 0.75 0.77 0.71 0.65 0.71 | K=3: now 25.03 tok/s (3.04/round), pipelined 24.52 (2.86/round, 30% rounds pre-drafted), -2.1%

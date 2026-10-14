@@ -1,0 +1,64 @@
+== mtp2-base-gate.json: T 0, 3 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+reference	18.49	18.17	-1.7%	0.571	0.025	1.09	159/1/12/1	54.7/91.0/107.5/134.8	6.49
+mean	18.49	18.17	-1.7%
+== mtp2-gate.json: T 0.0, 3 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+reference	18.53	18.15	-2.0%	0.500	0.019	1.10	154/4/12/2	54.2/89.4/106.4/129.9	5.11
+mean	18.53	18.15	-2.0%
+== mtp2-base-chat.json: T 0, 3 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.29	20.21	+10.5%	0.698	0.906	2.32	32/4/170/41	54.6/90.9/107.5/128.6	5.77
+csv.ids	18.30	24.12	+31.8%	0.844	0.000	3.45	0/3/10/153	0.0/92.9/109.5/128.1	5.78
+transformer.ids	18.30	20.31	+11.0%	0.708	0.755	2.28	53/0/138/60	55.4/0.0/108.2/128.8	5.76
+mean	18.30	21.55	+17.8%
+== mtp2-chat.json: T 0.0, 3 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.31	21.05	+15.0%	0.743	0.958	2.38	24/29/146/42	55.0/90.0/107.3/127.8	5.06
+csv.ids	18.34	24.88	+35.6%	0.857	0.000	3.47	0/4/11/150	0.0/91.6/109.3/126.9	5.10
+transformer.ids	18.38	20.88	+13.6%	0.756	0.770	2.17	61/37/126/40	54.6/90.2/107.8/128.2	5.05
+mean	18.34	22.27	+21.4%
+== mtp2-chat-nogate.json: T 0.0, 3 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.40	20.79	+13.0%	0.700	1.000	2.53	11/4/146/66	55.6/90.4/107.4/127.6	5.04
+csv.ids	18.36	25.06	+36.5%	0.852	0.000	3.49	0/3/6/155	0.0/91.0/109.3/125.9	5.04
+transformer.ids	18.38	20.46	+11.3%	0.693	0.762	2.23	63/0/129/66	54.4/0.0/107.6/127.8	5.01
+mean	18.38	22.10	+20.2%
+== mtp2-t1.0.json: T 1.0 top-k 64 top-p 0.95, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.25	20.45	+12.1%	0.710	0.757	2.20	37/22/74/41	54.8/90.4/108.1/126.7	5.03
+csv.ids	18.37	23.56	+28.2%	0.802	0.000	3.21	0/4/20/95	0.0/90.6/109.0/126.5	5.03
+transformer.ids	18.31	19.90	+8.7%	0.690	0.895	2.08	38/25/104/18	54.9/90.4/107.2/127.2	4.99
+mean	18.31	21.30	+16.3%
+== mtp2-t0.8.json: T 0.800000011920929 top-k 64 top-p 0.95, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.36	19.31	+5.2%	0.658	0.886	2.04	35/30/107/17	54.9/90.5/107.5/127.0	5.06
+csv.ids	18.36	24.20	+31.8%	0.837	1.000	3.27	1/8/13/95	54.4/90.8/107.7/126.1	5.08
+transformer.ids	18.38	20.50	+11.5%	0.709	0.929	2.38	14/20/88/39	54.9/90.7/107.7/127.6	5.11
+mean	18.37	21.34	+16.2%
+== mtp2-t0.8-main.json: T 0.800000011920929 top-k 64 top-p 0.95, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.46	19.02	+3.0%	0.612	0.771	2.00	48/2/113/28	54.8/89.6/107.5/126.9	5.03
+csv.ids	18.37	24.04	+30.8%	0.831	1.000	3.27	3/1/20/93	53.9/90.8/107.7/127.2	5.18
+transformer.ids	18.38	20.53	+11.7%	0.692	0.760	2.20	50/1/71/53	54.4/89.0/106.8/126.5	5.04
+mean	18.41	21.19	+15.2%
+== mtp2-t0.6.json: T 0.6000000238418579 top-k 64 top-p 0.95, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.35	19.50	+6.3%	0.668	0.933	2.08	30/29/106/19	55.0/89.9/107.6/127.6	5.02
+csv.ids	18.31	24.21	+32.2%	0.839	1.000	3.27	1/7/17/92	55.6/91.0/109.3/126.4	5.04
+transformer.ids	18.33	19.51	+6.4%	0.665	0.786	2.00	56/22/89/28	54.8/89.9/107.6/127.1	5.02
+mean	18.33	21.07	+15.0%
+== mtp2-t0.6-main.json: T 0.6000000238418579 top-k 64 top-p 0.95, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+water.ids	18.19	19.75	+8.6%	0.666	0.774	2.16	31/3/121/22	54.9/90.8/107.3/127.8	5.06
+csv.ids	18.33	24.37	+33.0%	0.830	0.000	3.36	0/1/16/97	0.0/91.2/107.0/126.2	5.06
+transformer.ids	18.33	19.46	+6.2%	0.649	0.754	1.96	65/0/99/31	55.0/0.0/107.7/126.8	5.01
+mean	18.28	21.19	+15.9%
+== mtp2-base-long.json: T 0, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+long.ids	16.15	16.23	+0.5%	0.621	0.574	1.61	61/1/53/3	62.9/103.0/123.6/150.5	6.55
+mean	16.15	16.23	+0.5%
+== mtp2-long.json: T 0.0, 2 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step
+long.ids	16.14	17.13	+6.2%	0.694	0.569	1.68	51/17/41/4	62.4/100.1/122.6/150.1	5.21
+mean	16.14	17.13	+6.2%

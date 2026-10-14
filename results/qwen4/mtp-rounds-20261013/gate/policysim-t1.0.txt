@@ -1,0 +1,5 @@
+T 1.0: draft 5.05 ms, rounds [54.2, 90.0, 107.3, 127.8] ms, plain 54.0 ms, unsure below 0.6
+main      chat mean  21.73 (plain 18.52)  csv 25.02 28/20/131/1303  reference 18.23 2312/20/40/44  transformer 20.33 377/20/1147/652  water 19.85 549/20/1414/415
+include   chat mean  22.04 (plain 18.52)  csv 25.13 26/113/151/1221  reference 18.39 2312/44/40/20  transformer 20.90 284/398/911/586  water 20.10 422/389/1296/292
+drop      chat mean  22.18 (plain 18.52)  csv 25.19 127/52/150/1215  reference 18.50 2336/20/40/20  transformer 20.99 788/116/1087/404  water 20.37 804/425/1064/261
+two-rate  chat mean  22.37 (plain 18.52)  csv 25.27 129/55/118/1234  reference 18.31 2316/20/60/20  transformer 21.37 530/122/642/833  water 20.46 586/446/726/597

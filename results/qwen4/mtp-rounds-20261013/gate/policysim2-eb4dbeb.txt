@@ -1,0 +1,39 @@
+T 0.0: draft 5.1 ms, rounds [49.4, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6, calibration scale
+fixed     chat mean  28.80 (plain 20.33)  csv 30.89 4/1/35/39 d5  reference 20.06 113/4/3/1 d2  transformer 27.94 14/10/72/7 d23  water 27.56 12/18/64/10 d29
+marginal  chat mean  28.05 (plain 20.33)  csv 29.73 5/5/59/20 d9  reference 20.15 114/3/3/1 d1  transformer 27.95 7/24/73/1 d17  water 26.46 13/42/61/1 d24
+greedy3   chat mean  28.63 (plain 20.33)  csv 30.58 7/5/29/40 d9  reference 18.38 111/7/2/1 d110  transformer 27.74 8/26/64/7 d14  water 27.58 14/35/54/7 d22
+T 0.0: draft 5.1 ms, rounds [49.4, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6, calibration raw
+marginal  chat mean  28.13 (plain 20.33)  csv 30.72 6/1/48/28 d12  reference 20.15 114/3/3/1 d1  transformer 27.95 7/24/73/1 d17  water 25.70 6/50/62/1 d16
+greedy3   chat mean  28.44 (plain 20.33)  csv 30.72 7/4/19/48 d8  reference 17.57 98/16/6/1 d97  transformer 27.39 11/24/43/24 d16  water 27.22 8/22/52/20 d15
+T 0.6: draft 5.1 ms, rounds [49.4, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6, calibration scale
+fixed     chat mean  27.80 (plain 20.33)  csv 30.33 124/87/699/739 d183  transformer 26.24 411/471/1315/111 d706  water 26.85 283/348/1435/112 d555
+marginal  chat mean  27.69 (plain 20.33)  csv 30.24 104/60/1025/516 d206  transformer 26.37 278/778/1200/74 d457  water 26.45 243/555/1447/24 d439
+greedy3   chat mean  27.84 (plain 20.33)  csv 30.46 95/119/667/751 d154  transformer 26.14 286/691/1166/160 d489  water 26.93 225/456/1297/181 d353
+T 0.6: draft 5.1 ms, rounds [49.4, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6, calibration raw
+marginal  chat mean  27.63 (plain 20.33)  csv 30.21 112/54/1067/482 d253  transformer 26.26 202/795/1259/59 d340  water 26.42 184/510/1514/29 d351
+greedy3   chat mean  27.98 (plain 20.33)  csv 30.44 97/127/451/912 d173  transformer 26.43 210/334/1106/436 d384  water 27.07 128/305/876/629 d280
+T 1.0: draft 5.1 ms, rounds [49.4, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6, calibration scale
+fixed     chat mean  27.20 (plain 20.33)  csv 29.93 103/88/956/578 d165  reference 19.89 1776/392/64/20 d456  transformer 26.25 504/162/1520/102 d626  water 25.42 444/628/1299/64 d901
+marginal  chat mean  27.41 (plain 20.33)  csv 30.13 54/82/1129/459 d144  reference 20.19 2272/72/52/20 d24  transformer 26.54 283/453/1482/42 d409  water 25.56 193/1004/1199/27 d496
+greedy3   chat mean  27.55 (plain 20.33)  csv 30.33 55/164/786/667 d103  reference 21.73 544/1108/44/20 d524  transformer 26.39 324/570/1182/191 d434  water 25.94 212/829/1097/179 d477
+T 1.0: draft 5.1 ms, rounds [49.4, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6, calibration raw
+marginal  chat mean  27.29 (plain 20.33)  csv 29.99 49/92/1239/375 d159  reference 20.19 2276/64/56/20 d24  transformer 26.28 163/608/1471/26 d279  water 25.62 159/985/1235/24 d424
+greedy3   chat mean  27.53 (plain 20.33)  csv 30.31 54/119/374/1012 d117  reference 19.88 84/1472/140/20 d192  transformer 26.43 204/479/977/457 d324  water 25.85 114/582/1046/413 d413
+
+== old costs (2293550)
+T 0.0: draft 5.1 ms, rounds [52.6, 84.1, 100.2, 118.1] ms, plain 51.3 ms, unsure below 0.6, calibration scale
+fixed     chat mean  25.35 (plain 19.49)  csv 27.52 4/3/4/62 d8  reference 18.89 116/1/3/1 d3  transformer 24.84 16/6/10/57 d28  water 23.69 14/12/20/49 d33
+marginal  chat mean  24.59 (plain 19.49)  csv 27.03 12/2/7/58 d15  reference 19.08 117/1/2/1 d1  transformer 23.69 33/7/34/33 d40  water 23.06 51/8/49/15 d41
+greedy3   chat mean  24.93 (plain 19.49)  csv 27.23 11/2/7/58 d12  reference 17.37 115/3/2/1 d114  transformer 23.94 36/6/19/44 d42  water 23.61 37/7/37/29 d46
+T 1.0: draft 5.1 ms, rounds [52.6, 84.1, 100.2, 118.1] ms, plain 51.3 ms, unsure below 0.6, calibration scale
+fixed     chat mean  23.77 (plain 19.49)  csv 27.05 109/53/102/1255 d176  reference 18.88 2312/20/64/20 d64  transformer 22.65 500/129/552/918 d712  water 21.62 519/452/698/648 d934
+marginal  chat mean  23.71 (plain 19.49)  csv 27.01 232/48/107/1204 d268  reference 19.11 2336/20/40/20 d24  transformer 22.52 975/85/853/518 d769  water 21.60 1068/178/1024/354 d733
+greedy3   chat mean  24.44 (plain 19.49)  csv 27.39 212/47/106/1195 d242  reference 17.59 2167/121/44/20 d2147  transformer 23.35 686/135/603/741 d845  water 22.58 622/222/696/691 d847
+
+== main's drafting (5.85 ms draft steps, k = 0 rounds 2 ms over a plain step) against the engine's (5.1, 1 ms)
+T 0.0: draft 5.85 ms, rounds [51.2, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6
+main      chat mean  27.26 (plain 20.33)  csv 29.42 1/1/71/15  reference 19.30 111/6/3/1  transformer 27.05 1/3/95/1  water 25.30 1/34/78/1
+two-rate  chat mean  28.77 (plain 20.33)  csv 30.88 4/1/35/39  reference 19.71 112/5/3/1  transformer 27.91 14/10/72/7  water 27.53 12/18/64/10
+T 1.0: draft 5.85 ms, rounds [51.2, 67.0, 83.0, 106.0] ms, plain 49.2 ms, unsure below 0.6
+main      chat mean  26.63 (plain 20.33)  csv 29.49 20/40/1277/395  reference 19.28 2196/132/60/24  transformer 25.39 20/530/1633/49  water 25.02 20/617/1628/28
+two-rate  chat mean  27.19 (plain 20.33)  csv 29.91 103/89/960/574  reference 19.91 1191/776/64/20  transformer 26.28 478/155/1554/87  water 25.37 445/633/1296/63

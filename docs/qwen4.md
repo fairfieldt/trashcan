@@ -28,9 +28,13 @@ to 21.5-21.6 tok/s (+17-18%) with identical output, and costs at most 1.6% where
 27.0 with the 1-4-token kernels, which take a 2 / 3 / 4-token verification from 86 / 101 / 119-121 to 66-69 / 83-84 /
 102-105 ms. The host path between the stages ([results/qwen4/decode-host-20261013](../results/qwen4/decode-host-20261013/README.md):
 faster head candidate selection, binary candidate frames, fewer copies and wakeups) takes decode up 2.8% and MTP chat
-replies up 3.6% (six Macs, alternated pairs; 19.3 -> 19.8 tok/s decode with every GPU at full clock). Not done
-yet: graphs submitted ahead of their input and prefix checkpoints (see [What is left](#what-is-left)). The Responses
-server runs on the chain ([Serving](#serving)).
+replies up 3.6% (six Macs, alternated pairs; 19.3 -> 19.8 tok/s decode with every GPU at full clock). A shorter CPU
+draft step, unsure drafts left unverified and sampled drafts coupled to the target's sample take greedy chat replies
+from 28.3 to 30.1 tok/s (+6.5% on main 7b41707; +4.4-6.6% on each main since 7da6f93), add 3-6% when sampling at
+temperatures 0.6-1 (main 7da6f93), and take the 3K-token document from break-even to +5.5%, with every seed's output
+equal to plain decoding's ([results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)). Not done yet: graphs submitted
+ahead of their input and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain
+([Serving](#serving)).
 
 | | |
 |---|---|
@@ -379,15 +383,18 @@ plus 11 times the largest, and the pipeline fill is most of a short prompt's tim
 expert tiles, block scoring at very long contexts, and the stage output copy to host memory (~2 GB/s: 1.3 ms per
 GPU per 64-token chunk); incite's first GPU (layers 0-3 and the n-gram module) is the slowest stage.
 
-**Beyond these ceilings.** MTP speculative decoding (measured, [results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)):
-the block (1.49 GB) runs on the driver's CPU (5.7 ms per draft step with the draft head's first rows on the driver's
-GPU head slices); greedy drafts are accepted 90%, 85% and 84% of the time (first, second given the first, third given
-both), so a round of 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verification. With the decode kernels
-a 2 / 3 / 4-token verification costs 1.69x / 2.0x / 2.37x a 53.9 ms decode step, and chat replies run at 21.5-21.6
-tok/s against 18.3 (+39% before those kernels, when verification cost 1.43x / 1.69x / 2.0x); with the 1-4-token
-mixer and Q8_0 kernels of results/qwen4/verify-batches-20261012 it costs 1.36x / 1.69x / 2.09x of a 49.5 ms step and
-chat replies run at 27.0 tok/s against 20.2 (+33%); ~39-41 tok/s is
-projected with ~35 ms decode steps and verification of 2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x. Tensor or
+**Beyond these ceilings.** MTP speculative decoding (measured, [results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md),
+[results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)): the block (1.49 GB) runs on the
+driver's CPU (5.0 ms per draft step with the draft head's first rows on the driver's GPU head slices, 5.8 before);
+greedy drafts are accepted 90%, 85% and 84% of the time (first, second given the first, third given both), and a draft
+whose top candidate has less than 0.6 probability (13% of them, accepted about half the time) is not verified, so a
+round of up to 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verification. With the decode kernels a 2 / 3
+/ 4-token verification costs 1.69x / 2.0x / 2.37x a 53.9 ms decode step, and chat replies run at 21.5-21.6 tok/s
+against 18.3 (+39% before those kernels, when verification cost 1.43x / 1.69x / 2.0x), 23.1 with the MTP rounds (main
+7da6f93); with the 1-4-token mixer and Q8_0 kernels of results/qwen4/verify-batches-20261012 it costs 1.36x / 1.69x /
+2.09x of a 49.5 ms step and chat replies run at 27.0 tok/s against 20.2 (+33%), 30.1 against 20.9 with the decode
+host path and the MTP rounds (main 7b41707); ~39-41 tok/s is projected with ~35 ms decode steps and verification of
+2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x (the policy's replays give 39 tok/s at 40 / 52 / 60 / 70 ms rounds). Tensor or
 expert parallelism over all 12 GPUs at once: ~2 ms of bytes per token, but ~96 cross-Mac all-reduces per token at
 >= 100 us each over the ring bound it near 50-80 tok/s, at a large cost in engineering.
 
@@ -461,9 +468,10 @@ per position per QSA layer (2.2 GB per Mac at 1M). Without Q2_0 this would also 
 K/V cache takes at 200K.
 
 **MTP at long contexts.** The block runs on the driver's CPU with its K/V in host RAM (f32, 4 KiB per position,
-0.8 GB at 200K). Its sparse attention reads at most ~2,051 positions per draft, but the attention part of a draft step
-grows from ~1.6 ms at position 512 to ~5 ms at 2048-4096 (`draft-bench`; block scoring and selection run on one
-thread per token), so long contexts need that threaded. Not measured past 8K.
+0.8 GB at 200K). Its sparse attention reads at most ~2,051 positions per draft; with block scoring in parallel and the
+attention in AVX the attention part of a draft step takes 1.1 ms at position 512 and 1.6-2.0 ms at 2048-4096 (a whole
+step 4.8 and 5.1-5.8 ms, `draft-bench`; 2.0 and 3.0-5.9 ms before,
+[results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)). Not measured past 8K.
 
 ## What is left
 
@@ -501,12 +509,14 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
    200K went from 155 to 17 ms (results/qwen4/long-context-20261013).
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
-9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012; 27.0 with
-   the 1-4-token kernels of results/qwen4/verify-batches-20261012): cheaper 2-4-token verification batches (1.36x /
-   1.69x / 2.09x a decode step; the experts, read per token, are the most of what an extra token adds), a plain step that
-   returns the residual row (k = 0 rounds cost ~1.1 ms more than a decode step), a shorter CPU draft step, and more of
-   the prompt for the block (it reads the last prefill chunk: 11% fewer tokens per round on a 3K-token document,
-   where drafting breaks even).
+9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012; sampled
+   drafts coupled to the target's sample, a shorter CPU draft step, the residual rows off the verification's critical
+   path (k = 0 rounds within 0.2-0.7 ms of a decode step) and unsure drafts left unverified, results/qwen4/mtp-rounds-20261013:
+   21.7 -> 23.1 tok/s on main 7da6f93, 28.3 -> 30.1 on 7b41707; 27.0 with the 1-4-token kernels of
+   results/qwen4/verify-batches-20261012):
+   cheaper 2-4-token verification batches (1.36x / 1.69x / 2.09x a decode step; the experts, read per token, are the
+   most of what an extra token adds), and a prompt's last prefill chunk long enough for the block (a 1-3-token last
+   chunk leaves it nearly no context: ~6% fewer tokens per round).
 10. **Prefix checkpoints**: the server continues only from the live state, so a prompt that is not an extension of
     everything processed so far starts again at position 0.
 11. **Host work per decode step** (results/qwen4/decode-host-20261013): submitting each stage's graph before its
@@ -535,8 +545,9 @@ A request continues from the live state when everything processed so far (the pr
 prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet
 and n-gram states only run forward. `--no-prefix-cache` always starts at 0. `--mtp mtp-G-iq4.gguf [--draft-tokens 3]
 [--draft-vocab 65536]` drafts with the MTP block on the driver's CPU, up to 3 tokens per round, as many as the recent
-acceptance pays for at the measured costs (above temperature 0 a draft is kept when the sampled token equals it, so
-sampling follows the target distribution with the same draws). No `--tp`.
+acceptance pays for at the measured costs. Tokens are picked with Gumbel noise keyed by the seed and the position
+(`spec::Draws`), plain or speculative, and drafts are sampled with the same noise, so a seed gives the same reply with
+and without `--mtp`, at every temperature. No `--tp`.
 `scripts/test-server.py` passes against it, and a second chat turn reuses the first
 ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md#server)).
 `scripts/latency-run.py` (how the chain runs start the engine) holds a 0 µs CPU latency request, so idle cores
@@ -554,12 +565,12 @@ trashcan qwen4 layer-check MODEL LLAMA_DUMP [--emulate-ggml]
 trashcan qwen4 node MODEL --listen 0.0.0.0:7071 [--cpu | --gpus 0,1]
 trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3,6 --nodes MAC:7071 [--head-split 3] [--kv q8] --greedy 10
 trashcan qwen4 bench MODEL --gpus 0,1 --nodes ... --pp 256 --tg 32
-# MTP: CPU reference, acceptance, the CPU drafter, speculative decoding on the chain (greedy with and without drafts)
+# MTP: CPU reference, acceptance, the CPU drafter, speculative decoding on the chain (plain and speculative, same tokens)
 trashcan qwen4 mtp ref MODEL MTP OUT --chain 3
-trashcan qwen4 mtp accept MODEL MTP OUT.json --tokens-file IDS --steps 256 --depth 3
-trashcan qwen4 mtp replay MODEL MTP RUN.json OUT.json --vocab 65536 [--rounds]
-trashcan qwen4 mtp draft-check MODEL MTP; trashcan qwen4 mtp draft-bench MODEL MTP --start 512 --threads 12
-trashcan qwen4 mtp spec MODEL --gpus 0,1 --nodes ... --mtp MTP --draft-tokens 3 --tg 192 --runs 3 PROMPT.ids...
+trashcan qwen4 mtp accept MODEL MTP OUT.json --tokens-file IDS --steps 256 --depth 3 [--temperature T --top-k K --top-p P]
+trashcan qwen4 mtp replay MODEL MTP RUN.json OUT.json --vocab 65536 [--rounds | --teacher]
+trashcan qwen4 mtp draft-check MODEL MTP; trashcan qwen4 mtp draft-bench MODEL MTP --start 512 --threads 24
+trashcan qwen4 mtp spec MODEL --gpus 0,1 --nodes ... --mtp MTP --draft-tokens 3 --tg 192 --runs 3 [--temperature T] PROMPT.ids...
 # six Macs (not run yet: every other Mac runs `qwen4 node MODEL --listen 0.0.0.0:7071 --gpus 0,1`), 32K with G-iq4,
 # 200K with the Q2_0 build and Q8 K/V
 trashcan qwen4 bench G-iq4.gguf --gpus 0,1 --nodes MAC2:7071,MAC3:7071,MAC4:7071,MAC5:7071,MAC6:7071 \
