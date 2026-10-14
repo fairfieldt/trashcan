@@ -266,6 +266,25 @@ the same tokens as plain decoding. Validation (`tools/valcmp.sh mtp2s3`, `chain3
 dump is byte-identical to main's (586 of 586 files); on the 14-token reference prompt the top token is the CPU
 reference's (9419, logits rel 2.8e-4), and p100's logits are as far from the CPU reference as main's (rel 3.5e-2).
 
+**Sessions 4 and 5** (`chain4/`, `chain5/`, this branch rebased on main `eb4dbeb`: the 1-4-token verification kernels;
+binary built from `16ad0dd9`, the engine as committed; `tools/mtp2-chain4.sh`, `tools/mtp2-chain5.sh`). Session 4:
+p100 validation, then the pair; invite's GPU0 ran at 450 MHz through it (latched after overheating; every other GPU at
+850 MHz), so session 5 repeated the pair after invite's reboot with every GPU at 850 MHz while working (its first
+attempt stopped before decoding: the chain's Thunderbolt names were not back yet). Greedy chat replies, `--runs 1`:
+
+| run | plain tok/s | MTP tok/s | gain | water / csv / transformer | accepted/draft | rounds k = 0/1/2/3 | ms per round k = 0/1/2/3 | draft step |
+|---|---|---|---|---|---|---|---|---|
+| session 5, main `eb4dbeb` | 20.24 | 27.29 | +34.9% | 24.97 / 30.21 / 26.69 | 0.71 / 0.90 / 0.76 | 3/40/192/1 | 49.7-51.4 / 66.7-67.1 / 81.5-82.6 / 107.2 | 5.75-5.85 ms |
+| **session 5, this branch** | 20.32 | **28.49** | **+40.2%** | 27.64 / 29.97 / 27.86 | 0.84 / 0.85 / 0.84 | 24/25/75/85 | 50.1-50.2 / 66.7-67.4 / 82.3-83.9 / 101.1-102.0 | 5.02-5.07 ms |
+| session 4 (invite GPU0 at 450 MHz), main | 19.27 | 26.03 | +35.1% | 24.20 / 28.71 / 25.18 | 0.72 / 0.91 / 0.76 | 3/34/185/9 | 52.9-53.9 / 70.3-70.8 / 86.9-87.3 / 106.7-111.9 | 5.76 ms |
+| session 4, this branch | 19.30 | 27.41 | +42.0% | 26.14 / 29.44 / 26.65 | 0.83 / 0.91 / 0.85 | 28/25/96/66 | 52.1-52.7 / 70.3-70.9 / 86.6-87.1 / 106.4-113.1 | 5.00-5.06 ms |
+
+With the cheaper batches the branch adds 4.4% to main's MTP (27.29 -> 28.49 tok/s; 5.3% in session 4), against 6.2%
+on `2293550` and the replays' 5.5%: water +10.7%, transformer +4.4%, csv -0.8% (main's acceptance makes 2-draft rounds
+pay there, 68 of 68; the branch's policy, with its cheaper draft steps, chose 3 drafts in 42 of 58 rounds). 55 drafts
+were dropped (7 matching the next token). Every run gave plain decoding's tokens; the branch's p100 dump is
+byte-identical to main `eb4dbeb`'s (586 of 586 files, `chain4/validation.txt`).
+
 ## Reproduction
 
 ```sh
@@ -291,8 +310,15 @@ python3 summary.py chain1/*.json; tools/valcmp.sh mtp2s4     # validation dumps 
 ## What is left
 
 - Cheaper 2-4-token verification batches remain the largest lever (another agent's kernels): a round's verification is
-  ~90% of its time (k = 3: 127 ms of verification against 15 ms of drafting), and the policy picks up cheaper batches
-  by itself (`gate/policysim.py` with 40 / 52 / 60 / 70 ms rounds: 39 tok/s on the chat replies).
+  most of its time (k = 3 on main `eb4dbeb`: 104-108 ms of verification against 15 ms of drafting), and the policy
+  picks up cheaper batches by itself (`gate/policysim.py` with 40 / 52 / 60 / 70 ms rounds: 39 tok/s on the chat
+  replies).
+- Drafting the next round while a batch is verified (the CPU is idle then) does not pay as such. Teacher-forced chains
+  of 7 drafts along the greedy chat runs (`gate/rep7.sh`, `gate/pipesim.py`, `gate/pipesim-eb4dbeb.txt`): a round's
+  chain, run on during its verification, predicts the bonus token and the next round's drafts, usable when every draft
+  and the bonus match; but drafts 5-7 of a chain are accepted 0.65-0.88 against 0.75-0.95 for drafts 1-3 from the
+  trunk's row, so with eb4dbeb's costs 3-draft rounds lose 2-6% and 2-draft rounds gain -1 to +5%. Using such drafts
+  only when the drafter is sure of them, or rounds of 1-2 pre-drafted tokens, might still pay a few percent.
 - The block's context: it reads only the residual rows of a prompt's last prefill chunk (`Speculator::prefill`), so a
   prompt whose length is just past a multiple of the chunk size leaves it 1-4 rows, and from a conversation's second
   turn on it no longer sees the earlier turns. In a second turn (`turns/`: water's prompt and greedy reply, then a
