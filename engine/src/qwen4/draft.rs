@@ -299,18 +299,23 @@ impl Mat {
         }
     }
 
+    /// Row `r` times one token's activations.
+    fn dot(&self, r: usize, x: Tok) -> f32 {
+        match self {
+            Mat::Q8 { k, q, d, .. } => dot_q8(&q[r * k..(r + 1) * k], &d[r * k / 32..(r + 1) * k / 32], x.q, x.d),
+            Mat::Iq4 { k, q, d, .. } => dot_iq4(&q[r * k / 2..(r + 1) * k / 2], &d[r * k / 32..(r + 1) * k / 32], x.q, x.d),
+            Mat::F32 { k, w, .. } => {
+                debug_assert_eq!(x.f.len(), *k, "an f32 matrix needs the f32 activations");
+                dot_f32(&w[r * k..(r + 1) * k], x.f)
+            }
+        }
+    }
+
     /// `out[t * stride + dst0 + r - r0] = W[r] . x[t]` for the rows `r0..r1` and every token of `x`.
     fn rows_into(&self, x: &Act, r0: usize, r1: usize, out: Out, stride: usize, dst0: usize) {
         for r in r0..r1 {
             for t in 0..x.n {
-                let v = match self {
-                    Mat::Q8 { k, q, d, .. } => dot_q8(&q[r * k..(r + 1) * k], &d[r * k / 32..(r + 1) * k / 32], x, t),
-                    Mat::Iq4 { k, q, d, .. } => {
-                        dot_iq4(&q[r * k / 2..(r + 1) * k / 2], &d[r * k / 32..(r + 1) * k / 32], x, t)
-                    }
-                    Mat::F32 { k, w, .. } => dot_f32(&w[r * k..(r + 1) * k], &x.f[t * k..(t + 1) * k]),
-                };
-                unsafe { out.set(t * stride + dst0 + r - r0, v) };
+                unsafe { out.set(t * stride + dst0 + r - r0, self.dot(r, x.tok(t))) };
             }
         }
     }
@@ -324,6 +329,78 @@ impl OutU8 {
     /// Safety: tasks write disjoint indices within the buffer.
     unsafe fn set(self, i: usize, v: u8) {
         *self.0.add(i) = v;
+    }
+}
+
+#[derive(Clone, Copy)]
+struct OutI8(*mut i8);
+unsafe impl Send for OutI8 {}
+unsafe impl Sync for OutI8 {}
+impl OutI8 {
+    /// Safety: tasks write disjoint indices within the buffer.
+    unsafe fn set(self, i: usize, v: i8) {
+        *self.0.add(i) = v;
+    }
+}
+
+/// The positions a token at `p` attends to (`CpuStage::select` with the block scores computed in parallel), from
+/// `first` (the first position the block holds keys for).
+fn visible(c: &Config, pool: &Pool, iq: &[f32], pooled: &[f32], first: usize, p: usize) -> Vec<usize> {
+    let (kp, id) = (c.kpool, c.idx_dim);
+    let complete = (p + 1) / kp;
+    let mut blocks: Vec<usize> = (0..complete).collect();
+    let top = c.top_blocks();
+    if complete > top {
+        const CHUNK: usize = 64;
+        let scale = 1. / (id as f32).sqrt();
+        let mut scores = vec![0f32; complete];
+        let out = Out::new(&mut scores);
+        pool.run(complete.div_ceil(CHUNK), &|i| {
+            for b in i * CHUNK..((i + 1) * CHUNK).min(complete) {
+                let kb = &pooled[b * id..(b + 1) * id];
+                let s = iq.chunks_exact(id).map(|q| dot_f32(q, kb).max(0.)).sum::<f32>() * scale;
+                unsafe { out.set(b, s) };
+            }
+        });
+        // The best `top` blocks, ties to the earlier block.
+        let order = |a: &usize, b: &usize| scores[*b].total_cmp(&scores[*a]).then(a.cmp(b));
+        blocks.select_nth_unstable_by(top - 1, order);
+        blocks.truncate(top);
+        blocks.sort_unstable();
+    }
+    let mut out: Vec<usize> = blocks.iter().flat_map(|b| b * kp..(b + 1) * kp).filter(|&j| j >= first).collect();
+    out.extend((complete * kp).max(first)..=p);
+    out
+}
+
+/// Softmax attention of one query over the cache rows `j * stride + off` of the visible positions: the output
+/// before normalization and the sum of the weights.
+fn attend(q: &[f32], vis: &[usize], kc: &[f32], vc: &[f32], stride: usize, off: usize, scale: f32) -> (Vec<f32>, f32) {
+    let hd = q.len();
+    #[cfg(target_arch = "x86_64")]
+    if hd % 8 == 0 && std::is_x86_feature_detected!("avx") {
+        return unsafe { simd::attend(q, vis, kc, vc, stride, off, scale) };
+    }
+    let scores: Vec<f32> = vis.iter().map(|&j| dot_f32(q, &kc[j * stride + off..][..hd]) * scale).collect();
+    let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+    let w: Vec<f32> = scores.iter().map(|s| (s - max).exp()).collect();
+    let sum: f32 = w.iter().sum();
+    let mut acc = vec![0f32; hd];
+    for (&j, wj) in vis.iter().zip(&w) {
+        for (a, x) in acc.iter_mut().zip(&vc[j * stride + off..][..hd]) {
+            *a += wj * x;
+        }
+    }
+    (acc, sum)
+}
+
+/// Rotate the pairs (i, i + half) of `x` by the angles whose sine and cosine `rope` holds (`half` of them).
+fn rotate_with(x: &mut [f32], rope: &[(f32, f32)]) {
+    let half = rope.len();
+    for (i, &(sn, cs)) in rope.iter().enumerate() {
+        let (a, b) = (x[i], x[i + half]);
+        x[i] = a * cs - b * sn;
+        x[i + half] = a * sn + b * cs;
     }
 }
 
@@ -389,12 +466,35 @@ pub struct Act {
 
 impl Act {
     fn new(x: &[f32], k: usize) -> Self {
+        Self { f: x.to_vec(), ..Self::q8(x, k) }
+    }
+
+    /// The Q8_0 codes only, for quantized matrices.
+    fn q8(x: &[f32], k: usize) -> Self {
         let n = x.len() / k;
         let mut q = vec![0i8; x.len()];
         let mut d = vec![0f32; x.len() / 32];
         quantize_q8(x, &mut q, &mut d);
-        Self { n, k, f: x.to_vec(), q, d }
+        Self { n, k, f: Vec::new(), q, d }
     }
+
+    /// Token `t`.
+    fn tok(&self, t: usize) -> Tok<'_> {
+        let k = self.k;
+        Tok {
+            f: if self.f.is_empty() { &[] } else { &self.f[t * k..(t + 1) * k] },
+            q: &self.q[t * k..(t + 1) * k],
+            d: &self.d[t * k / 32..(t + 1) * k / 32],
+        }
+    }
+}
+
+/// One token's activations (`f` may be empty when only quantized matrices read them).
+#[derive(Clone, Copy)]
+struct Tok<'a> {
+    f: &'a [f32],
+    q: &'a [i8],
+    d: &'a [f32],
 }
 
 fn quantize_q8(x: &[f32], q: &mut [i8], d: &mut [f32]) {
@@ -404,13 +504,23 @@ fn quantize_q8(x: &[f32], q: &mut [i8], d: &mut [f32]) {
         let inv = if s > 0. { 1. / s } else { 0. };
         *db = s;
         for (o, v) in qb.iter_mut().zip(xb) {
-            *o = (v * inv).round() as i8;
+            *o = round_i8(v * inv);
         }
     }
 }
 
-fn dot_q8(w: &[i8], wd: &[f32], x: &Act, t: usize) -> f32 {
-    let (q, d) = (&x.q[t * x.k..(t + 1) * x.k], &x.d[t * x.k / 32..(t + 1) * x.k / 32]);
+/// `x.round() as i8` (half away from zero, saturating) without a call into libm per value (baseline x86_64 has no
+/// instruction for it): clamp to the i8 range, truncate, then step away from zero when the exact remainder is at least
+/// a half.
+#[inline]
+fn round_i8(x: f32) -> i8 {
+    let x = x.clamp(-128., 127.);
+    let t = x as i32;
+    let f = x - t as f32;
+    (t + (f >= 0.5) as i32 - (f <= -0.5) as i32) as i8
+}
+
+fn dot_q8(w: &[i8], wd: &[f32], q: &[i8], d: &[f32]) -> f32 {
     #[cfg(target_arch = "x86_64")]
     if std::is_x86_feature_detected!("ssse3") {
         return unsafe { simd::dot_q8(w, wd, q, d) };
@@ -423,8 +533,7 @@ fn dot_q8(w: &[i8], wd: &[f32], x: &Act, t: usize) -> f32 {
     sum
 }
 
-fn dot_iq4(w: &[u8], wd: &[f32], x: &Act, t: usize) -> f32 {
-    let (q, d) = (&x.q[t * x.k..(t + 1) * x.k], &x.d[t * x.k / 32..(t + 1) * x.k / 32]);
+fn dot_iq4(w: &[u8], wd: &[f32], q: &[i8], d: &[f32]) -> f32 {
     #[cfg(target_arch = "x86_64")]
     if std::is_x86_feature_detected!("ssse3") {
         return unsafe { simd::dot_iq4(w, wd, q, d) };
@@ -479,6 +588,85 @@ mod simd {
             acc = _mm_add_ps(acc, _mm_mul_ps(_mm_cvtepi32_ps(s), _mm_set1_ps(wd[b] * d[b])));
         }
         hsum(acc)
+    }
+
+    /// The sum of a vector's lanes in order, as `cpu::dot` sums its eight accumulators.
+    #[inline]
+    #[target_feature(enable = "avx")]
+    unsafe fn lanes(v: __m256) -> f32 {
+        let mut a = [0f32; 8];
+        _mm256_storeu_ps(a.as_mut_ptr(), v);
+        a.iter().sum()
+    }
+
+    /// `super::attend` with eight dimensions per instruction: each key's score accumulates as `cpu::dot` does (lane j
+    /// sums dimensions j, j + 8, ...), four keys at a time so that their sums overlap; the values accumulate in the
+    /// order of the positions, four per pass over the output. The results equal the scalar code's.
+    #[target_feature(enable = "avx")]
+    pub unsafe fn attend(
+        q: &[f32],
+        vis: &[usize],
+        kc: &[f32],
+        vc: &[f32],
+        stride: usize,
+        off: usize,
+        scale: f32,
+    ) -> (Vec<f32>, f32) {
+        let hd = q.len();
+        let rows = |c: &[f32], j: usize| -> *const f32 {
+            assert!(j * stride + off + hd <= c.len());
+            c.as_ptr().add(j * stride + off)
+        };
+        let qp = q.as_ptr();
+        let mut scores = Vec::with_capacity(vis.len());
+        let mut groups = vis.chunks_exact(4);
+        for g in &mut groups {
+            let k = [rows(kc, g[0]), rows(kc, g[1]), rows(kc, g[2]), rows(kc, g[3])];
+            let mut a = [_mm256_setzero_ps(); 4];
+            for i in (0..hd).step_by(8) {
+                let x = _mm256_loadu_ps(qp.add(i));
+                for (s, kp) in a.iter_mut().zip(&k) {
+                    *s = _mm256_add_ps(*s, _mm256_mul_ps(x, _mm256_loadu_ps(kp.add(i))));
+                }
+            }
+            for s in a {
+                scores.push(lanes(s) * scale);
+            }
+        }
+        for &j in groups.remainder() {
+            let kp = rows(kc, j);
+            let mut s = _mm256_setzero_ps();
+            for i in (0..hd).step_by(8) {
+                s = _mm256_add_ps(s, _mm256_mul_ps(_mm256_loadu_ps(qp.add(i)), _mm256_loadu_ps(kp.add(i))));
+            }
+            scores.push(lanes(s) * scale);
+        }
+        let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let w: Vec<f32> = scores.iter().map(|s| (s - max).exp()).collect();
+        let sum: f32 = w.iter().sum();
+        let mut acc = vec![0f32; hd];
+        let ap = acc.as_mut_ptr();
+        let mut groups = vis.chunks_exact(4).zip(w.chunks_exact(4));
+        for (g, wg) in &mut groups {
+            let v = [rows(vc, g[0]), rows(vc, g[1]), rows(vc, g[2]), rows(vc, g[3])];
+            let ws = [_mm256_set1_ps(wg[0]), _mm256_set1_ps(wg[1]), _mm256_set1_ps(wg[2]), _mm256_set1_ps(wg[3])];
+            for i in (0..hd).step_by(8) {
+                let mut s = _mm256_loadu_ps(ap.add(i));
+                for (vp, wv) in v.iter().zip(&ws) {
+                    s = _mm256_add_ps(s, _mm256_mul_ps(*wv, _mm256_loadu_ps(vp.add(i))));
+                }
+                _mm256_storeu_ps(ap.add(i), s);
+            }
+        }
+        let done = vis.len() / 4 * 4;
+        for (&j, &wj) in vis[done..].iter().zip(&w[done..]) {
+            let (vp, wv) = (rows(vc, j), _mm256_set1_ps(wj));
+            for i in (0..hd).step_by(8) {
+                let s = _mm256_add_ps(_mm256_loadu_ps(ap.add(i)), _mm256_mul_ps(wv, _mm256_loadu_ps(vp.add(i))));
+                _mm256_storeu_ps(ap.add(i), s);
+            }
+        }
+        (acc, sum)
     }
 
     #[target_feature(enable = "ssse3,sse3")]
@@ -581,7 +769,7 @@ pub struct Draft {
     /// Rows `head_row0..vocab` of the LM head, Q8_0 (the driver's GPUs score the rows before, `skip_head_rows`).
     head: Mat,
     head_row0: usize,
-    /// Rows `0..head_row0`, for drafts while the driver's GPUs are busy (`best_all`).
+    /// Rows `0..head_row0`, for drafts while the driver's GPUs are busy (`top_all`).
     head_lo: Option<Mat>,
     kc: Vec<f32>,
     vc: Vec<f32>,
@@ -732,7 +920,7 @@ impl Draft {
     }
 
     /// Leave the first `rows` head rows to another scorer (the driver's GPU head slices): `head_best` ranks only
-    /// the rest, `best_all` all of them.
+    /// the rest, `top_all` all of them.
     pub fn skip_head_rows(&mut self, rows: usize) {
         let rows = rows.min(self.vocab());
         if self.head_row0 > 0 || rows == 0 {
@@ -767,23 +955,28 @@ impl Draft {
         if self.head.rows() == 0 {
             return None;
         }
-        let ha = Act::new(hn, self.c.d);
+        let ha = Act::q8(hn, self.c.d);
         let logits = matvec(&self.pool, &self.head, &ha, 256);
         let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
         Some((b as u32 + self.head_row0 as u32, logits[b]))
     }
 
-    /// The best of all draft head rows (token id and logit), on the CPU.
-    pub fn best_all(&self, hn: &[f32]) -> Option<(u32, f32)> {
-        let lo = self.head_lo.as_ref().map(|m| {
-            let logits = matvec(&self.pool, m, &Act::new(hn, self.c.d), 256);
-            let b = (0..logits.len()).fold(0, |b, i| if logits[i] > logits[b] { i } else { b });
-            (b as u32, logits[b])
-        });
-        match (lo, self.head_best(hn)) {
-            (Some(l), Some(h)) => Some(if l.1 >= h.1 { l } else { h }),
-            (l, h) => l.or(h),
+    /// The top candidates (logit, token id; best first) of the CPU head rows, as a head slice returns them.
+    pub fn head_top(&self, hn: &[f32]) -> Vec<(f32, u32)> {
+        if self.head.rows() == 0 {
+            return Vec::new();
         }
+        let logits = matvec(&self.pool, &self.head, &Act::q8(hn, self.c.d), 256);
+        let row0 = self.head_row0 as u32;
+        crate::qwen::pipeline::top_k(&logits).into_iter().map(|(s, id)| (s, id + row0)).collect()
+    }
+
+    /// The top candidates of all draft head rows, on the CPU.
+    pub fn top_all(&self, hn: &[f32]) -> Vec<(f32, u32)> {
+        let lo = self.head_lo.as_ref().map_or_else(Vec::new, |m| {
+            crate::qwen::pipeline::top_k(&matvec(&self.pool, m, &Act::q8(hn, self.c.d), 256))
+        });
+        super::gpu::merge_top(lo, self.head_top(hn))
     }
 
     fn mix(&self, m: &Mix, x: &[f32], n: usize) -> (Vec<f32>, Option<Vec<f32>>) {
@@ -793,38 +986,43 @@ impl Draft {
         for (i, row) in xn.chunks_exact_mut(d).enumerate() {
             rms_norm(row, Some(&m.norm[(i % hc) * d..(i % hc + 1) * d]), c.eps);
         }
-        let xa = Act::new(&xn, w);
+        let xa = Act::q8(&xn, w);
         let mut first: Vec<&Mat> = vec![&m.down];
         if let Some(inj) = &m.inject {
             first.push(inj);
         }
-        let outs = matvecs(&self.pool, &first, &xa, 16);
+        let outs = matvecs(&self.pool, &first, &xa, 8);
         let lo: Vec<f32> = outs[0].iter().map(|v| silu(v / hc as f32)).collect();
-        let gate = matvec(&self.pool, &m.up, &Act::new(&lo, c.hc_rank), 256);
+        let la = Act::q8(&lo, c.hc_rank);
+        // The up rows of every stream for a range of the sublayer input, their read gates and the stream mean in one
+        // parallel loop.
+        const CHUNK: usize = 64;
+        let per = d.div_ceil(CHUNK);
         let mut u = vec![0f32; n * d];
-        for t in 0..n {
-            for s in 0..hc {
-                let base = t * w + s * d;
-                for i in 0..d {
-                    u[t * d + i] += xn[base + i] * sigmoid(gate[base + i]);
+        let out = Out::new(&mut u);
+        self.pool.run(n * per, &|i| {
+            let (t, i0) = (i / per, i % per * CHUNK);
+            let x = la.tok(t);
+            for j in i0..(i0 + CHUNK).min(d) {
+                let mut acc = 0f32;
+                for s in 0..hc {
+                    let r = s * d + j;
+                    acc += xn[t * w + r] * sigmoid(m.up.dot(r, x));
                 }
+                unsafe { out.set(t * d + j, acc / hc as f32) };
             }
-            for v in &mut u[t * d..(t + 1) * d] {
-                *v /= hc as f32;
-            }
-        }
+        });
         let write = outs.get(1).map(|inj| inj.iter().map(|v| 2. * sigmoid(v / hc as f32)).collect());
         (u, write)
     }
 
+    /// Sine and cosine of each rotated pair's angle at `pos`.
+    fn rope(&self, pos: usize) -> Vec<(f32, f32)> {
+        (0..self.c.rot / 2).map(|i| self.c.rope_angle(pos, i).sin_cos()).collect()
+    }
+
     fn rotate(&self, x: &mut [f32], pos: usize) {
-        let half = self.c.rot / 2;
-        for i in 0..half {
-            let (sn, cs) = self.c.rope_angle(pos, i).sin_cos();
-            let (a, b) = (x[i], x[i + half]);
-            x[i] = a * cs - b * sn;
-            x[i + half] = a * sn + b * cs;
-        }
+        rotate_with(x, &self.rope(pos));
     }
 
     fn attention(&mut self, u: &[f32], pos: usize, n: usize) -> Vec<f32> {
@@ -858,77 +1056,47 @@ impl Draft {
             self.rotate(&mut m, b * kp);
             self.pooled[b * id..(b + 1) * id].copy_from_slice(&m);
         }
+        let ropes: Vec<Vec<(f32, f32)>> = (0..n).map(|t| self.rope(pos + t)).collect();
         for t in (0..n).filter(|_| sparse) {
             for h in 0..ih {
                 let r = &mut iq[(t * ih + h) * id..(t * ih + h + 1) * id];
                 rms_norm(r, Some(&self.iq_norm), c.eps);
-                let half = c.rot / 2;
-                for i in 0..half {
-                    let (sn, cs) = c.rope_angle(pos + t, i).sin_cos();
-                    let (a, b) = (r[i], r[i + half]);
-                    r[i] = a * cs - b * sn;
-                    r[i + half] = a * sn + b * cs;
-                }
+                rotate_with(r, &ropes[t]);
             }
         }
-        let mut q = vec![0f32; n * nh * hd];
-        let mut gate = vec![0f32; n * nh * hd];
         for t in 0..n {
-            for h in 0..nh {
-                let src = &qg[(t * nh + h) * 2 * hd..];
-                let dst = (t * nh + h) * hd;
-                q[dst..dst + hd].copy_from_slice(&src[..hd]);
-                gate[dst..dst + hd].copy_from_slice(&src[hd..2 * hd]);
-                rms_norm(&mut q[dst..dst + hd], Some(&self.q_norm), c.eps);
-                let p = pos + t;
-                self.rotate(&mut q[dst..dst + hd], p);
-            }
             for h in 0..nkv {
                 let at = (t * nkv + h) * hd;
                 let mut kk = k[at..at + hd].to_vec();
                 rms_norm(&mut kk, Some(&self.k_norm), c.eps);
-                self.rotate(&mut kk, pos + t);
+                rotate_with(&mut kk, &ropes[t]);
                 let slot = ((pos + t) * nkv + h) * hd;
                 self.kc[slot..slot + hd].copy_from_slice(&kk);
                 self.vc[slot..slot + hd].copy_from_slice(&v[at..at + hd]);
             }
         }
-        let first = self.first;
         let visible: Vec<Vec<usize>> = (0..n)
-            .map(|t| {
-                let mut v = CpuStage::select(&c, &iq[t * ih * id..(t + 1) * ih * id], &self.pooled, pos + t);
-                v.retain(|&j| j >= first);
-                v
-            })
+            .map(|t| visible(&c, &self.pool, &iq[t * ih * id..(t + 1) * ih * id], &self.pooled, self.first, pos + t))
             .collect();
         let scale = 1. / (hd as f32).sqrt();
         let mut o = vec![0f32; n * nh * hd];
         let out = Out::new(&mut o);
-        let (kc, vc, q) = (&self.kc, &self.vc, &q);
+        let (kc, vc, q_norm, eps) = (&self.kc, &self.vc, &self.q_norm, c.eps);
+        // Per head: the query's norm and rotation, attention, and the output gate.
         self.pool.run(n * nh, &|i| {
             let (t, h) = (i / nh, i % nh);
             let kh = h / (nh / nkv);
-            let qv = &q[(t * nh + h) * hd..][..hd];
-            let vis = &visible[t];
-            let scores: Vec<f32> = vis.iter().map(|&j| dot_f32(qv, &kc[(j * nkv + kh) * hd..][..hd]) * scale).collect();
-            let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
-            let w: Vec<f32> = scores.iter().map(|s| (s - max).exp()).collect();
-            let sum: f32 = w.iter().sum();
-            let mut acc = vec![0f32; hd];
-            for (&j, wj) in vis.iter().zip(&w) {
-                for (a, x) in acc.iter_mut().zip(&vc[(j * nkv + kh) * hd..][..hd]) {
-                    *a += wj * x;
-                }
-            }
-            for (e, a) in acc.iter().enumerate() {
-                unsafe { out.set((t * nh + h) * hd + e, a / sum) };
+            let src = &qg[(t * nh + h) * 2 * hd..][..2 * hd];
+            let mut qv = src[..hd].to_vec();
+            rms_norm(&mut qv, Some(q_norm), eps);
+            rotate_with(&mut qv, &ropes[t]);
+            let (acc, sum) = attend(&qv, &visible[t], kc, vc, nkv * hd, kh * hd, scale);
+            for (e, (a, g)) in acc.iter().zip(&src[hd..]).enumerate() {
+                unsafe { out.set((t * nh + h) * hd + e, a / sum * sigmoid(*g)) };
             }
         });
         self.prof[7] += t0.elapsed().as_secs_f64() * 1e3;
-        for (x, g) in o.iter_mut().zip(&gate) {
-            *x *= sigmoid(*g);
-        }
-        matvec(&self.pool, &self.o, &Act::new(&o, nh * hd), 32)
+        matvec(&self.pool, &self.o, &Act::q8(&o, nh * hd), 32)
     }
 
     fn moe(&self, u: &[f32], n: usize) -> Vec<f32> {
@@ -936,7 +1104,7 @@ impl Draft {
         let (d, ne, k, ff) = (c.d, c.experts, c.used, c.ff_exp);
         let e = &self.moe;
         let ua = Act::new(u, d);
-        let logits = matvec(&self.pool, &e.router, &ua, 32);
+        let logits = matvec(&self.pool, &e.router, &ua, 16);
         // (expert, weight) per token in rank order; the shared expert last with its sigmoid gate.
         let mut chosen = Vec::with_capacity(n * (k + 1));
         for t in 0..n {
@@ -944,38 +1112,43 @@ impl Draft {
             let max = row.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
             let p: Vec<f32> = row.iter().map(|v| (v - max).exp()).collect();
             let sum: f32 = p.iter().sum();
+            let order = |a: &usize, b: &usize| p[*b].total_cmp(&p[*a]).then(a.cmp(b));
             let mut idx: Vec<usize> = (0..ne).collect();
-            idx.sort_by(|a, b| p[*b].total_cmp(&p[*a]).then(a.cmp(b)));
-            let top = idx[..k].iter().map(|&i| p[i] / sum).sum::<f32>().max(6.103515625e-5);
-            chosen.extend(idx[..k].iter().map(|&i| (i, p[i] / sum / top)));
+            idx.select_nth_unstable_by(k - 1, order);
+            idx.truncate(k);
+            idx.sort_by(order);
+            let top = idx.iter().map(|&i| p[i] / sum).sum::<f32>().max(6.103515625e-5);
+            chosen.extend(idx.iter().map(|&i| (i, p[i] / sum / top)));
             chosen.push((ne, sigmoid(dot_f32(&e.shared_gate, &u[t * d..(t + 1) * d]))));
         }
         let slots = k + 1;
-        // Gate and up rows of every (token, slot), then the down rows.
-        let parts = 4;
-        let per = ff / parts;
-        let mut gu = vec![0f32; n * slots * 2 * ff];
-        let out = Out::new(&mut gu);
+        // Gate and up rows of every (token, slot) in parts of two Q8_0 blocks, each part's SwiGLU activations
+        // quantized for the down rows in the same task; then the down rows.
+        const PART: usize = 64;
+        let parts = ff / PART;
+        let mut aq = vec![0i8; n * slots * ff];
+        let mut ad = vec![0f32; n * slots * ff / 32];
+        let (qo, dout) = (OutI8(aq.as_mut_ptr()), Out::new(&mut ad));
         self.pool.run(n * slots * parts, &|i| {
             let (ts, part) = (i / parts, i % parts);
             let (t, (ex, _)) = (ts / slots, chosen[ts]);
-            let x = Act {
-                n: 1,
-                k: d,
-                f: Vec::new(),
-                q: ua.q[t * d..(t + 1) * d].to_vec(),
-                d: ua.d[t * d / 32..(t + 1) * d / 32].to_vec(),
-            };
+            let x = ua.tok(t);
             let (g, up, r0) = if ex == ne { (&e.sgate, &e.sup, 0) } else { (&e.gate, &e.up, ex * ff) };
-            let base = ts * 2 * ff;
-            g.rows_into(&x, r0 + part * per, r0 + (part + 1) * per, out, 0, base + part * per);
-            up.rows_into(&x, r0 + part * per, r0 + (part + 1) * per, out, 0, base + ff + part * per);
+            let mut a = [0f32; PART];
+            for (j, v) in a.iter_mut().enumerate() {
+                let r = r0 + part * PART + j;
+                *v = silu(g.dot(r, x)) * up.dot(r, x);
+            }
+            let (mut q, mut s) = ([0i8; PART], [0f32; PART / 32]);
+            quantize_q8(&a, &mut q, &mut s);
+            let at = ts * ff + part * PART;
+            for (j, v) in q.iter().enumerate() {
+                unsafe { qo.set(at + j, *v) };
+            }
+            for (j, v) in s.iter().enumerate() {
+                unsafe { dout.set(at / 32 + j, *v) };
+            }
         });
-        let act: Vec<f32> = gu
-            .chunks_exact(2 * ff)
-            .flat_map(|r| (0..ff).map(move |j| silu(r[j]) * r[ff + j]))
-            .collect();
-        let aa = Act::new(&act, ff);
         let mut down = vec![0f32; n * slots * d];
         let out = Out::new(&mut down);
         let dparts = 8;
@@ -983,15 +1156,11 @@ impl Draft {
         self.pool.run(n * slots * dparts, &|i| {
             let (ts, part) = (i / dparts, i % dparts);
             let ex = chosen[ts].0;
-            let x = Act {
-                n: 1,
-                k: ff,
-                f: Vec::new(),
-                q: aa.q[ts * ff..(ts + 1) * ff].to_vec(),
-                d: aa.d[ts * ff / 32..(ts + 1) * ff / 32].to_vec(),
-            };
+            let x = Tok { f: &[], q: &aq[ts * ff..(ts + 1) * ff], d: &ad[ts * ff / 32..(ts + 1) * ff / 32] };
             let (w, r0) = if ex == ne { (&e.sdown, 0) } else { (&e.down, ex * d) };
-            w.rows_into(&x, r0 + part * dper, r0 + (part + 1) * dper, out, 0, ts * d + part * dper);
+            for r in r0 + part * dper..r0 + (part + 1) * dper {
+                unsafe { out.set(ts * d + r - r0, w.dot(r, x)) };
+            }
         });
         let mut y = vec![0f32; n * d];
         for t in 0..n {
@@ -1032,7 +1201,7 @@ impl Draft {
             prof[i] += t.elapsed().as_secs_f64() * 1e3;
             t = std::time::Instant::now();
         };
-        let (ea, ha) = (Act::new(&en, d), Act::new(&hn, d));
+        let (ea, ha) = (Act::q8(&en, d), Act::q8(&hn, d));
         let outs = matvecs_of(&self.pool, &[(&self.eh_e, &ea), (&self.eh_h, &ha)], 32);
         let mut x = outs[1].clone();
         for (r, row) in x.chunks_exact_mut(d).enumerate() {
@@ -1065,6 +1234,84 @@ impl Draft {
     pub fn logits(&self, x: &[f32]) -> Vec<f32> {
         let w = self.c.width();
         let (hn, _) = self.mix(&self.head_mix, &x[x.len() - w..], 1);
-        matvec(&self.pool, &self.head, &Act::new(&hn, self.c.d), 256)
+        matvec(&self.pool, &self.head, &Act::q8(&hn, self.c.d), 256)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn visible_positions_match_the_reference_selection() {
+        // The model's indexer shape (4 heads of 128, blocks of 4, 512 blocks kept), random pooled keys and queries,
+        // with ties between blocks (repeated keys).
+        let c = Config {
+            d: 8, layers: 1, heads: 1, kv_heads: 1, head_dim: 8, rot: 4, rope_base: 1e4, eps: 1e-6, interval: 4,
+            conv: 4, k_heads: 1, v_heads: 1, state: 8, vocab: 16, hc: 4, hc_rank: 2, experts: 4, used: 2, ff_exp: 4,
+            ff_shexp: 4, idx_heads: 4, idx_dim: 128, idx_budget: 2048, kpool: 4, ngram: None,
+        };
+        let pool = Pool::new(4);
+        let mut s = 3u64;
+        let mut rnd = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (s >> 40) as f32 / (1u64 << 24) as f32 - 0.5
+        };
+        let blocks = 2000;
+        let mut pooled: Vec<f32> = (0..blocks * 128).map(|_| rnd()).collect();
+        for b in (0..blocks).step_by(7) {
+            let src: Vec<f32> = pooled[..128].to_vec();
+            pooled[b * 128..(b + 1) * 128].copy_from_slice(&src);
+        }
+        for p in [100, 2050, 2051, 2052, 3000, 5000, 7999] {
+            let iq: Vec<f32> = (0..4 * 128).map(|_| rnd()).collect();
+            for first in [0, 37, 2900] {
+                let mut want = CpuStage::select(&c, &iq, &pooled, p);
+                want.retain(|&j| j >= first);
+                assert_eq!(visible(&c, &pool, &iq, &pooled, first, p), want, "p {p} first {first}");
+            }
+        }
+    }
+
+    #[test]
+    fn rounding_matches_f32_round() {
+        let mut v = vec![0., -0., 0.5, -0.5, 1.5, -1.5, 2.5, -2.5, 126.5, -126.5, 127.49999, 127.5, -127.5, 128., -129.,
+            f32::NAN, f32::INFINITY, f32::NEG_INFINITY, 1e10, -1e10];
+        v.extend([0.5f32, 1.5, 2.5].iter().flat_map(|x| [x.next_down(), x.next_up(), -x.next_down(), -x.next_up()]));
+        let mut s = 1u64;
+        for _ in 0..1_000_000 {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            v.push(((s >> 40) as f32 / (1u64 << 24) as f32 - 0.5) * 300.);
+        }
+        for x in v {
+            assert_eq!(round_i8(x), x.round() as i8, "{x}");
+        }
+    }
+
+    #[test]
+    fn attention_matches_the_scalar_loop() {
+        // 37 positions (groups of four and a remainder) of a cache with two heads of 16.
+        let (hd, nkv, n) = (16, 2, 40);
+        let mut s = 7u64;
+        let mut rnd = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (s >> 40) as f32 / (1u64 << 24) as f32 - 0.5
+        };
+        let kc: Vec<f32> = (0..n * nkv * hd).map(|_| rnd()).collect();
+        let vc: Vec<f32> = (0..n * nkv * hd).map(|_| rnd()).collect();
+        let q: Vec<f32> = (0..hd).map(|_| rnd()).collect();
+        let vis: Vec<usize> = (3..40).collect();
+        let (acc, sum) = attend(&q, &vis, &kc, &vc, nkv * hd, hd, 0.25);
+        let scores: Vec<f32> = vis.iter().map(|&j| dot_f32(&q, &kc[j * nkv * hd + hd..][..hd]) * 0.25).collect();
+        let max = scores.iter().cloned().fold(f32::NEG_INFINITY, f32::max);
+        let w: Vec<f32> = scores.iter().map(|x| (x - max).exp()).collect();
+        let mut want = vec![0f32; hd];
+        for (&j, wj) in vis.iter().zip(&w) {
+            for (a, x) in want.iter_mut().zip(&vc[j * nkv * hd + hd..][..hd]) {
+                *a += wj * x;
+            }
+        }
+        assert_eq!(sum.to_bits(), w.iter().sum::<f32>().to_bits());
+        assert!(acc.iter().zip(&want).all(|(a, b)| a.to_bits() == b.to_bits()));
     }
 }
