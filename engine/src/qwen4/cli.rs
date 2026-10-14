@@ -112,18 +112,19 @@ pub enum Cmd {
         #[arg(long, default_value_t = 200)]
         iterations: u32,
     },
-    /// Check the bounded gate for work submitted ahead (qwen4_gate, qwen4_gate_clock) on GPU `gpu`: host writes seen
-    /// by a polling lane, release latency, the cost of an open gate, and the bounds (every wait ends by itself).
+    /// Check the bounded gate for work submitted ahead on GPU `gpu`: host writes seen by a polling wave, release
+    /// latency, the cost of an open gate, and the bounds (every wait ends by itself). See bench.rs `GateCheck`.
     GateCheck {
         #[arg(long, default_value_t = 0)]
         gpu: usize,
-        /// release (the host opens the gate every run) or never.
+        /// release (the host opens the gate every run), never, or open (the gate already open).
         #[arg(long)]
         step: String,
         /// The gate word's memory: cached (host-cached, coherent) or uncached (host-visible, coherent, not cached).
         #[arg(long, default_value = "cached")]
         memory: String,
-        /// qwen4_gate_clock (volatile loads) or qwen4_gate_nt (nontemporal loads).
+        /// qwen4_gate_clock (volatile loads), qwen4_gate_nt (nontemporal loads), qwen4_gate_atomic (device-scope atomic
+        /// loads), qwen4_gate_sweep / qwen4_gate_sweep_nt (an L2 sweep between polls), none (open step only).
         #[arg(long, default_value = "qwen4_gate_clock")]
         shader: String,
         /// Longest a gate may wait (1-100 ms).
@@ -131,6 +132,25 @@ pub enum Cmd {
         bound_ms: f64,
         #[arg(long, default_value_t = 200)]
         reps: usize,
+        /// After writing the gate word: mfence, sfence, or clflush (of the gate's line) and mfence.
+        #[arg(long, default_value = "mfence")]
+        fence: String,
+        /// The sweep shaders read this many KiB of device-local memory between polls...
+        #[arg(long, default_value_t = 1024)]
+        sweep_kib: usize,
+        /// ...one dword every `stride` bytes.
+        #[arg(long, default_value_t = 64)]
+        stride: usize,
+        /// The release step stops after this many runs whose gate ran to its bound.
+        #[arg(long, default_value_t = 3)]
+        max_fail: usize,
+    },
+    /// Print the gate shaders' machine code and statistics as RADV compiles them on GPU `gpu` (or RADV's null device
+    /// with RADV_FORCE_FAMILY, which needs no GPU).
+    GateIsa {
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        shaders: Vec<String>,
     },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
@@ -326,9 +346,25 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
-        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps } => {
+        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps, fence, sweep_kib, stride, max_fail } => {
             anyhow::ensure!(memory == "cached" || memory == "uncached", "memory cached or uncached");
-            super::bench::gate_check(gpu, &step, memory == "cached", &shader, bound_ms, reps)
+            super::bench::gate_check(&super::bench::GateCheck {
+                gpu,
+                step,
+                cached: memory == "cached",
+                shader,
+                bound_ms,
+                reps,
+                fence: fence.parse()?,
+                sweep_kib,
+                stride,
+                max_fail,
+            })
+        }
+        Cmd::GateIsa { gpu, shaders } => {
+            let all = ["qwen4_gate_clock", "qwen4_gate_nt", "qwen4_gate_atomic", "qwen4_gate_sweep", "qwen4_gate_sweep_nt"];
+            let names = if shaders.is_empty() { all.iter().map(|s| s.to_string()).collect() } else { shaders };
+            super::bench::gate_isa(gpu, &names)
         }
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:

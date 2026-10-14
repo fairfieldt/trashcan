@@ -1,0 +1,6 @@
+#version 460
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : require
+#extension GL_ARB_shader_clock : require
+// Gate polls with volatile (coherent) loads; the L2 sweep between polls is in qwen4_gate_sweep.glsl.
+#define GATE_ACCESS
+#include "qwen4_gate_sweep.glsl"

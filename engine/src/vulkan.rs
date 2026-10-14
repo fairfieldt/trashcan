@@ -91,6 +91,19 @@ impl Push {
     }
 }
 
+/// SPIR-V of the bounded gate shaders, for their machine code (`qwen4 gate-isa`).
+pub fn gate_spirv(name: &str) -> Option<&'static [u8]> {
+    Some(match name {
+        "qwen4_gate" => include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate.spv")).as_slice(),
+        "qwen4_gate_clock" => include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_clock.spv")).as_slice(),
+        "qwen4_gate_nt" => include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_nt.spv")).as_slice(),
+        "qwen4_gate_atomic" => include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_atomic.spv")).as_slice(),
+        "qwen4_gate_sweep" => include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_sweep.spv")).as_slice(),
+        "qwen4_gate_sweep_nt" => include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_sweep_nt.spv")).as_slice(),
+        _ => return None,
+    })
+}
+
 /// Choose the measured single-column Q4 layout from the sharded dimensions.
 pub fn q4_decode_shader(rows: usize, cols: usize) -> &'static str {
     if rows <= 4096 && cols <= 4096 {
@@ -239,7 +252,8 @@ impl Device {
         let mut f12 = vk::PhysicalDeviceVulkan12Features::default()
             .buffer_device_address(false)
             .timeline_semaphore(true)
-            .vulkan_memory_model(true);
+            .vulkan_memory_model(true)
+            .vulkan_memory_model_device_scope(true);
         let features = vk::PhysicalDeviceFeatures::default()
             .shader_int16(true)
             .shader_int64(true);
@@ -547,6 +561,9 @@ impl Device {
             ("qwen4_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate.spv")).as_slice()),
             ("qwen4_gate_clock", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_clock.spv")).as_slice()),
             ("qwen4_gate_nt", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_nt.spv")).as_slice()),
+            ("qwen4_gate_atomic", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_atomic.spv")).as_slice()),
+            ("qwen4_gate_sweep", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_sweep.spv")).as_slice()),
+            ("qwen4_gate_sweep_nt", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_sweep_nt.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -556,7 +573,7 @@ impl Device {
                 !bytes.is_empty(),
                 "shaders missing: build with glslc on incite"
             );
-            if (name == "qwen4_gate_clock" || name == "qwen4_gate_nt") && !shader_clock {
+            if name.starts_with("qwen4_gate_") && !shader_clock {
                 continue;
             }
             let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))?;

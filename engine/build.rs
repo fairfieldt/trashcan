@@ -105,6 +105,9 @@ fn main() {
         "qwen4_gate",
         "qwen4_gate_clock",
         "qwen4_gate_nt",
+        "qwen4_gate_atomic",
+        "qwen4_gate_sweep",
+        "qwen4_gate_sweep_nt",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",
