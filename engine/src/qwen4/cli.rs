@@ -117,7 +117,8 @@ pub enum Cmd {
     GateCheck {
         #[arg(long, default_value_t = 0)]
         gpu: usize,
-        /// release (the host opens the gate every run), never, or open (the gate already open).
+        /// release (the host opens the gate every run), never, open (the gate already open), or busy (`reps`
+        /// never-released gates back to back).
         #[arg(long)]
         step: String,
         /// The gate word's memory: cached (host-cached, coherent) or uncached (host-visible, coherent, not cached).

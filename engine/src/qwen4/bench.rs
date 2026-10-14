@@ -199,7 +199,8 @@ pub struct GateCheck {
     pub gpu: usize,
     /// `release`: `reps` runs, each opened by the host 200 µs after the command processor reached the gate (stops
     /// after `max_fail` runs whose gate did not see the write); `never`: one run never opened, which must end by its
-    /// bound; `open`: `reps` runs with the gate already open (the cost of a gate per graph).
+    /// bound; `open`: `reps` runs with the gate already open (the cost of a gate per graph); `busy`: `reps` runs never
+    /// opened, back to back (the GPU's power while gates wait).
     pub step: String,
     /// The gate word's memory: host-cached and coherent (the engine's host buffers), or host-visible, coherent and
     /// not cached (RADV: write-combined GTT).
@@ -503,7 +504,24 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
                 Ok(json!({"runs": c.reps, "not_open": not_open, "gate_gpu_us": spread(&gate_us),
                     "graph_gpu_us": spread(&graph_us), "started_to_done_host_us": spread(&host_us), "polls": spread(&npolls)}))
             }
-            _ => bail!("step release, never or open"),
+            "busy" => {
+                // Never-released gates back to back (each ends by its bound), for the GPU's power while it waits.
+                let utc = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_or(0.0, |d| d.as_secs_f64());
+                let (start, t) = (utc(), Instant::now());
+                let (mut ended, mut opened, mut polls) = (0, 0, Vec::new());
+                for _ in 0..c.reps {
+                    let r = run(cmd, false, false)?;
+                    if r.how == 2 || r.how == 3 {
+                        ended += 1;
+                    } else {
+                        opened += 1;
+                    }
+                    polls.push(us(r.ticks) / r.polls.max(1) as f64);
+                }
+                Ok(json!({"runs": c.reps, "ended_by_bound": ended, "not_ended_by_bound": opened,
+                    "seconds": t.elapsed().as_secs_f64(), "utc_start": start, "utc_end": utc(), "us_per_poll": spread(&polls)}))
+            }
+            _ => bail!("step release, never, open or busy"),
         }
     })();
     // Whatever happened, nothing may wait on the gate.

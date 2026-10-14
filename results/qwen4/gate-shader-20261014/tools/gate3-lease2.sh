@@ -36,4 +36,26 @@ GPU=0 step l2-never-sweep-1m-50 $n --bound-ms 50 --shader qwen4_gate_sweep --swe
 o="--step open --bound-ms 50 --reps 200"
 GPU=1 step l2-open-none-gpu1 $o --shader none
 GPU=1 step l2-open-sweep-gpu1 $o --shader qwen4_gate_sweep $SWEEP
+# GPU 0's power while gates wait (SMC PG0R, sampled every second by system-crash-capture on alight), with GPU 0 held
+# at the high level as the engine holds it: idle, then 150 never-released gates of 100 ms back to back (15 s) for a
+# plain poll (L2 hits), the chosen sweep and a 1 MiB contiguous sweep, then idle again.
+hold() {
+    [ -n "${DRY:-}" ] && { echo "DRY card0 level $1"; return; }
+    echo "$1" | sudo -n tee /sys/class/drm/card0/device/power_dpm_force_performance_level > /dev/null
+}
+idle() {
+    echo "$1: idle from $(date -u +%s.%N)"
+    [ -z "${DRY:-}" ] && sleep "$2"
+    echo "$1: idle to $(date -u +%s.%N)"
+}
+trap 'hold auto' EXIT
+hold high
+idle l2-power-idle-1 15
+b="--step busy --bound-ms 100 --reps 150"
+GPU=0 step l2-power-nosweep $b --shader qwen4_gate_sweep --sweep-kib 0
+GPU=0 step l2-power-sweep $b --shader qwen4_gate_sweep $SWEEP
+GPU=0 step l2-power-sweep-1m $b --shader qwen4_gate_sweep --sweep-kib 1024 --stride 64
+idle l2-power-idle-2 10
+hold auto
+echo "card0 level $(cat /sys/class/drm/card0/device/power_dpm_force_performance_level)"
 echo "lease 2 done; kernel log matches $(hits | wc -l) (baseline $base)"
