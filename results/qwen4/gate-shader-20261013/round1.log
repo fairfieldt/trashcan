@@ -1,0 +1,55 @@
+ticket alight #96
+#96 [queued] host gate-check (owner: Flash-Next decode host agent) · position 1 · est 3 min, starts in ~1 min
+The GPU is yours. Run GPU commands as `ssh alight 'gpuq run 96 -- CMD'`, and release with gpu_release / `gpuq release 96 -r RESULT` as soon as you are done.
+#96 [running] host gate-check (owner: Flash-Next decode host agent) · running 0 s, 3 min left of the estimate
+    ! 3 min left on your estimate. Extend now if you need longer.
+gpu 0 rc 0
+gpu 1 rc 0
+gpu 0 high rc 0
+amdgpu timeouts/resets in dmesg: 0
+{"gpu":0,"high":true,"shader_clock":true,"timestamp_ns":37.03703689575195}
+{"atomic":false,"gpu_ms":0.04918518499755859,"phase":"polls","polls":100,"us_per_poll":0.4918518499755859}
+{"atomic":false,"gpu_ms":0.4096296280670166,"phase":"polls","polls":1000,"us_per_poll":0.4096296280670166}
+{"atomic":false,"gpu_ms":4.236148131988526,"phase":"polls","polls":10000,"us_per_poll":0.4236148131988525}
+{"atomic":false,"gpu_ms":40.4106665125122,"phase":"polls","polls":100000,"us_per_poll":0.404106665125122}
+{"atomic":true,"gpu_ms":0.05377777757263184,"phase":"polls","polls":100,"us_per_poll":0.5377777757263184}
+{"atomic":true,"gpu_ms":0.509333331390381,"phase":"polls","polls":1000,"us_per_poll":0.509333331390381}
+{"atomic":true,"gpu_ms":5.139407387802124,"phase":"polls","polls":10000,"us_per_poll":0.5139407387802125}
+{"atomic":true,"gpu_ms":51.3438516559906,"phase":"polls","polls":100000,"us_per_poll":0.513438516559906}
+{"atomic":false,"gpu_ms":224.7071102539215,"how":2,"phase":"release","polls":508283,"rep":0,"seen":false}
+{"atomic":true,"gpu_ms":232.03555467041014,"how":2,"phase":"release","polls":464876,"rep":0,"seen":false}
+{"gate":"none","gpu_us_median":2.074074066162109,"gpu_us_p99":2.074074066162109,"phase":"open","reps":200,"started_to_done_us_median":3.257,"started_to_done_us_p99":3.324}
+{"gate":"qwen4_gate","gpu_us_median":4.444444427490234,"gpu_us_p99":4.592592575073242,"phase":"open","reps":200,"started_to_done_us_median":5.676,"started_to_done_us_p99":5.823}
+{"gpu_ms":1.2506666618957518,"how":3,"phase":"clock","polls":2014,"ticks":1049128,"ticks_bound":1048576}
+{"gpu_ms":249.14948053105164,"how":3,"phase":"clock","polls":394076,"ticks":209650276,"ticks_bound":209649664,"ticks_per_s":838855013.8609588}
+{"gpu":0,"high":false,"shader_clock":true,"timestamp_ns":37.03703689575195}
+{"atomic":false,"gpu_ms":0.0474074072265625,"phase":"polls","polls":100,"us_per_poll":0.474074072265625}
+{"atomic":false,"gpu_ms":0.43792592425537114,"phase":"polls","polls":1000,"us_per_poll":0.4379259242553711}
+{"atomic":false,"gpu_ms":4.283703687362671,"phase":"polls","polls":10000,"us_per_poll":0.4283703687362671}
+{"atomic":false,"gpu_ms":43.73807390722656,"phase":"polls","polls":100000,"us_per_poll":0.4373807390722656}
+{"atomic":true,"gpu_ms":0.05629629608154297,"phase":"polls","polls":100,"us_per_poll":0.5629629608154296}
+{"atomic":true,"gpu_ms":0.4856296277770996,"phase":"polls","polls":1000,"us_per_poll":0.4856296277770996}
+{"atomic":true,"gpu_ms":4.758962944808959,"phase":"polls","polls":10000,"us_per_poll":0.47589629448089593}
+{"atomic":true,"gpu_ms":48.49155537057495,"phase":"polls","polls":100000,"us_per_poll":0.4849155537057495}
+{"atomic":false,"gpu_ms":215.58592510353088,"how":2,"phase":"release","polls":527343,"rep":0,"seen":false}
+{"atomic":true,"gpu_ms":221.65466582112123,"how":2,"phase":"release","polls":444078,"rep":0,"seen":false}
+{"gate":"none","gpu_us_median":2.074074066162109,"gpu_us_p99":2.074074066162109,"phase":"open","reps":200,"started_to_done_us_median":3.336,"started_to_done_us_p99":3.481}
+{"gate":"qwen4_gate","gpu_us_median":4.444444427490234,"gpu_us_p99":4.592592575073242,"phase":"open","reps":200,"started_to_done_us_median":5.759,"started_to_done_us_p99":5.91}
+{"gpu_ms":1.250370365600586,"how":3,"phase":"clock","polls":1953,"ticks":1048708,"ticks_bound":1048576}
+{"gpu_ms":249.1496286791992,"how":3,"phase":"clock","polls":382570,"ticks":209650248,"ticks_bound":209649664,"ticks_per_s":838717894.1947155}
+{"gpu":1,"high":false,"shader_clock":true,"timestamp_ns":37.03703689575195}
+{"atomic":false,"gpu_ms":0.047703703521728515,"phase":"polls","polls":100,"us_per_poll":0.47703703521728513}
+{"atomic":false,"gpu_ms":0.4475555538482666,"phase":"polls","polls":1000,"us_per_poll":0.44755555384826656}
+{"atomic":false,"gpu_ms":4.045925910491944,"phase":"polls","polls":10000,"us_per_poll":0.40459259104919437}
+{"atomic":false,"gpu_ms":41.83674058114624,"phase":"polls","polls":100000,"us_per_poll":0.4183674058114624}
+{"atomic":true,"gpu_ms":0.056740740524292,"phase":"polls","polls":100,"us_per_poll":0.56740740524292}
+{"atomic":true,"gpu_ms":0.4949629610748291,"phase":"polls","polls":1000,"us_per_poll":0.4949629610748291}
+{"atomic":true,"gpu_ms":5.091703684280396,"phase":"polls","polls":10000,"us_per_poll":0.5091703684280395}
+{"atomic":true,"gpu_ms":50.39303684480286,"phase":"polls","polls":100000,"us_per_poll":0.5039303684480285}
+{"atomic":false,"gpu_ms":216.73822139543154,"how":2,"phase":"release","polls":524068,"rep":0,"seen":false}
+{"atomic":true,"gpu_ms":230.39066578779602,"how":2,"phase":"release","polls":440600,"rep":0,"seen":false}
+{"gate":"none","gpu_us_median":2.074074066162109,"gpu_us_p99":2.074074066162109,"phase":"open","reps":200,"started_to_done_us_median":3.35,"started_to_done_us_p99":3.4130000000000003}
+{"gate":"qwen4_gate","gpu_us_median":4.444444427490234,"gpu_us_p99":4.592592575073242,"phase":"open","reps":200,"started_to_done_us_median":5.766,"started_to_done_us_p99":5.896999999999999}
+{"gpu_ms":1.250518513748169,"how":3,"phase":"clock","polls":1983,"ticks":1048828,"ticks_bound":1048576}
+{"gpu_ms":249.14918423475646,"how":3,"phase":"clock","polls":400092,"ticks":209650016,"ticks_bound":209649664,"ticks_per_s":838714492.0040859}
+tail: option used in invalid context -- 2

@@ -1,0 +1,15 @@
+{"gpu":0,"high":false,"shader_clock":true,"timestamp_ns":37.03703689575195}
+{"atomic":false,"gpu_ms":0.0474074072265625,"phase":"polls","polls":100,"us_per_poll":0.474074072265625}
+{"atomic":false,"gpu_ms":0.43792592425537114,"phase":"polls","polls":1000,"us_per_poll":0.4379259242553711}
+{"atomic":false,"gpu_ms":4.283703687362671,"phase":"polls","polls":10000,"us_per_poll":0.4283703687362671}
+{"atomic":false,"gpu_ms":43.73807390722656,"phase":"polls","polls":100000,"us_per_poll":0.4373807390722656}
+{"atomic":true,"gpu_ms":0.05629629608154297,"phase":"polls","polls":100,"us_per_poll":0.5629629608154296}
+{"atomic":true,"gpu_ms":0.4856296277770996,"phase":"polls","polls":1000,"us_per_poll":0.4856296277770996}
+{"atomic":true,"gpu_ms":4.758962944808959,"phase":"polls","polls":10000,"us_per_poll":0.47589629448089593}
+{"atomic":true,"gpu_ms":48.49155537057495,"phase":"polls","polls":100000,"us_per_poll":0.4849155537057495}
+{"atomic":false,"gpu_ms":215.58592510353088,"how":2,"phase":"release","polls":527343,"rep":0,"seen":false}
+{"atomic":true,"gpu_ms":221.65466582112123,"how":2,"phase":"release","polls":444078,"rep":0,"seen":false}
+{"gate":"none","gpu_us_median":2.074074066162109,"gpu_us_p99":2.074074066162109,"phase":"open","reps":200,"started_to_done_us_median":3.336,"started_to_done_us_p99":3.481}
+{"gate":"qwen4_gate","gpu_us_median":4.444444427490234,"gpu_us_p99":4.592592575073242,"phase":"open","reps":200,"started_to_done_us_median":5.759,"started_to_done_us_p99":5.91}
+{"gpu_ms":1.250370365600586,"how":3,"phase":"clock","polls":1953,"ticks":1048708,"ticks_bound":1048576}
+{"gpu_ms":249.1496286791992,"how":3,"phase":"clock","polls":382570,"ticks":209650248,"ticks_bound":209649664,"ticks_per_s":838717894.1947155}
