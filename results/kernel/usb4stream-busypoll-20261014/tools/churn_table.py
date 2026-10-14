@@ -3,8 +3,26 @@
 time to stream (link start to stream up), failed epochs; then every session that did not pass.
 
 usage: churn_table.py CHURN.jsonl [SERVE.log]
+       churn_table.py --line CHURN.jsonl     one line: passed, time to stream, failed and one-way epochs
 """
 import json, sys
+
+
+def line(path):
+    rows, summary = [], None
+    for l in open(path):
+        if l.startswith('{'):
+            v = json.loads(l)
+            if 'session' in v:
+                rows.append(v)
+            elif 'churn' in v:
+                summary = v
+    ups = sorted(x['up_ms'] for x in rows if x['up_ms'] is not None)
+    oneway = sum(any('reads none of our frames' in s for s in x.get('stream_lines', [])) for x in rows)
+    f = lambda x: '-' if x is None else f'{x:.0f}'
+    return (f"{'pass' if summary and summary.get('pass') else 'FAIL'}: {sum(x['pass'] for x in rows)}/{len(rows)} passed"
+            f"{'' if summary else ' (no summary)'}, up p50/p99/max {f(pct(ups, .5))}/{f(pct(ups, .99))}/"
+            f"{f(ups[-1] if ups else None)} ms, {sum(x['failed_epochs'] for x in rows)} failed epochs, {oneway} one-way")
 
 KIND = {'n': 'normal exit', 'k': 'client killed', 's': 'server exits'}
 
@@ -14,9 +32,12 @@ def pct(v, p):
 
 
 def main():
+    if sys.argv[1] == '--line':
+        print(line(sys.argv[2]))
+        return
     rows, summary = [], None
-    for line in open(sys.argv[1]):
-        v = json.loads(line)
+    for l in open(sys.argv[1]):
+        v = json.loads(l)
         if 'session' in v:
             rows.append(v)
         elif 'churn' in v:

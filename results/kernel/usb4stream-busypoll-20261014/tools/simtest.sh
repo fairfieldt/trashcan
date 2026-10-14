@@ -2,7 +2,8 @@
 # Run a window script locally with every remote command simulated, keeping its real heartbeat loop, background jobs,
 # waits and traps. sim/ssh runs each remote snippet with bash in a simulated Mac (its home in $d/home/HOST, made from
 # sim/home; the Mac's own programs stubbed in sim/stubs) and, like ssh, returns only once nothing holds the snippet's
-# output, so a snippet that leaves a background job holding it hangs here as on the Macs. gpuq and rsync are logged.
+# output, so a snippet that leaves a background job holding it hangs here as on the Macs. gpuq and rsync are logged
+# (`gpuq run ID -- CMD` runs CMD).
 # The script must reach the end and exit 0 with no process left behind, within SIM_TIMEOUT s (default 180; past it,
 # the run is reported as hung and stopped); with TERM_AFTER=S, a TERM after S seconds must end it (exit 130) with its
 # cleanup run and nothing left behind.
@@ -16,7 +17,8 @@ d=$(mktemp -d "$HOME/dev/claude-work/flashnext-20261012/stream/sim.XXXXXX")
 mkdir -p "$d/bin" "$d/home"
 for h in incite indite inflight alight invite enlight; do cp -R "$here/sim/home" "$d/home/$h"; done
 cp "$here/sim/ssh" "$d/bin/ssh"
-printf '#!/bin/sh\necho "$(date +%%s) gpuq $*" >> "$SIMLOG"\n' > "$d/bin/gpuq"
+# gpuq: logged; `gpuq run ID -- CMD` (on a simulated Mac) runs CMD.
+printf '#!/bin/sh\necho "$(date +%%s) gpuq $*" >> "$SIMLOG"\nif [ "$1" = run ]; then shift 2; [ "$1" = -- ] && shift; exec "$@"; fi\n' > "$d/bin/gpuq"
 printf '#!/bin/sh\necho "$(date +%%s) rsync $*" >> "$SIMLOG"\n' > "$d/bin/rsync"
 printf '#!/bin/sh\necho "cool after 0 s"\n' > "$d/bin/cool.sh"
 chmod +x "$d/bin/"*
