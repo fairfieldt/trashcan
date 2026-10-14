@@ -110,6 +110,7 @@ fn main() {
         "qwen4_q8_mvk4",
         "qwen4_head_topk",
         "qwen4_head_merge",
+        "qwen4_moe_gu2",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",

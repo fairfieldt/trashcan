@@ -862,28 +862,16 @@ impl GpuStage {
             u,
         };
         let (id, ih) = (c.idx_dim, c.idx_heads);
+        // The raw keys into the ring, the indexer queries' norm and rotation, and the pooled keys of completed blocks
+        // (which take the batch's own keys from the projection output) are independent: they run together with the
+        // attention's query and key norms (the caller defers that group's barrier), behind one barrier.
         let mut u = [0; 16];
         u[6] = id as u32;
         u[10] = self.ring as u32;
         gpu.dispatch(
             current.get(),
             "qwen4_idx_store",
-            push([self.ik.address, 0, ix.raw.address, 0, 0, 0], u),
-            1,
-            n as u32,
-        );
-        let mut u = [0; 16];
-        u[1] = c.rot as u32;
-        u[6] = id as u32;
-        u[7] = self.context as u32;
-        u[8] = c.eps.to_bits();
-        u[9] = c.kpool as u32;
-        u[10] = self.ring as u32;
-        u[12] = c.rope_base.to_bits();
-        gpu.dispatch(
-            current.get(),
-            "qwen4_idx_pool",
-            push([ix.raw.address, ix.k_norm.address, ix.pooled.address, 0, 0, 0], u),
+            push([self.ik.address, 0, ix.raw.address, 0, 0, 0], u).defer_barrier(true),
             1,
             n as u32,
         );
@@ -900,8 +888,23 @@ impl GpuStage {
         gpu.dispatch(
             current.get(),
             "qwen_qk",
-            push([self.iq.address, ix.q_norm.address, self.iqr.address, 0, 0, 0], u),
+            push([self.iq.address, ix.q_norm.address, self.iqr.address, 0, 0, 0], u).defer_barrier(true),
             ih as u32,
+            n as u32,
+        );
+        let mut u = [0; 16];
+        u[1] = c.rot as u32;
+        u[6] = id as u32;
+        u[7] = self.context as u32;
+        u[8] = c.eps.to_bits();
+        u[9] = c.kpool as u32;
+        u[10] = self.ring as u32;
+        u[12] = c.rope_base.to_bits();
+        gpu.dispatch(
+            current.get(),
+            "qwen4_idx_pool",
+            push([ix.raw.address, ix.k_norm.address, ix.pooled.address, self.ik.address, 0, 0], u),
+            1,
             n as u32,
         );
         let mut u = [0; 16];
@@ -1826,7 +1829,7 @@ impl GpuStage {
                             hd,
                             kvd,
                             1f32,
-                            false,
+                            index.is_some() && self.kv == KvCache::F16,
                         ),
                     ] {
                         let mut u = [0; 16];
@@ -2093,11 +2096,14 @@ impl GpuStage {
                 u[2] = slots as u32;
                 u[3] = gu_stride;
                 u[15] = nb;
+                // One token with IQ4_XS gate/up: 2 gate and 2 up rows per wave (twice the waves, 40 registers), the
+                // same sums (results/qwen4/decode-kernels-20261014: 141 -> 131 us per layer).
+                let gu2 = n == 1 && l.gu_fmt == 2;
                 gpu.dispatch_matrix(
                     current.get(),
-                    expert_shader("qwen4_moe_gu", l.gu_fmt),
+                    if gu2 { "qwen4_moe_gu2_iq4xs" } else { expert_shader("qwen4_moe_gu", l.gu_fmt) },
                     push([0, self.u.address, self.act.address, self.ids.address, 0, 0], u),
-                    ff.div_ceil(16) as u32,
+                    ff.div_ceil(if gu2 { 8 } else { 16 }) as u32,
                     (n * slots) as u32,
                     &l.gate_up,
                 )?;

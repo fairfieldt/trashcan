@@ -3,7 +3,7 @@
 // QSA indexer: when token t completes a block of p.kind positions, pool it: the mean of the block's raw keys,
 // RMS-normed with a learned weight and rotated (NeoX, first p.k dims) to the block's first position.
 // One wave per token. a: raw key ring [offset][dim], b: norm weight [dim], c: pooled keys [dim / 4][cap / kind] (vec4s:
-// dims 4i .. 4i+3 of block b at (i * cap / kind + b) * 4).
+// dims 4i .. 4i+3 of block b at (i * cap / kind + b) * 4), d: the batch's raw keys [t][dim].
 // p.dim (<= 128), p.k = rotated dims (<= 64), p.kind = block size, p.cap, p.offset = ring rows, p.r0 = rope base
 // bits, p.window = eps.
 layout(local_size_x=64) in;
@@ -11,8 +11,12 @@ shared float sh[128];
 void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
 uint p1=position()+t+1;if(p1%p.kind!=0)return;
 uint b=p1/p.kind-1;float m[2];
+// The batch's own keys come from d (the projection output, which qwen4_idx_store copies into the ring in the same
+// group of dispatches); earlier ones from the ring.
+uint pos0=position();
 [[unroll]]for(uint h=0;h<2;h++){uint j=l+h*64;m[h]=0;
-    if(j<p.dim)for(uint i=0;i<p.kind;i++)m[h]+=a_f.v[((b*p.kind+i)%p.offset)*p.dim+j];
+    if(j<p.dim)for(uint i=0;i<p.kind;i++){uint q=b*p.kind+i;
+        float vr=a_f.v[(q%p.offset)*p.dim+j],vb=d_f.v[(q>=pos0?q-pos0:0u)*p.dim+j];m[h]+=q>=pos0?vb:vr;}
     m[h]/=float(p.kind);}
 float inv=inversesqrt(subgroupAdd(m[0]*m[0]+m[1]*m[1])/float(p.dim)+uintBitsToFloat(p.window));
 [[unroll]]for(uint h=0;h<2;h++){uint j=l+h*64;if(j<p.dim)m[h]*=inv*b_f.v[j];sh[l+h*64]=m[h];}

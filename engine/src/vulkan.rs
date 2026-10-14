@@ -527,6 +527,7 @@ impl Device {
             ("qwen4_q8_mvk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mvk4.spv")).as_slice()),
             ("qwen4_head_topk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_topk.spv")).as_slice()),
             ("qwen4_head_merge", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_merge.spv")).as_slice()),
+            ("qwen4_moe_gu2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu2.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -618,6 +619,7 @@ impl Device {
                     ("qwen4_mix_down_skw_c4", Some(4)),
                 ],
                 "qwen4_q8_mvk2" => &[("qwen4_q8_mvk2_c1", Some(1))],
+                "qwen4_moe_gu2" => &[("qwen4_moe_gu2_iq4xs", Some(2))],
                 "qwen4_q8_mvk4" => &[
                     ("qwen4_q8_mvk4_c2", Some(2)),
                     ("qwen4_q8_mvk4_c3", Some(3)),
