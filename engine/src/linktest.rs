@@ -14,6 +14,10 @@
 //!
 //! Fault injection (client side, for tests only): `--drop N` / `--corrupt N` lose or damage every Nth stream frame
 //! the client sends; `--overdrive N` lets it send N frames past its credits, overrunning the other end's ring.
+//!
+//! `link-test churn` runs sessions back to back, each a client process of its own, with normal exits, killed
+//! clients and server crashes mixed (`--server-exits`; run the server in a loop that restarts it): every session's
+//! stream must come up within `--within-ms` of its link's start, with no failed epoch.
 use crate::link::{self, Accepted, Found, Frames, Lanes, Link, Options, Streams, Sysfs, Tuning, Wait};
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -23,7 +27,7 @@ use std::{
     net::{SocketAddr, TcpListener},
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        mpsc, Arc, Mutex,
     },
     time::{Duration, Instant},
 };
@@ -35,8 +39,12 @@ pub enum Cmd {
         #[arg(long, default_value = "0.0.0.0:7075")]
         listen: String,
     },
-    /// Run a test against `link-test serve` and print one JSON line (soak: one every 10 s and a summary).
+    /// Run a test against `link-test serve` and print one JSON line (soak: one every 10 s and a summary), after a
+    /// line with `up_ms` as soon as the stream is up.
     Run(Run),
+    /// Sessions back to back against `link-test serve`, one process each, with kills and server exits mixed; one
+    /// JSON line per session and a summary. Fails unless every stream came up in time with no failed epoch.
+    Churn(Churn),
     /// CRC32C throughput on this CPU.
     Crc {
         #[arg(long, default_value_t = 40960)]
@@ -67,6 +75,23 @@ pub struct Run {
     overdrive: u32,
 }
 
+#[derive(clap::Args)]
+pub struct Churn {
+    /// The server's address on the cable, e.g. enlight.tb0:7075.
+    #[arg(long, required = true)]
+    connect: String,
+    #[arg(long, default_value_t = 200)]
+    sessions: usize,
+    /// A session passes when its stream is up within this many milliseconds of its link's start.
+    #[arg(long, default_value_t = 100.)]
+    within_ms: f64,
+    /// Session kinds in turn: n (normal exit), k (this side killed while on the stream), s (the server exits).
+    #[arg(long, default_value = "nkns")]
+    pattern: String,
+    #[arg(long, default_value = "churn")]
+    label: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, clap::ValueEnum)]
 #[serde(rename_all = "lowercase")]
 pub enum Mode {
@@ -94,6 +119,10 @@ pub struct Test {
     /// The server gives its stream up this many seconds into the test, as a failing device would (0: never).
     #[arg(long, default_value_t = 0.)]
     server_drops_stream: f64,
+    /// The server process exits this many seconds into the test, as a crash would (0: never).
+    #[arg(long, default_value_t = 0.)]
+    #[serde(default)]
+    server_exits: f64,
 }
 
 fn unix_now() -> f64 {
@@ -248,11 +277,21 @@ impl Events {
     }
 }
 
-/// Watch the first lane's path every millisecond until `stop`.
-fn watch(link: Link, events: Arc<Events>, stop: Arc<AtomicBool>) -> std::thread::JoinHandle<()> {
+/// Watch the first lane's path every millisecond until `stop`; print `{"label", "up_ms"}` once the stream is up.
+fn watch(link: Link, events: Arc<Events>, stop: Arc<AtomicBool>, label: String) -> std::thread::JoinHandle<()> {
     std::thread::spawn(move || {
         let mut path = link.path();
-        while !stop.load(Ordering::Relaxed) {
+        let mut told = false;
+        loop {
+            if !told {
+                if let Some(ms) = link.stats().first_up_ms {
+                    println!("{}", json!({"label": label, "up_ms": ms}));
+                    told = true;
+                }
+            }
+            if stop.load(Ordering::Relaxed) {
+                break;
+            }
             std::thread::sleep(Duration::from_millis(1));
             let now = link.path();
             if now != path {
@@ -504,6 +543,15 @@ fn serve(listen: &str) -> Result<()> {
                             link.give_up_stream("link-test fault injection");
                         });
                     }
+                    if t.server_exits > 0. {
+                        let after = Duration::from_secs_f64(t.server_exits);
+                        std::thread::spawn(move || {
+                            std::thread::sleep(after);
+                            eprintln!("link-test: exiting at {:.3} (fault injection)", unix_now());
+                            // SAFETY: ends the process at once, as a crash would; the kernel closes its files.
+                            unsafe { libc::_exit(9) };
+                        });
+                    }
                     let res = run_test(&mut lanes, &t, 1, None, &mut |_| {})?;
                     lanes.send_message(&serde_json::to_vec(&res)?)?;
                 }
@@ -546,7 +594,7 @@ fn run(r: &Run) -> Result<()> {
     let setup_ms = t0.elapsed().as_secs_f64() * 1e3;
     let events = Arc::new(Events { start: Instant::now(), log: Mutex::new(Vec::new()) });
     let stop = Arc::new(AtomicBool::new(false));
-    let w = watch(lanes.links()[0].clone(), events.clone(), stop.clone());
+    let w = watch(lanes.links()[0].clone(), events.clone(), stop.clone(), r.label.clone());
     lanes.send_message(&serde_json::to_vec(&r.test)?)?;
     let label = r.label.clone();
     let mut report = |v: Value| println!("{}", json!({"label": label, "report": v}));
@@ -567,7 +615,109 @@ fn run(r: &Run) -> Result<()> {
     let server: Value = serde_json::from_slice(&lanes.recv_message()?)?;
     res["server"] = server;
     res["setup_ms"] = json!(setup_ms);
+    res["up_ms"] = json!(lanes.links()[0].stats().first_up_ms);
     println!("{}", json!({"label": r.label, "connect": r.connect, "test": r.test, "result": res}));
+    Ok(())
+}
+
+/// What one churn session's client printed: the `up_ms` line and its result (or error) line.
+fn churn_lines(lines: &mpsc::Receiver<String>, wait: Option<Duration>, up_ms: &mut Option<f64>, last: &mut Option<Value>) {
+    let deadline = wait.map(|w| Instant::now() + w);
+    loop {
+        let line = match deadline {
+            Some(d) => match lines.recv_timeout(d.saturating_duration_since(Instant::now())) {
+                Ok(l) => l,
+                Err(_) => return,
+            },
+            None => match lines.recv() {
+                Ok(l) => l,
+                Err(_) => return,
+            },
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&line) else { continue };
+        if let Some(ms) = v.get("up_ms").and_then(Value::as_f64) {
+            if v.get("result").is_none() {
+                *up_ms = Some(ms);
+                if deadline.is_some() {
+                    return;
+                }
+                continue;
+            }
+        }
+        *last = Some(v);
+    }
+}
+
+fn churn(c: &Churn) -> Result<()> {
+    let kinds: Vec<char> = c.pattern.chars().collect();
+    ensure!(!kinds.is_empty() && kinds.iter().all(|k| "nks".contains(*k)), "--pattern takes n, k and s");
+    let exe = std::env::current_exe()?;
+    let mut seed = unix_now().to_bits();
+    let (mut ups, mut failed, mut passed) = (Vec::new(), 0usize, 0usize);
+    for i in 0..c.sessions {
+        let kind = kinds[i % kinds.len()];
+        let label = format!("{}-{i}", c.label);
+        let mut cmd = std::process::Command::new(&exe);
+        cmd.args(["link-test", "run", "--connect", &c.connect, "--label", &label, "--mode", "pingpong", "--size", "64"]);
+        match kind {
+            'n' => cmd.args(["--count", "2000"]),
+            'k' => cmd.args(["--count", "100000000"]),
+            _ => cmd.args(["--count", "100000000", "--server-exits", "0.2"]),
+        };
+        cmd.stdout(std::process::Stdio::piped()).stderr(std::process::Stdio::piped());
+        let t0 = Instant::now();
+        let mut child = cmd.spawn().context("starting a session")?;
+        let (tx, rx) = mpsc::channel();
+        let out = child.stdout.take().context("stdout")?;
+        let reader = std::thread::spawn(move || {
+            for line in io::BufRead::lines(io::BufReader::new(out)).map_while(Result::ok) {
+                let _ = tx.send(line);
+            }
+        });
+        let mut err = child.stderr.take().context("stderr")?;
+        let errors = std::thread::spawn(move || {
+            let mut s = String::new();
+            let _ = io::Read::read_to_string(&mut err, &mut s);
+            s
+        });
+        let (mut up_ms, mut last) = (None, None);
+        churn_lines(&rx, Some(Duration::from_secs(5)), &mut up_ms, &mut last);
+        if kind == 'k' {
+            // Killed 50-250 ms after its stream came up (or after 5 s without it).
+            seed = splitmix(seed);
+            std::thread::sleep(Duration::from_millis(50 + seed % 200));
+            child.kill()?;
+        }
+        let status = child.wait()?;
+        churn_lines(&rx, None, &mut up_ms, &mut last);
+        let _ = reader.join();
+        let stderr = errors.join().unwrap_or_default();
+        let not_opened = stderr.matches(" not opened (").count();
+        let lane = last.as_ref().and_then(|v| v["result"]["lanes"].get(0).or_else(|| v["lanes"].get(0))).cloned();
+        let ok = up_ms.is_some_and(|ms| ms <= c.within_ms) && not_opened == 0;
+        failed += not_opened;
+        passed += ok as usize;
+        if let Some(ms) = up_ms {
+            ups.push(ms);
+        }
+        println!(
+            "{}",
+            json!({"session": i, "kind": kind.to_string(), "up_ms": up_ms, "pass": ok, "failed_epochs": not_opened,
+                "rc": status.code(), "ms": t0.elapsed().as_secs_f64() * 1e3, "lane": lane,
+                "error": last.as_ref().and_then(|v| v.get("error")).cloned(),
+                "stream_lines": stderr.lines().filter(|l| l.contains(" stream ")).collect::<Vec<_>>()})
+        );
+    }
+    ups.sort_by(f64::total_cmp);
+    let pct = |p: f64| ups.get(((ups.len() as f64 - 1.) * p).round() as usize).copied();
+    let pass = passed == c.sessions;
+    println!(
+        "{}",
+        json!({"churn": c.label, "sessions": c.sessions, "pattern": c.pattern, "within_ms": c.within_ms,
+            "passed": passed, "on_stream": ups.len(), "failed_epochs": failed,
+            "up_ms": {"p50": pct(0.5), "p99": pct(0.99), "max": ups.last()}, "pass": pass})
+    );
+    ensure!(pass, "{} of {} sessions reached the stream within {} ms with no failed epoch", passed, c.sessions, c.within_ms);
     Ok(())
 }
 
@@ -603,6 +753,7 @@ pub fn main(cmd: &Cmd) -> Result<()> {
     match cmd {
         Cmd::Serve { listen } => serve(listen),
         Cmd::Run(r) => run(r),
+        Cmd::Churn(c) => churn(c),
         Cmd::Crc { size, iters } => {
             crc_speed(*size, *iters);
             Ok(())
