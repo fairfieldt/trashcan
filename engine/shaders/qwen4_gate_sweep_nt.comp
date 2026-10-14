@@ -7,4 +7,5 @@
 // Gate polls with volatile, nontemporal loads (Vulkan memory model); the L2 sweep between polls is in
 // qwen4_gate_sweep.glsl.
 #define GATE_ACCESS nontemporal
+#define SWEEP_ACCESS
 #include "qwen4_gate_sweep.glsl"

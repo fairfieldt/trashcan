@@ -284,32 +284,35 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
     let fence = unsafe { d.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
     let word = |i: usize| unsafe { std::ptr::read_volatile((gate.ptr as *const u32).add(i)) };
     let open = || open_gate(gate.ptr as *mut u32, c.fence);
-    let polls = (c.bound_ms / 1e3 / FASTEST_POLL_S) as u32;
     let ticks = ((c.bound_ms / 1e3 * TICKS_PER_S) as u64 >> 16) as u32;
-    let cmd = d.begin()?;
-    unsafe {
-        d.dev.cmd_reset_query_pool(cmd, q, 0, 3);
-        d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
-        d.dev.cmd_set_event(cmd, started, vk::PipelineStageFlags::TOP_OF_PIPE);
-    }
-    if c.shader != "none" {
-        let mut p = crate::vulkan::Push::default();
-        p.ptr[0] = gate.address;
-        p.ptr[1] = lines_buf.as_ref().map_or(0, |b| b.address);
-        (p.u[0], p.u[1], p.u[2], p.u[3]) = (polls, ticks, lines as u32, (c.stride / 4) as u32);
-        d.dispatch(cmd, &c.shader, p, 1, 1);
-    }
-    unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
-    // As a stage would before reading the input the host wrote.
-    d.barrier(cmd);
-    d.host_barrier(cmd, false);
-    unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 2) };
-    d.host_barrier(cmd, true);
-    unsafe { d.dev.cmd_set_event(cmd, done, vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER) };
-    d.finish(cmd)?;
+    // The gate's command buffer with a bound of `polls` polls (and `bound_ms` of shader clock).
+    let record = |polls: u32| -> Result<vk::CommandBuffer> {
+        let cmd = d.begin()?;
+        unsafe {
+            d.dev.cmd_reset_query_pool(cmd, q, 0, 3);
+            d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0);
+            d.dev.cmd_set_event(cmd, started, vk::PipelineStageFlags::TOP_OF_PIPE);
+        }
+        if c.shader != "none" {
+            let mut p = crate::vulkan::Push::default();
+            p.ptr[0] = gate.address;
+            p.ptr[1] = lines_buf.as_ref().map_or(0, |b| b.address);
+            (p.u[0], p.u[1], p.u[2], p.u[3]) = (polls, ticks, lines as u32, (c.stride / 4) as u32);
+            d.dispatch(cmd, &c.shader, p, 1, 1);
+        }
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+        // As a stage would before reading the input the host wrote.
+        d.barrier(cmd);
+        d.host_barrier(cmd, false);
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 2) };
+        d.host_barrier(cmd, true);
+        unsafe { d.dev.cmd_set_event(cmd, done, vk::PipelineStageFlags::COMPUTE_SHADER | vk::PipelineStageFlags::TRANSFER) };
+        d.finish(cmd)?;
+        Ok(cmd)
+    };
     // Where the gate writes how it ended: words 1-4 (the first line) or, for the sweep shaders, words 16-25.
     let at = if sweep { 16 } else { 1 };
-    let run = |release: bool, preopen: bool| -> Result<GateRun> {
+    let run = |cmd: vk::CommandBuffer, release: bool, preopen: bool| -> Result<GateRun> {
         gate.write(&[0u8; 128])?;
         if preopen {
             open();
@@ -362,6 +365,13 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
         } else {
             (0, 0, 0, 0)
         };
+        let gate_us = (t[1] - t[0]) as f64 * period / 1e3;
+        // The shader clock must agree with the command processor's timestamps; otherwise its bound means nothing.
+        let ticks_us = ticks as f64 / TICKS_PER_S * 1e6;
+        ensure!(
+            c.shader == "none" || (ticks_us - gate_us).abs() <= 0.2 * gate_us + 30.0,
+            "the shader clock disagrees with the GPU timestamps ({ticks_us:.1} against {gate_us:.1} us): stop"
+        );
         let (mut to_gpu_us, mut to_shader_us) = (None, None);
         if let (Some((_, host)), Some((tick, now))) = (released, d.calibrate()) {
             let host_of = |gpu: u64| now as f64 - (tick as i64 - gpu as i64) as f64 * period;
@@ -376,7 +386,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
             fewest,
             most,
             sweep_ticks,
-            gate_us: (t[1] - t[0]) as f64 * period / 1e3,
+            gate_us,
             graph_us: (t[2] - t[0]) as f64 * period / 1e3,
             to_gpu_us,
             to_shader_us,
@@ -400,9 +410,30 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
         v
     };
     let round = |v: &[f64]| v.iter().map(|x| (x * 100.0).round() / 100.0).collect::<Vec<_>>();
+    // The poll bound: `bound_ms` at the fastest poll seen (0.40 us). A sweep shader polls far slower, so its bound
+    // is also `bound_ms` at the rate a 16-poll run shows in the command processor's timestamps: the poll count alone
+    // then ends the gate within about its bound even if the shader clock failed.
+    let mut polls = (c.bound_ms / 1e3 / FASTEST_POLL_S) as u32;
+    let mut calibration = serde_json::Value::Null;
+    if sweep && lines > 0 {
+        let cal = record(16)?;
+        let r = run(cal, false, false);
+        open();
+        unsafe {
+            let _ = d.dev.device_wait_idle();
+            d.dev.free_command_buffers(d.pool, &[cal]);
+        }
+        let r = r?;
+        ensure!(r.how == 2 && r.polls == 16, "the 16-poll run ended with how {} after {} polls", r.how, r.polls);
+        let per_poll_s = r.gate_us / 1e6 / 16.0;
+        polls = polls.min((c.bound_ms / 1e3 / per_poll_s) as u32).max(1);
+        calibration = json!({"polls": 16, "gate_us": r.gate_us, "us_per_poll": per_poll_s * 1e6, "ticks": r.ticks});
+    }
+    let cmd = record(polls)?;
     let base = json!({"gpu": c.gpu, "step": c.step, "shader": c.shader, "memory": memory, "fence": format!("{:?}", c.fence),
         "bound_ms": c.bound_ms, "polls_bound": polls, "ticks_bound": (ticks as u64) << 16,
-        "sweep": if sweep { json!({"kib": c.sweep_kib, "stride": c.stride, "lines": lines}) } else { serde_json::Value::Null }});
+        "sweep": if sweep { json!({"kib": c.sweep_kib, "stride": c.stride, "lines": lines}) } else { serde_json::Value::Null },
+        "calibration": calibration});
     let result = (|| -> Result<serde_json::Value> {
         match c.step.as_str() {
             "release" => {
@@ -410,7 +441,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
                     (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
                 let (mut failed, mut runs, mut first_fail) = (0, 0, serde_json::Value::Null);
                 for _ in 0..c.reps {
-                    let r = run(true, false)?;
+                    let r = run(cmd, true, false)?;
                     runs += 1;
                     if r.how != 1 {
                         if failed == 0 {
@@ -438,7 +469,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
                     "raw_release_to_gpu_past_gate_us": round(&gpu), "raw_release_to_shader_open_us": round(&shader)}))
             }
             "never" => {
-                let r = run(false, false)?;
+                let r = run(cmd, false, false)?;
                 let mut v = poll_stats(&r);
                 v["ended_by_bound"] = json!(r.how == 2 || r.how == 3);
                 Ok(v)
@@ -447,7 +478,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
                 let (mut gate_us, mut graph_us, mut host_us, mut npolls) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
                 let mut not_open = 0;
                 for _ in 0..c.reps {
-                    let r = run(false, true)?;
+                    let r = run(cmd, false, true)?;
                     if c.shader != "none" && r.how != 1 {
                         not_open += 1;
                     }

@@ -65,6 +65,10 @@ step() {
     rc=$?
     echo "$name: rc $rc; $(cut -c1-400 "$R/$name.json")"
     check "$name"
+    if [ "$rc" != 0 ]; then
+        echo "STOP after $name: rc $rc; $(tail -3 "$R/$name.err")"
+        exit 4
+    fi
 }
 # isa NAME [ENV...]: the gate shaders' machine code (gate-isa on GPU ${GPU:-0}, or RADV's null device with
 # RADV_FORCE_FAMILY in ENV), then the kernel-log check.
