@@ -46,13 +46,21 @@ def wrapped(clock, argv):
 
 
 start = time.time()
-# Any engine binary still running from an earlier run (whatever its name), or anything holding a node's port, would
-# take this run's place in the chain: refuse to start.
-checks = [(host, subprocess.Popen(['ssh', host, f'pgrep -f "^{ROOT}/trashcan[^ ]* qwen4 "'], stdout=subprocess.DEVNULL))
+# Refuse to start when any engine binary from an earlier run is still running (whatever its name; it would take this
+# run's place in the chain), or when a GPU refuses the high DPM level: amdgpu latches an overheated SI GPU in its
+# thermal state (power level 1, 450 MHz) until a reboot, and that one stage then paces the whole chain.
+PRECHECK = (f'pgrep -f "^{ROOT}/trashcan[^ ]* qwen4 " > /dev/null && exit 3; '
+            'for c in 0 1; do f=/sys/class/drm/card$c/device/power_dpm_force_performance_level; '
+            'echo high | sudo -n tee $f > /dev/null 2>&1 || exit $((10 + c)); echo auto | sudo -n tee $f > /dev/null 2>&1; '
+            'done; exit 0')
+checks = [(host, subprocess.Popen(['ssh', host, PRECHECK], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
           for host in [a.driver_host] + nodes]
 for host, check in checks:
-    if check.wait() == 0:
+    rc = check.wait()
+    if rc == 3:
         sys.exit(f'{host}: an engine process from an earlier run is still running; stop it first')
+    if rc in (10, 11):
+        sys.exit(f'{host}: GPU {rc - 10} refuses the high DPM level (thermal state latched after overheating); reboot it')
 
 
 def listening(host):
