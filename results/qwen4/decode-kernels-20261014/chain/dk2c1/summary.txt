@@ -1,0 +1,56 @@
+# bench runs (tools/chain_sum.py)
+dk2c1-pp2048-base          pp2048   891.8 tok/s  tg32  20.47 tok/s
+dk2c1-pp2048-cand          pp2048   892.0 tok/s  tg32  20.96 tok/s
+dk2c1-pp512-base-1         pp512   290.8 tok/s  tg128  21.12 tok/s
+dk2c1-pp512-base-2         pp512   523.8 tok/s  tg128  21.20 tok/s
+dk2c1-pp512-cand-1         pp512   524.0 tok/s  tg128  21.42 tok/s
+dk2c1-pp512-cand-2         pp512   524.2 tok/s  tg128  21.15 tok/s
+dk2c1-pp8192-base          pp8192  1133.8 tok/s  tg32  20.12 tok/s
+dk2c1-pp8192-cand          pp8192  1131.8 tok/s  tg32  20.36 tok/s
+
+pp512: decode 21.16 -> 21.29 tok/s (+0.6%), prefill 407.3 -> 524.1 tok/s (+28.7%), n = 2, 2
+pp2048: decode 20.47 -> 20.96 tok/s (+2.4%), prefill 891.8 -> 892.0 tok/s (+0.0%), n = 1, 1
+pp8192: decode 20.12 -> 20.36 tok/s (+1.2%), prefill 1133.8 -> 1131.8 tok/s (-0.2%), n = 1, 1
+
+# link transports (tools/transport.py)
+mtp-base            0 stream
+mtp-cand            0 stream
+pp2048-base         0 stream
+pp2048-cand         0 stream
+pp512-base-1        0 stream
+pp512-base-2        0 stream
+pp512-cand-1        0 stream
+pp512-cand-2        0 stream
+pp8192-base         0 stream
+pp8192-cand         0 stream
+val100              0 stream
+val14               0 stream
+
+mtp: same transport
+pp2048: same transport
+pp512-1: same transport
+pp512-2: same transport
+pp8192: same transport
+
+# MTP (tools/mtp_summary.py, tools/mtp_same.py)
+== dk2c1-mtp-base.json: k up to 3, draft vocabulary 65536, 1 runs, all identical: True
+prompt	pass	plain tok/s	MTP tok/s	gain	tokens/round	draft ms	verify ms	rollback ms	rounds by k	shadow acc	verify ms by k
+water.ids	mtp	21.03	28.17	+33.9%	2.36	9.4	74.2	0.10	10/10/60/1	0.30	49/65/79/104
+csv.ids	mtp	21.08	31.99	+51.7%	2.77	10.6	75.9	0.03	3/4/62/0	0.67	48/64/78/0
+transformer.ids	mtp	20.90	29.14	+39.4%	2.33	9.5	70.4	0.05	19/8/55/0	0.21	49/65/79/0
+mean	mtp	21.00	29.77	+41.7%
+== dk2c1-mtp-cand.json: k up to 3, draft vocabulary 65536, 1 runs, all identical: True
+prompt	pass	plain tok/s	MTP tok/s	gain	tokens/round	draft ms	verify ms	rollback ms	rounds by k	shadow acc	verify ms by k
+water.ids	mtp	21.13	28.70	+35.8%	2.36	9.1	73.0	0.09	11/11/58/1	0.27	48/65/79/104
+csv.ids	mtp	21.19	31.99	+50.9%	2.77	10.5	76.0	0.03	3/4/62/0	0.67	48/64/78/0
+transformer.ids	mtp	21.17	28.95	+36.7%	2.33	10.1	70.2	0.07	17/7/58/0	0.29	48/64/78/0
+mean	mtp	21.16	29.88	+41.2%
+water.ids: the same 192 tokens (runs agree: True, True)
+csv.ids: the same 192 tokens (runs agree: True, True)
+transformer.ids: the same 192 tokens (runs agree: True, True)
+
+# clocks (tools/nodeclocks.py)
+driver (incite)  14 logs, 802 samples; GPU0 850/1370 x728 300/150 x74; GPU1 850/1370 x750 300/150 x51 450/150 x1; max 62 C
+alight           12 logs, 867 samples; GPU0 850/1370 x811 300/150 x55 650/1370 x1; GPU1 850/1370 x814 300/150 x53; max 64 C
+indite           12 logs, 855 samples; GPU0 850/1370 x800 300/150 x53 450/150 x1 650/1370 x1; GPU1 850/1370 x801 300/150 x52 650/1370 x1 450/1370 x1; max 62 C
+inflight         12 logs, 851 samples; GPU0 850/1370 x776 300/150 x62 450/1370 x10 450/150 x2 650/1370 x1; GPU1 850/1370 x777 300/150 x60 450/1370 x8 650/1370 x4 300/1370 x2; max 61 C

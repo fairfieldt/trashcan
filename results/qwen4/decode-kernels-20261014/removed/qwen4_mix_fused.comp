@@ -1,0 +1,124 @@
+#version 460
+#include "common.glsl"
+// A Q8_0 hyper-connection mixer (4 streams, bottleneck 320) for one token in one dispatch: workgroups 0 .. NA - 1 do
+// qwen4_mix_down_skw's first half (20 rows per workgroup, 4 per wave, one stream each; the last of them to finish
+// applies the stream norms and writes the bottleneck, write weights and inverse norms, then raises a flag), and
+// workgroups NA .. NA + 159 do qwen4_mix_rows_up's second half: they load their 64 rows of the up projection and
+// their epilogue inputs as soon as they start, while the first half runs, wait for the flag (one lane polls it, at
+// most BOUND times), then multiply, reduce and write the sublayer input. The last of them to pass resets the flag.
+// Each lane computes what it computes in the two kernels, in the same order (the same bits).
+// Workgroups start in order of their index on GCN, so every first-half workgroup is running or done before a
+// second-half one can occupy a slot; the bound only keeps a broken assumption from hanging the GPU.
+// a: x [hc][n], b: y [n] (flags & 1: pending combine), c: u [n], d: previous mixer out (write weights at m),
+// e: gamma [hc][n], f: out [m + 8] (bottleneck | write | inv norms), then the partials [hc][m + 8] from m + 8,
+// extra: counters (2: first half done, 3: flag, 4: second half past the flag). Weights: set 0 the fused down matrix
+// (bottleneck and write rows, blocks from word p.stride), set 1 the up projection (blocks from word p.cap).
+// p.n = stream width (2560), p.k = hc * n, p.m = bottleneck (320), p.r0 = eps bits.
+#define NA 68u
+#define BOUND 65536u
+layout(local_size_x=320) in;
+layout(set=2,binding=5,std430) coherent buffer Out { float v[]; } co;
+layout(set=2,binding=7,std430) coherent buffer Counters { uint v[]; } cnt;
+// The bottleneck and inverse norms after the flag: nothing in this dispatch reads them before it is raised, so the
+// caches (invalidated by the barrier before the dispatch) cannot hold old copies; scalar loads, issued together.
+layout(set=2,binding=5,std430) readonly restrict buffer Lo { vec4 v[]; } lo4;
+layout(set=2,binding=5,std430) readonly restrict buffer LoF { float v[]; } lof;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+layout(set=1,binding=0,std430) readonly restrict buffer UpQuads { uvec4 q[]; } wq;
+layout(set=1,binding=0,std430) readonly restrict buffer UpWords { uint words[]; } wqw;
+shared bool last;
+shared float red[5][64];
+shared uint sdep[320];
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+void main(){
+uint lane=gl_SubgroupInvocationID,wv=gl_SubgroupID,tid=gl_LocalInvocationID.x,wg=gl_WorkGroupID.x;
+uint P=p.m+8;
+if(wg<NA){
+    // First half: stream s, rows first .. first + 3 of this wave.
+    uint blocks=p.k/32,sb=p.n/32,part=lane%4,s=wg%4,gx=wg/4;
+    uint rows=p.m+4,first=gx*20+wv*4;
+    bool comb=(p.flags&1)!=0;
+    float ws=comb?d_f.v[p.m+s]:0.0,ss=0,acc[4];
+    [[unroll]]for(uint r=0;r<4;r++)acc[r]=0;
+    uint rb[4];[[unroll]]for(uint r=0;r<4;r++)rb[r]=min(first+r,rows-1)*blocks;
+    for(uint b=s*sb+lane/4;b<(s+1)*sb;b+=16){
+        uint i0=(b*32-s*p.n)/4+part*2;
+        uvec2 q[4];uint d[4];
+        [[unroll]]for(uint r=0;r<4;r++){uint blk=rb[r]+b;q[r]=ww2.v[p.stride/2+blk*4+part];d[r]=uint(wh.halves[blk]);}
+        vec4 e0=e_v4.v[s*p.n/4+i0],e1=e_v4.v[s*p.n/4+i0+1];
+        uint xo=(b*32)/4+part*2;
+        vec4 x0=a_v4.v[xo],x1=a_v4.v[xo+1];
+        if(comb){x0=fma(vec4(ws),b_v4.v[i0],x0);x1=fma(vec4(ws),b_v4.v[i0+1],x1);}
+        ss+=dot(x0,x0)+dot(x1,x1);
+        vec4 g0=x0*e0,g1=x1*e1;
+        [[unroll]]for(uint r=0;r<4;r++)acc[r]=fma(dot(i8(q[r].x),g0)+dot(i8(q[r].y),g1),unpackHalf2x16(d[r]).x,acc[r]);
+    }
+    uint o=P+s*P;
+    [[unroll]]for(uint r=0;r<4;r++){float v=subgroupAdd(acc[r]);if(lane==0&&first+r<rows)co.v[o+first+r]=v;}
+    if(gx==0&&wv==0){float v=subgroupAdd(ss);if(lane==0)co.v[o+rows]=v;}
+    memoryBarrierBuffer();
+    barrier();
+    if(tid==0)last=atomicAdd(cnt.v[2],1u)==NA-1u;
+    barrier();
+    if(!last)return;
+    memoryBarrierBuffer();
+    if(tid==0)cnt.v[2]=0;
+    float eps=uintBitsToFloat(p.r0);
+    float qs[4],a[2][4];
+    [[unroll]]for(uint s=0;s<4;s++){uint at=P+s*P;qs[s]=co.v[at+p.m+4];
+        [[unroll]]for(uint h=0;h<2;h++)a[h][s]=co.v[at+min(tid+320*h,rows-1)];}
+    float inv[4];
+    [[unroll]]for(uint s=0;s<4;s++)inv[s]=inversesqrt(qs[s]/float(p.n)+eps);
+    [[unroll]]for(uint h=0;h<2;h++){uint j=tid+320*h;if(j<rows){float v=0;
+        [[unroll]]for(uint s=0;s<4;s++)v+=inv[s]*a[h][s];
+        float y=v*0.25;co.v[j]=j<p.m?y/(1.0+exp(-y)):2.0/(1.0+exp(-y));}}
+    if(tid<4)co.v[p.m+4+tid]=inv[tid];
+    memoryBarrierBuffer();
+    barrier();
+    if(tid==0)atomicExchange(cnt.v[3],1u);
+    return;
+}
+// Second half: elements 16 B .. 16 B + 15 of every stream (64 rows of the up projection); wave wv takes columns
+// 64 wv .. 64 wv + 63 of them.
+uint B=wg-NA,blocks=p.m/32,i0=B*16;
+uint row=(lane/16)*p.n+i0+lane%16;
+uint blk=row*blocks+2*wv,a=p.cap/4+blk*2;
+uvec4 q[4];q[0]=wq.q[a];q[1]=wq.q[a+1];q[2]=wq.q[a+2];q[3]=wq.q[a+3];
+uint dw=wqw.words[blk/2];
+// The epilogue thread's element (clamped, so every thread loads unconditionally).
+uint ei=i0+tid%16;
+float x[4],wp[4],gm[4],y=b_f.v[ei];
+[[unroll]]for(uint s=0;s<4;s++){x[s]=a_f.v[s*p.n+ei];wp[s]=d_f.v[p.m+s];gm[s]=e_f.v[s*p.n+ei];}
+// The weights and the epilogue's inputs are in registers before the wait (a shared-memory store that needs them, so
+// the compiler cannot move the loads past it).
+float ein=y;
+[[unroll]]for(uint s=0;s<4;s++)ein+=x[s]+wp[s]+gm[s];
+sdep[tid]=q[0].x^q[0].y^q[0].z^q[0].w^q[1].x^q[1].y^q[1].z^q[1].w^q[2].x^q[2].y^q[2].z^q[2].w^q[3].x^q[3].y^q[3].z^
+    q[3].w^dw^floatBitsToUint(ein);
+// DIAGNOSTIC p.r1: 1 no wait (wrong results), 2 exit after the loads.
+if(p.r1==2u){barrier();if(tid==0&&atomicAdd(cnt.v[4],1u)==159u){cnt.v[3]=0;cnt.v[4]=0;}return;}
+if(tid==0&&p.r1!=1u){uint it=0;while(atomicOr(cnt.v[3],0u)==0u&&it<BOUND)it++;}
+barrier();
+// Never true (p.r1 is 0): keeps the store above, and so the loads, before the wait.
+if(p.r1==0x7fc00001u)c_f.v[ei]=uintBitsToFloat(sdep[tid]);
+uint xo=wv*16;
+vec2 d=unpackHalf2x16(dw);
+float acc=0;
+[[unroll]]for(uint h=0;h<2;h++){
+    float s=0;
+    [[unroll]]for(uint j=0;j<8;j++){vec4 w=i8(q[h*2+j/4][j%4]);
+        vec4 xv=lo4.v[xo+h*8+j];s=fma(w.x,xv.x,s);s=fma(w.y,xv.y,s);s=fma(w.z,xv.z,s);s=fma(w.w,xv.w,s);}
+    acc=fma(s,d[h],acc);
+}
+red[wv][lane]=acc;
+barrier();
+if(tid==0&&atomicAdd(cnt.v[4],1u)==159u){cnt.v[3]=0;cnt.v[4]=0;}
+if(tid<16){uint e=tid%16;
+    float g[4],inv[4];
+    [[unroll]]for(uint s=0;s<4;s++){uint k=s*16+e;g[s]=red[0][k]+red[1][k]+red[2][k]+red[3][k]+red[4][k];
+        inv[s]=lof.v[p.m+4+s];}
+    if((p.flags&1)!=0)[[unroll]]for(uint s=0;s<4;s++){x[s]=fma(wp[s],y,x[s]);a_f.v[s*p.n+ei]=x[s];}
+    float u=0;
+    [[unroll]]for(uint s=0;s<4;s++)u=fma(x[s]*inv[s]*gm[s],1.0/(1.0+exp(-g[s])),u);
+    c_f.v[ei]=u*0.25;}
+}

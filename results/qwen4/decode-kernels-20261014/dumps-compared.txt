@@ -1,0 +1,117 @@
+# s1: lite barriers (TRASHCAN_Q4_DIAG=lite), 14 tokens one at a time
+== dump-lite vs dump-main: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s2: coherent bindings + execution-only barriers
+== dump-cohx-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-cohx-b4 vs dump-main-b4: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-cohx-p16 vs dump-main-p16: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s3: v2 kernels
+== dump-v2-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-v2-b4 vs dump-main-b4: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s4: gate/up 2 + 2 rows (v3), fused mixer (v3f)
+== dump-v3-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-v3f-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-v3f-p16 vs dump-main-p16: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s6: mixer variants k5 + upl
+== dump-both-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-upl-b4 vs dump-main-b4: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s7: v5 (c1 + attention queries via LDS + gdn unconditional load)
+== dump-v5-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-v5-b4 vs dump-main-b4: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-v5-p16 vs dump-main-p16: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-v5-l2101 vs dump-main-l2101: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s8: c1 with Q8 K/V caches
+== dump-q8-trashcan-dk2-c1-b1 vs dump-q8-trashcan-15e5457-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-q8-trashcan-dk2-c1-b16 vs dump-q8-trashcan-15e5457-b16: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s10: c2 (light barriers) against main 9baedca
+== dump-c2-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-c2-b4 vs dump-main-b4: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-c2-p16 vs dump-main-p16: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-c2-l2101 vs dump-main-l2101: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# s11: c3 (c2 + qwen4_moe_down_p, removed) against main 9baedca
+== dump-c3-b1 vs dump-main-b1: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+== dump-c3-l2101 vs dump-main-l2101: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
+# stress (c1 against main 15e5457, layers 0-7 on both GPUs of indite)
+== cand-n520-r1 vs main-n520-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n1030-r1 vs main-n1030-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2060-r1 vs main-n2060-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600-r1 vs main-n2600-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600b4-r1 vs main-n2600b4-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n520-r2 vs main-n520-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n1030-r2 vs main-n1030-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2060-r2 vs main-n2060-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600-r2 vs main-n2600-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600b4-r2 vs main-n2600b4-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== main-n520-r2 vs main-n520-r1: 100 of 100 tensors identical
+== main-n1030-r2 vs main-n1030-r1: 100 of 100 tensors identical
+== main-n2060-r2 vs main-n2060-r1: 100 of 100 tensors identical
+== main-n2600-r2 vs main-n2600-r1: 100 of 100 tensors identical
+== main-n2600b4-r2 vs main-n2600b4-r1: 100 of 100 tensors identical
+== cand-n520-r2 vs cand-n520-r1: 100 of 100 tensors identical
+== cand-n1030-r2 vs cand-n1030-r1: 100 of 100 tensors identical
+== cand-n2060-r2 vs cand-n2060-r1: 100 of 100 tensors identical
+== cand-n2600-r2 vs cand-n2600-r1: 100 of 100 tensors identical
+== cand-n2600b4-r2 vs cand-n2600b4-r1: 100 of 100 tensors identical
+# stress (c2 against main 9baedca, layers 0-7 on both GPUs of enlight)
+== cand-n520-r1 vs main-n520-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n1030-r1 vs main-n1030-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2060-r1 vs main-n2060-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600-r1 vs main-n2600-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600b4-r1 vs main-n2600b4-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n520-r2 vs main-n520-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n1030-r2 vs main-n1030-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2060-r2 vs main-n2060-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600-r2 vs main-n2600-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600b4-r2 vs main-n2600b4-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== main-n520-r2 vs main-n520-r1: 100 of 100 tensors identical
+== main-n1030-r2 vs main-n1030-r1: 100 of 100 tensors identical
+== main-n2060-r2 vs main-n2060-r1: 100 of 100 tensors identical
+== main-n2600-r2 vs main-n2600-r1: 100 of 100 tensors identical
+== main-n2600b4-r2 vs main-n2600b4-r1: 100 of 100 tensors identical
+== cand-n520-r2 vs cand-n520-r1: 100 of 100 tensors identical
+== cand-n1030-r2 vs cand-n1030-r1: 100 of 100 tensors identical
+== cand-n2060-r2 vs cand-n2060-r1: 100 of 100 tensors identical
+== cand-n2600-r2 vs cand-n2600-r1: 100 of 100 tensors identical
+== cand-n2600b4-r2 vs cand-n2600b4-r1: 100 of 100 tensors identical

@@ -1,0 +1,32 @@
+# bench runs (tools/chain_sum.py)
+dk2c2r-pp512-base-1        pp512   354.8 tok/s  tg128  21.28 tok/s
+dk2c2r-pp512-base-2        pp512   359.1 tok/s  tg128  21.32 tok/s
+dk2c2r-pp512-cand-1        pp512   521.3 tok/s  tg128  22.29 tok/s
+dk2c2r-pp512-cand-2        pp512   522.5 tok/s  tg128  22.38 tok/s
+
+pp512: decode 21.30 -> 22.34 tok/s (+4.8%), prefill 356.9 -> 521.9 tok/s (+46.2%), n = 2, 2
+
+# link transports (tools/transport.py)
+pp2048-base-a1      6 stream; enlight->invite tcp, indite->invite tcp, invite->enlight tcp, invite->indite tcp
+pp2048-base-a2      4 stream; driver->inflight tcp, enlight->invite tcp, indite->invite tcp, inflight->incite tcp, invite->enlight tcp, invite->indite tcp
+pp2048-base-a3      2 stream; alight->indite tcp, driver->inflight tcp, enlight->invite tcp, indite->alight tcp, indite->invite tcp, inflight->incite tcp, invite->enlight tcp, invite->indite tcp
+pp2048-base-a4      6 stream; alight->indite tcp, enlight->invite tcp, indite->alight tcp, invite->enlight tcp
+pp512-base-1       10 stream
+pp512-base-1-a1    10 stream
+pp512-base-2       10 stream
+pp512-base-2-a1    10 stream
+pp512-cand-1       10 stream
+pp512-cand-1-a1    10 stream
+pp512-cand-2       10 stream
+pp512-cand-2-a1    10 stream
+
+pp512-1: same transport
+pp512-2: same transport
+
+# clocks (tools/nodeclocks.py)
+driver (incite)  13 logs, 442 samples; GPU0 850/1370 x442; GPU1 850/1370 x442; max 57 C
+alight           12 logs, 496 samples; GPU0 850/1370 x496; GPU1 850/1370 x496; max 58 C
+enlight          12 logs, 525 samples; GPU0 850/1370 x525; GPU1 850/1370 x525; max 58 C
+indite           12 logs, 516 samples; GPU0 850/1370 x516; GPU1 850/1370 x516; max 54 C
+inflight         12 logs, 486 samples; GPU0 850/1370 x486; GPU1 850/1370 x486; max 57 C
+invite           12 logs, 529 samples; GPU0 850/1370 x529; GPU1 850/1370 x529; max 68 C

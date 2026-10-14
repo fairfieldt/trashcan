@@ -1,0 +1,89 @@
+s1/main-p.json: decode wall 3.971 ms, layer ms [0.904, 0.886, 0.89, 0.982]
+
+== layer 4: 885.8 us (18.4 of gaps, 14 barriers), 117.1 MB (132 GB/s over the layer)
+dispatch                                          us   gap     MB  GB/s   code
+(layer start)                                    0.0   1.2   0.00     0       
+qwen4_mix_down_skw_c1 2560x10240                46.1   0.2   3.53    77   3152
+qwen4_mix_rows_up_c1 2560x0                     40.6   1.1   3.48    86   2192
+qwen4_matf32 96x2560                            29.5   1.1   0.98    33   1612
+qwen4_q8_mvw4_r4 6144x2560                     114.7   nan  16.71   146   1740
+qwen4_q8_mvw4_r4 10240x2560                    242.2   nan  27.85   115   1740
+qwen_conv 40x1                                   7.4   1.0   0.00     0    456
+qwen4_gdn 768x1                                 48.5   2.2   6.29   130   1740
+qwen4_gated_norm 48x1                            5.2   3.5   0.00     0    380
+qwen4_q8_mvk2_c1 2560x6144                     104.2   1.1  16.71   160   1120
+qwen4_mix_down_skw_c1 2560x10240                47.2   1.1   3.53    75   3152
+qwen4_mix_rows_up_c1 2560x0                     42.9   1.0   3.48    81   2192
+qwen4_router 513x2560                           33.6   1.4   5.25   156    828
+qwen4_topk 1x1                                  23.3   1.0   0.00     0   2700
+qwen4_moe_gu_iq4xs 640x2560                    140.8   1.3  19.15   136   3652
+qwen4_moe_down_w_iq4nl 2560x640                 85.4   1.0  10.14   119   3044
+
+== layer 5: 884.7 us (18.7 of gaps, 14 barriers), 117.1 MB (132 GB/s over the layer)
+dispatch                                          us   gap     MB  GB/s   code
+(layer start)                                    0.0   1.4   0.00     0       
+qwen4_mix_down_skw_c1 2560x10240                48.1   0.3   3.53    73   3152
+qwen4_mix_rows_up_c1 2560x0                     42.6   1.1   3.48    82   2192
+qwen4_matf32 96x2560                            29.0   1.4   0.98    34   1612
+qwen4_q8_mvw4_r4 6144x2560                     115.0   nan  16.71   145   1740
+qwen4_q8_mvw4_r4 10240x2560                    241.8   nan  27.85   115   1740
+qwen_conv 40x1                                   7.3   1.0   0.00     0    456
+qwen4_gdn 768x1                                 47.4   1.9   6.29   133   1740
+qwen4_gated_norm 48x1                            5.2   3.4   0.00     0    380
+qwen4_q8_mvk2_c1 2560x6144                     102.8   1.1  16.71   163   1120
+qwen4_mix_down_skw_c1 2560x10240                47.1   1.1   3.53    75   3152
+qwen4_mix_rows_up_c1 2560x0                     41.7   1.3   3.48    83   2192
+qwen4_router 513x2560                           33.6   1.4   5.25   156    828
+qwen4_topk 1x1                                  23.2   1.0   0.00     0   2700
+qwen4_moe_gu_iq4xs 640x2560                    140.2   1.3  19.15   137   3652
+qwen4_moe_down_w_iq4nl 2560x640                 84.9   1.0  10.14   119   3044
+
+== layer 6: 889.1 us (18.7 of gaps, 14 barriers), 117.1 MB (132 GB/s over the layer)
+dispatch                                          us   gap     MB  GB/s   code
+(layer start)                                    0.0   1.4   0.00     0       
+qwen4_mix_down_skw_c1 2560x10240                48.2   0.3   3.53    73   3152
+qwen4_mix_rows_up_c1 2560x0                     42.0   1.2   3.48    83   2192
+qwen4_matf32 96x2560                            30.2   1.4   0.98    33   1612
+qwen4_q8_mvw4_r4 6144x2560                     114.8   nan  16.71   146   1740
+qwen4_q8_mvw4_r4 10240x2560                    242.1   nan  27.85   115   1740
+qwen_conv 40x1                                   7.4   1.0   0.00     0    456
+qwen4_gdn 768x1                                 48.3   1.8   6.29   130   1740
+qwen4_gated_norm 48x1                            5.3   3.5   0.00     0    380
+qwen4_q8_mvk2_c1 2560x6144                     104.8   1.1  16.71   159   1120
+qwen4_mix_down_skw_c1 2560x10240                47.6   1.1   3.53    74   3152
+qwen4_mix_rows_up_c1 2560x0                     41.9   1.2   3.48    83   2192
+qwen4_router 513x2560                           33.8   1.4   5.25   156    828
+qwen4_topk 1x1                                  23.3   1.0   0.00     0   2700
+qwen4_moe_gu_iq4xs 640x2560                    140.5   1.3  19.15   136   3652
+qwen4_moe_down_w_iq4nl 2560x640                 85.3   1.0  10.14   119   3044
+
+== layer 7: 970.6 us (26.3 of gaps, 22 barriers), 108.0 MB (111 GB/s over the layer)
+dispatch                                          us   gap     MB  GB/s   code
+(layer start)                                    0.0   1.4   0.00     0       
+qwen4_mix_down_skw_c1 2560x10240                47.8   0.2   3.53    74   3152
+qwen4_mix_rows_up_c1 2560x0                     42.7   1.1   3.48    81   2192
+qwen4_matf32 128x2560                           30.5   1.4   1.31    43   1612
+qwen4_matf32 512x2560                           51.3   nan   5.24   102   1612
+qwen4_q8_mvw4_r2 512x2560                       63.8   nan   1.39    22    988
+qwen4_q8_mvw4_r2 512x2560                       75.0   nan   1.39    19    988
+qwen4_q8_mvw4_r4 12288x2560                    230.6   nan  33.42   145   1740
+qwen_qk 24x1                                    15.4   1.0   0.00     0   1072
+qwen_qk 2x1                                     15.3   nan   0.00     0   1072
+qwen_qk 2x1                                     15.0   nan   0.00     0   1072
+qwen4_idx_store 1x1                              5.0   1.3   0.00     0    256
+qwen4_idx_pool 1x1                               7.8   1.3   0.00     0   1428
+qwen_qk 4x1                                     12.9   1.0   0.00     0   1072
+qwen4_idx_score_lds 32x1                         4.2   1.3   0.00     0   3144
+qwen4_idx_select 1x1                             5.5   0.9   0.00     0   5680
+qwen4_attention_grouped_dec32 64x1              71.7   1.3   0.00     0   4380
+qwen4_attention_merge32 24x1                    13.9   2.0   0.00     0   1732
+qwen_gate 24x1                                   4.4   1.1   0.00     0    332
+qwen4_q8_mvk2_c1 2560x6144                     102.6   1.1  16.71   163   1120
+qwen4_mix_down_skw_c1 2560x10240                46.9   1.1   3.53    75   3152
+qwen4_mix_rows_up_c1 2560x0                     41.9   1.3   3.48    83   2192
+qwen4_router 513x2560                           33.7   1.4   5.25   156    828
+qwen4_topk 1x1                                  23.5   1.3   0.00     0   2700
+qwen4_moe_gu_iq4xs 640x2560                    140.4   1.3  19.15   136   3652
+qwen4_moe_down_w_iq4nl 2560x640                 85.2   1.0  10.14   119   3044
+qwen4_combine 10x1                               5.5   1.1   0.00     0    464
+copy 40960                                       2.6   1.2   0.00     0       

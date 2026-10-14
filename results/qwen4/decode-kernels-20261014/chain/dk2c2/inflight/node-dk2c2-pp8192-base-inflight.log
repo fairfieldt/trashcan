@@ -1,0 +1,14 @@
+CPU latency request: 0 us, scoped to this command
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: no session from 100.101.45.117:64344: handshake from 100.101.45.117:64344: failed to fill whole buffer
+qwen4 node: session from 10.99.21.1:52694
+link incite (10.99.21.1:52694): stream epoch 10be664a not opened (write: No such device or address (os error 6))
+link alight (alight.tb1:7071): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2492a334
+link incite (10.99.21.1:52694): stream epoch 10be664b not opened (write: No such device or address (os error 6))
+GPU0: layers 8..12 + head rows 43008..64512
+GPU0: 5768.5 MiB allocated in 0.90 s; device-local heap 5769 of 5888 MiB used, budget 5868
+GPU1: layers 12..16 + head rows 64512..86016
+link incite (10.99.21.1:52694): stream epoch 10be664c not opened (write: No such device or address (os error 6))
+GPU1: 5768.5 MiB allocated in 0.89 s; device-local heap 5769 of 5888 MiB used, budget 5868
+link incite (10.99.21.1:52694): stream epoch 10be664d not opened (write: No such device or address (os error 6))
+[clocks] 57 samples card0 (02:00.0) sclk/mclk: 850/1370 x57  max 59C card1 (06:00.0) sclk/mclk: 850/1370 x57  max 60C  log=results/clocks/node-dk2c2-pp8192-base-inflight.txt

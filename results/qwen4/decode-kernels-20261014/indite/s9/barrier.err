@@ -1,0 +1,1 @@
+[clocks] 3 samples card0 (02:00.0) sclk/mclk: 850/1370 x3  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x3  max 55C  log=results/dk2/s9/barrier.clk

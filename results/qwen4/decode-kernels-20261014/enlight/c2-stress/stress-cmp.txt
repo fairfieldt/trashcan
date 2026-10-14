@@ -1,0 +1,30 @@
+== cand-n520-r1 vs main-n520-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n1030-r1 vs main-n1030-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2060-r1 vs main-n2060-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600-r1 vs main-n2600-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600b4-r1 vs main-n2600b4-r1: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n520-r2 vs main-n520-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n1030-r2 vs main-n1030-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2060-r2 vs main-n2060-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600-r2 vs main-n2600-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== cand-n2600b4-r2 vs main-n2600b4-r2: 100 of 100 tensors identical
+   differing router/top-k tensors: 0 
+== main-n520-r2 vs main-n520-r1: 100 of 100 tensors identical
+== main-n1030-r2 vs main-n1030-r1: 100 of 100 tensors identical
+== main-n2060-r2 vs main-n2060-r1: 100 of 100 tensors identical
+== main-n2600-r2 vs main-n2600-r1: 100 of 100 tensors identical
+== main-n2600b4-r2 vs main-n2600b4-r1: 100 of 100 tensors identical
+== cand-n520-r2 vs cand-n520-r1: 100 of 100 tensors identical
+== cand-n1030-r2 vs cand-n1030-r1: 100 of 100 tensors identical
+== cand-n2060-r2 vs cand-n2060-r1: 100 of 100 tensors identical
+== cand-n2600-r2 vs cand-n2600-r1: 100 of 100 tensors identical
+== cand-n2600b4-r2 vs cand-n2600b4-r1: 100 of 100 tensors identical

@@ -1,0 +1,46 @@
+#version 460
+#include "common.glsl"
+#include "qwen4_expert.glsl"
+// EXPERIMENT: qwen4_moe_down_w with 5 rows per wave (512 waves for d = 2560: one round at 4 waves per SIMD) and the
+// next step's weights loaded while this step's are multiplied: each step starts with a copy of the weights loaded
+// one step earlier (xor with p.flags = 0, which the compiler cannot elide, so the next loads take their registers
+// without a copy at the loop's end), loads this step's inputs, then the next step's weights, then multiplies. The
+// expert ids and routing weights are staged in LDS; the scales are loaded as words. Same per-lane sums in the same
+// order (the same bits).
+#define BLOCKS 20
+#define R 5
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+shared uint sid[16];
+shared float swt[16];
+void main(){
+uint tid=gl_LocalInvocationID.x,t=gl_WorkGroupID.y;
+bool live=t<batch();
+if(FMT!=0&&tid<16)lut[tid]=kv[tid];
+if(live&&tid<p.m){sid[tid]=d_u.v[t*p.m+tid];swt[tid]=e_f.v[t*p.m+tid];}
+barrier();
+if(!live)return;
+uint lane=gl_SubgroupInvocationID,h=lane&1u,w=gl_SubgroupID;
+uint first=gl_WorkGroupID.x*(4*R)+w*R,pairs=p.m*BLOCKS,steps=(pairs+31)/32;
+uint rb[R];[[unroll]]for(uint r=0;r<R;r++)rb[r]=min(first+r,p.n-1);
+float acc[R];[[unroll]]for(uint r=0;r<R;r++)acc[r]=0;
+// Pair f = lane / 2 + 32 k: slot f / 20, block f % 20 (past the last pair: the last slot, no weight).
+uint f=lane>>1,j=f/BLOCKS,b=f%BLOCKS;
+uvec2 qn[R];uint sn[R];
+{uint e=sid[min(j,p.m-1)];
+[[unroll]]for(uint r=0;r<R;r++){uint blk=(e*p.n+rb[r])*BLOCKS+b;qn[r]=ww2.v[p.stride/2+blk*2+h];sn[r]=ww.words[blk>>1];}}
+for(uint k=0;k<steps;k++){
+    uvec2 qc[R];uint sc[R];
+    [[unroll]]for(uint r=0;r<R;r++){qc[r]=qn[r]^uvec2(p.flags);sc[r]=sn[r]^p.flags;}
+    uint jc=min(j,p.m-1),bc=b;bool on=f<pairs;
+    float cw=on?swt[jc]:0.0;uint xo=(t*p.m+jc)*(BLOCKS*8)+bc*8+h*2;
+    vec4 c0=b_v4.v[xo],c1=b_v4.v[xo+1],c2=b_v4.v[xo+4],c3=b_v4.v[xo+5];
+    f+=32;b+=12;j+=1;if(b>=BLOCKS){b-=BLOCKS;j++;}
+    {bool more=k+1<steps;uint jn=more?min(j,p.m-1):jc,bn=more?b:bc,e=sid[jn];
+    [[unroll]]for(uint r=0;r<R;r++){uint blk=(e*p.n+rb[r])*BLOCKS+bn;qn[r]=ww2.v[p.stride/2+blk*2+h];
+        sn[r]=ww.words[blk>>1];}}
+    [[unroll]]for(uint r=0;r<R;r++)acc[r]=fma(dot(qlo(qc[r].x),c0)+dot(qlo(qc[r].y),c1)+dot(qhi(qc[r].x),c2)+
+        dot(qhi(qc[r].y),c3),unpackHalf2x16(sc[r]>>((bc&1u)*16u)).x*cw,acc[r]);
+}
+[[unroll]]for(uint r=0;r<R;r++){float v=subgroupAdd(acc[r]);if(lane==0&&first+r<p.n)c_f.v[t*p.n+first+r]=v;}
+}
