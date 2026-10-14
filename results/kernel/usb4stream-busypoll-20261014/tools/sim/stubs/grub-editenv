@@ -1,0 +1,3 @@
+#!/bin/bash
+# Stub of grub-editenv on a simulated Mac: the entry kernel-boot.sh picked for the next boot.
+echo "next_entry=gnulinux-advanced-x>gnulinux-$(cat "$SIMHOME/$SIMHOST.next" 2> /dev/null)-advanced-x"

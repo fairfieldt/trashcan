@@ -1,0 +1,30 @@
+[16:29:23] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/pathmap-20261014-162923; (a) path tables closed, open and closed again; (b) pos and pp, 6 opens per direction on each cable, clients in the order abba
+[16:29:27]   incite 7.3.0-rc7-p2p
+[16:29:27]   inflight 7.3.0-rc7-p2p
+[16:29:27]   alight 7.3.0-rc7-p2p
+[16:29:27]   indite 7.3.0-rc7-p2p
+[16:29:27]   invite 7.3.0-rc7-p2p-s3
+[16:29:27]   enlight 7.3.0-rc7-p2p-s3
+[16:29:27]   tools 5ce28d9118fc 86c5450bfa69 60fed8bdab38 
+[16:29:27] (a) path tables with the stream devices closed
+[16:29:30]   closed: incite 4215 lines; inflight 4215 lines; alight 4215 lines; indite 4215 lines; invite 4215 lines; enlight 4215 lines; 
+[16:29:30] (a) path tables with every stream device held open
+[16:29:38]   open: incite 4215 lines; inflight 4215 lines; alight 4215 lines; indite 4215 lines; invite 4215 lines; enlight 4215 lines; 
+[16:29:48]   held open: incite: tbstream0 ok, tbstream1 ok; inflight: tbstream0 ok eofs 29, tbstream1 ok; alight: tbstream0 ok, tbstream1 ok; indite: tbstream0 ok eofs 29, tbstream1 ok; invite: tbstream0 ok, tbstream1 ok; enlight: tbstream0 ok eofs 1, tbstream1 ok eofs 1
+[16:29:48] (b) the hold on each cable
+[16:29:48] incite-inflight: incite /dev/tbstream0 <-> inflight /dev/tbstream0
+[16:32:17]   incite-inflight: pos incite->inflight [x x x x x x]; pos inflight->incite [x 0 x 0 x 0]; pp client incite [x x x x x x]; pp client inflight [2-10 2-10 2-10 2-10 2-10 2-10]; lost opens: 6x rc 255 at inflight (server), 3x ENXIO at inflight (client), stopped at incite (server), 6x ENXIO at incite (client), ENXIO at inflight (server) 
+[16:32:17] incite-enlight: incite /dev/tbstream1 <-> enlight /dev/tbstream1
+[16:33:20]   incite-enlight: pos incite->enlight [0 0 0 0 0 0]; pos enlight->incite [0 0 0 0 0 0]; pp client incite [0 0 0 0 0 0]; pp client enlight [0 0 0 0 0 0] 
+[16:33:20] inflight-alight: inflight /dev/tbstream1 <-> alight /dev/tbstream1
+[16:35:48]   inflight-alight: pos inflight->alight [x x x x x x]; pos alight->inflight [x 0 x 0 x 0]; pp client inflight [x x x x x x]; pp client alight [1-10 1-10 1-10 1-10 1-10 1-10]; lost opens: 6x no answer at inflight (client), stopped at alight (server), 3x ENXIO at alight (client), stopped at inflight (server), 6x ENXIO at inflight (client), ENXIO at alight (server) 
+[16:35:48] alight-indite: alight /dev/tbstream0 <-> indite /dev/tbstream0
+[16:38:17]   alight-indite: pos alight->indite [x x x x x x]; pos indite->alight [x 0 x 0 x 0]; pp client alight [x x x x x x]; pp client indite [2-10 2-10 2-10 2-10 2-10 2-10]; lost opens: 6x no answer at alight (client), stopped at indite (server), 3x ENXIO at indite (client), stopped at alight (server), 6x ENXIO at alight (client), ENXIO at indite (server) 
+[16:38:17] indite-invite: indite /dev/tbstream1 <-> invite /dev/tbstream1
+[16:39:21]   indite-invite: pos indite->invite [0 0 0 0 0 0]; pos invite->indite [0 0 0 0 0 0]; pp client indite [0 0 0 0 0 0]; pp client invite [0 0 0 0 0 0] 
+[16:39:21] invite-enlight: invite /dev/tbstream0 <-> enlight /dev/tbstream0
+[16:40:11]   invite-enlight: pos invite->enlight [0 0 0 0 0 0]; pos enlight->invite [0 0 0 0 0 0]; pp client invite [0 0 0 0 0 0]; pp client enlight [0 0 0 0 0 0] 
+[16:40:11] (a) path tables with the stream devices closed again
+[16:40:15]   after: incite 4215 lines; inflight 4215 lines; alight 4215 lines; indite 4215 lines; invite 4215 lines; enlight 4215 lines; 
+[16:40:15] map: /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/pathmap-20261014-162923/map.md (     155 lines; errors:        0 lines)
+[16:40:15] done

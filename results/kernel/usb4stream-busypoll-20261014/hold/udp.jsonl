@@ -1,0 +1,4 @@
+{"role": "client", "addr": "10.99.36.2", "n": 2000, "size": 64, "lost": 0, "rtt_us": {"p50": 123.6, "p90": 132.5, "p99": 147.1, "max": 425.4}, "host": "invite"}
+{"role": "server", "addr": "10.99.36.2", "echoed": 2000, "host": "enlight"}
+{"role": "client", "addr": "10.99.36.1", "n": 2000, "size": 64, "lost": 0, "rtt_us": {"p50": 94.6, "p90": 125.2, "p99": 143.4, "max": 525.6}, "host": "enlight"}
+{"role": "server", "addr": "10.99.36.1", "echoed": 2000, "host": "invite"}

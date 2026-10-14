@@ -1,0 +1,3 @@
+#!/bin/bash
+# Stub of setsid (not on macOS): runs the command in this process.
+exec "$@"

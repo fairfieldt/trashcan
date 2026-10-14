@@ -1,0 +1,12 @@
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 1, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 513.7229740012117, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 3, "rounds": 8, "fillers_by_position_mod_4": {"0": [0], "1": [0], "2": [0], "3": [0]}, "raw": [[4, 0, 0, 55], [6, 1, 0, 48], [9, 2, 0, 44], [13, 3, 0, 53], [14, 0, 0, 45], [16, 1, 0, 46], [19, 2, 0, 44], [23, 3, 0, 48]], "close_ms": 520.3494010002032, "host": "inflight"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream0", "run": 3, "answered": 8, "close_ms": 526.369593999334, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 4, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 531.7959869989863, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 5, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 502.5122259994532, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 7, "rounds": 8, "fillers_by_position_mod_4": {"0": [0], "1": [0], "2": [0], "3": [0]}, "raw": [[4, 0, 0, 87], [6, 1, 0, 78], [9, 2, 0, 75], [13, 3, 0, 93], [14, 0, 0, 80], [16, 1, 0, 72], [19, 2, 0, 73], [23, 3, 0, 84]], "close_ms": 514.6921810010099, "host": "inflight"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream0", "run": 7, "answered": 8, "close_ms": 520.8084000005329, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 8, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 504.60585099972377, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 9, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 531.4894950006419, "host": "incite"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream0", "run": 11, "answered": 8, "close_ms": 502.52547099989897, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 11, "rounds": 8, "fillers_by_position_mod_4": {"0": [0], "1": [0], "2": [0], "3": [0]}, "raw": [[4, 0, 0, 82], [6, 1, 0, 75], [9, 2, 0, 78], [13, 3, 0, 92], [14, 0, 0, 74], [16, 1, 0, 70], [19, 2, 0, 74], [23, 3, 0, 76]], "close_ms": 528.4743070005788, "host": "inflight"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 12, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 524.0868249984487, "host": "incite"}

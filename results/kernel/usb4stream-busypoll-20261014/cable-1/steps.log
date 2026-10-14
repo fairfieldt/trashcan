@@ -1,0 +1,23 @@
+[14:08:44] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/cc-20261014-140844; invite connects, enlight accepts
+[14:08:44] 1. before: the running kernel
+[14:08:46]   kernels: invite 7.3.0-rc7-p2p 7.3.0~rc7-1p2p , enlight 7.3.0-rc7-p2p 7.3.0~rc7-1p2p 
+[14:08:46]   invite /dev/tbstream0 <-> enlight /dev/tbstream0, invite connects to enlight.tb0
+[14:08:58]   enlight: 0 ends of file, write ok, 0 after it; invite: 0 ends of file, write ok, 0 after it; 
+[14:11:01]   churn rc 1: {"churn":"cc-before","failed_epochs":6,"on_stream":11,"pass":false,"passed":9,"pattern":"nkns","sessions":20,"up_ms":{"max":1085.2815440000002,"p50":7.845289,"p99":1085.2815440000002},"within_ms":100.0}; server: 6 failed epochs, 5 exits
+[14:11:01] 2. install 7.3.0-rc7-p2p-s on both, for the next boot only
+[14:11:21]   invite: installed 7.3.0~rc7-2p2p; running 7.3.0-rc7-p2p next_entry=gnulinux-advanced-0ad542e5-3786-4b92-a4b2-74a036ddb5d5>gnulinux-7.3.0-rc7-p2p-s-advanced-0ad542e5-3786-4b92-a4b2-74a036ddb5d5 
+[14:11:41]   enlight: installed 7.3.0~rc7-2p2p; running 7.3.0-rc7-p2p next_entry=gnulinux-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03>gnulinux-7.3.0-rc7-p2p-s-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03 
+[14:11:41] waiting for /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/cc-20261014-140844/go-reboot (up to 45 min)
+[14:14:57]   go-reboot
+[14:14:57] 3. reboot invite and enlight
+[14:15:56]   invite up on 7.3.0-rc7-p2p-s after 30 s
+[14:15:57]   enlight up on 7.3.0-rc7-p2p-s after 20 s
+[14:15:57] waiting for /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/cc-20261014-140844/links-up (up to 60 min)
+[14:18:02]   links-up
+[14:18:02] 4. after: 7.3.0-rc7-p2p-s
+[14:18:03]   kernels: invite 7.3.0-rc7-p2p-s 7.3.0~rc7-2p2p , enlight 7.3.0-rc7-p2p-s 7.3.0~rc7-2p2p 
+[14:18:03]   invite /dev/tbstream0 <-> enlight /dev/tbstream0, invite connects to enlight.tb0
+[14:18:15]   enlight: 0 ends of file, write ok, 0 after it; invite: 0 ends of file, write ok, 0 after it; 
+[14:20:46]   churn rc 1: {"churn":"cc-after","failed_epochs":1,"on_stream":198,"pass":false,"passed":192,"pattern":"nkns","sessions":200,"up_ms":{"max":4035.615884,"p50":13.031701,"p99":713.0437400000001},"within_ms":100.0}; server: 1 failed epochs, 50 exits
+[14:20:51]   suite: 5 of 5 tests passed, 0 failed epochs, 0 fallbacks
+[14:20:52] done

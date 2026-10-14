@@ -1,0 +1,17 @@
+[13:23:43] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/bp1-20261014-132340
+[13:23:43] ring: incite->inflight.tb0 inflight->alight.tb1 alight->indite.tb0 indite->invite.tb1 invite->enlight.tb0 enlight->incite.tb1 
+[13:23:44] kernels: 
+[13:23:44] 1. busy_poll 0 (as created), no follow-up frames
+[13:23:45]   busy_poll:  12 0;
+== /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/bp1-20261014-132340/probe-bp0.jsonl: 3 client runs
+  alight    follow 0:   0 rounds, round trip p50         0 us p90         0 us, fillers p50 None total 0
+  enlight   follow 0:  24 rounds, round trip p50     60148 us p90     60181 us, fillers p50 3 total 72
+  inflight  follow 0:   0 rounds, round trip p50         0 us p90         0 us, fillers p50 None total 0
+[13:24:48] 2. busy_poll 1, no follow-up frames
+[13:24:50]   busy_poll:  12 1;
+== /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/bp1-20261014-132340/probe-bp1.jsonl: 2 client runs
+  enlight   follow 0: 199 rounds, round trip p50     60118 us p90     60128 us, fillers p50 3 total 597
+  indite    follow 0: 200 rounds, round trip p50     40098 us p90     40111 us, fillers p50 2 total 400
+[13:25:07] 3. busy_poll back to 0
+[13:25:08]   busy_poll:  24 0;
+[13:25:08] done

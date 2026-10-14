@@ -1,0 +1,90 @@
+== run 49 server
+== run 50 client
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 340, in <module>
+    main()
+    ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 285, in main
+    res = ringpos(fd, client, rounds, run)
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 166, in ringpos
+    write(hello)
+    ~~~~~^^^^^^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 117, in write
+    os.write(fd, frame(seq, size))
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 6] No such device or address
+== run 51 server
+== run 52 client
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 340, in <module>
+    main()
+    ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 285, in main
+    res = ringpos(fd, client, rounds, run)
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 166, in ringpos
+    write(hello)
+    ~~~~~^^^^^^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 117, in write
+    os.write(fd, frame(seq, size))
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 6] No such device or address
+== run 53 server
+== run 54 client
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 340, in <module>
+    main()
+    ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 285, in main
+    res = ringpos(fd, client, rounds, run)
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 166, in ringpos
+    write(hello)
+    ~~~~~^^^^^^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 117, in write
+    os.write(fd, frame(seq, size))
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 6] No such device or address
+== run 55 server
+== run 56 client
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 340, in <module>
+    main()
+    ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 285, in main
+    res = ringpos(fd, client, rounds, run)
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 166, in ringpos
+    write(hello)
+    ~~~~~^^^^^^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 117, in write
+    os.write(fd, frame(seq, size))
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 6] No such device or address
+== run 57 server
+== run 58 client
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 340, in <module>
+    main()
+    ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 285, in main
+    res = ringpos(fd, client, rounds, run)
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 166, in ringpos
+    write(hello)
+    ~~~~~^^^^^^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 117, in write
+    os.write(fd, frame(seq, size))
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 6] No such device or address
+== run 59 server
+== run 60 client
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 340, in <module>
+    main()
+    ~~~~^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 285, in main
+    res = ringpos(fd, client, rounds, run)
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 166, in ringpos
+    write(hello)
+    ~~~~~^^^^^^^
+  File "/home/fairfieldt/trashcan-exp/flashnext/stream-tbcheck.py", line 117, in write
+    os.write(fd, frame(seq, size))
+    ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 6] No such device or address

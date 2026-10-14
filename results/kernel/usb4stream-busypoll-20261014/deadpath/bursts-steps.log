@@ -1,0 +1,34 @@
+[14:54:40] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/deadpath-20261014-145440
+[14:54:41]   invite 7.3.0-rc7-p2p-s /dev/tbstream0 <-> enlight 7.3.0-rc7-p2p-s /dev/tbstream0
+[14:54:41] invite early, enlight late
+[14:55:34] enlight early, invite late
+run early       K open s burst sent burst read early->late late->early
+  1 invite      0    0.1          0          0       20/20       20/20
+  2 invite      0    0.1          0          0       20/20       20/20
+  3 invite      4    0.1          4          0       20/20       20/20
+  4 invite      4    0.1          4          0       20/20       20/20
+  5 invite     16    0.1         16          0       20/20       20/20
+  6 invite     16    0.1         16          0       20/20       20/20
+  7 invite     64    0.1         64          0       20/20       20/20
+  8 invite     64    0.1         64          0       20/20       20/20
+  9 invite    300    0.1        269          0       20/20       20/20
+ 10 invite    300    0.1        300         31       19/20       20/20
+ 11 invite     16    1.0         16          0       20/20       20/20
+ 12 invite     16    1.0         16          0       20/20       20/20
+ 13 invite    300    1.0        269          0       20/20       20/20
+ 14 invite    300    1.0        269          0       20/20       20/20
+ 15 enlight     0    0.1          0          0       20/20       20/20
+ 16 enlight     0    0.1          0          0       20/20       20/20
+ 17 enlight     4    0.1          4          0       20/20       20/20
+ 18 enlight     4    0.1          4          0       20/20       20/20
+ 19 enlight    16    0.1         16          0       20/20       20/20
+ 20 enlight    16    0.1         16          0       20/20       20/20
+ 21 enlight    64    0.1         64          0       20/20       20/20
+ 22 enlight    64    0.1         64          0       20/20       20/20
+ 23 enlight   300    0.1        269          0       20/20       20/20
+ 24 enlight   300    0.1        300         29       20/20       20/20
+ 25 enlight    16    1.0         16          0       20/20       20/20
+ 26 enlight    16    1.0         16          0       20/20       20/20
+ 27 enlight   300    1.0        269          0       20/20       20/20
+ 28 enlight   300    1.0        269          0       20/20       20/20
+[14:56:28] done

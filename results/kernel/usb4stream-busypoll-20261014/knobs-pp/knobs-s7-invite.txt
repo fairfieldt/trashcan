@@ -1,0 +1,1 @@
+rx_e2e=1 paths_last=1 poll_mode=1 rx_repost=0 rx_eof_close=1 busy_poll=0 throttling=8192 

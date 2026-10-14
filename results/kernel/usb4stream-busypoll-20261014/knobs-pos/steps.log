@@ -1,0 +1,16 @@
+[15:23:47] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/knobs-20261014-152347; invite connects, enlight accepts; 10 opens per direction and 20 churn sessions per setting
+[15:23:48]   invite 7.3.0-rc7-p2p-s3 /dev/tbstream0 <-> enlight 7.3.0-rc7-p2p-s3 /dev/tbstream0; build d12fae10d15c
+[15:23:48] s1. defaults
+[15:23:49]   invite: rx_e2e=1 paths_last=0 poll_mode=0 rx_repost=0 rx_eof_close=1 busy_poll=0 throttling=8192 
+[15:24:28]   into the other end from invite: fillers per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; into the other end from enlight: fillers per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; 
+[15:24:35]   churn: {"churn":"s1","failed_epochs":0,"on_stream":20,"pass":true,"passed":20,"pattern":"nkns","sessions":20,"up_ms":{"max":52.842034000000005,"p50":9.265942,"p99":52.842034000000005},"within_ms":100.0}; server: 0 failed epochs
+[15:24:35] s2. paths_last=1
+[15:24:36]   invite: rx_e2e=1 paths_last=1 poll_mode=0 rx_repost=0 rx_eof_close=1 busy_poll=0 throttling=8192 
+[15:25:15]   into the other end from invite: fillers per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; into the other end from enlight: fillers per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; 
+[15:25:19]   churn: {"churn":"s2","failed_epochs":0,"on_stream":20,"pass":true,"passed":20,"pattern":"nkns","sessions":20,"up_ms":{"max":43.480751,"p50":10.827195,"p99":43.480751},"within_ms":100.0}; server: 0 failed epochs
+[15:25:19] s3. poll_mode=1
+[15:25:20]   invite: rx_e2e=1 paths_last=0 poll_mode=1 rx_repost=0 rx_eof_close=1 busy_poll=0 throttling=8192 
+[15:25:59]   into the other end from invite: fillers per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; into the other end from enlight: fillers per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; 
+[15:26:03]   churn: {"churn":"s3","failed_epochs":0,"on_stream":20,"pass":true,"passed":20,"pattern":"nkns","sessions":20,"up_ms":{"max":37.866648000000005,"p50":10.016145,"p99":37.866648000000005},"within_ms":100.0}; server: 0 failed epochs
+[15:26:03] s4. rx_repost=1
+[15:26:04]   invite: rx_e2e=1 paths_last=0 poll_mode=0 rx_repost=1 rx_eof_close=1 busy_poll=0 throttling=8192 

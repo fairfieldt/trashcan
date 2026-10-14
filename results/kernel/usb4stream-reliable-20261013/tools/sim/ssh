@@ -38,6 +38,8 @@ def result(label, mode, size):
     return {'label': label, 'connect': ['x'], 'test': {'mode': mode, 'size': size}, 'result': r}
 
 
+if 'uname -r' in cmd:
+    print('7.3.0-rc7-p2p')
 if 'tblink links' in cmd:
     links()
 elif 'stream-tbcheck.py pp' in cmd:
@@ -56,6 +58,9 @@ elif 'stream-tbcheck.py pos' in cmd:
                           'fillers_by_position_mod_4': {'0': [3], '1': [2], '2': [1], '3': [0]}, 'raw': [], 'host': host}))
     else:
         print(json.dumps({'step': 'pos', 'side': side, 'run': 1, 'answered': 40, 'host': host}))
+elif 'stream-pg.sh up' in cmd:
+    time.sleep(0.1)
+    print('/dev/tbstream2 busy_poll=%s hopids=14/14' % cmd.split()[-1])
 elif 'stream-tbcheck.py drain' in cmd:
     time.sleep(0.5)
     print(json.dumps({'step': 'drain', 'dev': '/dev/tbstream0', 'bytes': 0, 'eofs': 0, 'close_ms': 500.0, 'host': host}))

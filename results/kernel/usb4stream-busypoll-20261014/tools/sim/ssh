@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+"""Stand-in for ssh in a window script's simulation (simtest.sh): runs the remote shell text locally with bash, as
+ssh runs it on the Mac, with that Mac's home in $SIMHOME/HOST and the Mac's own programs replaced by stubs
+($SIMSTUBS: tblink, uname -r, sudo, systemctl, setsid, ...; the home holds stub builds and probe scripts), so quoting
+and backgrounding bugs in remote snippets show. Like ssh it returns only when the remote command has exited and
+everything holding its output has closed it: a background job left holding the output hangs the window, as it does
+on the Macs. Logs each command to $SIMLOG."""
+import os, selectors, subprocess, sys, time
+
+args = sys.argv[1:]
+while args and args[0].startswith('-'):
+    args = args[2:] if args[0] in ('-o', '-F', '-i', '-p', '-l') else args[1:]
+host, cmd = args[0].split('.')[0], ' '.join(args[1:])
+with open(os.environ.get('SIMLOG', '/dev/null'), 'a') as f:
+    f.write(f'{time.time():.3f} {host}: {cmd}\n')
+home = os.path.join(os.environ['SIMHOME'], host)
+env = dict(os.environ, HOME=home, SIMHOST=host, PATH=os.environ['SIMSTUBS'] + ':' + os.environ['PATH'])
+cmd = cmd.replace('/usr/local/sbin/tblink', 'tblink')
+p = subprocess.Popen(['bash', '-c', cmd], cwd=home, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                     stderr=subprocess.PIPE)
+sel = selectors.DefaultSelector()
+sel.register(p.stdout, selectors.EVENT_READ, sys.stdout.buffer)
+sel.register(p.stderr, selectors.EVENT_READ, sys.stderr.buffer)
+left = 2
+while left:
+    for key, _ in sel.select():
+        data = os.read(key.fileobj.fileno(), 65536)
+        if data:
+            key.data.write(data)
+            key.data.flush()
+        else:
+            sel.unregister(key.fileobj)
+            left -= 1
+sys.exit(p.wait())

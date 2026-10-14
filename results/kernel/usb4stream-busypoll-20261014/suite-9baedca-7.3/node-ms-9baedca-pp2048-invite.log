@@ -1,0 +1,19 @@
+CPU latency request: 0 us, scoped to this command
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: no session from 100.101.45.117:62775: handshake from 100.101.45.117:62775: failed to fill whole buffer
+qwen4 node: session from 10.99.35.18:36596
+link indite (10.99.35.18:36596): stream epoch fb14eabe not opened (write: No such device or address (os error 6))
+link enlight (enlight.tb0:7071): stream epoch 0309b56f not opened (the other side gave the stream up)
+GPU0: layers 32..36 + head rows 172032..193536
+link indite (10.99.35.18:36596): stream up (1-3.1/trashcan /dev/tbstream1), epoch fb14eabf
+link enlight (enlight.tb0:7071): stream epoch 0309b570 not opened (the other side gave the stream up)
+GPU0: 5768.5 MiB allocated in 0.91 s; device-local heap 5769 of 5888 MiB used, budget 5868
+GPU1: layers 36..40 + head rows 193536..215040
+GPU1: 5768.5 MiB allocated in 0.89 s; device-local heap 5769 of 5888 MiB used, budget 5868
+link enlight (enlight.tb0:7071): stream epoch 0309b571 not opened (the other side gave the stream up)
+cat: /sys/class/drm/card1/device/hwmon/hwmon3/freq1_input: Device or resource busy
+scripts/clockmon.sh: line 10: / 1000000 : syntax error: operand expected (error token is "/ 1000000 ")
+link enlight (enlight.tb0:7071): stream epoch 0309b572 not opened (the other side gave the stream up)
+link enlight (enlight.tb0:7071): stream epoch 0309b573 not opened (the other side gave the stream up)
+link enlight (enlight.tb0:7071): stream epoch 0309b574 not opened (the other side gave the stream up)
+[clocks] 21 samples card0 (02:00.0) sclk/mclk: 850/1370 x21  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x21  max 60C  log=results/clocks/node-ms-9baedca-pp2048-invite.txt

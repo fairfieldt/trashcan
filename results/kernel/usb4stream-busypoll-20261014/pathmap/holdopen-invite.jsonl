@@ -1,0 +1,1 @@
+{"step": "holdopen", "host": "invite", "secs": 16.2, "devs": [{"dev": "/dev/tbstream0", "opened": true, "open_ms": 0.5, "bytes": 0, "eofs": 0, "errors": {}, "close_ms": 0.8}, {"dev": "/dev/tbstream1", "opened": true, "open_ms": 0.5, "bytes": 0, "eofs": 0, "errors": {}, "close_ms": 0.8}]}

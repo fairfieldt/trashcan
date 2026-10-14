@@ -1,0 +1,4 @@
+#!/bin/bash
+# Stub of sudo on a simulated Mac: runs the command (stubs where the Mac's own programs would act).
+[ "${1:-}" = -n ] && shift
+exec "$@"

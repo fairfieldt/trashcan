@@ -1,0 +1,7 @@
+#!/bin/bash
+# Stub of dpkg-query on a simulated Mac: the version of the kernel package asked for.
+case "$*" in
+    *p2p-s2*) echo 7.3.0~rc7-3p2p ;;
+    *p2p-s*) echo 7.3.0~rc7-2p2p ;;
+    *) echo 7.3.0~rc7-1p2p ;;
+esac

@@ -1,0 +1,8 @@
+#!/bin/bash
+# Stub of uname on a simulated Mac: -r gives the kernel it booted (7.3.0-rc7-p2p, or the KREL written by the
+# systemctl reboot stub); anything else is the real uname.
+if [ "${1:-}" = -r ]; then
+    cat "$SIMHOME/$SIMHOST.krel" 2> /dev/null || echo 7.3.0-rc7-p2p
+else
+    exec /usr/bin/uname "$@"
+fi

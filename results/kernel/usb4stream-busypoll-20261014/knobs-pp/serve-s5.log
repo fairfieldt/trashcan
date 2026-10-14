@@ -1,0 +1,64 @@
+link-test: serving on 0.0.0.0:7075
+link invite (10.99.36.1:44034): stream up (0-3.1/trashcan /dev/tbstream0), epoch 32293aae, 7.1 ms after the link started
+link-test: 10.99.36.1:44034: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44034): stream down (the other side closed its stream); continuing over TCP
+link invite (10.99.36.1:44040): stream up (0-3.1/trashcan /dev/tbstream0), epoch 54772d2e, 29.0 ms after the link started
+link-test: 10.99.36.1:44040: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44040): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.36.1:44040: invite (10.99.36.1:44040): 10.99.36.2:7075 -> 10.99.36.1:44040 (read: Connection reset by peer (os error 104))
+link invite (10.99.36.1:44054): stream up (0-3.1/trashcan /dev/tbstream0), epoch 3d51ff6f, 11.6 ms after the link started
+link-test: 10.99.36.1:44054: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44054): stream down (the other side closed its stream); continuing over TCP
+link invite (10.99.36.1:44062): stream up (0-3.1/trashcan /dev/tbstream0), epoch 30f2b831, 11.8 ms after the link started
+link-test: 10.99.36.1:44062: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792017088.463 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link invite (10.99.36.1:44082): stream up (0-3.1/trashcan /dev/tbstream0), epoch 5c18b3d1, 9.9 ms after the link started
+link-test: 10.99.36.1:44082: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44094): stream up (0-3.1/trashcan /dev/tbstream0), epoch 409add56, 20.7 ms after the link started
+link-test: 10.99.36.1:44094: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44094): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.36.1:44094: invite (10.99.36.1:44094): 10.99.36.2:7075 -> 10.99.36.1:44094 (read: Connection reset by peer (os error 104))
+link invite (10.99.36.1:44098): stream up (0-3.1/trashcan /dev/tbstream0), epoch b9b12ee4, 14.7 ms after the link started
+link-test: 10.99.36.1:44098: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44104): stream up (0-3.1/trashcan /dev/tbstream0), epoch 6111dffa, 15.9 ms after the link started
+link-test: 10.99.36.1:44104: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792017089.143 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link invite (10.99.36.1:44116): stream up (0-3.1/trashcan /dev/tbstream0), epoch 498d39da, 11.3 ms after the link started
+link-test: 10.99.36.1:44116: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44124): stream up (0-3.1/trashcan /dev/tbstream0), epoch 336950bf, 29.1 ms after the link started
+link-test: 10.99.36.1:44124: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44124): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.36.1:44124: invite (10.99.36.1:44124): 10.99.36.2:7075 -> 10.99.36.1:44124 (read: Connection reset by peer (os error 104))
+link invite (10.99.36.1:44136): stream up (0-3.1/trashcan /dev/tbstream0), epoch f727c40a, 16.6 ms after the link started
+link-test: 10.99.36.1:44136: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44150): stream up (0-3.1/trashcan /dev/tbstream0), epoch dd752871, 12.6 ms after the link started
+link-test: 10.99.36.1:44150: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792017089.887 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link invite (10.99.36.1:44176): stream up (0-3.1/trashcan /dev/tbstream0), epoch 70cbddc5, 52.8 ms after the link started
+link-test: 10.99.36.1:44176: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44176): stream down (the other side closed its stream); continuing over TCP
+link invite (10.99.36.1:44182): stream up (0-3.1/trashcan /dev/tbstream0), epoch a8db98d9, 27.1 ms after the link started
+link-test: 10.99.36.1:44182: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44182): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.36.1:44182: invite (10.99.36.1:44182): 10.99.36.2:7075 -> 10.99.36.1:44182 (read: Connection reset by peer (os error 104))
+link invite (10.99.36.1:44184): stream up (0-3.1/trashcan /dev/tbstream0), epoch d47a3400, 41.9 ms after the link started
+link-test: 10.99.36.1:44184: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44196): stream up (0-3.1/trashcan /dev/tbstream0), epoch 828b5e2d, 14.0 ms after the link started
+link-test: 10.99.36.1:44196: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792017090.701 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link invite (10.99.36.1:44216): stream up (0-3.1/trashcan /dev/tbstream0), epoch 45f2ee8e, 4.4 ms after the link started
+link-test: 10.99.36.1:44216: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44230): stream up (0-3.1/trashcan /dev/tbstream0), epoch 2728cb54, 9.7 ms after the link started
+link-test: 10.99.36.1:44230: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44230): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.36.1:44230: invite (10.99.36.1:44230): 10.99.36.2:7075 -> 10.99.36.1:44230 (read: Connection reset by peer (os error 104))
+link invite (10.99.36.1:44232): stream up (0-3.1/trashcan /dev/tbstream0), epoch 34eeef4b, 4.8 ms after the link started
+link-test: 10.99.36.1:44232: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link invite (10.99.36.1:44242): stream up (0-3.1/trashcan /dev/tbstream0), epoch 22e3f297, 5.8 ms after the link started
+link-test: 10.99.36.1:44242: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792017091.322 (fault injection)
+link-test: serving on 0.0.0.0:7075

@@ -1,0 +1,9 @@
+[14:42:10] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/churn-20261014-144210; invite connects, enlight accepts; 200 sessions
+[14:42:12]   invite: 7.3.0-rc7-p2p-s a1bffdbe3ef1 ; enlight: 7.3.0-rc7-p2p-s a1bffdbe3ef1 
+[14:42:12]   invite /dev/tbstream0 <-> enlight /dev/tbstream0, invite connects to enlight.tb0
+[14:42:12] 1. 200 churn sessions
+[14:45:38]   churn rc 1: {"churn":"churn","failed_epochs":1,"on_stream":198,"pass":false,"passed":197,"pattern":"nkns","sessions":200,"up_ms":{"max":4043.653708,"p50":10.016007,"p99":90.715244},"within_ms":100.0}
+[14:45:38] 2. the link-test suite
+[14:45:45]   suite: 5 of 5 tests passed, 0 failed epochs, 0 fallbacks
+[14:45:45]   server: 1 failed epochs, 50 exits, 0 slow opens
+[14:45:45] done
