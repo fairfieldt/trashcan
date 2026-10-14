@@ -285,6 +285,18 @@ pay there, 68 of 68; the branch's policy, with its cheaper draft steps, chose 3 
 were dropped (7 matching the next token). Every run gave plain decoding's tokens; the branch's p100 dump is
 byte-identical to main `eb4dbeb`'s (586 of 586 files, `chain4/validation.txt`).
 
+**Session 6** (`chain6/`, this branch rebased on main `9f54fb8`, engine `e9f34e6`: QSA kernels and prefill chunks queued
+in GpuStage's submission slots, which the verification batches and the rollback also go through;
+`tools/mtp2-chain6.sh`; every GPU at 850 MHz while working): p100 validation, then one pass:
+
+| run | plain tok/s | MTP tok/s | gain | water / csv / transformer | accepted/draft | rounds k = 0/1/2/3 | ms per round k = 0/1/2/3 | draft step |
+|---|---|---|---|---|---|---|---|---|
+| main `e9f34e6` | 20.38 | 27.72 | +36.0% | 26.61 / 30.29 / 26.24 | 0.73 / 0.87 / 0.72 | 1/10/168/38 | 53.6 / 66.6-66.9 / 80.4-82.1 / 99.3-103.9 | 5.76-5.86 ms |
+| **this branch** | 20.26 | **29.14** | **+43.8%** | 27.30 / 31.42 / 28.70 | 0.83 / 0.95 / 0.92 | 31/24/176/1 | 49.5-51.2 / 65.9-68.2 / 80.5-82.2 / 109.6 | 5.01-5.04 ms |
+
++5.1% over main's MTP (27.72 -> 29.14), the same tokens as plain decoding, and the p100 dump byte-identical to main
+`e9f34e6`'s (598 of 598 files, `chain6/validation.txt`).
+
 ## Reproduction
 
 ```sh
