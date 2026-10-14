@@ -1,0 +1,12 @@
+== mtp2s7-base-chat.json: T 0, 1 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step	dropped (hits)
+water.ids	21.03	27.38	+30.2%	0.757	1.000	2.42	1/9/68/1	51.3/64.3/79.3/102.4	5.76	0 (0)
+csv.ids	20.84	30.74	+47.6%	0.898	0.000	2.81	0/0/67/1	0.0/0.0/78.9/99.4	6.02	0 (0)
+transformer.ids	20.78	26.63	+28.1%	0.741	1.000	2.33	1/15/66/0	48.0/64.2/79.5/0.0	6.24	0 (0)
+mean	20.88	28.25	+35.3%
+== mtp2s7-chat.json: T 0.0, 1 runs, all identical: True
+prompt	plain tok/s	MTP tok/s	gain	accepted/draft	shadow	tokens/round	rounds by k	ms by k	draft ms/step	dropped (hits)
+water.ids	20.86	29.14	+39.7%	0.859	0.273	2.36	11/13/56/1	48.0/63.9/77.8/104.8	5.06	17 (3)
+csv.ids	20.95	32.14	+53.4%	0.953	0.667	2.77	3/4/62/0	48.5/64.4/78.1/0.0	5.18	7 (3)
+transformer.ids	21.02	28.94	+37.7%	0.901	0.294	2.33	17/9/56/0	48.3/65.1/78.8/0.0	5.28	26 (1)
+mean	20.94	30.08	+43.6%

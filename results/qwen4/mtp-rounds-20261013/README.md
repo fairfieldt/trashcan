@@ -1,9 +1,26 @@
 # Flash-Next MTP rounds: sampling, the draft step, the verification reply (2026-10-13)
 
 Follows [results/qwen4/mtp-20261012](../mtp-20261012/README.md) (the MTP block drafting on the driver's CPU, adaptive
-rounds of 0-3 drafts, greedy chat replies 18.3 -> 21.6 tok/s on six Macs). Branch `worktree-agent-a173c86cfe38f66c7`,
-started from main `4c1346d` (session 1), measured on main `7da6f93` (session 2), `2293550` (session 3) and `eb4dbeb`
-(session 4: the 1-4-token verification kernels).
+rounds of 0-3 drafts, greedy chat replies 18.3 -> 21.6 tok/s on six Macs). Started from main `4c1346d` (session 1),
+measured against main as it moved (sessions 2-7), final tree on main `7b41707`.
+
+Speculative decoding now samples with keyed Gumbel noise, so drafts are sampled coupled to the target's sample and every
+seed gives plain decoding's output; the CPU's part of a draft step is 30-50% shorter with the same drafts (on the chain
+5.8 -> 5.0-5.3 ms at chat lengths, 6.6-7.3 -> 5.2 ms at 3K positions); the verification reply sends the residual rows
+off the critical path; drafts the drafter is unsure of are not verified, with a policy that keeps two rates. Greedy
+chat replies (water, csv, transformer; six Macs, main and this branch in the same session, three passes in session 2
+and one since; the same tokens as plain decoding; every GPU at 850 MHz):
+
+| main | main's MTP | this branch | gain | session |
+|---|---|---|---|---|
+| `7da6f93` | 21.68 tok/s | 23.11 | +6.6% | 2 |
+| `2293550` | 23.28 | 24.72 | +6.2% | 3 |
+| `eb4dbeb` (1-4-token verification kernels) | 27.29 | 28.49 | +4.4% | 5 |
+| `e9f34e6` (QSA kernels, queued prefill chunks) | 27.72 | 29.14 | +5.1% | 6 |
+| **`7b41707`** (decode host path) | **28.25** | **30.08** | **+6.5%** | 7 |
+
+Sampled replies (main `7da6f93`, against main's drafting with the same texts): +5.5% at T = 0.6, +3.3% at 0.8, +6.0%
+at 1.0; the degenerate reference prompt -3.5% -> -1.6% against plain decoding; a 3K-token document -0.3% -> +5.5%.
 
 ## Sampling (`spec::Draws`)
 
@@ -297,6 +314,19 @@ in GpuStage's submission slots, which the verification batches and the rollback 
 +5.1% over main's MTP (27.72 -> 29.14), the same tokens as plain decoding, and the p100 dump byte-identical to main
 `e9f34e6`'s (598 of 598 files, `chain6/validation.txt`).
 
+**Session 7** (`chain7/`, the final tree: this branch on main `7b417070`, whose decode host path (binary candidate frames,
+spinning on expected frames) is merged with this branch's residual-row frame; `tools/mtp2-chain7.sh`; every GPU at 850
+MHz while working; before it the two-process CPU chain gave plain decoding's tokens at T = 0 and 1, `tools/cpu2.sh`):
+
+| run | plain tok/s | MTP tok/s | gain | water / csv / transformer | accepted/draft | rounds k = 0/1/2/3 | ms per round k = 0/1/2/3 | draft step |
+|---|---|---|---|---|---|---|---|---|
+| main `7b41707` | 20.88 | 28.25 | +35.3% | 27.38 / 30.74 / 26.63 | 0.76 / 0.90 / 0.74 | 2/24/201/2 | 48.0-51.3 / 64.2-64.3 / 78.9-79.5 / 99.4-102.4 | 5.76-6.24 ms |
+| **this branch** | 20.94 | **30.08** | **+43.6%** | 29.14 / 32.14 / 28.94 | 0.86 / 0.95 / 0.90 | 31/26/174/1 | 48.0-48.5 / 63.9-65.1 / 77.8-78.8 / 104.8 | 5.06-5.28 ms |
+
++6.5% over main's MTP (28.25 -> 30.08 tok/s; 50 drafts dropped, 7 of them matching the next token), the same tokens
+as plain decoding, the p100 dump byte-identical to main `7b41707`'s (598 of 598 files, `chain7/validation.txt`). A
+k = 0 round cost 48.0-48.5 ms against 47.8 ms per plain token (main 48.0-51.3 against 47.9).
+
 ## Reproduction
 
 ```sh
@@ -312,19 +342,25 @@ tools/cpu2.sh 0 1; tools/same.sh
 tools/mtp2-db-ab2.sh; python3 tools/instrument2.py WORKTREE   # temporary timers, then draft-bench
 # x86 unit tests (the SSSE3/AVX drafter kernels) built in the kbuild VM and run on incite
 tools/xtest.sh; ./trashcan-mtp2-tests qwen4::draft qwen4::spec
-# six Macs (sessions 1-4; DRY=1 prints the commands of sessions 3 and 4)
+# six Macs (sessions 1-7; DRY=1 prints the commands of sessions 3-7)
 chain6.sh mtp2-chain1 50 OWNER -- tools/mtp2-chain1.sh; tools/fetch_session.sh chain1 NAMES...
 chain6.sh mtp2-chain2 35 OWNER -- tools/mtp2-chain2.sh; chain6.sh mtp2-chain3 8 OWNER -- tools/mtp2-chain3.sh
-chain6.sh mtp2-chain4 4 OWNER -- tools/mtp2-chain4.sh
+chain6.sh mtp2-chain4 4 OWNER -- tools/mtp2-chain4.sh; chain6.sh mtp2-chain5 3 OWNER -- tools/mtp2-chain5.sh
+chain6.sh mtp2-chain6 4 OWNER -- tools/mtp2-chain6.sh; chain6.sh mtp2-chain7 4 OWNER -- tools/mtp2-chain7.sh
 python3 summary.py chain1/*.json; tools/valcmp.sh mtp2s4     # validation dumps against the CPU references and main's
 ```
 
 ## What is left
 
 - Cheaper 2-4-token verification batches remain the largest lever (another agent's kernels): a round's verification is
-  most of its time (k = 3 on main `eb4dbeb`: 104-108 ms of verification against 15 ms of drafting), and the policy
-  picks up cheaper batches by itself (`gate/policysim.py` with 40 / 52 / 60 / 70 ms rounds: 39 tok/s on the chat
-  replies).
+  most of its time (main `7b41707`: 64 / 79 / 99-105 ms for 2 / 3 / 4 tokens against 5.1 ms per draft step), and the
+  policy picks up cheaper batches by itself (`gate/policysim.py` with 40 / 52 / 60 / 70 ms rounds: 39 tok/s on the
+  chat replies).
+- Each batch size's cost is measured in the first rounds of the first sequence and again when 256 rounds old
+  (`REFRESH`), each time from one round. In sessions 6 and 7 the branch's only 4-token round (the measurement, on water)
+  took 105-110 ms against main's 99-104, and its policy used at most 2 drafts for the rest of the three replies (main
+  kept some 3-draft rounds on csv). Refreshing a size's cost sooner, or after an outlier, might recover some 3-draft
+  rounds; not measured.
 - Drafting the next round while a batch is verified (the CPU is idle then) does not pay as such. Teacher-forced chains
   of 7 drafts along the greedy chat runs (`gate/rep7.sh`, `gate/pipesim.py`, `gate/pipesim-eb4dbeb.txt`): a round's
   chain, run on during its verification, predicts the bonus token and the next round's drafts, usable when every draft

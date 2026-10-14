@@ -29,10 +29,10 @@ to 21.5-21.6 tok/s (+17-18%) with identical output, and costs at most 1.6% where
 102-105 ms. The host path between the stages ([results/qwen4/decode-host-20261013](../results/qwen4/decode-host-20261013/README.md):
 faster head candidate selection, binary candidate frames, fewer copies and wakeups) takes decode up 2.8% and MTP chat
 replies up 3.6% (six Macs, alternated pairs; 19.3 -> 19.8 tok/s decode with every GPU at full clock). A shorter CPU
-draft step, unsure drafts left unverified and sampled drafts coupled to the target's sample add 6.2% on greedy chat
-replies (23.3 -> 24.7 tok/s on main 2293550), 3-6% when sampling at temperatures 0.6-1 (main 7da6f93), and take the
-3K-token document from break-even to +5.5%, with every seed's output equal to plain decoding's
-([results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)). Not done yet: graphs submitted
+draft step, unsure drafts left unverified and sampled drafts coupled to the target's sample take greedy chat replies
+from 28.3 to 30.1 tok/s (+6.5% on main 7b41707; +4.4-6.6% on each main since 7da6f93), add 3-6% when sampling at
+temperatures 0.6-1 (main 7da6f93), and take the 3K-token document from break-even to +5.5%, with every seed's output
+equal to plain decoding's ([results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)). Not done yet: graphs submitted
 ahead of their input and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain
 ([Serving](#serving)).
 
@@ -392,9 +392,9 @@ round of up to 3 drafts yields ~3 tokens for 3 draft steps and a 4-token verific
 / 4-token verification costs 1.69x / 2.0x / 2.37x a 53.9 ms decode step, and chat replies run at 21.5-21.6 tok/s
 against 18.3 (+39% before those kernels, when verification cost 1.43x / 1.69x / 2.0x), 23.1 with the MTP rounds (main
 7da6f93); with the 1-4-token mixer and Q8_0 kernels of results/qwen4/verify-batches-20261012 it costs 1.36x / 1.69x /
-2.09x of a 49.5 ms step and chat replies run at 27.0 tok/s against 20.2 (+33%); ~39-41 tok/s is projected with ~35 ms
-decode steps and verification of 2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x (the policy's replays give 39 tok/s at
-40 / 52 / 60 / 70 ms rounds). Tensor or
+2.09x of a 49.5 ms step and chat replies run at 27.0 tok/s against 20.2 (+33%), 30.1 against 20.9 with the decode
+host path and the MTP rounds (main 7b41707); ~39-41 tok/s is projected with ~35 ms decode steps and verification of
+2 / 3 / 4 tokens at 1.2x / 1.4x / 1.65x (the policy's replays give 39 tok/s at 40 / 52 / 60 / 70 ms rounds). Tensor or
 expert parallelism over all 12 GPUs at once: ~2 ms of bytes per token, but ~96 cross-Mac all-reduces per token at
 >= 100 us each over the ring bound it near 50-80 tok/s, at a large cost in engineering.
 
@@ -511,8 +511,9 @@ step 4.8 and 5.1-5.8 ms, `draft-bench`; 2.0 and 3.0-5.9 ms before,
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
 9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012; sampled
    drafts coupled to the target's sample, a shorter CPU draft step, the residual rows off the verification's critical
-   path (k = 0 rounds within 0.2 ms of a decode step) and unsure drafts left unverified, results/qwen4/mtp-rounds-20261013:
-   21.7 -> 23.1 tok/s on main 7da6f93; 27.0 with the 1-4-token kernels of results/qwen4/verify-batches-20261012):
+   path (k = 0 rounds within 0.2-0.7 ms of a decode step) and unsure drafts left unverified, results/qwen4/mtp-rounds-20261013:
+   21.7 -> 23.1 tok/s on main 7da6f93, 28.3 -> 30.1 on 7b41707; 27.0 with the 1-4-token kernels of
+   results/qwen4/verify-batches-20261012):
    cheaper 2-4-token verification batches (1.36x / 1.69x / 2.09x a decode step; the experts, read per token, are the
    most of what an extra token adds), and a prompt's last prefill chunk long enough for the block (a 1-3-token last
    chunk leaves it nearly no context: ~6% fewer tokens per round).

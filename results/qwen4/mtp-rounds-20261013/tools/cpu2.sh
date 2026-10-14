@@ -13,7 +13,7 @@ node=$!
 trap 'kill $node 2>/dev/null; wait $node 2>/dev/null' EXIT
 sleep 2
 P=$W/results/qwen4/mtp-20261012/acceptance
-for t in "${@:-0 1}"; do
+for t in ${*:-0 1}; do
     $T qwen4 mtp spec $M --cpu --nodes 127.0.0.1:7181 --cuts 24 --context 512 --batch 64 --mtp $X --draft-tokens 3 \
         --tg 24 --runs 2 --temperature $t --seed 11 $P/water.ids > spec-t$t.json 2> spec-t$t.err
     echo "t=$t rc $?"
