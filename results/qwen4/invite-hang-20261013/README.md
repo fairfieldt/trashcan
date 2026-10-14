@@ -95,3 +95,20 @@ Second attempt (`stress2.log`): **32 of 32 runs rc 0, no GPU or PCIe errors on a
 So invite runs clean from a fresh boot, whichever layers it holds. The 16:05 timeout is unexplained: it came with
 main's code and no forced reset first. Two GPU faults on one Mac in half an hour, and none on the other five all day,
 make invite the first suspect if it happens again. Its GPU and PCIe logs stay watched.
+
+## inflight: thunderbolt driver Oops during a link-reset fault test, 17:59
+
+During the USB4STREAM agent's window 1, a fault step on inflight reset Thunderbolt by unloading and reloading the
+modules. The window ran link-test only, with no GPU work. Over netconsole (`netconsole-inflight-oops-1759.txt`):
+1. 14 s of `thunderbolt 0-3: failed request link state change, aborting`;
+2. the module unloaded and was loaded again, then `thunderbolt 0000:16:00.0: error -ETIMEDOUT: failed to allocate
+   host router`;
+3. a WARNING `TX ring 0 is still active` at `nhi_shutdown` (nhi.c:1120) from modprobe;
+4. `BUG: kernel NULL pointer dereference` in `tb_xdp_handle_request` (workqueue).
+
+That is the thunderbolt driver's failed-probe path racing an XDomain request still queued. inflight stopped answering
+(no ping, telemetry ends 17:59:11) and needs a manual power-off. The other five Macs were left with no stream groups
+and no test processes.
+
+Until the driver's error path is understood or fixed, Thunderbolt module reloads are not a fault to inject on the
+shared Macs.

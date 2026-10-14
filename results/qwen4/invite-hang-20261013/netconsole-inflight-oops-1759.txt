@@ -1,0 +1,376 @@
+2026-10-13T17:58:30.808 192.168.0.151 [30160.919348] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:31.836 192.168.0.151 [30161.947379] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:32.856 192.168.0.151 [30162.967474] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:33.880 192.168.0.151 [30163.991461] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:34.908 192.168.0.151 [30165.019485] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:35.929 192.168.0.151 [30166.039604] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:36.952 192.168.0.151 [30167.063674] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:37.980 192.168.0.151 [30168.091543] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:39.000 192.168.0.151 [30169.111760] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:40.024 192.168.0.151 [30170.135876] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:41.048 192.168.0.151 [30171.159891] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:42.072 192.168.0.151 [30172.183907] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:43.096 192.168.0.151 [30173.207768] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:44.120 192.168.0.151 [30174.231998] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:45.144 192.168.0.151 [30175.255903] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:46.168 192.168.0.151 [30176.279994] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:47.192 192.168.0.151 [30177.304224] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:48.216 192.168.0.151 [30178.328148] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:49.240 192.168.0.151 [30179.352255] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:50.264 192.168.0.151 [30180.376180] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:51.292 192.168.0.151 [30181.404278] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:52.312 192.168.0.151 [30182.424459] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:53.336 192.168.0.151 [30183.448381] thunderbolt 0-3: failed request link state change, aborting
+2026-10-13T17:58:54.319 192.168.0.151 [30184.434982] ACPI: bus type thunderbolt unregistered
+2026-10-13T17:58:54.488 192.168.0.151 [30184.600313] pcieport 0000:15:00.0: pciehp: Slot(0): Link Down/Up ignored
+2026-10-13T17:58:54.617 192.168.0.151 [30184.728220] pcieport 0000:5c:00.0: pciehp: Slot(0-1): Link Down/Up ignored
+2026-10-13T17:58:54.748 192.168.0.151 [30184.860261] pcieport 0000:a3:00.0: pciehp: Slot(0-2): Link Down/Up ignored
+2026-10-13T17:59:10.304 192.168.0.151 [30200.420555] ACPI: bus type thunderbolt registered
+2026-10-13T17:59:10.308 192.168.0.151 [30200.421551] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+2026-10-13T17:59:10.727 192.168.0.151 [30200.837127] thunderbolt 0000:16:00.0: error -ETIMEDOUT: failed to allocate host router
+2026-10-13T17:59:10.732 192.168.0.151 [30200.837250] ------------[ cut here ]------------
+2026-10-13T17:59:10.733 192.168.0.151 [30200.837258] thunderbolt 0000:16:00.0: TX ring 0 is still active
+2026-10-13T17:59:10.733 192.168.0.151 [30200.837284] BUG: kernel NULL pointer dereference, address: 00000000000002ea
+2026-10-13T17:59:10.735 192.168.0.151 [30200.837265] WARNING: drivers/thunderbolt/nhi.c:1120 at nhi_shutdown+0x5a/0x110 [thunderbolt], CPU#1: modprobe/2505389
+2026-10-13T17:59:10.736 192.168.0.151 [30200.837306] #PF: supervisor read access in kernel mode
+2026-10-13T17:59:10.736 192.168.0.151 [30200.837311] #PF: error_code(0x0000) - not-present page
+2026-10-13T17:59:10.738 192.168.0.151 [30200.837316] PGD 0 P4D 0 
+2026-10-13T17:59:10.739 192.168.0.151 [30200.837324] Oops: Oops: 0000 [#1] SMP PTI
+2026-10-13T17:59:10.740 192.168.0.151 [30200.837334] Modules linked in: thunderbolt(+)
+2026-10-13T17:59:10.740 192.168.0.151 [30200.837346] CPU: 13 UID: 0 PID: 878294 Comm: kworker/13:2 Tainted: G        W           7.2.9-p2p #2p2p PREEMPT(lazy) 
+2026-10-13T17:59:10.740 192.168.0.151 [30200.837356] Tainted: [W]=WARN
+2026-10-13T17:59:10.740 192.168.0.151 [30200.837359]  netconsole xt_connmark xt_conntrack
+2026-10-13T17:59:10.741 192.168.0.151 [30200.837364] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+2026-10-13T17:59:10.741 192.168.0.151 [30200.837370]  xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables amdgpu 8021q garp stp mrp llc b43 intel_rapl_msr intel_rapl_common sb_edac cordic x86_pkg_temp_thermal binfmt_misc intel_powerclamp mac80211 coretemp btusb nls_ascii kvm_intel nls_cp437 btmtk vfat fat btrtl drm_buddy amdxcp btbcm drm_panel_backlight_quirks gpu_sched btintel radeon cfg80211 kvm bluetooth snd_hda_codec_cs420x joydev snd_hda_codec_generic
+2026-10-13T17:59:10.741 192.168.0.151 [30200.837381] Workqueue: events tb_xdp_handle_request [thunderbolt]
+2026-10-13T17:59:10.741 192.168.0.151 [30200.837437]  snd_hda_codec_atihdmi
+2026-10-13T17:59:10.742 192.168.0.151 [30200.837456]  snd_hda_codec_hdmi drm_ttm_helper snd_hda_intel ttm snd_hda_codec drm_exec ssb drm_suballoc_helper irqbypass drm_display_helper snd_hda_core mmc_core aesni_intel hid_generic snd_intel_dspcfg snd_intel_sdw_acpi gf128mul cec usbhid snd_hwdep rapl intel_cstate ecdh_generic
+2026-10-13T17:59:10.742 192.168.0.151 [30200.837491] 
+2026-10-13T17:59:10.742 192.168.0.151 [30200.837493]  hid
+2026-10-13T17:59:10.742 192.168.0.151 [30200.837508]  pcmcia snd_pcm rfkill rc_core pcmcia_core libarc4 drm_client_lib aead apple_mfi_fastcharge evdev applesmc intel_uncore drm_kms_helper mei_me snd_timer at24 pcspkr apple_gmux i2c_algo_bit snd mei
+2026-10-13T17:59:10.742 192.168.0.151 [30200.837496] RIP: 0010:tb_xdp_handle_request+0x8a/0xdd0 [thunderbolt]
+2026-10-13T17:59:10.743 192.168.0.151 [30200.837544]  bcma video soundcore wmi button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci libata xhci_pci
+2026-10-13T17:59:10.743 192.168.0.151 [30200.837568] Code: 09 c3 41 8b 46 08 48 0f ba f3 3f c1 e8 1b 83 e0 03 89 44 24 08 e8 f6 83 17 d1 49 8b 85 40 03 00 00 48 85 c0 0f 84 0d 06 00 00 <48> 8b b8 58 03 00 00 ba c0 0c 00 00 be 10 00 00 00 e8 90 77 74 d0
+2026-10-13T17:59:10.743 192.168.0.151 [30200.837578]  xhci_hcd ehci_pci
+2026-10-13T17:59:10.743 192.168.0.151 [30200.837587] RSP: 0018:ffffd0e6acb47d90 EFLAGS: 00010282
+2026-10-13T17:59:10.744 192.168.0.151 [30200.837593]  iTCO_wdt tg3
+2026-10-13T17:59:10.744 192.168.0.151 [30200.837598] 
+2026-10-13T17:59:10.744 192.168.0.151 [30200.837599]  ehci_hcd
+2026-10-13T17:59:10.745 192.168.0.151 [30200.837601] RAX: ffffffffffffff92 RBX: 0000000000000003 RCX: ffff89f593dccf80
+2026-10-13T17:59:10.745 192.168.0.151 [30200.837604] RDX: 0000000000000000 RSI: 0000000000000282 RDI: ffffd0e6acb47d10
+2026-10-13T17:59:10.745 192.168.0.151 [30200.837608]  intel_pmc_bxt
+2026-10-13T17:59:10.745 192.168.0.151 [30200.837613] RBP: ffff89fb91619480 R08: 0000000000000000 R09: 0000000000000001
+2026-10-13T17:59:10.745 192.168.0.151 [30200.837618]  scsi_mod
+2026-10-13T17:59:10.746 192.168.0.151 [30200.837622] R10: 000000000000000d R11: 0000000000000001 R12: ffff8a047fb71500
+2026-10-13T17:59:10.746 192.168.0.151 [30200.837627]  watchdog
+2026-10-13T17:59:10.746 192.168.0.151 [30200.837630] R13: ffff89f5471cf000 R14: ffff89f54b02fa20 R15: ffff89f5471cf310
+2026-10-13T17:59:10.746 192.168.0.151 [30200.837635]  usbcore
+2026-10-13T17:59:10.746 192.168.0.151 [30200.837639] FS:  0000000000000000(0000) GS:ffff8a04ecf97000(0000) knlGS:0000000000000000
+2026-10-13T17:59:10.747 192.168.0.151 [30200.837644]  libphy
+2026-10-13T17:59:10.747 192.168.0.151 [30200.837647] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+2026-10-13T17:59:10.747 192.168.0.151 [30200.837653]  i2c_i801
+2026-10-13T17:59:10.747 192.168.0.151 [30200.837656] CR2: 00000000000002ea CR3: 00000002ec422001 CR4: 00000000001726f0
+2026-10-13T17:59:10.747 192.168.0.151 [30200.837660]  ioatdma
+2026-10-13T17:59:10.748 192.168.0.151 [30200.837664] Call Trace:
+2026-10-13T17:59:10.748 192.168.0.151 [30200.837669]  i2c_smbus
+2026-10-13T17:59:10.748 192.168.0.151 [30200.837674]  <TASK>
+2026-10-13T17:59:10.748 192.168.0.151 [30200.837680]  lpc_ich mdio_bus scsi_common
+2026-10-13T17:59:10.748 192.168.0.151 [30200.837679]  ? __wake_up+0x44/0x60
+2026-10-13T17:59:10.749 192.168.0.151 [30200.837684]  dca
+2026-10-13T17:59:10.749 192.168.0.151 [30200.837689]  configfs usb_common [last unloaded: thunderbolt]
+2026-10-13T17:59:10.749 192.168.0.151 [30200.837706] CPU: 1 UID: 0 PID: 2505389 Comm: modprobe Tainted: G        W           7.2.9-p2p #2p2p PREEMPT(lazy) 
+2026-10-13T17:59:10.749 192.168.0.151 [30200.837717] Tainted: [W]=WARN
+2026-10-13T17:59:10.749 192.168.0.151 [30200.837721] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+2026-10-13T17:59:10.750 192.168.0.151 [30200.837694]  ? ring_work+0x1d4/0x280 [thunderbolt]
+2026-10-13T17:59:10.750 192.168.0.151 [30200.837727] RIP: 0010:nhi_shutdown+0x5f/0x110 [thunderbolt]
+2026-10-13T17:59:10.750 192.168.0.151 [30200.837771]  process_one_work+0x196/0x370
+2026-10-13T17:59:10.750 192.168.0.151 [30200.837781] Code: 08 e8 d5 71 dc d0 48 8b 7b 08 4c 8b 6f 50 4d 85 ed 75 03 4c 8b 2f e8 c0 71 dc d0 48 89 c6 48 8d 3d 96 90 f5 ff 89 e9 4c 89 ea <67> 48 0f b9 3a 48 8b 43 28 4a 83 3c e0 00 74 32 48 8b 7b 08 e8 98
+2026-10-13T17:59:10.750 192.168.0.151 [30200.837788]  worker_thread+0x1af/0x320
+2026-10-13T17:59:10.751 192.168.0.151 [30200.837798] RSP: 0018:ffffd0e68580b838 EFLAGS: 00010282
+2026-10-13T17:59:10.751 192.168.0.151 [30200.837797]  ? __pfx_worker_thread+0x10/0x10
+2026-10-13T17:59:10.751 192.168.0.151 [30200.837804] 
+2026-10-13T17:59:10.751 192.168.0.151 [30200.837806] RAX: ffffffffc0622de9 RBX: ffff89f591853138 RCX: 0000000000000000
+2026-10-13T17:59:10.751 192.168.0.151 [30200.837811]  kthread+0xe3/0x120
+2026-10-13T17:59:10.751 192.168.0.151 [30200.837818] RDX: ffff89f542bd32d0 RSI: ffffffffc0622de9 RDI: ffffffffc03d4050
+2026-10-13T17:59:10.752 192.168.0.151 [30200.837821] RBP: 0000000000000000 R08: 0000000000000002 R09: 0000000000000000
+2026-10-13T17:59:10.752 192.168.0.151 [30200.837827]  ? __pfx_kthread+0x10/0x10
+2026-10-13T17:59:10.752 192.168.0.151 [30200.837834] R10: 000000000000000a R11: 0000000000000001 R12: 0000000000000000
+2026-10-13T17:59:10.752 192.168.0.151 [30200.837841]  ret_from_fork+0x2ba/0x340
+2026-10-13T17:59:10.752 192.168.0.151 [30200.837845] R13: ffff89f542bd32d0 R14: 0000000000000000 R15: ffff89f54a73a268
+2026-10-13T17:59:10.753 192.168.0.151 [30200.837848] FS:  00007f6c1ba8a640(0000) GS:ffff8a04ecc97000(0000) knlGS:0000000000000000
+2026-10-13T17:59:10.753 192.168.0.151 [30200.837851] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+2026-10-13T17:59:10.753 192.168.0.151 [30200.837855]  ? __pfx_kthread+0x10/0x10
+2026-10-13T17:59:10.753 192.168.0.151 [30200.837861] CR2: 00007f040e8aaae0 CR3: 00000001e1d46004 CR4: 00000000001726f0
+2026-10-13T17:59:10.753 192.168.0.151 [30200.837865]  ret_from_fork_asm+0x1a/0x30
+2026-10-13T17:59:10.753 192.168.0.151 [30200.837873] Call Trace:
+2026-10-13T17:59:10.754 192.168.0.151 [30200.837879]  </TASK>
+2026-10-13T17:59:10.754 192.168.0.151 [30200.837883]  <TASK>
+2026-10-13T17:59:10.754 192.168.0.151 [30200.837887] Modules linked in: thunderbolt(+) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables
+2026-10-13T17:59:10.754 192.168.0.151 [30200.837887]  nhi_probe+0x33f/0x360 [thunderbolt]
+2026-10-13T17:59:10.754 192.168.0.151 [30200.837919]  amdgpu 8021q garp stp mrp llc b43 intel_rapl_msr intel_rapl_common sb_edac cordic x86_pkg_temp_thermal binfmt_misc
+2026-10-13T17:59:10.754 192.168.0.151 [30200.837934]  local_pci_probe+0x41/0x90
+2026-10-13T17:59:10.755 192.168.0.151 [30200.837945]  intel_powerclamp mac80211 coretemp btusb
+2026-10-13T17:59:10.755 192.168.0.151 [30200.837951]  pci_call_probe+0x58/0x160
+2026-10-13T17:59:10.755 192.168.0.151 [30200.837958]  nls_ascii kvm_intel nls_cp437 btmtk
+2026-10-13T17:59:10.755 192.168.0.151 [30200.837964]  pci_device_probe+0xd4/0x160
+2026-10-13T17:59:10.755 192.168.0.151 [30200.837970]  vfat fat btrtl drm_buddy amdxcp
+2026-10-13T17:59:10.756 192.168.0.151 [30200.837976]  really_probe+0xde/0x380
+2026-10-13T17:59:10.756 192.168.0.151 [30200.837983]  btbcm drm_panel_backlight_quirks gpu_sched
+2026-10-13T17:59:10.756 192.168.0.151 [30200.837988]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.756 192.168.0.151 [30200.837991]  btintel radeon cfg80211 kvm
+2026-10-13T17:59:10.756 192.168.0.151 [30200.838002]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.756 192.168.0.151 [30200.838009]  bluetooth snd_hda_codec_cs420x joydev
+2026-10-13T17:59:10.757 192.168.0.151 [30200.838013]  __driver_probe_device+0x85/0x150
+2026-10-13T17:59:10.757 192.168.0.151 [30200.838020]  snd_hda_codec_generic snd_hda_codec_atihdmi snd_hda_codec_hdmi
+2026-10-13T17:59:10.757 192.168.0.151 [30200.838025]  driver_probe_device+0x1f/0x90
+2026-10-13T17:59:10.757 192.168.0.151 [30200.838032]  drm_ttm_helper snd_hda_intel ttm
+2026-10-13T17:59:10.757 192.168.0.151 [30200.838037]  __driver_attach+0xba/0x1f0
+2026-10-13T17:59:10.757 192.168.0.151 [30200.838039]  snd_hda_codec drm_exec ssb drm_suballoc_helper
+2026-10-13T17:59:10.758 192.168.0.151 [30200.838050]  bus_for_each_dev+0x8e/0xe0
+2026-10-13T17:59:10.758 192.168.0.151 [30200.838057]  irqbypass drm_display_helper snd_hda_core mmc_core
+2026-10-13T17:59:10.758 192.168.0.151 [30200.838062]  bus_add_driver+0x11f/0x200
+2026-10-13T17:59:10.758 192.168.0.151 [30200.838070]  aesni_intel hid_generic snd_intel_dspcfg snd_intel_sdw_acpi
+2026-10-13T17:59:10.758 192.168.0.151 [30200.838075]  driver_register+0x72/0xd0
+2026-10-13T17:59:10.758 192.168.0.151 [30200.838078]  gf128mul cec usbhid snd_hwdep rapl intel_cstate ecdh_generic hid pcmcia snd_pcm rfkill rc_core pcmcia_core libarc4 drm_client_lib aead apple_mfi_fastcharge evdev applesmc intel_uncore drm_kms_helper mei_me snd_timer
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838090]  nhi_init+0x2f/0xff0 [thunderbolt]
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838124]  at24 pcspkr apple_gmux i2c_algo_bit snd mei bcma video soundcore wmi button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci libata xhci_pci xhci_hcd ehci_pci iTCO_wdt tg3 ehci_hcd intel_pmc_bxt scsi_mod
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838143]  ? __pfx_init_module+0x10/0x10 [thunderbolt]
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838175]  watchdog usbcore libphy i2c_i801 ioatdma i2c_smbus lpc_ich mdio_bus scsi_common
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838185]  do_one_initcall+0x5c/0x300
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838194]  dca configfs usb_common [last unloaded: thunderbolt]
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838201]  do_init_module+0x60/0x240
+2026-10-13T17:59:10.759 192.168.0.151 [30200.838210] CR2: 00000000000002ea
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838214]  init_module_from_file+0xd6/0x130
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838222] ---[ end trace 0000000000000000 ]---
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838222]  idempotent_init_module+0x114/0x310
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838234]  __x64_sys_finit_module+0x71/0xe0
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838242]  do_syscall_64+0xea/0x640
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838254]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838263]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.760 192.168.0.151 [30200.838272]  ? __x64_sys_pread64+0x91/0xc0
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838280]  ? handle_mm_fault+0x1e2/0x2e0
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838289]  ? do_syscall_64+0x128/0x640
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838295]  ? do_user_addr_fault+0x211/0x670
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838302]  ? irqentry_exit+0x48/0x740
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838309]  ? do_syscall_64+0x9f/0x640
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838316]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838324] RIP: 0033:0x7f6c1b31a4f9
+2026-10-13T17:59:10.761 192.168.0.151 [30200.838331] Code: ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00 00 48 89 f8 48 89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff ff 73 01 c3 48 8b 0d e7 68 0d 00 f7 d8 64 89 01 48
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838341] RSP: 002b:00007ffe1bdae038 EFLAGS: 00000246 ORIG_RAX: 0000000000000139
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838350] RAX: ffffffffffffffda RBX: 0000563480638c80 RCX: 00007f6c1b31a4f9
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838356] RDX: 0000000000000004 RSI: 000056346148b32b RDI: 0000000000000003
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838361] RBP: 0000000000000004 R08: 0000000000000000 R09: 000056348063afd0
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838367] R10: 0000000000000000 R11: 0000000000000246 R12: 000056346148b32b
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838373] R13: 0000000000040000 R14: 0000563480638c30 R15: 0000000000000000
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838381]  </TASK>
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838385] ---[ end trace 0000000000000000 ]---
+2026-10-13T17:59:10.762 192.168.0.151 [30200.838392] ------------[ cut here ]------------
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838397] thunderbolt 0000:16:00.0: RX ring 0 is still active
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838402] WARNING: drivers/thunderbolt/nhi.c:1123 at nhi_shutdown+0x97/0x110 [thunderbolt], CPU#1: modprobe/2505389
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838456] Modules linked in: thunderbolt(+) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables amdgpu 8021q garp stp mrp llc b43 intel_rapl_msr intel_rapl_common sb_edac cordic x86_pkg_temp_thermal binfmt_misc intel_powerclamp mac80211 coretemp btusb nls_ascii kvm_intel nls_cp437 btmtk vfat fat btrtl drm_buddy amdxcp btbcm drm_panel_backlight_quirks gpu_sched btintel radeon cfg80211 kvm bluetooth snd_hda_codec_cs420x joydev snd_hda_codec_generic snd_hda_codec_atihdmi snd_hda_codec_hdmi drm_ttm_helper snd_hda_intel ttm snd_hda_codec drm_exec ssb drm_suballoc_helper irqbypass drm_display_helper snd_hda_core mmc_core aesni_intel hid_generic snd_intel_dspcfg snd_intel_sdw_acpi gf128mul cec usbhid snd_hwdep rapl intel_cstate ecdh_generic hid pcmcia snd_pcm rfkill rc_core pcmcia_core libarc4 drm_client_lib aead apple_mfi_fastcharge evdev applesmc intel_uncore drm_kms_helper
+2026-10-13T17:59:10.763 192.168.0.151  mei_me snd_timer at24 pcspkr
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838562]  apple_gmux i2c_algo_bit snd mei bcma video soundcore wmi button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci libata xhci_pci xhci_hcd ehci_pci iTCO_wdt tg3 ehci_hcd intel_pmc_bxt scsi_mod watchdog usbcore libphy i2c_i801 ioatdma i2c_smbus lpc_ich mdio_bus scsi_common dca configfs usb_common [last unloaded: thunderbolt]
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838656] CPU: 1 UID: 0 PID: 2505389 Comm: modprobe Tainted: G      D W           7.2.9-p2p #2p2p PREEMPT(lazy) 
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838667] Tainted: [D]=DIE, [W]=WARN
+2026-10-13T17:59:10.763 192.168.0.151 [30200.838671] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838678] RIP: 0010:nhi_shutdown+0x9c/0x110 [thunderbolt]
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838725] Code: 08 e8 98 71 dc d0 48 8b 7b 08 4c 8b 67 50 4d 85 e4 75 03 4c 8b 27 e8 83 71 dc d0 48 89 c6 48 8d 3d 69 90 f5 ff 89 e9 4c 89 e2 <67> 48 0f b9 3a 83 c5 01 3b 6b 58 0f 82 77 ff ff ff 48 89 df e8 cb
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838735] RSP: 0018:ffffd0e68580b838 EFLAGS: 00010282
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838742] RAX: ffffffffc0622de9 RBX: ffff89f591853138 RCX: 0000000000000000
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838748] RDX: ffff89f542bd32d0 RSI: ffffffffc0622de9 RDI: ffffffffc03d4060
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838753] RBP: 0000000000000000 R08: 0000000000000002 R09: 0000000000000000
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838759] R10: 000000000000000a R11: 0000000000000001 R12: ffff89f542bd32d0
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838764] R13: ffff89f542bd32d0 R14: 0000000000000000 R15: ffff89f54a73a268
+2026-10-13T17:59:10.764 192.168.0.151 [30200.838770] FS:  00007f6c1ba8a640(0000) GS:ffff8a04ecc97000(0000) knlGS:0000000000000000
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838778] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838783] CR2: 00007f040e8aaae0 CR3: 00000001e1d46004 CR4: 00000000001726f0
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838790] Call Trace:
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838794]  <TASK>
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838799]  nhi_probe+0x33f/0x360 [thunderbolt]
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838845]  local_pci_probe+0x41/0x90
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838852]  pci_call_probe+0x58/0x160
+2026-10-13T17:59:10.765 192.168.0.151 [30200.838860]  pci_device_probe+0xd4/0x160
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838867]  really_probe+0xde/0x380
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838875]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838884]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838891]  __driver_probe_device+0x85/0x150
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838900]  driver_probe_device+0x1f/0x90
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838908]  __driver_attach+0xba/0x1f0
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838916]  bus_for_each_dev+0x8e/0xe0
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838923]  bus_add_driver+0x11f/0x200
+2026-10-13T17:59:10.766 192.168.0.151 [30200.838931]  driver_register+0x72/0xd0
+2026-10-13T17:59:10.767 192.168.0.151 [30200.838939]  nhi_init+0x2f/0xff0 [thunderbolt]
+2026-10-13T17:59:10.767 192.168.0.151 [30200.838987]  ? __pfx_init_module+0x10/0x10 [thunderbolt]
+2026-10-13T17:59:10.767 192.168.0.151 [30200.839032]  do_one_initcall+0x5c/0x300
+2026-10-13T17:59:10.767 192.168.0.151 [30200.839042]  do_init_module+0x60/0x240
+2026-10-13T17:59:10.767 192.168.0.151 [30200.839049]  init_module_from_file+0xd6/0x130
+2026-10-13T17:59:10.767 192.168.0.151 [30200.839059]  idempotent_init_module+0x114/0x310
+2026-10-13T17:59:10.767 192.168.0.151 [30200.839068]  __x64_sys_finit_module+0x71/0xe0
+2026-10-13T17:59:10.767 192.168.0.151 [30200.839075]  do_syscall_64+0xea/0x640
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839085]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839093]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839102]  ? __x64_sys_pread64+0x91/0xc0
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839110]  ? handle_mm_fault+0x1e2/0x2e0
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839118]  ? do_syscall_64+0x128/0x640
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839125]  ? do_user_addr_fault+0x211/0x670
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839131]  ? irqentry_exit+0x48/0x740
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839138]  ? do_syscall_64+0x9f/0x640
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839144]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+2026-10-13T17:59:10.768 192.168.0.151 [30200.839151] RIP: 0033:0x7f6c1b31a4f9
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839156] Code: ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00 00 48 89 f8 48 89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff ff 73 01 c3 48 8b 0d e7 68 0d 00 f7 d8 64 89 01 48
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839167] RSP: 002b:00007ffe1bdae038 EFLAGS: 00000246 ORIG_RAX: 0000000000000139
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839175] RAX: ffffffffffffffda RBX: 0000563480638c80 RCX: 00007f6c1b31a4f9
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839181] RDX: 0000000000000004 RSI: 000056346148b32b RDI: 0000000000000003
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839186] RBP: 0000000000000004 R08: 0000000000000000 R09: 000056348063afd0
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839192] R10: 0000000000000000 R11: 0000000000000246 R12: 000056346148b32b
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839198] R13: 0000000000040000 R14: 0000563480638c30 R15: 0000000000000000
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839206]  </TASK>
+2026-10-13T17:59:10.769 192.168.0.151 [30200.839210] ---[ end trace 0000000000000000 ]---
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839222] thunderbolt 0000:16:00.0: error -ETIMEDOUT: failed to add domain
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839231] thunderbolt 0000:16:00.0: probe with driver thunderbolt failed with error -110
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839301] ------------[ cut here ]------------
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839307] remove_proc_entry: removing non-empty directory 'irq/63', leaking at least 'thunderbolt'
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839314] WARNING: fs/proc/generic.c:747 at remove_proc_entry+0x193/0x1d0, CPU#1: modprobe/2505389
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839326] Modules linked in: thunderbolt(+) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables amdgpu 8021q garp stp mrp llc b43 intel_rapl_msr intel_rapl_common sb_edac cordic x86_pkg_temp_thermal binfmt_misc intel_powerclamp mac80211 coretemp btusb nls_ascii kvm_intel nls_cp437 btmtk vfat fat btrtl drm_buddy amdxcp btbcm drm_panel_backlight_quirks gpu_sched btintel radeon cfg80211 kvm bluetooth snd_hda_codec_cs420x joydev snd_hda_codec_generic snd_hda_codec_atihdmi snd_hda_codec_hdmi drm_ttm_helper snd_hda_intel ttm snd_hda_codec drm_exec ssb drm_suballoc_helper irqbypass drm_display_helper snd_hda_core mmc_core aesni_intel hid_generic snd_intel_dspcfg snd_intel_sdw_acpi gf128mul cec usbhid snd_hwdep rapl intel_cstate ecdh_generic hid pcmcia snd_pcm rfkill rc_core pcmcia_core libarc4 drm_client_lib aead apple_mfi_fastcharge evdev applesmc intel_uncore drm_kms_helper
+2026-10-13T17:59:10.770 192.168.0.151  mei_me snd_timer at24 pcspkr
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839433]  apple_gmux i2c_algo_bit snd mei bcma video soundcore wmi button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci libata xhci_pci xhci_hcd ehci_pci iTCO_wdt tg3 ehci_hcd intel_pmc_bxt scsi_mod watchdog usbcore libphy i2c_i801 ioatdma i2c_smbus lpc_ich mdio_bus scsi_common dca configfs usb_common [last unloaded: thunderbolt]
+2026-10-13T17:59:10.770 192.168.0.151 [30200.839527] CPU: 1 UID: 0 PID: 2505389 Comm: modprobe Tainted: G      D W           7.2.9-p2p #2p2p PREEMPT(lazy) 
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839538] Tainted: [D]=DIE, [W]=WARN
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839542] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839548] RIP: 0010:remove_proc_entry+0x1a9/0x1d0
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839556] Code: 00 48 89 c8 48 8b 49 10 48 85 c9 75 f4 48 8d 3d 0d 88 4d 01 48 8b 4b 18 48 8b 92 98 00 00 00 48 c7 c6 c0 c3 85 91 4c 8b 40 18 <67> 48 0f b9 3a e9 72 ff ff ff 48 8d 3d f6 87 4d 01 48 8b 73 18 67
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839567] RSP: 0018:ffffd0e68580b720 EFLAGS: 00010246
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839573] RAX: ffff89f546838980 RBX: ffff89f546839340 RCX: ffff89f546839364
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839579] RDX: ffff89f540a0ad64 RSI: ffffffff9185c3c0 RDI: ffffffff922a32f0
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839584] RBP: ffff89f5468392c0 R08: ffff89f5468389a4 R09: 00000000ffffffff
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839590] R10: 0000000000000004 R11: 0000000000000000 R12: 0000000000000002
+2026-10-13T17:59:10.771 192.168.0.151 [30200.839595] R13: ffffd0e68580b775 R14: ffffd0e68580b775 R15: ffff89f540a0acc0
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839601] FS:  00007f6c1ba8a640(0000) GS:ffff8a04ecc97000(0000) knlGS:0000000000000000
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839608] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839614] CR2: 00007f040e8aaae0 CR3: 00000001e1d46004 CR4: 00000000001726f0
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839620] Call Trace:
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839624]  <TASK>
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839629]  unregister_irq_proc+0xfc/0x120
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839638]  free_desc+0x3a/0x120
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839646]  irq_free_descs+0x47/0x70
+2026-10-13T17:59:10.772 192.168.0.151 [30200.839652]  msi_domain_free_locked.part.0+0x162/0x1a0
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839663]  msi_domain_free_irqs_all_locked+0x6b/0xd0
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839672]  pci_free_msi_irqs+0x12/0x40
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839681]  pci_disable_msix+0x4b/0x60
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839688]  pci_free_irq_vectors+0x13/0x70
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839696]  release_nodes+0x36/0xb0
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839706]  devres_release_all+0x8f/0x100
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839714]  device_unbind_cleanup+0x26/0xa0
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839722]  really_probe+0x221/0x380
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839729]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.773 192.168.0.151 [30200.839738]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839745]  __driver_probe_device+0x85/0x150
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839753]  driver_probe_device+0x1f/0x90
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839761]  __driver_attach+0xba/0x1f0
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839769]  bus_for_each_dev+0x8e/0xe0
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839777]  bus_add_driver+0x11f/0x200
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839784]  driver_register+0x72/0xd0
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839793]  nhi_init+0x2f/0xff0 [thunderbolt]
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839840]  ? __pfx_init_module+0x10/0x10 [thunderbolt]
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839884]  do_one_initcall+0x5c/0x300
+2026-10-13T17:59:10.774 192.168.0.151 [30200.839895]  do_init_module+0x60/0x240
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839901]  init_module_from_file+0xd6/0x130
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839911]  idempotent_init_module+0x114/0x310
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839920]  __x64_sys_finit_module+0x71/0xe0
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839928]  do_syscall_64+0xea/0x640
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839938]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839946]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839955]  ? __x64_sys_pread64+0x91/0xc0
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839963]  ? handle_mm_fault+0x1e2/0x2e0
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839971]  ? do_syscall_64+0x128/0x640
+2026-10-13T17:59:10.775 192.168.0.151 [30200.839977]  ? do_user_addr_fault+0x211/0x670
+2026-10-13T17:59:10.776 192.168.0.151 [30200.839983]  ? irqentry_exit+0x48/0x740
+2026-10-13T17:59:10.776 192.168.0.151 [30200.839990]  ? do_syscall_64+0x9f/0x640
+2026-10-13T17:59:10.776 192.168.0.151 [30200.839997]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840003] RIP: 0033:0x7f6c1b31a4f9
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840009] Code: ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00 00 48 89 f8 48 89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff ff 73 01 c3 48 8b 0d e7 68 0d 00 f7 d8 64 89 01 48
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840023] RSP: 002b:00007ffe1bdae038 EFLAGS: 00000246 ORIG_RAX: 0000000000000139
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840030] RAX: ffffffffffffffda RBX: 0000563480638c80 RCX: 00007f6c1b31a4f9
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840036] RDX: 0000000000000004 RSI: 000056346148b32b RDI: 0000000000000003
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840041] RBP: 0000000000000004 R08: 0000000000000000 R09: 000056348063afd0
+2026-10-13T17:59:10.776 192.168.0.151 [30200.840054] R10: 0000000000000000 R11: 0000000000000246 R12: 000056346148b32b
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840060] R13: 0000000000040000 R14: 0000563480638c30 R15: 0000000000000000
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840069]  </TASK>
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840072] ---[ end trace 0000000000000000 ]---
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840114] ------------[ cut here ]------------
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840121] remove_proc_entry: removing non-empty directory 'irq/64', leaking at least 'thunderbolt'
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840128] WARNING: fs/proc/generic.c:747 at remove_proc_entry+0x193/0x1d0, CPU#1: modprobe/2505389
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840139] Modules linked in: thunderbolt(+) netconsole xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables amdgpu 8021q garp stp mrp llc b43 intel_rapl_msr intel_rapl_common sb_edac cordic x86_pkg_temp_thermal binfmt_misc intel_powerclamp mac80211 coretemp btusb nls_ascii kvm_intel nls_cp437 btmtk vfat fat btrtl drm_buddy amdxcp btbcm drm_panel_backlight_quirks gpu_sched btintel radeon cfg80211 kvm bluetooth snd_hda_codec_cs420x joydev snd_hda_codec_generic snd_hda_codec_atihdmi snd_hda_codec_hdmi drm_ttm_helper snd_hda_intel ttm snd_hda_codec drm_exec ssb drm_suballoc_helper irqbypass drm_display_helper snd_hda_core mmc_core aesni_intel hid_generic snd_intel_dspcfg snd_intel_sdw_acpi gf128mul cec usbhid snd_hwdep rapl intel_cstate ecdh_generic hid pcmcia snd_pcm rfkill rc_core pcmcia_core libarc4 drm_client_lib aead apple_mfi_fastcharge evdev applesmc intel_uncore drm_kms_helper
+2026-10-13T17:59:10.777 192.168.0.151  mei_me snd_timer at24 pcspkr
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840244]  apple_gmux i2c_algo_bit snd mei bcma video soundcore wmi button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci libata xhci_pci xhci_hcd ehci_pci iTCO_wdt tg3 ehci_hcd intel_pmc_bxt scsi_mod watchdog usbcore libphy i2c_i801 ioatdma i2c_smbus lpc_ich mdio_bus scsi_common dca configfs usb_common [last unloaded: thunderbolt]
+2026-10-13T17:59:10.777 192.168.0.151 [30200.840339] CPU: 1 UID: 0 PID: 2505389 Comm: modprobe Tainted: G      D W           7.2.9-p2p #2p2p PREEMPT(lazy) 
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840349] Tainted: [D]=DIE, [W]=WARN
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840353] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840359] RIP: 0010:remove_proc_entry+0x1a9/0x1d0
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840367] Code: 00 48 89 c8 48 8b 49 10 48 85 c9 75 f4 48 8d 3d 0d 88 4d 01 48 8b 4b 18 48 8b 92 98 00 00 00 48 c7 c6 c0 c3 85 91 4c 8b 40 18 <67> 48 0f b9 3a e9 72 ff ff ff 48 8d 3d f6 87 4d 01 48 8b 73 18 67
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840378] RSP: 0018:ffffd0e68580b720 EFLAGS: 00010246
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840384] RAX: ffff89f546838d40 RBX: ffff89f546838bc0 RCX: ffff89f546838be4
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840390] RDX: ffff89f540a0ad64 RSI: ffffffff9185c3c0 RDI: ffffffff922a32f0
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840395] RBP: ffff89f546838b40 R08: ffff89f546838d64 R09: 00000000ffffffff
+2026-10-13T17:59:10.778 192.168.0.151 [30200.840401] R10: 0000000000000004 R11: 0000000000000000 R12: 0000000000000002
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840407] R13: ffffd0e68580b775 R14: ffffd0e68580b775 R15: ffff89f540a0acc0
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840413] FS:  00007f6c1ba8a640(0000) GS:ffff8a04ecc97000(0000) knlGS:0000000000000000
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840420] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840425] CR2: 00007f040e8aaae0 CR3: 00000001e1d46004 CR4: 00000000001726f0
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840431] Call Trace:
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840436]  <TASK>
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840441]  unregister_irq_proc+0xfc/0x120
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840449]  free_desc+0x3a/0x120
+2026-10-13T17:59:10.779 192.168.0.151 [30200.840456]  irq_free_descs+0x47/0x70
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840462]  msi_domain_free_locked.part.0+0x162/0x1a0
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840472]  msi_domain_free_irqs_all_locked+0x6b/0xd0
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840481]  pci_free_msi_irqs+0x12/0x40
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840489]  pci_disable_msix+0x4b/0x60
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840496]  pci_free_irq_vectors+0x13/0x70
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840503]  release_nodes+0x36/0xb0
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840512]  devres_release_all+0x8f/0x100
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840520]  device_unbind_cleanup+0x26/0xa0
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840528]  really_probe+0x221/0x380
+2026-10-13T17:59:10.780 192.168.0.151 [30200.840535]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840543]  ? __pfx___driver_attach+0x10/0x10
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840551]  __driver_probe_device+0x85/0x150
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840559]  driver_probe_device+0x1f/0x90
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840567]  __driver_attach+0xba/0x1f0
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840575]  bus_for_each_dev+0x8e/0xe0
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840582]  bus_add_driver+0x11f/0x200
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840590]  driver_register+0x72/0xd0
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840599]  nhi_init+0x2f/0xff0 [thunderbolt]
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840645]  ? __pfx_init_module+0x10/0x10 [thunderbolt]
+2026-10-13T17:59:10.781 192.168.0.151 [30200.840688]  do_one_initcall+0x5c/0x300
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840698]  do_init_module+0x60/0x240
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840705]  init_module_from_file+0xd6/0x130
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840715]  idempotent_init_module+0x114/0x310
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840724]  __x64_sys_finit_module+0x71/0xe0
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840731]  do_syscall_64+0xea/0x640
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840741]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840749]  ? vfs_read+0x167/0x370
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840758]  ? __x64_sys_pread64+0x91/0xc0
+2026-10-13T17:59:10.782 192.168.0.151 [30200.840766]  ? handle_mm_fault+0x1e2/0x2e0
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840774]  ? do_syscall_64+0x128/0x640
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840780]  ? do_user_addr_fault+0x211/0x670
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840787]  ? irqentry_exit+0x48/0x740
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840793]  ? do_syscall_64+0x9f/0x640
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840800]  entry_SYSCALL_64_after_hwframe+0x76/0x7e
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840807] RIP: 0033:0x7f6c1b31a4f9
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840812] Code: ff c3 66 2e 0f 1f 84 00 00 00 00 00 0f 1f 44 00 00 48 89 f8 48 89 f7 48 89 d6 48 89 ca 4d 89 c2 4d 89 c8 4c 8b 4c 24 08 0f 05 <48> 3d 01 f0 ff ff 73 01 c3 48 8b 0d e7 68 0d 00 f7 d8 64 89 01 48
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840823] RSP: 002b:00007ffe1bdae038 EFLAGS: 00000246 ORIG_RAX: 0000000000000139
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840830] RAX: ffffffffffffffda RBX: 0000563480638c80 RCX: 00007f6c1b31a4f9
+2026-10-13T17:59:10.783 192.168.0.151 [30200.840836] RDX: 0000000000000004 RSI: 000056346148b32b RDI: 0000000000000003
+2026-10-13T17:59:10.784 192.168.0.151 [30200.840842] RBP: 0000000000000004 R08: 0000000000000000 R09: 000056348063afd0
+2026-10-13T17:59:10.784 192.168.0.151 [30200.840847] R10: 0000000000000000 R11: 0000000000000246 R12: 000056346148b32b
+2026-10-13T17:59:10.784 192.168.0.151 [30200.840853] R13: 0000000000040000 R14: 0000563480638c30 R15: 0000000000000000
+2026-10-13T17:59:10.784 192.168.0.151 [30200.840861]  </TASK>
+2026-10-13T17:59:10.784 192.168.0.151 [30200.840865] ---[ end trace 0000000000000000 ]---
+2026-10-13T17:59:10.784 192.168.0.151 [30200.842027] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+2026-10-13T17:59:11.157 192.168.0.151 [30201.269101] thunderbolt 0000:5d:00.0: error -ETIMEDOUT: failed to allocate host router
+2026-10-13T17:59:11.158 192.168.0.151 [30201.269264] thunderbolt 0000:5d:00.0: error -ETIMEDOUT: failed to add domain
+2026-10-13T17:59:11.158 192.168.0.151 [30201.269277] thunderbolt 0000:5d:00.0: probe with driver thunderbolt failed with error -110
+2026-10-13T17:59:11.158 192.168.0.151 [30201.270131] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+2026-10-13T17:59:11.585 192.168.0.151 [30201.697106] thunderbolt 0000:a4:00.0: error -ETIMEDOUT: failed to allocate host router
+2026-10-13T17:59:11.585 192.168.0.151 [30201.697260] thunderbolt 0000:a4:00.0: error -ETIMEDOUT: failed to add domain
+2026-10-13T17:59:11.586 192.168.0.151 [30201.697273] thunderbolt 0000:a4:00.0: probe with driver thunderbolt failed with error -110
