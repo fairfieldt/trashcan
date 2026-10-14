@@ -178,6 +178,11 @@ pub fn selected_attention_shaders(
     Ok((partial, merge, heads_per_group))
 }
 
+thread_local! {
+    /// A memory type `uncached_host_buffer` asks `buffer_impl` for.
+    static UNCACHED: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
 impl Device {
     pub fn new(inst: Rc<Instance>, pd: vk::PhysicalDevice) -> Result<Rc<Self>> {
         let mut subgroup = vk::PhysicalDeviceSubgroupProperties::default();
@@ -233,7 +238,8 @@ impl Device {
             vk::PhysicalDeviceVulkan11Features::default().storage_buffer16_bit_access(true);
         let mut f12 = vk::PhysicalDeviceVulkan12Features::default()
             .buffer_device_address(false)
-            .timeline_semaphore(true);
+            .timeline_semaphore(true)
+            .vulkan_memory_model(true);
         let features = vk::PhysicalDeviceFeatures::default()
             .shader_int16(true)
             .shader_int64(true);
@@ -540,6 +546,7 @@ impl Device {
             ("qwen4_head_merge", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_merge.spv")).as_slice()),
             ("qwen4_gate", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate.spv")).as_slice()),
             ("qwen4_gate_clock", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_clock.spv")).as_slice()),
+            ("qwen4_gate_nt", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_gate_nt.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
@@ -549,7 +556,7 @@ impl Device {
                 !bytes.is_empty(),
                 "shaders missing: build with glslc on incite"
             );
-            if name == "qwen4_gate_clock" && !shader_clock {
+            if (name == "qwen4_gate_clock" || name == "qwen4_gate_nt") && !shader_clock {
                 continue;
             }
             let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))?;
@@ -796,6 +803,20 @@ impl Device {
             })
             .context("no compatible Vulkan memory type")
     }
+    /// A host-visible, coherent buffer in a memory type that is not host-cached (RADV: write-combined GTT), when the
+    /// device has one; with the memory type it got.
+    pub fn uncached_host_buffer(self: &Rc<Self>, size: usize) -> Result<(Buffer, vk::MemoryPropertyFlags)> {
+        let want = vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+        let found = (0..self.mem.memory_type_count).find(|&i| {
+            let f = self.mem.memory_types[i as usize].property_flags;
+            f.contains(want) && !f.contains(vk::MemoryPropertyFlags::HOST_CACHED) && !f.contains(vk::MemoryPropertyFlags::DEVICE_LOCAL)
+        });
+        let ty = found.context("no host-visible, coherent, non-cached memory type")?;
+        UNCACHED.with(|u| u.set(Some(ty)));
+        let b = self.buffer_impl(size, true, false, None);
+        UNCACHED.with(|u| u.set(None));
+        Ok((b?, self.mem.memory_types[ty as usize].property_flags))
+    }
     pub fn buffer(
         self: &Rc<Self>,
         size: usize,
@@ -845,7 +866,9 @@ impl Device {
         } else {
             vk::MemoryPropertyFlags::DEVICE_LOCAL
         };
-        let ty = if host {
+        let ty = if let Some(t) = UNCACHED.with(|u| u.get()).filter(|t| host && bits & (1 << t) != 0) {
+            t
+        } else if host {
             self.memory_type(bits, flags | vk::MemoryPropertyFlags::HOST_CACHED)
                 .or_else(|_| self.memory_type(bits, flags))?
         } else {

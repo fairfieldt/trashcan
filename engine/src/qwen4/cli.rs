@@ -117,11 +117,20 @@ pub enum Cmd {
     GateCheck {
         #[arg(long, default_value_t = 0)]
         gpu: usize,
+        /// release (the host opens the gate every run) or never.
+        #[arg(long)]
+        step: String,
+        /// The gate word's memory: cached (host-cached, coherent) or uncached (host-visible, coherent, not cached).
+        #[arg(long, default_value = "cached")]
+        memory: String,
+        /// qwen4_gate_clock (volatile loads) or qwen4_gate_nt (nontemporal loads).
+        #[arg(long, default_value = "qwen4_gate_clock")]
+        shader: String,
+        /// Longest a gate may wait (1-100 ms).
+        #[arg(long, default_value_t = 100.0)]
+        bound_ms: f64,
         #[arg(long, default_value_t = 200)]
         reps: usize,
-        /// Hold the clocks up as the engine does while it works.
-        #[arg(long)]
-        high: bool,
     },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
@@ -317,7 +326,10 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
-        Cmd::GateCheck { gpu, reps, high } => super::bench::gate_check(gpu, reps, high),
+        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps } => {
+            anyhow::ensure!(memory == "cached" || memory == "uncached", "memory cached or uncached");
+            super::bench::gate_check(gpu, &step, memory == "cached", &shader, bound_ms, reps)
+        }
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
             // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.
