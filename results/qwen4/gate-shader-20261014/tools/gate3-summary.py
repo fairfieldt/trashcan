@@ -47,6 +47,9 @@ for arg in sys.argv[1:]:
             line = (f"{head} how {j['how']} ended_by_bound {j['ended_by_bound']} {fmt(j['gate_ms'], 2)} ms"
                     f" polls {j['polls']} {fmt(j['us_per_poll'], 3)} us/poll load {fmt(j.get('load_us_mean'), 2)}"
                     f" [{fmt(j.get('load_us_fewest'), 2)}, {fmt(j.get('load_us_most'), 2)}] sweep {fmt(j.get('sweep_us_mean'), 2)}")
+        elif j["step"] == "busy":
+            line = (f"{head} runs {j['runs']} ended_by_bound {j['ended_by_bound']} in {fmt(j['seconds'], 1)} s"
+                    f" | us/poll p50 {pct(j['us_per_poll'], 'p50', 2)}")
         else:
             line = (f"{head} not_open {j['not_open']}/{j['runs']} | gate GPU us p50 {pct(j['gate_gpu_us'], 'p50', 2)}"
                     f" p99 {pct(j['gate_gpu_us'], 'p99', 2)} | graph GPU us p50 {pct(j['graph_gpu_us'], 'p50', 2)}"

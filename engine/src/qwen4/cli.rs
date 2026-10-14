@@ -148,6 +148,10 @@ pub enum Cmd {
         /// The release step opens each gate 200 µs plus a random 0-jitter_us µs after it started.
         #[arg(long, default_value_t = 0)]
         jitter_us: u64,
+        /// The lowest shader clock (MHz): the gate's shader-clock bound is `bound_ms` at this clock (s_memtime counts
+        /// cycles of the current shader clock on GFX6), so it holds at every DPM level.
+        #[arg(long, default_value_t = 300.0)]
+        min_mhz: f64,
     },
     /// Print the gate shaders' machine code and statistics as RADV compiles them on GPU `gpu` (or RADV's null device
     /// with RADV_FORCE_FAMILY, which needs no GPU).
@@ -350,7 +354,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
-        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps, fence, sweep_kib, stride, max_fail, jitter_us } => {
+        Cmd::GateCheck { gpu, step, memory, shader, bound_ms, reps, fence, sweep_kib, stride, max_fail, jitter_us, min_mhz } => {
             anyhow::ensure!(memory == "cached" || memory == "uncached", "memory cached or uncached");
             super::bench::gate_check(&super::bench::GateCheck {
                 gpu,
@@ -364,6 +368,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 stride,
                 max_fail,
                 jitter_us,
+                min_mhz,
             })
         }
         Cmd::GateIsa { gpu, shaders } => {

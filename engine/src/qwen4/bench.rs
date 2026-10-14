@@ -219,6 +219,10 @@ pub struct GateCheck {
     /// The release step opens each gate 200 µs plus a uniformly random 0-`jitter_us` µs after it started, so that
     /// releases fall at every phase of the sweep and poll cycle.
     pub jitter_us: u64,
+    /// The lowest shader clock the GPU may run at (MHz). On GFX6 `s_memtime` counts shader-clock cycles at the current
+    /// DPM level (838.8 MHz at the top level, 300 MHz at the lowest), so the gate's tick bound is `bound_ms` at this
+    /// clock: at any faster clock the gate ends sooner.
+    pub min_mhz: f64,
 }
 
 /// One run of the gate check: how the gate ended and what it measured.
@@ -231,6 +235,9 @@ struct GateRun {
     fewest: u32,
     most: u32,
     sweep_ticks: u64,
+    /// Shader-clock ticks per µs over the gate (its ticks against the command processor's timestamps); the top DPM
+    /// level's 838.8 for gates too short to tell.
+    rate: f64,
     /// GPU µs from the timestamp before the gate to the one after it, and to the one after the input barriers.
     gate_us: f64,
     graph_us: f64,
@@ -245,8 +252,10 @@ struct GateRun {
 }
 
 /// One step of the bounded gate's single-GPU check on GPU `c.gpu`. The gate word (word 0 of a page) lives in host
-/// memory; the gate polls it until it reads 1, for at most `bound_ms` (shader clock at 838.8 MHz, with a poll count
-/// behind it that alone ends within `bound_ms` at the fastest poll rate seen, 0.40 µs). The command buffer is a gated
+/// memory; the gate polls it until it reads 1, for at most `bound_ms` (shader-clock ticks counted at `min_mhz`, with a
+/// poll count behind it that alone ends within `bound_ms` at the fastest poll rate seen). Every run must end within
+/// its bound by the command processor's timestamps, with a shader clock of 250-900 MHz; otherwise the step stops.
+/// The command buffer is a gated
 /// stage's: a timestamp, an event the command processor sets just before the gate, the gate, a timestamp, the
 /// barriers a stage needs before reading host input, a timestamp and an end event. Release latencies need calibrated
 /// timestamps (`TRASHCAN_TP_PROFILE=1`). One JSON line.
@@ -288,7 +297,8 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
     let fence = unsafe { d.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
     let word = |i: usize| unsafe { std::ptr::read_volatile((gate.ptr as *const u32).add(i)) };
     let open = || open_gate(gate.ptr as *mut u32, c.fence);
-    let ticks = ((c.bound_ms / 1e3 * TICKS_PER_S) as u64 >> 16) as u32;
+    ensure!((250.0..=TICKS_PER_S / 1e6).contains(&c.min_mhz), "min-mhz 250-838.8");
+    let ticks = ((c.bound_ms / 1e3 * c.min_mhz * 1e6) as u64 >> 16) as u32;
     // The gate's command buffer with a bound of `polls` polls (and `bound_ms` of shader clock).
     let record = |polls: u32| -> Result<vk::CommandBuffer> {
         let cmd = d.begin()?;
@@ -380,17 +390,19 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
             (0, 0, 0, 0)
         };
         let gate_us = (t[1] - t[0]) as f64 * period / 1e3;
-        // The shader clock must agree with the command processor's timestamps; otherwise its bound means nothing.
-        let ticks_us = ticks as f64 / TICKS_PER_S * 1e6;
+        // Every gate must end within its bound by the command processor's clock, and its shader clock must run at a
+        // DPM level's rate (250-900 MHz); otherwise stop.
+        ensure!(gate_us <= c.bound_ms * 1.1e3 + 100.0, "a gate ran {gate_us:.1} us, past its {} ms bound: stop", c.bound_ms);
+        let rate = if gate_us >= 50.0 && c.shader != "none" { ticks as f64 / gate_us } else { TICKS_PER_S / 1e6 };
         ensure!(
-            c.shader == "none" || (ticks_us - gate_us).abs() <= 0.2 * gate_us + 30.0,
-            "the shader clock disagrees with the GPU timestamps ({ticks_us:.1} against {gate_us:.1} us): stop"
+            gate_us < 50.0 || c.shader == "none" || (250.0..=900.0).contains(&rate),
+            "the shader clock ran at {rate:.1} MHz over {gate_us:.1} us: stop"
         );
         let (mut to_gpu_us, mut to_shader_us) = (None, None);
         if let (Some((_, host)), Some((tick, now))) = (released, d.calibrate()) {
             let host_of = |gpu: u64| now as f64 - (tick as i64 - gpu as i64) as f64 * period;
             to_gpu_us = Some((host_of(t[1]) - host as f64) / 1e3);
-            to_shader_us = Some((host_of(t[0]) + ticks as f64 / TICKS_PER_S * 1e9 - host as f64) / 1e3);
+            to_shader_us = Some((host_of(t[0]) + ticks as f64 / rate * 1e3 - host as f64) / 1e3);
         }
         Ok(GateRun {
             how,
@@ -400,6 +412,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
             fewest,
             most,
             sweep_ticks,
+            rate,
             gate_us,
             graph_us: (t[2] - t[0]) as f64 * period / 1e3,
             to_gpu_us,
@@ -409,17 +422,17 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
             started_to_done_us: seen.map(|s| (s - start_seen).as_secs_f64() * 1e6),
         })
     };
-    let us = |t: u64| t as f64 / TICKS_PER_S * 1e6;
+    let us = |t: u64, rate: f64| t as f64 / rate;
     // Per poll: the poll load's µs (mean, fewest, most) and the sweep's µs (mean), for the sweep shaders.
     let poll_stats = |r: &GateRun| -> serde_json::Value {
         let n = r.polls.max(1) as f64;
         let mut v = json!({"how": r.how, "polls": r.polls, "gate_ms": r.gate_us / 1e3, "ticks": r.ticks,
-            "us_per_poll": us(r.ticks) / n});
+            "shader_mhz": r.rate, "us_per_poll": us(r.ticks, r.rate) / n});
         if sweep {
-            v["load_us_mean"] = json!(us(r.load_ticks) / (n + 1.0));
-            v["load_us_fewest"] = json!(us(r.fewest as u64));
-            v["load_us_most"] = json!(us(r.most as u64));
-            v["sweep_us_mean"] = json!(us(r.sweep_ticks) / n);
+            v["load_us_mean"] = json!(us(r.load_ticks, r.rate) / (n + 1.0));
+            v["load_us_fewest"] = json!(us(r.fewest as u64, r.rate));
+            v["load_us_most"] = json!(us(r.most as u64, r.rate));
+            v["sweep_us_mean"] = json!(us(r.sweep_ticks, r.rate) / n);
         }
         v
     };
@@ -445,7 +458,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
     }
     let cmd = record(polls)?;
     let base = json!({"gpu": c.gpu, "step": c.step, "jitter_us": c.jitter_us, "shader": c.shader, "memory": memory, "fence": format!("{:?}", c.fence),
-        "bound_ms": c.bound_ms, "polls_bound": polls, "ticks_bound": (ticks as u64) << 16,
+        "bound_ms": c.bound_ms, "min_mhz": c.min_mhz, "polls_bound": polls, "ticks_bound": (ticks as u64) << 16,
         "sweep": if sweep { json!({"kib": c.sweep_kib, "stride": c.stride, "lines": lines}) } else { serde_json::Value::Null },
         "calibration": calibration});
     let result = (|| -> Result<serde_json::Value> {
@@ -473,7 +486,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
                     write.extend(r.write_us);
                     npolls.push(r.polls as f64);
                     if sweep {
-                        load.push(us(r.load_ticks) / (r.polls as f64 + 1.0));
+                        load.push(us(r.load_ticks, r.rate) / (r.polls as f64 + 1.0));
                     }
                 }
                 Ok(json!({"runs": runs, "seen": runs - failed, "failed": failed, "first_failed_run": first_fail,
@@ -516,7 +529,7 @@ pub fn gate_check(c: &GateCheck) -> Result<()> {
                     } else {
                         opened += 1;
                     }
-                    polls.push(us(r.ticks) / r.polls.max(1) as f64);
+                    polls.push(us(r.ticks, r.rate) / r.polls.max(1) as f64);
                 }
                 Ok(json!({"runs": c.reps, "ended_by_bound": ended, "not_ended_by_bound": opened,
                     "seconds": t.elapsed().as_secs_f64(), "utc_start": start, "utc_end": utc(), "us_per_poll": spread(&polls)}))

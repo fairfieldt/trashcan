@@ -1,0 +1,1 @@
+{"bound_ms":50.0,"calibration":null,"ended_by_bound":true,"fence":"Mfence","gate_ms":49.77081462495423,"gpu":0,"how":3,"jitter_us":0,"memory":"host-cached, coherent","polls":113794,"polls_bound":125000,"shader":"qwen4_gate_atomic","step":"never","sweep":null,"ticks":41878096,"ticks_bound":41877504,"us_per_poll":0.43874193131781625}
