@@ -112,3 +112,27 @@ and no test processes.
 
 Until the driver's error path is understood or fixed, Thunderbolt module reloads are not a fault to inject on the
 shared Macs.
+
+## invite GPU 1: compute ring timeout and GPU reset, 2026-10-14 13:22
+
+The main suite for 9baedca ran on all six Macs on Linux 7.3.0-rc7-p2p, with the stream transport. During pp2048,
+invite's GPU 1 (06:00.0) hung (`gpu1-timeout-20261014-1322/`: dmesg, devcoredump, the run's clock log):
+- `ring comp_1.0.0 timeout, signaled seq=4123, emitted seq=4125` (process trashcan-9baedca, the node);
+- the soft reset of gfx_v6_0 failed (-110);
+- a PCI CONFIG reset then succeeded, with VRAM lost.
+
+Nothing pointed to a cause beforehand:
+- both GPUs were at 850/1370 MHz and 60-62 °C;
+- no AER or PCIe errors appeared since boot;
+- the suite's validation, pp512 and earlier runs had passed.
+The `tbstream: RX CRC error` lines before it are not invite-specific: every Mac logged a few during stream traffic
+today (enlight 13, invite 6, inflight 2, alight 2, indite 1) and yesterday.
+
+The suite was stopped, and invite was rebooted under a lease, per the rule after any GPU reset. It came back healthy
+on 7.3: both GPUs accept the high level, no errors. Thunderbolt was then reset on all six.
+
+This is invite's third GPU incident in two days, and no other Mac has had one outside deliberate tests:
+- GPU 0 dropped off the bus on 2026-10-13 at 15:35, 8 minutes after a forced reset;
+- GPU 1 timed out on 2026-10-13 at 16:05 (7.2.9, main's code over TCP);
+- GPU 1 timed out now (7.3, the stream build).
+invite's GPU 0 also runs 10-15 °C hotter than the other eleven. invite was repasted on 2026-10-07.
