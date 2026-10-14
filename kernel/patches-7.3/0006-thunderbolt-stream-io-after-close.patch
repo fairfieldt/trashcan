@@ -1,0 +1,79 @@
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Wed, 14 Oct 2026 13:44:23 -0700
+Subject: [PATCH] thunderbolt: stream: Don't fail I/O after a CLOSE has been
+ read
+
+Since commit e120d14d03b3 ("thunderbolt: stream: Add support for busy
+polling") the read and write paths check sdev->closed before they look
+at the ring. Once a CLOSE packet has been read, every read returns 0 and
+every write fails with -ENXIO until the device is closed, even when the
+other side has opened its end again and sent more frames. Before that
+commit the reader got end of file at the CLOSE, the frames behind it
+could still be read, and only a blocking read or write that would have
+had to wait returned 0 or -ENXIO.
+
+A CLOSE can outlive the session that sent it. On Mac Pro 6,1 hosts
+(Intel Falcon Ridge controllers connected with a Thunderbolt 2 cable),
+frames sent to an end that is not open, including the CLOSE that every
+close of the device sends, are delivered when that end is opened again.
+Whichever end of a session closes last thus leaves a CLOSE at the other
+end, and the next session there reads it and can no longer write.
+Closing the device to start over sends a CLOSE back, so two hosts that
+retry can keep failing each other's sessions. On a chain of six such
+hosts, 9 of 25 stream sessions needed one or more retries this way and
+2 never got a working stream; with the old behaviour none failed.
+
+Check sdev->closed only where a blocking read or write would otherwise
+wait, as before.
+
+Fixes: e120d14d03b3 ("thunderbolt: stream: Add support for busy polling")
+Assisted-by: Claude:claude-opus-5-5
+---
+--- a/drivers/thunderbolt/stream.c
++++ b/drivers/thunderbolt/stream.c
+@@ -737,7 +737,7 @@ tbstream_dev_fops_read_iter(struct kiocb *kiocb, struc
+ 			return ret;
+ 		}
+ 
+-		if (tbstream_dev_closed(sdev) || tbstream_dev_removed(sdev)) {
++		if (tbstream_dev_removed(sdev)) {
+ 			mutex_unlock(&sdev->lock);
+ 			return 0;
+ 		}
+@@ -749,6 +749,13 @@ tbstream_dev_fops_read_iter(struct kiocb *kiocb, struc
+ 
+ 		if (nowait)
+ 			return -EAGAIN;
++
++		/*
++		 * After a CLOSE, a blocking read with nothing more to read
++		 * returns end of file instead of waiting.
++		 */
++		if (tbstream_dev_closed(sdev))
++			return 0;
+ 
+ 		if (sdev->busy_poll) {
+ 			if (signal_pending(current))
+@@ -848,7 +855,7 @@ tbstream_dev_fops_write_iter(struct kiocb *kiocb, stru
+ 			return ret;
+ 		}
+ 
+-		if (tbstream_dev_closed(sdev) || tbstream_dev_removed(sdev)) {
++		if (tbstream_dev_removed(sdev)) {
+ 			mutex_unlock(&sdev->lock);
+ 			return -ENXIO;
+ 		}
+@@ -861,6 +868,13 @@ tbstream_dev_fops_write_iter(struct kiocb *kiocb, stru
+ 		if (nowait)
+ 			return -EAGAIN;
+ 
++		/*
++		 * After a CLOSE, a blocking write that has to wait for room
++		 * in the ring fails instead.
++		 */
++		if (tbstream_dev_closed(sdev))
++			return -ENXIO;
++
+ 		if (sdev->busy_poll) {
+ 			if (signal_pending(current))
+ 				return -ERESTARTSYS;

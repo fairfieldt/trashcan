@@ -2,6 +2,8 @@
 
 All six Mac Pros run **Linux 7.3 from kernel.org, now 7.3-rc7, built as `7.3.0-rc7-p2p`**, with four local patches
 and 7.2.9's config. `7.2.9-p2p` stays installed as the fallback, and Debian's own kernels are still in the GRUB menu.
+Two more patches, 0006 and 0007 for USB4STREAM, are being rolled out as `7.3.0-rc7-p2p-s2`
+(`results/kernel/usb4stream-busypoll-20261014/`).
 
 7.3 is needed for USB4STREAM busy polling (`busy_poll` in each stream's configfs group). On the D700s it measures the
 same as 7.2.9: same VBIOS selection and clocks, P2P passes, the engine test suite passes with the same errors, and
@@ -15,6 +17,12 @@ Flash-Next's stage times, P2P bandwidth and the six-Mac main suite match 7.2.9's
 | 0003 `p2pdma-whitelist-ivy-bridge-ep` | Add the Xeon E5 v2 host bridge (8086:0e00) to the P2PDMA whitelist | Without it dma-buf imports between the D700s migrate to system memory | Prepared in `kernel/upstream/p2pdma-ivy-bridge-ep/`, not sent |
 | 0004 `thunderbolt-net-throttling-param` | `thunderbolt_net` ring interrupt throttle as the `throttling` module parameter (default 128000 ns) | 128 us sets back-to-back latency; 32000 gives 40 us round trips at the same throughput | Local tuning knob |
 | 0005 `thunderbolt-stream-no-tx-e2e` | USB4STREAM Tx ring without E2E flow control (Rx keeps it) | With Tx-side E2E the Falcon Ridge NHI wedges and stops answering config reads | `kernel/upstream/usb4stream-falcon-ridge/` 0001 rebased onto 7.3's `stream.c`, not sent; same failure upstream fixed in `thunderbolt_net` with revert 1881f2efbf7f |
+| 0006 `thunderbolt-stream-io-after-close` | A CLOSE that has been read no longer fails every later read (end of file) and write (`ENXIO`) until the device is closed, as in 7.2 | On 7.3 a CLOSE left from the previous session kept links off their streams: 9 of 25 chain links needed retries, 2 never got there | Candidate (`Fixes: e120d14d03b3`), not sent |
+| 0007 `thunderbolt-stream-no-rx-flush-on-close` | A close stops the RX ring without waiting for it to drain | The RX ring never drains (its buffers stay posted), so every close took 500 ms and a reopen waited for it | Candidate (`Fixes: 6db21d817b43`), not sent |
+
+`kernel/patches-7.3-diag/` holds diagnostic patches (now 0008, experiment switches for the stream's lone-frame
+hold). `kernel/build-7.3.sh` applies them only with `DIAG=1`, and only under a release name of its own (`KLOCAL`).
+They are never rolled out or sent upstream.
 
 The numbers follow `kernel/patches-7.2/`, the fallback's patches. Its 0002 (`si-dpm-gpio-dc-mobile-only`, without
 which the cards stay in the DC power state at 300/150 MHz) is upstream in 7.3 as cd883d0a3937, with its companion
@@ -138,7 +146,13 @@ cable's stream throughput and latency, `results/kernel/tb-loopback-20261006/` ha
   lost), and every close sends a CLOSE, so the end that closes last leaves one waiting at the other, which reads it as
   end of file at its next open (main's TP lanes then fail their handshake); every close takes 500-530 ms (it waits for the receive ring to drain, which never happens); an fd kept open
   across an XDomain reconnect stays valid but carries nothing; a stream's configfs group is named after the service
-  (`0-3.1`), whose index can change at a reconnect. 7.3 changes none of this unless `busy_poll` is set.
+  (`0-3.1`), whose index can change at a reconnect.
+- On 7.3 (`results/kernel/usb4stream-busypoll-20261014/`): without 0006, once a stream device has read a CLOSE every
+  later read returns end of file and every write fails with `ENXIO` until it is closed; with 0007 a close takes under
+  a millisecond. `busy_poll` does not release held frames. The hold belongs to a direction of a cable (0-3 frames,
+  surviving Thunderbolt resets), not to the paths' settings, which are the same on every cable; a CLOSE it holds
+  reaches the other end's next session. With 0008 at its defaults (`7.3.0-rc7-p2p-s3`) no cable touching that kernel
+  held; what 0008 changes is being bisected.
 - Between two Macs with the engine's links (link-test, every byte checked, three extra frames after every write): a
   64 B ping-pong takes 32-47 us p50 on a stream against 40-95 us over TCP, a 40 KiB exchange 79-88 us against 169-219,
   a chain token (40 KiB on, 10 KiB back) 121-160 us against 283-351, and 5 MiB one way runs at 556-604 MB/s against
@@ -149,8 +163,8 @@ cable's stream throughput and latency, `results/kernel/tb-loopback-20261006/` ha
 
   | Fix | Expected benefit |
   |---|---|
-  | Read a received frame as soon as it completes: find whether the completion is in memory and only unreported (7.3's `busy_poll`, which polls the rings, tests that) or late in the controller | No extra frames after each write; request/reply traffic at the stream's latency |
-  | Flush only the Tx ring on release (the Rx ring's in-flight list never empties) | A close in milliseconds instead of at least 0.5 s: faster session turnover, `rmmod` and resets not held up |
+  | Read a received frame as soon as it arrives (7.3's `busy_poll`, which polls the rings, does not: the frame is not completed; see the 0008 bisection) | No extra frames after each write; request/reply traffic at the stream's latency |
+  | Flush only the Tx ring on release (the Rx ring's in-flight list never empties): done in 0007 | A close in milliseconds instead of at least 0.5 s: faster session turnover, `rmmod` and resets not held up |
   | Re-post frames flagged with a CRC error or a buffer overrun instead of returning their bytes, and count them (a configfs attribute) | Damaged data never reaches a reader; the loss shows as a gap and in a counter instead of in dmesg |
   | When the XDomain goes away under an open fd, stop its rings and fail later reads, writes and polls (`-ENXIO`/`EPOLLHUP`) until it is reopened | A dead stream is reported at once instead of found by timeouts |
   | Name configfs groups by the XDomain and the service key, or re-attach a group whose service index changed | Streams survive reconnects without being recreated |

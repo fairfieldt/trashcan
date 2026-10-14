@@ -1,0 +1,36 @@
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Wed, 14 Oct 2026 14:40:00 -0700
+Subject: [PATCH] thunderbolt: stream: Don't wait for the RX ring to empty on
+ close
+
+tbstream_dev_stop() flushes the RX ring with a 500 ms timeout before
+stopping it. tb_ring_flush() waits for the ring's in-flight list to
+empty, but an RX ring keeps its buffers posted to the controller (they
+are posted again as soon as they are read), so the wait always runs into
+the timeout. Every close of a stream device therefore takes at least
+half a second, and an open of the same device, which takes sdev->lock,
+waits for it: a program that closes its stream and opens it again, or a
+new program that takes over the device, starts half a second late.
+
+Stop the RX ring right away, as the busy-polling path already does.
+Frames that arrive in the meantime are freed with the ring, as they are
+after the timeout now: nothing reads them once the device is closed.
+
+Fixes: 6db21d817b43 ("thunderbolt: Add support for USB4STREAM")
+Assisted-by: Claude:claude-opus-5-5
+---
+--- a/drivers/thunderbolt/stream.c
++++ b/drivers/thunderbolt/stream.c
+@@ -677,7 +677,11 @@ static void tbstream_dev_stop(struct tbstream_dev *sde
+ 	} else {
+ 		tb_ring_flush(sdev->tx_ring.ring, 500);
+ 		tb_ring_stop(sdev->tx_ring.ring);
+-		tb_ring_flush(sdev->rx_ring.ring, 500);
++		/*
++		 * The RX ring keeps its buffers posted to the controller,
++		 * so waiting for it to empty would only run into the
++		 * timeout.
++		 */
+ 		tb_ring_stop(sdev->rx_ring.ring);
+ 	}
+ 

@@ -1,0 +1,291 @@
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Wed, 14 Oct 2026 15:20:00 -0700
+Subject: [PATCH] thunderbolt: stream: Experiment switches for the lone-frame
+ hold (diagnostic, not for upstream)
+
+On the Mac Pros a stream's receiving controller reads a frame only once
+up to three more have arrived behind it, while thunderbolt_net on the
+same controllers delivers single packets at once. These configfs
+attributes switch the stream's RX ring setup and use, one by one, to
+what thunderbolt_net does; each is written while the device is closed
+and used from its next open:
+
+  rx_e2e (1)        RX ring with end-to-end flow control
+  paths_last (0)    enable the DMA paths after the rings are started and
+                    the RX ring is primed, as thunderbolt_net does
+  poll_mode (0)     RX completions through start_poll and tb_ring_poll(),
+                    the interrupt masked until polled (as NAPI)
+  rx_repost (0)     post consumed RX buffers again at the end of each
+                    read instead of one at a time
+  rx_eof_close (1)  CLOSE ends a frame in the RX eof_mask (0 breaks CLOSE;
+                    raw probes only)
+
+With every attribute at its default the driver behaves as before.
+
+Assisted-by: Claude:claude-opus-5-5
+---
+--- a/drivers/thunderbolt/stream.c
++++ b/drivers/thunderbolt/stream.c
+@@ -133,6 +133,15 @@ struct tbstream_ring {
+  * @ring_size: Size of the rings
+  * @throttling: Interrupt throttling rate in ns
+  * @busy_poll: Instead of interrupts, busy poll the rings
++ * @rx_e2e: Experiment: RX ring with end-to-end flow control
++ * @paths_last: Experiment: enable the paths after the RX ring is primed
++ * @poll_mode: Experiment: RX completions through start_poll and
++ *	       tb_ring_poll(), as thunderbolt_net
++ * @rx_repost: Experiment: post consumed RX buffers again at the end of
++ *	       each read instead of one at a time
++ * @rx_eof_close: Experiment: CLOSE ends a frame in the RX eof_mask
++ * @rx_poll_pending: RX completions wait for tb_ring_poll() (@poll_mode)
++ * @rx_unposted: Consumed RX buffers not posted again yet (@rx_repost)
+  * @users: Number of times @cdev has been opened
+  * @closed: CLOSE packet was received
+  * @removed: Userspace removed the ConfigFS group underneath.
+@@ -153,6 +162,13 @@ struct tbstream_dev {
+ 	unsigned int ring_size;
+ 	unsigned int throttling;
+ 	bool busy_poll;
++	bool rx_e2e;
++	bool paths_last;
++	bool poll_mode;
++	bool rx_repost;
++	bool rx_eof_close;
++	bool rx_poll_pending;
++	unsigned int rx_unposted;
+ 	int users;
+ 	bool closed;
+ 	bool removed;
+@@ -402,6 +418,10 @@ static int tbstream_dev_consume_rx(struct tbstream_dev
+ 				   tb_ring_frame_size(&sf->frame),
+ 				   DMA_FROM_DEVICE);
+ 
++	if (sdev->rx_repost) {
++		sdev->rx_unposted++;
++		return 0;
++	}
+ 	return tb_ring_rx(sdev->rx_ring.ring, &sf->frame);
+ }
+ 
+@@ -543,15 +563,47 @@ tbstream_dev_poll_ring(struct tbstream_dev *sdev, stru
+ static void
+ tbstream_dev_poll_ring(struct tbstream_dev *sdev, struct tbstream_ring *ring)
+ {
++	bool rx_poll = sdev->poll_mode && !sdev->busy_poll && ring == &sdev->rx_ring;
+ 	struct ring_frame *frame;
+ 
+-	if (!sdev->busy_poll)
++	if (!sdev->busy_poll && !rx_poll)
+ 		return;
+ 
+ 	while ((frame = tb_ring_poll(ring->ring)))
+ 		frame->callback(ring->ring, frame, false);
++
++	if (rx_poll && READ_ONCE(sdev->rx_poll_pending)) {
++		/* Re-enable the ring interrupt, as thunderbolt_net does */
++		WRITE_ONCE(sdev->rx_poll_pending, false);
++		tb_ring_poll_complete(ring->ring);
++		/* Frames that completed before it was enabled again */
++		while ((frame = tb_ring_poll(ring->ring)))
++			frame->callback(ring->ring, frame, false);
++	}
++}
++
++/* @poll_mode: the RX ring interrupt fired and is masked until polled */
++static void tbstream_dev_rx_start_poll(void *data)
++{
++	struct tbstream_dev *sdev = data;
++
++	WRITE_ONCE(sdev->rx_poll_pending, true);
++	wake_up_interruptible_poll(&sdev->wait, EPOLLIN | EPOLLRDNORM);
+ }
+ 
++/* @rx_repost: post the RX buffers consumed by this read again */
++static void tbstream_dev_repost_rx(struct tbstream_dev *sdev)
++{
++	size_t size = tb_ring_size(sdev->rx_ring.ring);
++
++	while (sdev->rx_unposted) {
++		unsigned long i = sdev->rx_ring.cons - sdev->rx_unposted;
++
++		tb_ring_rx(sdev->rx_ring.ring, &sdev->rx_ring.frames[i % size].frame);
++		sdev->rx_unposted--;
++	}
++}
++
+ static int tbstream_dev_send_close(struct tbstream_dev *sdev)
+ {
+ 	struct tbstream_frame *sf;
+@@ -582,10 +634,11 @@ static int tbstream_dev_start(struct tbstream_dev *sde
+ static int tbstream_dev_start(struct tbstream_dev *sdev)
+ {
+ 	struct tb_xdomain *xd = tbstream_dev_xdomain(sdev);
+-	unsigned int flags = RING_FLAG_FRAME;
++	unsigned int flags = RING_FLAG_FRAME, rx_flags;
+ 	u16 sof_mask, eof_mask;
+ 	struct tb_ring *ring;
+ 	int ret, e2e_tx_hop;
++	bool rx_poll;
+ 
+ 	if (sdev->busy_poll)
+ 		flags |= RING_FLAG_NO_INTERRUPT;
+@@ -601,23 +654,34 @@ static int tbstream_dev_start(struct tbstream_dev *sde
+ 
+ 	e2e_tx_hop = ring->hop;
+ 	sof_mask = BIT(TBSTREAM_FRAME_START);
+-	eof_mask = BIT(TBSTREAM_DATA) | BIT(TBSTREAM_CLOSE);
++	eof_mask = BIT(TBSTREAM_DATA);
++	if (sdev->rx_eof_close)
++		eof_mask |= BIT(TBSTREAM_CLOSE);
++	rx_flags = flags;
++	if (sdev->rx_e2e)
++		rx_flags |= RING_FLAG_E2E;
++	rx_poll = sdev->poll_mode && !sdev->busy_poll;
+ 
+-	ring = tb_ring_alloc_rx(xd->tb->nhi, -1, sdev->ring_size,
+-				flags | RING_FLAG_E2E, e2e_tx_hop, sof_mask,
+-				eof_mask, NULL, NULL);
++	ring = tb_ring_alloc_rx(xd->tb->nhi, -1, sdev->ring_size, rx_flags,
++				e2e_tx_hop, sof_mask, eof_mask,
++				rx_poll ? tbstream_dev_rx_start_poll : NULL,
++				rx_poll ? sdev : NULL);
+ 	if (!ring) {
+ 		ret = -ENOMEM;
+ 		goto err_free_tx_buffers;
+ 	}
+ 	sdev->rx_ring.ring = ring;
++	sdev->rx_poll_pending = false;
++	sdev->rx_unposted = 0;
+ 
+-	ret = tb_xdomain_enable_paths(xd, sdev->out_hopid,
+-				     sdev->tx_ring.ring->hop,
+-				     sdev->in_hopid,
+-				     sdev->rx_ring.ring->hop);
+-	if (ret)
+-		goto err_free_rx;
++	if (!sdev->paths_last) {
++		ret = tb_xdomain_enable_paths(xd, sdev->out_hopid,
++					     sdev->tx_ring.ring->hop,
++					     sdev->in_hopid,
++					     sdev->rx_ring.ring->hop);
++		if (ret)
++			goto err_free_rx;
++	}
+ 
+ 	tb_ring_throttling(sdev->tx_ring.ring, sdev->throttling);
+ 	tb_ring_throttling(sdev->rx_ring.ring, sdev->throttling);
+@@ -628,8 +692,23 @@ static int tbstream_dev_start(struct tbstream_dev *sde
+ 	ret = tbstream_dev_alloc_rx_buffers(sdev);
+ 	if (ret)
+ 		goto err_stop;
++
++	if (sdev->paths_last) {
++		/* As thunderbolt_net: no frame arrives before the RX ring is primed */
++		ret = tb_xdomain_enable_paths(xd, sdev->out_hopid,
++					     sdev->tx_ring.ring->hop,
++					     sdev->in_hopid,
++					     sdev->rx_ring.ring->hop);
++		if (ret)
++			goto err_free_rx_buffers;
++	}
+ 	return 0;
+ 
++err_free_rx_buffers:
++	tb_ring_stop(sdev->rx_ring.ring);
++	tb_ring_stop(sdev->tx_ring.ring);
++	tbstream_ring_free(&sdev->rx_ring);
++	goto err_free_rx;
+ err_stop:
+ 	tb_ring_stop(sdev->rx_ring.ring);
+ 	tb_ring_stop(sdev->tx_ring.ring);
+@@ -768,6 +847,7 @@ tbstream_dev_fops_read_iter(struct kiocb *kiocb, struc
+ 		} else {
+ 			ret = wait_event_interruptible(sdev->wait,
+ 					tbstream_ring_available(&sdev->rx_ring) ||
++					READ_ONCE(sdev->rx_poll_pending) ||
+ 					tbstream_dev_valid(sdev) != 0 ||
+ 					tbstream_dev_closed(sdev) ||
+ 					tbstream_dev_removed(sdev));
+@@ -827,6 +907,7 @@ tbstream_dev_fops_read_iter(struct kiocb *kiocb, struc
+ 		nbytes += size;
+ 	}
+ 
++	tbstream_dev_repost_rx(sdev);
+ 	mutex_unlock(&sdev->lock);
+ 	if (ret)
+ 		return ret;
+@@ -943,7 +1024,8 @@ tbstream_dev_fops_poll(struct file *file, struct poll_
+ 	} else {
+ 		if (tbstream_ring_available(&sdev->tx_ring))
+ 			mask |= EPOLLOUT | EPOLLWRNORM;
+-		if (tbstream_ring_available(&sdev->rx_ring))
++		if (tbstream_ring_available(&sdev->rx_ring) ||
++		    READ_ONCE(sdev->rx_poll_pending))
+ 			mask |= EPOLLIN | EPOLLRDNORM;
+ 	}
+ 	return mask;
+@@ -1077,6 +1159,43 @@ CONFIGFS_ATTR(tbstream_dev_, busy_poll);
+ }
+ CONFIGFS_ATTR(tbstream_dev_, busy_poll);
+ 
++/* Experiment switches: written while the device is closed, used at its next open */
++#define TBSTREAM_DEV_BOOL_ATTR(_name)						\
++static ssize_t tbstream_dev_##_name##_show(struct config_item *item,	\
++					   char *buf)			\
++{									\
++	struct tbstream_dev *sdev =					\
++		tbstream_dev_from_group(to_config_group(item));		\
++									\
++	return sysfs_emit(buf, "%u\n", sdev->_name);			\
++}									\
++									\
++static ssize_t tbstream_dev_##_name##_store(struct config_item *item,	\
++					    const char *buf, size_t count) \
++{									\
++	struct tbstream_dev *sdev =					\
++		tbstream_dev_from_group(to_config_group(item));		\
++	bool val;							\
++	int ret;							\
++									\
++	ret = kstrtobool(buf, &val);					\
++	if (ret)							\
++		return ret;						\
++									\
++	guard(mutex)(&sdev->lock);					\
++	if (sdev->users)						\
++		return -EBUSY;						\
++	sdev->_name = val;						\
++	return count;							\
++}									\
++CONFIGFS_ATTR(tbstream_dev_, _name)
++
++TBSTREAM_DEV_BOOL_ATTR(rx_e2e);
++TBSTREAM_DEV_BOOL_ATTR(paths_last);
++TBSTREAM_DEV_BOOL_ATTR(poll_mode);
++TBSTREAM_DEV_BOOL_ATTR(rx_repost);
++TBSTREAM_DEV_BOOL_ATTR(rx_eof_close);
++
+ static ssize_t tbstream_dev_index_show(struct config_item *item, char *buf)
+ {
+ 	struct config_group *group = to_config_group(item);
+@@ -1384,6 +1503,11 @@ static struct configfs_attribute *tbstream_dev_attrs[]
+ 
+ static struct configfs_attribute *tbstream_dev_attrs[] = {
+ 	&tbstream_dev_attr_busy_poll,
++	&tbstream_dev_attr_rx_e2e,
++	&tbstream_dev_attr_paths_last,
++	&tbstream_dev_attr_poll_mode,
++	&tbstream_dev_attr_rx_repost,
++	&tbstream_dev_attr_rx_eof_close,
+ 	&tbstream_dev_attr_index,
+ 	&tbstream_dev_attr_in_hopid,
+ 	&tbstream_dev_attr_out_hopid,
+@@ -1533,6 +1657,8 @@ tbstream_dev_make_group(struct config_group *group, co
+ 	sdev->index = index;
+ 	sdev->ring_size = TBSTREAM_DEV_RING_SIZE;
+ 	sdev->throttling = TBSTREAM_DEV_THROTTLING;
++	sdev->rx_e2e = true;
++	sdev->rx_eof_close = true;
+ 	mutex_init(&sdev->lock);
+ 	init_waitqueue_head(&sdev->wait);
+ 	INIT_LIST_HEAD(&sdev->list);
