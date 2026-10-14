@@ -1,0 +1,5 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU0: layers 0..3 + head rows 0..124928
+GPU0: 4663.5 MiB allocated in 1.04 s; device-local heap 4664 of 5888 MiB used, budget 5870
+[clocks] 74 samples card0 (02:00.0) sclk/mclk: 850/1370 x74  max 56C card1 (06:00.0) sclk/mclk: 850/1370 x74  max 58C  log=results/dg5-correct/clocks/two-0-A.txt

@@ -1,0 +1,1 @@
+[clocks] 4 samples card0 (02:00.0) sclk/mclk: 850/1370 x4  max 54C card1 (06:00.0) sclk/mclk: 850/1370 x4  max 56C  log=results/dg/clocks/skip-gpu1.txt

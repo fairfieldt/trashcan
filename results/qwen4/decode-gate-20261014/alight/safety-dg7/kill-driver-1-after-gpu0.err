@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 51C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 52C  log=results/dg7-safety/clocks/kill-driver-1-after-gpu0.txt

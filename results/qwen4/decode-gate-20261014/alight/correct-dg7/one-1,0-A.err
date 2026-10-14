@@ -1,0 +1,7 @@
+plan: [[(0, 3), (3, 6)]]
+head rows: [[Some((0, 124928)), Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 0.81 s; device-local heap 4664 of 5888 MiB used, budget 5870
+GPU0: layers 3..6 + head rows 124928..248320
+GPU0: 4634.3 MiB allocated in 0.76 s; device-local heap 4634 of 5888 MiB used, budget 5870
+[clocks] 72 samples card0 (02:00.0) sclk/mclk: 850/1370 x72  max 59C card1 (06:00.0) sclk/mclk: 850/1370 x72  max 61C  log=results/dg7-correct/clocks/one-1,0-A.txt

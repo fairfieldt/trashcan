@@ -1,0 +1,11 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 1.43 s; device-local heap 4664 of 5888 MiB used, budget 4664
+qwen4: GPU1: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 2720-246556 ticks at 832 MHz, 1758.0 us per poll
+qwen4: GPU1: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 720-188624 ticks at 839 MHz, 1274.9 us per poll
+qwen4: layers 0..3: the gate of head scoring gave up after 5 ms (58 polls, poll loads 368-37440 ticks; it read 0x0 last and ticket 0x2, released with 0x2) without its input; running it again (1 so far)
+qwen4: layers 0..3: the gate of head scoring gave up after 2 ms (58 polls, poll loads 104-42688 ticks; it read 0x3 last and ticket 0x4, released with 0x4) without its input; running it again (2 so far)
+qwen4: layers 0..3: the gate of head scoring gave up after 2 ms (58 polls, poll loads 596-3300 ticks; it read 0x5 last and ticket 0x6, released with 0x6) without its input; running it again (3 so far)
+qwen4: layers 0..3: a gate's shader clock ran at 211 MHz over 155 us; graphs are no longer submitted ahead
+qwen4: stall at 120 after the head scoring for 3000 ms

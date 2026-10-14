@@ -1,0 +1,4 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 127.0.0.1:7181, devices Gpus([0])
+qwen4 node: session from 127.0.0.1:45744
+GPU0: layers 3..6 + head rows 124928..248320
+GPU0: 4634.3 MiB allocated in 1.06 s; device-local heap 4634 of 5888 MiB used, budget 5870

@@ -1,0 +1,8 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 1.03 s; device-local heap 4664 of 5888 MiB used, budget 5870
+qwen4: GPU1: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 688-7552 ticks at 823 MHz, 14.0 us per poll
+qwen4: GPU1: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 668-9364 ticks at 826 MHz, 13.5 us per poll
+gate: {"stages":[{"gated":true,"layers":[0,3],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":1030.3434343434344,"min":664.6243902439024,"n":2047,"p10":676.8159203980099,"p50":719.2407407407408,"p90":730.3681592039801,"p99":833.7254901960785},"release_to_past_gate_us":null,"released":2047,"timeouts":0,"wait_ms":{"max":3.8559999852905276,"min":2.68977776751709,"n":2047,"p10":2.8093333226165775,"p50":2.8565925816955566,"p90":2.8939259148864744,"p99":2.993037025619507}}}],"timeouts":0}
+[clocks] 73 samples card0 (02:00.0) sclk/mclk: 850/1370 x73  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x73  max 62C  log=results/dg5-correct/clocks/two-1-B.txt

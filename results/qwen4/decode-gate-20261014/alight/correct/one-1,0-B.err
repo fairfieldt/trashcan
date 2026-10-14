@@ -1,0 +1,14 @@
+plan: [[(0, 3), (3, 6)]]
+head rows: [[Some((0, 124928)), Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 0.79 s; device-local heap 4664 of 5888 MiB used, budget 5870
+GPU0: layers 3..6 + head rows 124928..248320
+GPU0: 4634.3 MiB allocated in 0.76 s; device-local heap 4634 of 5888 MiB used, budget 5870
+qwen4: GPU1: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 748-828 ticks at 822 MHz, 13.9 us per poll
+qwen4: GPU1: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 740-964 ticks at 825 MHz, 13.8 us per poll
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 236-764 ticks at 823 MHz, 13.6 us per poll: hits in the L2
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 664-672 ticks at 824 MHz, 13.8 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 224-732 ticks at 824 MHz, 13.1 us per poll: hits in the L2
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 648-656 ticks at 823 MHz, 13.2 us per poll
+gate: {"stages":[{"gated":true,"layers":[0,3],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":null,"release_to_past_gate_us":null,"released":0,"timeouts":0,"wait_ms":null}},{"gated":true,"layers":[3,6],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":813.6559139784946,"min":650.8301886792453,"n":2047,"p10":667.4926829268293,"p50":710.6600985221675,"p90":736.663101604278,"p99":760.2680412371134},"release_to_past_gate_us":null,"released":2047,"timeouts":0,"wait_ms":{"max":2.7534814709777833,"min":2.198962954574585,"n":2047,"p10":2.613333323364258,"p50":2.6691851750030517,"p90":2.7164444340820313,"p99":2.7352592488250735}}}],"timeouts":0}
+[clocks] 73 samples card0 (02:00.0) sclk/mclk: 850/1370 x73  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x73  max 57C  log=results/dg5-correct/clocks/one-1,0-B.txt

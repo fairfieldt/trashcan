@@ -1,0 +1,3 @@
+ok   qwen4_gate                           set2:a load/glc 2 store/glc 12; set2:b load/glc 8; set2:c store 1
+FAIL qwen4_count                          set2:a store 1; set2:b smem 1
+       s1: %8:s[0] = s_buffer_load_dword %7:s[4-7], 0 storage:buffer semantics:private,reorder

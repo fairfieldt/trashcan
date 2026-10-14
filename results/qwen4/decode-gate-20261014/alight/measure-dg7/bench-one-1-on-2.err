@@ -1,0 +1,15 @@
+plan: [[(0, 3), (3, 6)]]
+head rows: [[Some((0, 124928)), Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 0.78 s; device-local heap 4664 of 5888 MiB used, budget 5870
+GPU0: layers 3..6 + head rows 124928..248320
+GPU0: 4634.3 MiB allocated in 0.76 s; device-local heap 4634 of 5888 MiB used, budget 5870
+qwen4: GPU1: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 692-7236 ticks, sweeps up to 14300 ticks (6 per line) at 822 MHz, 14.5 us per poll
+qwen4: GPU1: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 700-2444 ticks, sweeps up to 12504 ticks (6 per line) at 825 MHz, 14.0 us per poll
+qwen4: GPU1: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 208-688 ticks, sweeps up to 13732 ticks (6 per line) at 821 MHz, 12.9 us per poll: hits in the L2
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 628-9996 ticks, sweeps up to 14000 ticks (6 per line) at 823 MHz, 14.0 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 216-692 ticks, sweeps up to 11924 ticks (5 per line) at 824 MHz, 12.9 us per poll: hits in the L2
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 628-8592 ticks, sweeps up to 13888 ticks (6 per line) at 823 MHz, 13.8 us per poll
+qwen4: GPU0: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+[clocks] 24 samples card0 (02:00.0) sclk/mclk: 850/1370 x24  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x24  max 56C  log=results/dg7-measure/clocks/bench-one-1-on-2.txt

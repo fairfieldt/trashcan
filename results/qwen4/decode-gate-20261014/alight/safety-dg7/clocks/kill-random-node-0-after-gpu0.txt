@@ -1,0 +1,2 @@
+t sclk0 mclk0 temp0 sclk1 mclk1 temp1
+1792012184.711 850 1370 50 850 1370 51

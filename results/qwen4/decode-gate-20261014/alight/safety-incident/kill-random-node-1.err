@@ -1,0 +1,7 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 2.15 s; device-local heap 4664 of 5888 MiB used, budget 5888
+qwen4: GPU1: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 736-6332 ticks at 823 MHz, 14.5 us per poll
+qwen4: GPU1: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 732-5936 ticks at 826 MHz, 14.3 us per poll
+Error: remote: the gate check ended with how 3 after 22 polls

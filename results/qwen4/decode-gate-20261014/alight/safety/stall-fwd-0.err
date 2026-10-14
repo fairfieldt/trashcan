@@ -1,0 +1,10 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU0: layers 0..3 + head rows 0..124928
+GPU0: 4663.5 MiB allocated in 1.05 s; device-local heap 4664 of 5888 MiB used, budget 5870
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 680-8580 ticks, sweeps up to 14028 ticks (6 per line) at 822 MHz, 14.0 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 680-6552 ticks, sweeps up to 11656 ticks (5 per line) at 824 MHz, 13.4 us per poll
+qwen4: GPU0: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+qwen4: stall at 120 for 400 ms
+gate: {"stages":[{"gated":true,"layers":[0,3],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":1057.8936170212767,"min":674.261780104712,"n":63,"p10":686.6808510638298,"p50":734.4888888888889,"p90":918.7225130890052,"p99":1057.8936170212767},"release_to_past_gate_us":null,"released":63,"slow_sweeps":0,"slowest_sweep_ticks":{"max":14340.0,"min":12536.0,"n":63,"p10":12708.0,"p50":12928.0,"p90":13200.0,"p99":14340.0},"timeouts":0,"wait_ms":{"max":3.1631110990447997,"min":2.353777768798828,"n":63,"p10":2.5037036941528323,"p50":2.54251850881958,"p90":2.6925925823211667,"p99":3.1631110990447997}}}],"timeouts":0}
+[clocks] 10 samples card0 (02:00.0) sclk/mclk: 850/1370 x10  max 48C card1 (06:00.0) sclk/mclk: 850/1370 x10  max 48C  log=results/dg6-safety/clocks/stall-fwd-0.txt

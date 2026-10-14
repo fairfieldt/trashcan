@@ -36,8 +36,10 @@ equal to plain decoding's ([results/qwen4/mtp-rounds-20261013](../results/qwen4/
 decode-sized graphs and two decode kernels ([results/qwen4/decode-kernels-20261014](../results/qwen4/decode-kernels-20261014/README.md))
 take MTP chat replies from 30.05 to 31.28 tok/s (+4.1%) and plain decode in the same runs from 20.98 to 22.04 (+5.1%)
 on main 9baedca9 over the USB4STREAM links, with identical output (a decode step's GPU time -5.9% on one D700); the
-decode and prefill pairs wait for the 7.3 stream fix. Not done yet: graphs submitted
-ahead of their input and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain
+decode and prefill pairs wait for the 7.3 stream fix. Graphs submitted ahead of their input, behind a gate that bounds
+itself on the GPU ([results/qwen4/decode-gate-20261014](../results/qwen4/decode-gate-20261014/README.md)), take decode on
+one Mac (6 layers over 2 GPUs) up 1.6-3.3% with identical output; the six-Mac A/B waits for the same fix. Not done
+yet: prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain
 ([Serving](#serving)).
 
 | | |
@@ -228,6 +230,21 @@ not on the Vulkan memory model: the kernels that may run after it (`SCALAR_SAFE`
 an earlier dispatch wrote through scalar loads, which an ISA audit of the compiled programs checks, and a startup
 self-test keeps full barriers if vector reads come back stale. After any Mesa upgrade, rerun the audit and the stress
 check of [results/qwen4/decode-kernels-20261014](../results/qwen4/decode-kernels-20261014/README.md).
+
+Decode steps and verification batches (up to 8 tokens) are submitted before their input arrives
+([results/qwen4/decode-gate-20261014](../results/qwen4/decode-gate-20261014/README.md)): the driver sends a notice down
+the chain before each step, every machine submits its stages ahead, and the driver its later stages and its head
+scoring, so that `vkQueueSubmit` (0.11-0.22 ms per stage) overlaps the previous stage's work. Such a graph starts with
+`qwen4_gate` (engine/src/qwen4/gate.rs): one wave polls a word of host memory until the host writes the submission's
+ticket there once the input is written, and between polls reads 8 MiB of the stage's first-layer expert weights a line
+every 4 KiB, which evicts the polled line from the L2 (otherwise the wave never sees the host's write on Tahiti;
+[results/qwen4/gate-shader-20261014](../results/qwen4/gate-shader-20261014/README.md)). A gate opens 12-14 us (p50)
+after the host's write. Whatever the host does, it gives up after 0.1 s at the top DPM level (0.28 s at the lowest),
+far inside amdgpu's 2 s job timeout; its graph's dispatches then skip (conditional rendering) and the host runs the
+stage again without a gate. A startup check per GPU picks gate pages whose line the sweep evicts and leaves a GPU
+without gates when it fails; gates go off for the whole process when amdgpu reports any of its VRAM evicted or a sweep
+runs slower than VRAM, so the sweep never reads system memory (an incident on alight with two processes overcommitting
+one GPU, in the results). `TRASHCAN_Q4_GATE=0` turns them off.
 
 | part | kernels |
 |---|---|
@@ -543,7 +560,8 @@ step 4.8 and 5.1-5.8 ms, `draft-bench`; 2.0 and 3.0-5.9 ms before,
 11. **Host work per decode step** (results/qwen4/decode-host-20261013): submitting each stage's graph before its
     input arrives took 2.4 -> 0.3 ms of submission off every token (+4.9% alone, about +4% on top of the rest). The
     graph waits on the GPU for a host event, which amdgpu resets after 2 s and which a crashed process would leave
-    set, so this waits for a gate that bounds itself on the GPU. Frames over USB4STREAM links instead of TCP: decode
+    set, so this waited for a gate that bounds itself on the GPU: built (results/qwen4/decode-gate-20261014; one Mac
+    +1.6-3.3% decode), the six-Mac A/B pending. Frames over USB4STREAM links instead of TCP: decode
     +2.2%, MTP +2.0% on six Macs (results/kernel/usb4stream-reliable-20261013).
 
 ## Serving
@@ -611,6 +629,9 @@ trashcan qwen4 stage-bench MODEL --ranges 0:4,4:8 --gpus 0,1 --context 32768 --b
 trashcan qwen4 ngram-bench META_SHARD TABLE_SHARD --mode ram-q4|direct|buffered-cold [--ids IDS]
 trashcan qwen4 head-topk-check [--gpu 0]   # the head's candidate kernels against qwen35's topk/merge, bit for bit
 trashcan qwen4 barrier-bench [--gpu 0]   # streaming read rates, barrier costs, which caches a barrier leaves stale
+trashcan qwen4 gate-skip-check [--gpu 0]   # a given-up gate's graph skips its dispatches; the CP sees every predicate
+# the chain code on one Mac (two GPUs, the first 6 layers), as in results/qwen4/decode-gate-20261014
+TRASHCAN_Q4_LAYERS=6 trashcan qwen4 validate MODEL OUT --gpus 0,1 --cuts 3 --head-split 2 --greedy 2048
 # a decode step's timeline: give every process of the chain the same prefix, then (results/qwen4/decode-host-20261013)
 TRASHCAN_Q4_TRACE=results/trace trashcan qwen4 bench ...
 python3 results/qwen4/decode-host-20261013/tools/timeline.py trace-DRIVER.json trace-NODE1.json ... trace-NODE5.json

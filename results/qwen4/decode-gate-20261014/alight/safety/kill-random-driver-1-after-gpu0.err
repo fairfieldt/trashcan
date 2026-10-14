@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 53C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 54C  log=results/dg6-safety/clocks/kill-random-driver-1-after-gpu0.txt

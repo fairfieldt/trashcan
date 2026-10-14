@@ -1,0 +1,5 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 127.0.0.1:7181, devices Gpus([1])
+qwen4 node: session from 127.0.0.1:43160
+GPU1: layers 3..6 + head rows 124928..248320
+GPU1: 4634.3 MiB allocated in 1.10 s; device-local heap 4634 of 5888 MiB used, budget 5870
+qwen4 node: gate: {"stages":[{"gated":false,"layers":[3,6],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":null,"release_to_past_gate_us":null,"released":0,"slow_sweeps":0,"slowest_sweep_ticks":null,"timeouts":0,"wait_ms":null}}],"timeouts":0}

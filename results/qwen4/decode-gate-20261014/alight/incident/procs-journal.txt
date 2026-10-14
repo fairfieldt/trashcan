@@ -1,0 +1,22 @@
+845 /usr/local/bin/gpuq agent --hub https://gpuq.tdf.sh --name alight --gpu 2x FirePro D700 --probe amd --lock /home/fairfieldt/trashcan-exp/.lock --ignore Xorg,Xwayland,gnome-shell --ignore-cgroup /s
+391288 bash -c pgrep -fa "[t]rashcan|[g]ate" | cut -c1-200; journalctl --since "13:30" --no-pager 2>/dev/null | grep -i -E "gpuq|trashcan|kill" | tail -20 | cut -c1-200
+Oct 14 13:32:58 alight sudo[379218]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg
+Oct 14 13:32:58 alight sudo[379257]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg
+Oct 14 13:32:59 alight sudo[379278]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:32:59 alight sudo[379279]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:00 alight sudo[382169]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:00 alight sudo[382237]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:01 alight sudo[382932]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:01 alight sudo[382945]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:13 alight sudo[383670]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg
+Oct 14 13:33:13 alight sudo[383716]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg
+Oct 14 13:33:13 alight sudo[383752]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg
+Oct 14 13:33:14 alight sudo[383784]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:14 alight sudo[383786]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:15 alight sudo[386667]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:16 alight sudo[387420]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:16 alight sudo[387421]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:16 alight sudo[387429]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:25 alight sudo[388040]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/tee /sys/class/drm/card0/device/power_dpm_force_performance_level /sys/clas
+Oct 14 13:33:28 alight sudo[388173]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg
+Oct 14 13:33:28 alight sudo[388179]: fairfieldt : PWD=/home/fairfieldt/trashcan-exp/flashnext ; USER=root ; COMMAND=/usr/bin/dmesg

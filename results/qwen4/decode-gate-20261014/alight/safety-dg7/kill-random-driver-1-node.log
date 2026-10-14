@@ -1,0 +1,10 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 127.0.0.1:7181, devices Gpus([0])
+qwen4 node: session from 127.0.0.1:58486
+GPU0: layers 3..6 + head rows 124928..248320
+GPU0: 4634.3 MiB allocated in 1.07 s; device-local heap 4634 of 5888 MiB used, budget 5870
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 200-680 ticks, sweeps up to 13360 ticks (6 per line) at 820 MHz, 12.5 us per poll: hits in the L2
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 648-7172 ticks, sweeps up to 14648 ticks (7 per line) at 824 MHz, 14.5 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 224-700 ticks, sweeps up to 12312 ticks (6 per line) at 824 MHz, 13.2 us per poll: hits in the L2
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 620-3096 ticks, sweeps up to 13644 ticks (6 per line) at 823 MHz, 13.2 us per poll
+qwen4: GPU0: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+qwen4 node: gate: {"stages":[{"gated":true,"layers":[3,6],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":987.3435897435897,"min":647.924882629108,"n":1048,"p10":674.6730769230769,"p50":711.7157360406092,"p90":731.6954314720812,"p99":868.139303482587},"release_to_past_gate_us":null,"released":1048,"slow_sweeps":0,"slowest_sweep_ticks":{"max":15028.0,"min":11632.0,"n":1048,"p10":11808.0,"p50":12396.0,"p90":12916.0,"p99":13200.0},"timeouts":0,"wait_ms":{"max":3.6733333193206787,"min":2.181185176864624,"n":1048,"p10":2.7167407303771975,"p50":2.7705185079498293,"p90":2.8020740633850094,"p99":2.850518507644653}}}],"timeouts":0}

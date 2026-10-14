@@ -1,0 +1,16 @@
+plan: [[(0, 3), (3, 6)]]
+head rows: [[Some((0, 124928)), Some((124928, 248320))]]
+GPU1: layers 0..3 + head rows 0..124928
+GPU1: 4663.5 MiB allocated in 0.79 s; device-local heap 4664 of 5888 MiB used, budget 5870
+GPU0: layers 3..6 + head rows 124928..248320
+GPU0: 4634.3 MiB allocated in 0.78 s; device-local heap 4634 of 5888 MiB used, budget 5870
+qwen4: GPU1: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 720-868 ticks, sweeps up to 14372 ticks (7 per line) at 822 MHz, 14.1 us per poll
+qwen4: GPU1: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 688-724 ticks, sweeps up to 11696 ticks (5 per line) at 824 MHz, 13.1 us per poll
+qwen4: GPU1: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 220-716 ticks, sweeps up to 14308 ticks (6 per line) at 822 MHz, 13.3 us per poll: hits in the L2
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 648-656 ticks, sweeps up to 14680 ticks (7 per line) at 824 MHz, 14.2 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 208-716 ticks, sweeps up to 11536 ticks (5 per line) at 823 MHz, 12.5 us per poll: hits in the L2
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 648-656 ticks, sweeps up to 14416 ticks (7 per line) at 824 MHz, 14.1 us per poll
+qwen4: GPU0: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+gate: {"stages":[{"gated":true,"layers":[0,3],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":null,"release_to_past_gate_us":null,"released":0,"slow_sweeps":0,"slowest_sweep_ticks":null,"timeouts":0,"wait_ms":null}},{"gated":true,"layers":[3,6],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":878.2929936305733,"min":648.1489361702128,"n":2047,"p10":672.271186440678,"p50":711.5723270440252,"p90":731.3506493506494,"p99":741.3594771241831},"release_to_past_gate_us":null,"released":2047,"slow_sweeps":0,"slowest_sweep_ticks":{"max":13900.0,"min":11588.0,"n":2047,"p10":11800.0,"p50":12368.0,"p90":12892.0,"p99":13176.0},"timeouts":0,"wait_ms":{"max":2.4851851757049563,"min":0.9937777739868164,"n":2047,"p10":2.162814806564331,"p50":2.194962954589844,"p90":2.413777768569946,"p99":2.449777768432617}}}],"timeouts":0}
+[clocks] 70 samples card0 (02:00.0) sclk/mclk: 850/1370 x70  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x70  max 62C  log=results/dg7-correct/clocks/one-1,0-B.txt

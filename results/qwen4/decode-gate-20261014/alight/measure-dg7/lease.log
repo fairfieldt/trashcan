@@ -1,0 +1,38 @@
+kernel log matches before (baseline): 11
+GPU 0 is card0 (0000:02:00.0), GPU 1 is card1 (0000:06:00.0)
+kernel 7.3.0-rc7-p2p
+card0: accepts high, now auto; power level 3 sclk: 85000 mclk: 137000 vddc: 1100 vddci: 800 pcie gen: 3;
+card1: accepts high, now auto; power level 3 sclk: 85000 mclk: 137000 vddc: 1100 vddci: 800 pcie gen: 3;
+bench-one-0-on-1: rc 0; {"decode_layer_ms":[[0.8553284110890321,1.024807866461039,0.8161504598495957],[0.8924641169658899,0.7989079830635184,0.9013148113765717]
+    stages with gates: 2
+bench-two-0-on-1: rc 0; {"decode_layer_ms":[[0.85505265877527,1.0248880169236965,0.8164354714225842]],"gate":{"stages":[{"gated":true,"layers":[0,3],"stats":{"a
+    stages with gates: 2
+bench-one-0-off-1: rc 0; {"decode_layer_ms":[[0.855645251365602,1.0247502854427404,0.8154629598522188],[0.8954942095469246,0.7983402747323508,0.9000266169370407
+    stages with gates: 0
+bench-two-0-off-1: rc 0; {"decode_layer_ms":[[0.8545717559993269,1.025052368774921,0.8152395802234403]],"gate":{"stages":[{"gated":false,"layers":[0,3],"stats":
+    stages with gates: 0
+bench-one-1-on-1: rc 0; {"decode_layer_ms":[[0.8507656217545866,1.0242797993334236,0.8154884228150838],[0.8909444410457616,0.8000156219481822,0.9015361655423938
+    stages with gates: 2
+bench-two-1-on-1: rc 0; {"decode_layer_ms":[[0.8506012699033619,1.0242971604444684,0.815424765407919]],"gate":{"stages":[{"gated":true,"layers":[0,3],"stats":{"
+    stages with gates: 2
+bench-one-1-off-1: rc 0; {"decode_layer_ms":[[0.8510509226794254,1.024734949794651,0.8151675316126047],[0.893665505850196,0.7991843140809838,0.9006657951753446]
+    stages with gates: 0
+bench-two-1-off-1: rc 0; {"decode_layer_ms":[[0.8508619759208861,1.0247916627573965,0.8153619760563084]],"gate":{"stages":[{"gated":false,"layers":[0,3],"stats"
+    stages with gates: 0
+bench-one-0-on-2: rc 0; {"decode_layer_ms":[[0.8554085615516906,1.0245017322029475,0.8160552630906996],[0.8926782373354433,0.7990037585261165,0.9012462349879449
+    stages with gates: 2
+bench-two-0-on-2: rc 0; {"decode_layer_ms":[[0.8549890013681054,1.0250130169232192,0.8156759228143691]],"gate":{"stages":[{"gated":true,"layers":[0,3],"stats":{
+    stages with gates: 2
+bench-one-0-off-2: rc 0; {"decode_layer_ms":[[0.8554343138664071,1.0248292784979942,0.8161296265163417],[0.8955891169539695,0.7983249390842623,0.900253758139879
+    stages with gates: 0
+bench-two-0-off-2: rc 0; {"decode_layer_ms":[[0.855054973590076,1.0250488965527118,0.8151087931869032]],"gate":{"stages":[{"gated":false,"layers":[0,3],"stats":
+    stages with gates: 0
+bench-one-1-on-2: rc 0; {"decode_layer_ms":[[0.8505315361073321,1.0243781789626782,0.8154699042966376],[0.8907563623427748,0.8000355872258844,0.901396987302185]
+    stages with gates: 2
+bench-two-1-on-2: rc 0; {"decode_layer_ms":[[0.8506681101808851,1.0244409683142905,0.8152268487420083]],"gate":{"stages":[{"gated":true,"layers":[0,3],"stats":{
+    stages with gates: 2
+bench-one-1-off-2: rc 0; {"decode_layer_ms":[[0.8511079249940219,1.0243417206294838,0.8155824621665773],[0.8936721609427631,0.7992187469512231,0.900578989620119
+    stages with gates: 0
+bench-two-1-off-2: rc 0; {"decode_layer_ms":[[0.8503541634228237,1.0243003433148266,0.8150422422612309]],"gate":{"stages":[{"gated":false,"layers":[0,3],"stats"
+    stages with gates: 0
+measure done; kernel log matches 11 (baseline 11)

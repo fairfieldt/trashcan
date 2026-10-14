@@ -1,0 +1,9 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU0: layers 0..3 + head rows 0..124928
+GPU0: 4663.5 MiB allocated in 1.05 s; device-local heap 4664 of 5888 MiB used, budget 5870
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 704-8356 ticks at 824 MHz, 15.3 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 672-9432 ticks at 825 MHz, 13.1 us per poll
+qwen4: stall at 120 for 400 ms
+gate: {"stages":[{"gated":true,"layers":[0,3],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":775.8632478632478,"min":648.3022222222222,"n":63,"p10":656.9302325581396,"p50":687.0588235294117,"p90":701.3084112149533,"p99":775.8632478632478},"release_to_past_gate_us":null,"released":63,"timeouts":0,"wait_ms":{"max":3.142370358383179,"min":2.657925915786743,"n":63,"p10":2.7995555448760987,"p50":2.847999989135742,"p90":2.8817777667846682,"p99":3.142370358383179}}}],"timeouts":0}
+[clocks] 10 samples card0 (02:00.0) sclk/mclk: 850/1370 x10  max 57C card1 (06:00.0) sclk/mclk: 850/1370 x10  max 59C  log=results/dg5-safety/clocks/stall-fwd-0.txt

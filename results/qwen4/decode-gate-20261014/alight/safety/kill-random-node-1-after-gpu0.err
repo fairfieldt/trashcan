@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 52C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 53C  log=results/dg6-safety/clocks/kill-random-node-1-after-gpu0.txt

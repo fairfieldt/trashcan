@@ -1,0 +1,68 @@
+kernel log matches before (baseline): 11
+GPU 0 is card0 (0000:02:00.0), GPU 1 is card1 (0000:06:00.0)
+kernel 7.3.0-rc7-p2p
+card0: accepts high, now auto; power level 3 sclk: 85000 mclk: 137000 vddc: 1100 vddci: 800 pcie gen: 3;
+card1: accepts high, now auto; power level 3 sclk: 85000 mclk: 137000 vddc: 1100 vddci: 800 pcie gen: 3;
+plain-0: rc 0; greedy: [104334, 204159, 239, 238360, 4104, 47779, 9672, 57200, 25930, 643, 21791, 27974, 35715, 107826, 43564, 96135, 96729, 1725, 62009, 49988, 233963, 224322, 67343, 17224, 14010, 22
+    stages with gates: 2
+stall-fwd-0: rc 0; greedy: [104334, 204159, 239, 238360, 4104, 47779, 9672, 57200, 25930, 643, 21791, 27974, 35715, 107826, 43564, 96135, 96729, 1725, 62009, 49988, 233963, 224322, 67343, 17224, 14010
+    stages with gates: 2
+stall-head-0: rc 0; greedy: [104334, 204159, 239, 238360, 4104, 47779, 9672, 57200, 25930, 643, 21791, 27974, 35715, 107826, 43564, 96135, 96729, 1725, 62009, 49988, 233963, 224322, 67343, 17224, 1401
+    stages with gates: 2
+plain-1: rc 0; greedy: [104334, 204159, 239, 238360, 4104, 47779, 9672, 57200, 25930, 643, 21791, 27974, 35715, 107826, 43564, 96135, 96729, 1725, 62009, 49988, 233963, 224322, 67343, 17224, 14010, 22
+    stages with gates: 2
+stall-fwd-1: rc 0; greedy: [104334, 204159, 239, 238360, 4104, 47779, 9672, 57200, 25930, 643, 21791, 27974, 35715, 107826, 43564, 96135, 96729, 1725, 62009, 49988, 233963, 224322, 67343, 17224, 14010
+    stages with gates: 2
+stall-head-1: rc 0; greedy: [104334, 204159, 239, 238360, 4104, 47779, 9672, 57200, 25930, 643, 21791, 27974, 35715, 107826, 43564, 96135, 96729, 1725, 62009, 49988, 233963, 224322, 67343, 17224, 1401
+    stages with gates: 2
+kill-node-0: node on GPU 1 (pid 277609), driver on GPU 0 (pid 277616), started 14:09:19.693
+kill-node-0: kill -9 the node at 14:09:21.430, 1.74 s after the start
+dg-safety.sh: line 47: 277609 Killed                  $B qwen4 node $M --listen 127.0.0.1:$PORT --gpus "$2" > "$R/$1-node.log" 2>&1
+    stages with gates: 2
+kill-node-0-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.518518493652337,"gpu":0,"per_dispatch_us":{"conditional":0.01481
+kill-node-0-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.518518493652344,"gpu":1,"per_dispatch_us":{"conditional":0.01481
+kill-driver-0: node on GPU 1 (pid 281520), driver on GPU 0 (pid 281524), started 14:09:24.913
+kill-driver-0: kill -9 the driver at 14:09:26.642, 1.73 s after the start
+dg-safety.sh: line 47: 281524 Killed                  TRASHCAN_Q4_STALL=$stall $B qwen4 validate $M "$R/$name" --greedy 3000 --tokens-file p100.ids --gpus "$dg" --nodes 127.0.0.1:$PORT $C > "$R/$name.
+    stages with gates: 2
+kill-driver-0-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.814814788818353,"gpu":0,"per_dispatch_us":{"conditional":0.014
+kill-driver-0-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":1,"per_dispatch_us":{"conditional":0.0,"
+kill-random-node-0: node on GPU 1 (pid 285417), driver on GPU 0 (pid 285421), started 14:09:30.036
+kill-random-node-0: kill -9 the node at 14:09:41.640, 11.61 s after the start
+dg-safety.sh: line 47: 285417 Killed                  $B qwen4 node $M --listen 127.0.0.1:$PORT --gpus "$2" > "$R/$1-node.log" 2>&1
+    stages with gates: 2
+kill-random-node-0-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.814814788818353,"gpu":0,"per_dispatch_us":{"conditional":
+kill-random-node-0-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.518518493652337,"gpu":1,"per_dispatch_us":{"conditional":
+kill-random-driver-0: node on GPU 1 (pid 289357), driver on GPU 0 (pid 289361), started 14:09:45.016
+kill-random-driver-0: kill -9 the driver at 14:09:55.320, 10.31 s after the start
+dg-safety.sh: line 47: 289361 Killed                  TRASHCAN_Q4_STALL=$stall $B qwen4 validate $M "$R/$name" --greedy 3000 --tokens-file p100.ids --gpus "$dg" --nodes 127.0.0.1:$PORT $C > "$R/$name.
+    stages with gates: 2
+kill-random-driver-0-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.81481478881836,"gpu":0,"per_dispatch_us":{"conditional"
+kill-random-driver-0-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":1,"per_dispatch_us":{"conditional
+kill-node-1: node on GPU 0 (pid 293280), driver on GPU 1 (pid 293284), started 14:09:58.709
+kill-node-1: kill -9 the node at 14:10:00.455, 1.75 s after the start
+dg-safety.sh: line 47: 293280 Killed                  $B qwen4 node $M --listen 127.0.0.1:$PORT --gpus "$2" > "$R/$1-node.log" 2>&1
+    stages with gates: 2
+kill-node-1-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.962962936401361,"gpu":0,"per_dispatch_us":{"conditional":0.01481
+kill-node-1-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.814814788818353,"gpu":1,"per_dispatch_us":{"conditional":0.01481
+kill-driver-1: node on GPU 0 (pid 297185), driver on GPU 1 (pid 297189), started 14:10:03.892
+kill-driver-1: kill -9 the driver at 14:10:05.657, 1.77 s after the start
+dg-safety.sh: line 47: 297189 Killed                  TRASHCAN_Q4_STALL=$stall $B qwen4 validate $M "$R/$name" --greedy 3000 --tokens-file p100.ids --gpus "$dg" --nodes 127.0.0.1:$PORT $C > "$R/$name.
+    stages with gates: 2
+kill-driver-1-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":0,"per_dispatch_us":{"conditional":0.014
+kill-driver-1-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235352,"gpu":1,"per_dispatch_us":{"conditional":0.014
+kill-random-node-1: node on GPU 0 (pid 301111), driver on GPU 1 (pid 301115), started 14:10:09.067
+kill-random-node-1: kill -9 the node at 14:10:20.571, 11.51 s after the start
+dg-safety.sh: line 47: 301111 Killed                  $B qwen4 node $M --listen 127.0.0.1:$PORT --gpus "$2" > "$R/$1-node.log" 2>&1
+    stages with gates: 2
+kill-random-node-1-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":0,"per_dispatch_us":{"conditional":
+kill-random-node-1-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":1,"per_dispatch_us":{"conditional":
+kill-random-driver-1: node on GPU 0 (pid 305064), driver on GPU 1 (pid 305068), started 14:10:23.975
+kill-random-driver-1: kill -9 the driver at 14:10:34.281, 10.31 s after the start
+dg-safety.sh: line 47: 305068 Killed                  TRASHCAN_Q4_STALL=$stall $B qwen4 validate $M "$R/$name" --greedy 3000 --tokens-file p100.ids --gpus "$dg" --nodes 127.0.0.1:$PORT $C > "$R/$name.
+    stages with gates: 2
+kill-random-driver-1-after-gpu0: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":0,"per_dispatch_us":{"conditional
+kill-random-driver-1-after-gpu1: rc 0; {"alternating":{"runs":40,"wrong_counts":0},"conditional_rendering":true,"dispatches":10,"gate_open_us":6.666666641235345,"gpu":1,"per_dispatch_us":{"conditional
+card0: accepts high, now auto; power level 3 sclk: 85000 mclk: 137000 vddc: 1100 vddci: 800 pcie gen: 3;
+card1: accepts high, now auto; power level 3 sclk: 85000 mclk: 137000 vddc: 1100 vddci: 800 pcie gen: 3;
+safety done; kernel log matches 11 (baseline 11)

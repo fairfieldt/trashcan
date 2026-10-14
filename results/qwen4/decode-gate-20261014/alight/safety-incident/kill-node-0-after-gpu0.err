@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 850/1370 x1  max 58C card1 (06:00.0) sclk/mclk: 850/1370 x1  max 60C  log=results/dg5-safety/clocks/kill-node-0-after-gpu0.txt

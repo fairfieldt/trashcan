@@ -1,0 +1,1 @@
+[clocks] 1 samples card0 (02:00.0) sclk/mclk: 300/150 x1  max 55C card1 (06:00.0) sclk/mclk: 300/150 x1  max 58C  log=results/dg5-safety/clocks/kill-random-node-1-after-gpu0.txt

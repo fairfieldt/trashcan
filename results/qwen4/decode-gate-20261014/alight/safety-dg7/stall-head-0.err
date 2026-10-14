@@ -1,0 +1,11 @@
+plan: [[(0, 3)], [(3, 6)]]
+head rows: [[Some((0, 124928))], [Some((124928, 248320))]]
+GPU0: layers 0..3 + head rows 0..124928
+GPU0: 4663.5 MiB allocated in 1.07 s; device-local heap 4664 of 5888 MiB used, budget 5870
+qwen4: GPU0: gate 0 check, 8 MiB read every 4096 B between polls: poll loads 696-832 ticks, sweeps up to 14384 ticks (7 per line) at 821 MHz, 14.0 us per poll
+qwen4: GPU0: gate 1 check, 8 MiB read every 4096 B between polls: poll loads 700-5924 ticks, sweeps up to 12704 ticks (6 per line) at 826 MHz, 14.4 us per poll
+qwen4: GPU0: gates read 8 MiB every 4096 B between polls and give up after 0.1 s at the top clock or 12208 polls (none of the process's VRAM evicted)
+qwen4: stall at 140 after the head scoring for 400 ms
+qwen4: layers 0..3: the gate of head scoring gave up after 101 ms (7456 polls, poll loads 636-7096 ticks; it read 0x29 last and ticket 0x2a, released with 0x2a) without its input; running it again (1 so far)
+gate: {"stages":[{"gated":true,"layers":[0,3],"stats":{"abandoned":0,"open_at_start":0,"open_gate_gpu_us":null,"poll_load_ticks":{"max":999.2568306010929,"min":658.204081632653,"n":62,"p10":694.2978723404256,"p50":708.1123595505618,"p90":866.3191489361702,"p99":999.2568306010929},"release_to_past_gate_us":null,"released":63,"slow_sweeps":0,"slowest_sweep_ticks":{"max":13992.0,"min":11636.0,"n":62,"p10":11824.0,"p50":12024.0,"p90":12184.0,"p99":13992.0},"timeouts":1,"wait_ms":{"max":2.621925915924072,"min":2.2071111026916506,"n":62,"p10":2.3669629539337156,"p50":2.41496295375061,"p90":2.539111101425171,"p99":2.621925915924072}}}],"timeouts":1}
+[clocks] 10 samples card0 (02:00.0) sclk/mclk: 850/1370 x10  max 47C card1 (06:00.0) sclk/mclk: 850/1370 x10  max 48C  log=results/dg7-safety/clocks/stall-head-0.txt
