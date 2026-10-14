@@ -1,0 +1,5 @@
+enlight: ticket 76 queued 14:21:21
+enlight: granted 14:45:02: ./long-200k.sh trashcan-long-r19 long-sb-s4n-200k; ./long-200k.sh trashcan-4307169 long-sb-s4b-200k
+long-sb-s4n-200k rc=0 [clocks] 264 samples card0 (02:00.0) sclk/mclk: 850/1370 x259 300/150 x5  max 67C card1 (06:00.0) sclk/mclk: 850/1370 x256 300/150 x8  max 59C  log=results/clocks/long-sb-s4n-200k.txt
+long-sb-s4b-200k rc=0 [clocks] 826 samples card0 (02:00.0) sclk/mclk: 850/1370 x826  max 71C card1 (06:00.0) sclk/mclk: 850/1370 x826  max 64C  log=results/clocks/long-sb-s4b-200k.txt
+enlight: released 14:49:54 rc=0

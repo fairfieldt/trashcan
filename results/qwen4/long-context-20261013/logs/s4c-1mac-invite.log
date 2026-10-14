@@ -1,0 +1,7 @@
+invite: ticket 196 queued 15:06:13
+invite: granted 15:12:25: ./long-sb.sh trashcan-long-r20 s4u20 128 1024 2176 16512
+long-sb-s4u20-128 rc=0 [clocks] 67 samples card0 (02:00.0) sclk/mclk: 850/1370 x50 650/1370 x1 300/150 x16  max 65C card1 (06:00.0) sclk/mclk: 850/1370 x53 450/1370 x1 300/150 x13  max 63C  log=results/clocks/long-sb-s4u20-128.txt
+long-sb-s4u20-1024 rc=0 [clocks] 72 samples card0 (02:00.0) sclk/mclk: 850/1370 x56 300/150 x16  max 66C card1 (06:00.0) sclk/mclk: 850/1370 x58 650/1370 x1 300/150 x13  max 63C  log=results/clocks/long-sb-s4u20-1024.txt
+long-sb-s4u20-2176 rc=0 [clocks] 81 samples card0 (02:00.0) sclk/mclk: 850/1370 x62 300/150 x19  max 68C card1 (06:00.0) sclk/mclk: 850/1370 x66 300/150 x15  max 63C  log=results/clocks/long-sb-s4u20-2176.txt
+long-sb-s4u20-16512 rc=0 [clocks] 166 samples card0 (02:00.0) sclk/mclk: 850/1370 x152 450/1370 x1 300/150 x13  max 74C card1 (06:00.0) sclk/mclk: 850/1370 x156 300/150 x10  max 65C  log=results/clocks/long-sb-s4u20-16512.txt
+invite: released 15:14:07 rc=0

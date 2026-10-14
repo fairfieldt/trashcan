@@ -1,0 +1,11 @@
+alight: ticket 70 queued 14:57:44
+alight: granted 14:59:29: ./long-equiv.sh trashcan-long-r19 trashcan-long-r20 s4t 8193 8196 30081; KV=q8 ./long-equiv.sh trashcan-long-r19 trashcan-long-r20 s4tq8 8196
+8193 a rc=0
+8193 b rc=0
+8196 a rc=0
+8196 b rc=0
+30081 a rc=0
+30081 b rc=0
+8196 a rc=0
+8196 b rc=0
+alight: released 15:05:23 rc=0

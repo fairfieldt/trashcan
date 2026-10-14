@@ -1,0 +1,5 @@
+incite: ticket 207 queued 15:14:56
+incite: granted 15:28:14: ./long-sb.sh trashcan-long-r20 s4v20 8320 30080
+long-sb-s4v20-8320 rc=0 [clocks] 116 samples card0 (02:00.0) sclk/mclk: 850/1370 x74 300/150 x42  max 52C card1 (06:00.0) sclk/mclk: 850/1370 x77 450/1370 x1 300/150 x38  max 51C  log=results/clocks/long-sb-s4v20-8320.txt
+long-sb-s4v20-30080 rc=0 [clocks] 246 samples card0 (02:00.0) sclk/mclk: 850/1370 x227 450/1370 x1 300/150 x18  max 57C card1 (06:00.0) sclk/mclk: 850/1370 x227 300/150 x19  max 56C  log=results/clocks/long-sb-s4v20-30080.txt
+incite: released 15:29:53 rc=0

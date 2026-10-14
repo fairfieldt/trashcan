@@ -1,0 +1,4 @@
+enlight: ticket 80 queued 15:06:13
+enlight: granted 15:12:25: ./long-200k.sh trashcan-long-r20 long-sb-s4u20-200k
+long-sb-s4u20-200k rc=0 [clocks] 268 samples card0 (02:00.0) sclk/mclk: 850/1370 x268  max 66C card1 (06:00.0) sclk/mclk: 850/1370 x268  max 58C  log=results/clocks/long-sb-s4u20-200k.txt
+enlight: released 15:13:36 rc=0

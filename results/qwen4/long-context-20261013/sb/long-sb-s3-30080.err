@@ -1,0 +1,6 @@
+CPU latency request: 0 us, scoped to this command
+GPU0: layers 0..4
+GPU0: 5736.3 MiB allocated; device-local heap 5736 of 5888 MiB used, budget 5868
+GPU1: layers 4..8
+GPU1: 5702.5 MiB allocated; device-local heap 5703 of 5888 MiB used, budget 5868
+[clocks] 486 samples card0 (02:00.0) sclk/mclk: 850/1370 x468 300/150 x18  max 71C card1 (06:00.0) sclk/mclk: 850/1370 x471 300/150 x15  max 65C  log=results/clocks/long-sb-s3-30080.txt

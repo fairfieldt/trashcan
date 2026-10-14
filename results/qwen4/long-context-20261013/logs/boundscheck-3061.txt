@@ -1,0 +1,19 @@
+58 chunks; block counts past 512: 513..767 (255)
+selection exact and in bounds: random
+selection exact and in bounds: all equal
+selection exact and in bounds: few values
+selection exact and in bounds: nan, inf, zeros
+selection exact and in bounds: denormals
+pooled_vec4  max index     254719 of     262144
+pooled_f     max index    1018875 of    1048576
+scores       max index     516847 of    1048576
+sel          max index      32767 of      65536
+ring         max index      16895 of      16896
+iqr          max index      32767 of      65536
+krow_uvec4   max index    2097151 of    2097152
+vrow_uvec2   max index    4194303 of    4194304
+q            max index     393215 of     786432
+q4           max index      98303 of     196608
+out          max index     393215 of     786432
+partials     max index     388289 of    3170304
+ok

@@ -1,0 +1,9 @@
+indite: ticket 71 queued 14:21:21
+indite: granted 14:47:11: ./long-sb.sh trashcan-4307169 s4b-b 8320 30080; ./long-sb.sh trashcan-long-r19 s4n-b 8320 30080; ./long-sb.sh trashcan-long-r17 s4o-b 8320; ./long-sb.sh trashcan-long-r18 s4r-b 8320
+long-sb-s4b-b-8320 rc=0 [clocks] 191 samples card0 (02:00.0) sclk/mclk: 850/1370 x180 650/1370 x1 300/150 x10  max 53C card1 (06:00.0) sclk/mclk: 850/1370 x175 650/1370 x1 300/150 x15  max 54C  log=results/clocks/long-sb-s4b-b-8320.txt
+long-sb-s4b-b-30080 rc=0 [clocks] 495 samples card0 (02:00.0) sclk/mclk: 850/1370 x492 300/150 x3  max 58C card1 (06:00.0) sclk/mclk: 850/1370 x489 300/150 x6  max 59C  log=results/clocks/long-sb-s4b-b-30080.txt
+long-sb-s4n-b-8320 rc=0 [clocks] 102 samples card0 (02:00.0) sclk/mclk: 850/1370 x99 450/1370 x1 300/150 x2  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x94 650/1370 x1 300/150 x7  max 60C  log=results/clocks/long-sb-s4n-b-8320.txt
+long-sb-s4n-b-30080 rc=0 [clocks] 237 samples card0 (02:00.0) sclk/mclk: 850/1370 x214 450/1370 x1 300/150 x22  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x234 300/150 x3  max 62C  log=results/clocks/long-sb-s4n-b-30080.txt
+long-sb-s4o-b-8320 rc=0 [clocks] 93 samples card0 (02:00.0) sclk/mclk: 850/1370 x76 450/1370 x1 300/150 x16  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x93  max 63C  log=results/clocks/long-sb-s4o-b-8320.txt
+long-sb-s4r-b-8320 rc=0 [clocks] 105 samples card0 (02:00.0) sclk/mclk: 850/1370 x103 300/150 x2  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x100 300/150 x5  max 63C  log=results/clocks/long-sb-s4r-b-8320.txt
+indite: released 14:52:32 rc=0

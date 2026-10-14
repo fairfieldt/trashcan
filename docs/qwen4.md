@@ -218,7 +218,7 @@ that the next mixer, the head or the stage output resolves.
 | n-gram module | key/value projections, `qwen4_ple_sums` and `qwen4_ple_gate`, `qwen4_ple_conv` (dilated convolution, 9-step history) |
 | DeltaNet | qwen35's `qwen_conv`, `qwen4_gdn` (up to 8 tokens), beyond: `qwen4_gdn_prep` (q, k norms and the gates once per token) and `qwen4_gdn_rows` (a state row in a lane's registers, q and k as LDS broadcasts), `qwen4_gated_norm` (sigmoid gate) |
 | QSA, up to 2051 tokens | qwen35's `qwen_qk` and the split/unsplit attention kernels (dense is exact there) |
-| QSA, longer contexts | `qwen4_idx_store`/`qwen4_idx_pool` (raw and pooled block keys), `qwen_qk` on the indexer queries, `qwen4_idx_score` (block scores, one wave per block for 8 tokens), `qwen4_idx_select` (exact radix top-512, ties to the earlier block), `qwen4_attention_sparse[_full]` |
+| QSA, longer contexts (or a Q8 K/V cache) | `qwen4_idx_store`/`qwen4_idx_pool` (raw and pooled block keys, the pooled ones `[dim / 4][block]`), `qwen_qk` on the indexer queries, `qwen4_idx_score` (a lane per block and up to 8 tokens, the queries through scalar loads; `_lds` up to 8 tokens: from shared memory, a loop over the heads; the bits of a wave reduction per block), `qwen4_idx_select` (exact radix top-512 in three passes over a shared histogram, ties to the earlier block; 1024 threads up to 8 tokens, `qwen4_idx_select256` beyond), attention grouped by KV head so each K/V row is read once for its 12 query heads: `qwen4_attention_grouped` (prefill: a workgroup per KV head and token) and `qwen4_attention_grouped_dec{8,16,32,64}` with `qwen4_attention_merge` (up to 8 tokens: a workgroup per KV head, 64 positions and token), Q8 and K16V8 variants (results/qwen4/long-context-20261013) |
 | MoE | router (f32, with the shared gate as row 512): `qwen4_router` (a wave per row) up to 4 tokens, `qwen4_router_gemm` (64 x 64 tiles split along K) beyond; `qwen4_topk` (a wave per token: a radix-selected threshold, then the few candidates ranked); below 16 tokens `qwen4_moe_gu` and `qwen4_moe_down_w` per (token, slot) (Q2_0 down: `qwen4_moe_down`; results/qwen4/decode-experts-20261013); from 16 tokens `qwen4_moe_tiles` groups the slots by expert into tiles of up to 8, `qwen4_moe_gu_tiles`/`qwen4_moe_down_tiles` decode each expert's rows once per tile (a lane per row, whole 64-byte lines, the slots' inputs through scalar loads) and `qwen4_moe_sum` adds a token's slots (2.6x faster at 128 tokens, results/qwen4/prefill-experts-20261012) |
 | experts | IQ4_XS (4.25 bpw), IQ4_NL or Q4_0 (f16 scale per 32, 4.5 bpw), at their GGUF size; the shared expert is stacked as expert 512 and must share the routed format |
 | head | final mixer, qwen35's Q6 `headvec` (int8 with f32 scales per 16), top-64; any range of vocabulary rows (`--head-split`) |
@@ -231,6 +231,11 @@ another, and prints one JSON line per size, each as `--batch` with that size alo
 the buffers, so the smaller ones run as in a chain with that `--batch`, where kernel choices that depend on it can
 differ from a run of the size alone
 ([results/qwen4/load-time-20261013](../results/qwen4/load-time-20261013/README.md#stage-bench-several-sizes-on-one-load)).
+With `--start` the profile includes the late chunk's dispatches (`late_dispatches`). On the chain,
+`TRASHCAN_Q4_TIMELINE=1` (with `TRASHCAN_TP_PROFILE=1` for GPU times in the host's clock) makes every machine print a
+line per prompt-chunk event: the driver's embedding and n-gram rows, each stage's submit, wait and GPU start and end,
+the node's wait for its input, the sends (`tl HOST_US EVENT STAGE POS A B`);
+results/qwen4/long-context-20261013/tools/timeline.py turns them into each GPU's busy time and gaps per chunk.
 
 Loading: a stage repacks its weights from the GGUF mapping straight into three reused 64 MiB staging buffers on every
 core, and each buffer's copies run while the next one is filled (`vulkan::Uploader`). A Mac's two stages (11.8 GB)
@@ -280,7 +285,10 @@ and top-k to 0.058 ms and the experts to 0.22 ms per decode token, the MoE phase
 and the router of a 128-token chunk from 2.1 to 0.24 ms. The 1-4-token mixer and Q8_0 kernels of
 results/qwen4/verify-batches-20261012 (measured on invite) take a mixer to 0.089 ms (0.047 + 0.042) and the out
 projections from 0.12 to 0.10 ms per decode token, and 8 layers from 7.9 to 7.6 ms for one token and from 12.6 / 15.1 /
-17.9 to 9.8 / 12.2 / 15.1 ms for 2 / 3 / 4 tokens.
+17.9 to 9.8 / 12.2 / 15.1 ms for 2 / 3 / 4 tokens. The QSA kernels of results/qwen4/long-context-20261013 (attention
+grouped by KV head, a lane per block for scoring, scans in the selection) take the QSA layer of a 128-token chunk at 8K
+and 30K from 69-80 to 27-31 ms (attention 42 to 7-8 ms, projections with scoring and selection 12-22 to 6-7 ms) and of
+a decode step from 1.63-1.77 to 1.13-1.18 ms (1.03 to 1.01 ms at 128 positions).
 
 Formats compared on layers 0-5 (decode GPU time per DeltaNet layer; experts per decode token / per prefill chunk):
 
@@ -323,41 +331,48 @@ past 32K need the S-q2dn build and a Q8 K/V cache ([200K context](#200k-context-
 
 | context | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | 21.2 ms, 47 tok/s | 56 ms, **17.9 tok/s** (measured) | ~35 ms, ~28 tok/s |
-| 2K-8K | 21.3-21.4 ms, 47 tok/s | 62 ms, 16.1 tok/s (measured at 2K) | ~37 ms, ~27 tok/s |
-| 32K (G-iq4 maximum) | 21.6 ms, 46 tok/s | ~66 ms, ~15 tok/s | ~40 ms, ~25 tok/s |
+| 512 | 21.2 ms, 47 tok/s | 48.5 ms, **20.6 tok/s** (measured) | ~35 ms, ~28 tok/s |
+| 2K-16K | 21.3-21.5 ms, 47 tok/s | 51 ms, **19.7 tok/s** (measured after 8K; 19.6 after 16K) | ~37 ms, ~27 tok/s |
+| 32K (G-iq4 maximum) | 21.6 ms, 46 tok/s | ~52 ms, ~19 tok/s | ~40 ms, ~25 tok/s |
 | 128K (S-q2dn, Q8 K/V) | 22.0 ms, 45 tok/s | ~77 ms, ~13 tok/s | ~43 ms, ~23 tok/s |
 | 200K | 22.2 ms, 45 tok/s | ~84 ms, ~12 tok/s | ~46 ms, ~22 tok/s |
 | 262K (model maximum) | 22.5 ms, 44 tok/s | ~90 ms, ~11 tok/s | ~48 ms, ~21 tok/s |
 
-The 56 ms of today: about 50 ms of GPU layers (0.95-1.11 ms each against 0.42 ms of bytes: 44% of the bandwidth;
+Decode rows measured on 2026-10-13 with main eb4dbeb and results/qwen4/long-context-20261013 (main alone: 20.1 tok/s
+at 512, 17.4 after 8K, 17.1 after 16K, 17.0 after 30K); the 32K row is modeled from those; the rows from 128K predate
+that round, which takes about 1.7 ms off each QSA layer's decode step at 200K. The 56 ms of the earlier breakdown:
+about 50 ms of GPU layers (0.95-1.11 ms each against 0.42 ms of bytes: 44% of the bandwidth;
 13 ms less since the decode kernels of results/qwen4/decode-kernels-20261012), ~1 ms of head slices (all Macs at once since 2026-10-12, which saved 5.9 ms),
 ~3-4 ms of host work (0.39 ms per stage) and ~1 ms of Thunderbolt hops. Toward ~28 tok/s: fused decode kernels at
-60-70% of the bandwidth (~28 ms), less host work per stage (~3 ms); at long contexts a multi-workgroup block selection
-(0.6 ms per QSA layer at 32K, 1.9 ms at 200K today).
+60-70% of the bandwidth (~28 ms), less host work per stage (~3 ms); at long contexts the QSA layer's ~0.2 ms over
+a DeltaNet layer (decode attention, block selection and scoring; results/qwen4/long-context-20261013).
 
 **Prefill** (whole prompt; the ceiling is the FP32 roofline of all 12 GPUs, ~3,300 tok/s in steady state, and for
 short prompts the time to fill 12 stages):
 
 | prompt | ceiling | now | realistic |
 |---|---|---|---|
-| 512 | ~0.25 s | 1.19 s, **432 tok/s** (measured; 1024 tokens: 543 tok/s) | ~1.2 s, ~430 tok/s |
-| 2048 | ~0.8 s | 3.2 s, **633 tok/s** (measured) | ~3 s, ~660 tok/s |
-| 4K | ~1.5 s, 2,800 tok/s | 6.0 s, **686 tok/s** (measured) | ~5 s, ~820 tok/s |
-| 8K | ~2.7 s, 3,000 tok/s | 10.8 s, **755 tok/s** (measured) | ~9 s, ~920 tok/s |
-| 32K | ~11 s, 3,150 tok/s | ~40 s, ~820 tok/s | ~35 s, ~950 tok/s |
+| 512 | ~0.25 s | 0.99 s, **518 tok/s** (measured) | ~1.2 s, ~430 tok/s |
+| 2048 | ~0.8 s | 2.3 s, **875 tok/s** (measured) | ~3 s, ~660 tok/s |
+| 4K | ~1.5 s, 2,800 tok/s | 4.1 s, **995 tok/s** (measured) | ~5 s, ~820 tok/s |
+| 8K | ~2.7 s, 3,000 tok/s | 7.3 s, **1127 tok/s** (measured; 16K: 1211 tok/s) | ~9 s, ~920 tok/s |
+| 32K | ~11 s, 3,150 tok/s | ~27 s, ~1,200 tok/s | ~35 s, ~950 tok/s |
 | 128K | ~42 s | ~3.4 min, ~650 tok/s | ~2.5 min, ~900 tok/s |
 | 200K | ~65 s | ~5.8 min, ~590 tok/s | ~4 min, ~850 tok/s |
 | 262K | ~83 s | ~7.8 min, ~560 tok/s | ~5.5 min, ~820 tok/s |
 
-Today: the experts take 42-45% of a chunk's time at 20-39% of FP32 peak (each expert's rows decoded once per tile of
+Prefill rows from 512 to 16K measured on 2026-10-13 with main eb4dbeb and results/qwen4/long-context-20261013 (main
+alone: 487 tok/s at 512, 806 at 8K, 846 at 16K, 849 at 30K); a chunk now costs about the same at every position (96 ms
+at 0, 98-101 ms from 2K to 30K on the slowest stage), so the 32K row is modeled from 16K; the realistic column
+predates both, and the rows from 128K predate this round (its selection and attention take ~140 ms off each QSA layer's
+chunk at 200K). Today: the experts take 42-45% of a chunk's time at 20-39% of FP32 peak (each expert's rows decoded once per tile of
 up to 8 of its tokens; most tiles of 16-64-token chunks hold 1-3), the Q8_0 projections run at 27-45% of the peak up
 to 32 tokens and 50-63% beyond, and the DeltaNet recurrence is 2.7% of a chunk
 ([results/qwen4/prefill-kernels-20261013](../results/qwen4/prefill-kernels-20261013/README.md)). Every GPU is a
 pipeline stage (a Mac's two GPUs work on consecutive chunks), so a prompt takes about the sum of its chunks' stage times
 plus 11 times the largest, and the pipeline fill is most of a short prompt's time. Toward the realistic column: the
-expert tiles, faster block selection and sparse attention at long contexts, and the stage output copy
-to host memory (~2 GB/s: 1.3 ms per GPU per 64-token chunk).
+expert tiles, block scoring at very long contexts, and the stage output copy to host memory (~2 GB/s: 1.3 ms per
+GPU per 64-token chunk); incite's first GPU (layers 0-3 and the n-gram module) is the slowest stage.
 
 **Beyond these ceilings.** MTP speculative decoding (measured, [results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)):
 the block (1.49 GB) runs on the driver's CPU (5.7 ms per draft step with the draft head's first rows on the driver's
@@ -417,9 +432,17 @@ position 0 and 202 ms for the QSA layer at 204,544 (selection 101, attention 54)
 same 0.29 ms per decode token as IQ4_NL and 6 ms more per chunk (38 against 32 ms, measured with the grouped expert
 kernels since removed), since 640-wide rows gave that kernel only 10 of its 16 lanes' blocks.
 
-Projected six-Mac decode at 200K: 36 x 1.24 + 12 x 3.65 + 0.43 + 6.7 + 12 x 0.39 + 0.5 = 101 ms, **9.9 tok/s**
-(14.1 at short context). Prefill of a 200K prompt averages about 0.57 s per 128-token chunk per Mac (6 DeltaNet
-layers at 52 ms, 2 QSA layers averaging 129 ms): **about 225 tok/s, 15 minutes** for the whole prompt.
+With the QSA kernels of results/qwen4/long-context-20261013 (measured on G-iq4: layer 3 alone with a Q8 K/V cache for
+204,800 positions, on enlight) the QSA layer of the chunk at 204,544 takes 38 ms (block scoring and selection 10.2,
+attention 6.9; 176 before) and a decode step's 1.59 ms (scoring and selection 0.54, attention 0.26; 3.26 before).
+
+Projected six-Mac decode at 200K, the QSA layer above at 3.65 - 1.92 - 0.66 + 0.54 + 0.26 + 0.02 = 1.89 ms (the new
+selection and attention, the indexer projections now among the attention projections): 36 x 1.24 + 12 x 1.89 + 0.43 +
+6.7 + 12 x 0.39 + 0.5 = 80 ms, **12.6 tok/s** (101 ms, 9.9 tok/s, with the earlier kernels). Prefill of a 200K
+prompt, the QSA layers' scoring, selection and attention from 155 to 17 ms per chunk at 204K (on average from ~80 to
+~12): about 0.43 s per 128-token chunk per Mac (6 DeltaNet layers at 52 ms, 2 QSA layers averaging ~59 ms), **about
+300 tok/s, 11-12 minutes** for the whole prompt (0.57 s, 225 tok/s, 15 minutes before; both with the DeltaNet and
+expert kernels of that measurement).
 
 NEEDLE
 
@@ -452,9 +475,10 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
    to 32 tokens, split-K out projections and the DeltaNet recurrence in registers (done: 512 tokens 369 -> 432 tok/s,
    8192 702 -> 755, results/qwen4/prefill-kernels-20261013); the expert tiles (42-45% of a chunk; occupancy splits,
    prefetch, vector-loaded inputs and unrolled lines all lost there), the Q8_0 GEMMs at 64-128 tokens (58-63% of the
-   FMA peak, LDS-bound), grouping the 12 query heads that share a KV head in sparse attention (76 ms per chunk at
-   32K), the f32 router (done: 2.1 -> 0.24 ms per layer of a 128-token chunk, results/qwen4/decode-experts-20261013),
-   and smaller chunks for short prompts, whose time is mostly the 12-stage
+   FMA peak, LDS-bound), grouping the 12 query heads that share a KV head in sparse attention (done: the QSA layer
+   of a 128-token chunk at 30K 78 -> 30 ms, results/qwen4/long-context-20261013), the f32 router (done: 2.1 -> 0.24
+   ms per layer of a 128-token chunk, results/qwen4/decode-experts-20261013), and smaller chunks for short prompts,
+   whose time is mostly the 12-stage
    pipeline fill since the two GPUs of a Mac work on consecutive chunks (done: 2048 tokens 210 -> 324 tok/s,
    results/qwen4/prefill-overlap-20261012).
 5. **Decode**: a DeltaNet layer takes ~1.0 ms per token (about 110 GB/s; results/qwen4/decode-kernels-20261012):
@@ -462,9 +486,14 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
    per nibble to address the IQ4 table), the out projections at ~164 GB/s, the mixers (0.047 + 0.042 ms for 7 MB,
    latency-bound; results/qwen4/verify-batches-20261012), single-wave top-k (0.023 ms); RADV writes back and
    invalidates the L2 at every barrier on GFX6. Batches of 2-4 tokens (MTP verification) re-read each token's 11
-   experts (~0.165 ms per extra token and layer; 39% of a 4-token batch). And a
-   multi-workgroup radix select (block selection takes 0.6 ms of a QSA layer at 32K and 1.9 ms at 200K).
-6. **Long prefill**: block selection (101 ms) and sparse attention (54 ms) of a 128-token chunk at 200K.
+   experts (~0.165 ms per extra token and layer; 39% of a 4-token batch). A decode step runs each kernel's code about
+   once per wave and every dispatch fetches its instructions anew, about 5-7 us per KB: the decode attention went from
+   169 to 131 us at 2049 positions by keeping its loops (12.5 to 4.4 KB of code), block scoring from 55 to 33 us
+   (results/qwen4/long-context-20261013); other decode kernels may have the same cost. Block selection takes
+   0.05-0.09 ms of a QSA layer at 2K-30K and 0.32 ms at 200K (one workgroup).
+6. **Long prefill**: block scoring (9.3 ms of a 128-token chunk at 200K, ~20% of the FP32 peak) and the grouped
+   prefill attention (5-8 ms per chunk from 2K on, about a third of the peak); the selection and attention of a chunk at
+   200K went from 155 to 17 ms (results/qwen4/long-context-20261013).
 7. **Four Macs**: the host-RAM expert cache (or 2-bit kernels, if that quality is acceptable).
 8. **Past 262K**: QSA K/V in host RAM (estimated above).
 9. **MTP** (done: chat replies 18.3 -> 21.5-21.6 tok/s with adaptive rounds, results/qwen4/mtp-20261012; 27.0 with
