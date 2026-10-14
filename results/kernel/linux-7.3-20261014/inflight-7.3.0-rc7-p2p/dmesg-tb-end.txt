@@ -1,0 +1,43 @@
+[    0.990656] ACPI: bus type thunderbolt registered
+[    0.991193] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.004525] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.008015] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    3.116025] Modules linked in: apple_gmux(+) soundcore video wmi fjes(-) button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci xhci_pci iTCO_wdt libata xhci_hcd ehci_pci intel_pmc_bxt ehci_hcd tg3 watchdog at24 thunderbolt scsi_mod usbcore libphy ioatdma i2c_i801 lpc_ich i2c_smbus mdio_bus scsi_common dca configfs usb_common
+[   14.529099] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[   14.529119] thunderbolt 0-3: Linux incite
+[   14.529120] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[   14.529141] thunderbolt 1-3: Linux alight
+[   15.616563] thunderbolt 0-3: failed to send properties changed notification
+[   15.616564] thunderbolt 1-3: failed to send properties changed notification
+[   22.968044] netconsole: netconsole: local port 6666
+[   22.968058] netconsole: netconsole: local IPv4 address 0.0.0.0
+[   22.968063] netconsole: netconsole: interface name 'enp12s0'
+[   22.968066] netconsole: netconsole: local ethernet address 'ff:ff:ff:ff:ff:ff'
+[   22.968071] netconsole: netconsole: remote port 6666
+[   22.968074] netconsole: netconsole: remote IPv4 address 192.168.0.212
+[   22.968095] netconsole: netconsole: local IP 192.168.0.153
+[   22.996754] netconsole: network logging started
+[  326.793313] thunderbolt-net 0-3.0 thunderbolt0: ThunderboltIP login timed out
+[  326.793367] thunderbolt-net 1-3.0 thunderbolt1: ThunderboltIP login timed out
+[  338.636523] ACPI: bus type thunderbolt unregistered
+[  344.589054] ACPI: bus type thunderbolt registered
+[  344.589571] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  344.595433] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  344.600249] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  356.860530] thunderbolt 1-3: error waiting for link width to become 14
+[  357.866935] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  357.866956] thunderbolt 1-3: Linux alight
+[  357.884520] thunderbolt 0-3: error waiting for link width to become 14
+[  358.891046] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  358.891072] thunderbolt 0-3: Linux incite
+[  374.219075] thunderbolt 0-3: failed to send properties changed notification
+[  374.220134] ACPI: bus type thunderbolt unregistered
+[  380.010977] ACPI: bus type thunderbolt registered
+[  380.011686] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  380.017186] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  380.022522] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  385.291801] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  385.291827] thunderbolt 1-3: Linux alight
+[  385.323885] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  385.323905] thunderbolt 0-3: Linux incite
+[  424.237746] kernel73 netconsole check inflight 7.3.0-rc7-p2p 1792006653

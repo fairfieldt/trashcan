@@ -1,0 +1,10 @@
+0000:02:00.0 level high, sclk 850 mclk 1370
+  echo high: rc 0
+  level high, sclk 850 mclk 1370
+  echo auto: rc 0
+  level auto, sclk 850 mclk 1370
+0000:06:00.0 level high, sclk 850 mclk 1370
+  echo high: rc 0
+  level high, sclk 850 mclk 1370
+  echo auto: rc 0
+  level auto, sclk 850 mclk 1370
