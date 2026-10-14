@@ -109,6 +109,7 @@ pub fn stage_bench(
     let mut dec = Vec::new();
     // Per dispatch (TRASHCAN_Q4_PROFILE=1): stage, label, mean ms and mean gap before it over the decode steps.
     let mut disp: Vec<Vec<(String, f64, f64)>> = Vec::new();
+    let mut late_disp = Vec::new();
     let profile = |local: &Local, disp: &mut Vec<Vec<(String, f64, f64)>>, pos: usize, n: usize, k: f64| -> Result<()> {
         let mut i = 0;
         for s in &local.stages {
@@ -126,6 +127,10 @@ pub fn stage_bench(
         }
         Ok(())
     };
+    // The late chunk's dispatches (its graph ran last).
+    if start > 0 {
+        profile(local, &mut late_disp, late_pos, batch.min(start - late_pos), 1.)?;
+    }
     // The last timed prefill chunk's dispatches (batches of a few tokens).
     let mut pre_disp = Vec::new();
     if prefill > 0 {
@@ -177,6 +182,8 @@ pub fn stage_bench(
         "dispatches": disp.iter().map(|v| v.iter().map(|x| serde_json::json!([x.0, x.1, x.2])).collect::<Vec<_>>())
             .collect::<Vec<_>>(),
         "prefill_dispatches": pre_disp.iter().map(|v| v.iter().map(|x| serde_json::json!([x.0, x.1, x.2]))
+            .collect::<Vec<_>>()).collect::<Vec<_>>(),
+        "late_dispatches": late_disp.iter().map(|v| v.iter().map(|x| serde_json::json!([x.0, x.1, x.2]))
             .collect::<Vec<_>>()).collect::<Vec<_>>()}),
     )
 }

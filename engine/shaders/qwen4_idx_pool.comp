@@ -2,7 +2,8 @@
 #include "common.glsl"
 // QSA indexer: when token t completes a block of p.kind positions, pool it: the mean of the block's raw keys,
 // RMS-normed with a learned weight and rotated (NeoX, first p.k dims) to the block's first position.
-// One wave per token. a: raw key ring [offset][dim], b: norm weight [dim], c: pooled keys [cap / kind][dim].
+// One wave per token. a: raw key ring [offset][dim], b: norm weight [dim], c: pooled keys [dim / 4][cap / kind] (vec4s:
+// dims 4i .. 4i+3 of block b at (i * cap / kind + b) * 4).
 // p.dim (<= 128), p.k = rotated dims (<= 64), p.kind = block size, p.cap, p.offset = ring rows, p.r0 = rope base
 // bits, p.window = eps.
 layout(local_size_x=64) in;
@@ -20,5 +21,5 @@ float pos=float(b*p.kind);uint half_rot=p.k/2;
 if(l<p.k){uint i=l%half_rot;float th=pos*pow(uintBitsToFloat(p.r0),-2.0*float(i)/float(p.k));
     float co=cos(th),si=sin(th),partner=sh[l<half_rot?l+half_rot:l-half_rot];
     m[0]=l<half_rot?m[0]*co-partner*si:partner*si+m[0]*co;}
-uint dst=(b%(p.cap/p.kind))*p.dim;
-[[unroll]]for(uint h=0;h<2;h++){uint j=l+h*64;if(j<p.dim)c_f.v[dst+j]=m[h];}}
+uint stride=p.cap/p.kind,bs=b%stride;
+[[unroll]]for(uint h=0;h<2;h++){uint j=l+h*64;if(j<p.dim)c_f.v[((j>>2)*stride+bs)*4u+(j&3u)]=m[h];}}

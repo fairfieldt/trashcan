@@ -1,0 +1,4 @@
+#version 460
+#define QLDS
+#include "common.glsl"
+#include "qwen4_idx_score.glsl"

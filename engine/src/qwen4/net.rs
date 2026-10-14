@@ -7,7 +7,7 @@ use super::{
     embed,
     gpu::{merge_top, KvCache, Output},
     ngram,
-    pipeline::{assemble_logits, head_rows, plan, Done, Local},
+    pipeline::{assemble_logits, head_rows, plan, tl, Done, Local},
     Config,
 };
 use crate::{gguf::Gguf, qwen::pipeline::Devices};
@@ -97,10 +97,15 @@ fn requests(s: &TcpStream) -> Result<Requests> {
 /// is done: nobody waits for its candidates.
 fn pass_on(next: Option<&mut Conn>, d: Done) -> Result<()> {
     match (d.out, next) {
-        (Output::Hidden(x), Some(conn)) => conn.send(
-            &json!({"forward": {"pos": d.pos, "n": d.n, "reply": false, "dump": false}}),
-            bytemuck::cast_slice(&x),
-        ),
+        (Output::Hidden(x), Some(conn)) => {
+            tl("send", 0, d.pos, 0., 0.);
+            conn.send(
+                &json!({"forward": {"pos": d.pos, "n": d.n, "reply": false, "dump": false}}),
+                bytemuck::cast_slice(&x),
+            )?;
+            tl("sent", 0, d.pos, 0., 0.);
+            Ok(())
+        }
         (Output::Hidden(_), None) => bail!("no machine holds the LM head"),
         (Output::Final(_), _) => Ok(()),
     }
@@ -224,11 +229,16 @@ fn session(model: &Path, devices: &Devices, up: &mut Conn, requests: &Requests) 
     let mut down: Option<Conn> = None;
     let mut local: Option<Local> = None;
     loop {
+        let waited = std::time::Instant::now();
         let (header, blob) = match requests.recv() {
             Ok(Ok(m)) => m,
             Ok(Err(e)) if e.downcast_ref::<std::io::Error>().is_none() => return Err(e),
             _ => return Ok(()),
         };
+        if let Some(f) = header.get("forward") {
+            let pos = f["pos"].as_u64().unwrap_or(0) as usize;
+            tl("recv", 0, pos, waited.elapsed().as_secs_f64() * 1e6, 0.);
+        }
         if let Some(chain) = header.get("probe") {
             let chain: Vec<String> = serde_json::from_value(chain.clone())?;
             let mut counts = vec![devices.count()];
@@ -583,8 +593,10 @@ impl Chain {
         if self.pos == 0 {
             self.history.clear();
         }
+        tl("drv", 0, self.pos, 0., 0.);
         let x = embed(&self.local.gguf, &self.local.c, tokens)?;
         let ple = self.ple(tokens)?;
+        tl("ple", 0, self.pos, 0., 0.);
         self.history.extend_from_slice(tokens);
         let pos = self.pos;
         let out = if dump.is_some() {

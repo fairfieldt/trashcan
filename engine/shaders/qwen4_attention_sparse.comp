@@ -1,4 +1,0 @@
-#version 460
-#define PARTIAL
-#include "common.glsl"
-#include "qwen4_attention_sparse.glsl"

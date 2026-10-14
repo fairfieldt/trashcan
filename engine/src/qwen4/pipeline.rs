@@ -56,6 +56,16 @@ fn split_layers(costs: &[f64], head: f64, devices: usize, head_split: usize, min
     cuts.windows(2).map(|w| (w[0], w[1])).collect()
 }
 
+/// `TRASHCAN_Q4_TIMELINE=1` (diagnostics): a stderr line per prompt-chunk event, `tl HOST_US EVENT STAGE POS A B`
+/// with CLOCK_MONOTONIC microseconds; with `TRASHCAN_TP_PROFILE=1` too, `done` carries the chunk's GPU start and end
+/// in the same clock.
+pub fn tl(ev: &str, stage: usize, pos: usize, a: f64, b: f64) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("TRASHCAN_Q4_TIMELINE").is_some()) {
+        eprintln!("tl {} {ev} {stage} {pos} {a:.0} {b:.0}", crate::vulkan::host_ns() / 1000);
+    }
+}
+
 /// Size, budget and usage in MiB of a GPU's largest device-local heap (VK_EXT_memory_budget). RADV places
 /// allocations that do not fit elsewhere, so usage near the size means a stage does not fit.
 pub fn heap_mib(inst: &Instance, pd: ash::vk::PhysicalDevice) -> (f64, f64, f64) {
@@ -114,8 +124,8 @@ pub struct Local {
     pub heads: Vec<Option<(usize, usize)>>,
     /// Holds the GPUs' clocks up while work arrives (GPU stages only).
     pub(crate) clocks: Option<crate::clocks::Clocks>,
-    /// The chunk each stage is working on (`push`).
-    flight: Vec<Option<Flight>>,
+    /// The chunks each stage is working on, oldest first: the running one and one queued behind it (`push`).
+    flight: Vec<std::collections::VecDeque<Flight>>,
     /// The residual rows the stage that ends the model kept from the latest verification or `forward_rows` batch
     /// (speculative decoding, `spec.rs`).
     pub rows: Vec<f32>,
@@ -183,7 +193,7 @@ impl Local {
         Ok(Self {
             gguf,
             c,
-            flight: stages.iter().map(|_| None).collect(),
+            flight: stages.iter().map(|_| std::collections::VecDeque::new()).collect(),
             stages,
             heads: heads.to_vec(),
             clocks,
@@ -191,10 +201,11 @@ impl Local {
         })
     }
 
-    /// Start a prompt chunk on the first stage without waiting for it. The chunks in flight move on by one stage, each
-    /// stage starting its next chunk as soon as it has finished the previous one, so the GPUs of a machine work on
-    /// consecutive chunks at the same time. Returns the chunk that left the last stage, if one did. `forward` and
-    /// `head_slices` need the stages idle: `drain` or `finish` first.
+    /// Start a prompt chunk on the first stage without waiting for it. The chunks in flight move on by one stage: each
+    /// stage queues the incoming chunk behind the one it is running and then waits for that one, so the GPUs of a
+    /// machine work on consecutive chunks at the same time and a GPU never waits for the host between chunks.
+    /// Returns the chunk that left the last stage, if one did. `forward` and `head_slices` need the stages idle:
+    /// `drain` or `finish` first.
     pub fn push(&mut self, x: Vec<f32>, ple: Option<Vec<f32>>, pos: usize, n: usize) -> Result<Option<Done>> {
         if self.stages.iter().any(|s| matches!(s, Stage::Cpu(_))) {
             // A CPU machine runs a single stage, synchronously.
@@ -206,7 +217,7 @@ impl Local {
 
     /// Wait for the chunks in flight, handing each to `pass` as it leaves the last stage.
     pub fn drain(&mut self, mut pass: impl FnMut(Done) -> Result<()>) -> Result<()> {
-        while self.flight.iter().any(Option::is_some) {
+        while self.flight.iter().any(|f| !f.is_empty()) {
             if let Some(d) = self.step(None)? {
                 pass(d)?;
             }
@@ -224,7 +235,7 @@ impl Local {
         n: usize,
         mut pass: impl FnMut(Done) -> Result<()>,
     ) -> Result<Output> {
-        if self.flight.iter().all(Option::is_none) {
+        if self.flight.iter().all(|f| f.is_empty()) {
             return self.forward(x, ple.as_deref(), pos, n, None);
         }
         if let Some(d) = self.push(x, ple, pos, n)? {
@@ -233,7 +244,7 @@ impl Local {
         // The chunk leaves last.
         loop {
             let d = self.step(None)?;
-            let idle = self.flight.iter().all(Option::is_none);
+            let idle = self.flight.iter().all(|f| f.is_empty());
             match d {
                 Some(d) if idle => return Ok(d.out),
                 Some(d) => pass(d)?,
@@ -251,15 +262,25 @@ impl Local {
         let mut left = None;
         for (i, (stage, flight)) in self.stages.iter_mut().zip(&mut self.flight).enumerate() {
             let Stage::Gpu(s) = stage else { bail!("only GPU stages work on chunks in flight") };
-            // Wait for this stage's chunk, then start the next one on it at once.
-            let prev = match flight.take() {
-                Some(f) => Some((s.collect(None)?, f)),
-                None => None,
-            };
+            // Queue the incoming chunk behind the running one, then wait for the running one (with nothing coming in,
+            // for whatever this stage holds).
+            let incoming = input.is_some();
             if let Some((f, x)) = input.take() {
                 s.submit(&x, f.ple.as_deref(), f.pos, f.n, false)?;
-                *flight = Some(f);
+                tl("sub", i, f.pos, 0., 0.);
+                flight.push_back(f);
             }
+            let prev = if flight.len() > usize::from(incoming) {
+                let f = flight.pop_front().unwrap();
+                tl("wait", i, f.pos, 0., 0.);
+                s.wait()?;
+                let out = s.output(None)?;
+                let (a, b) = s.window.unwrap_or((0., 0.));
+                tl("done", i, f.pos, a / 1e3, b / 1e3);
+                Some((out, f))
+            } else {
+                None
+            };
             match prev {
                 Some((Output::Hidden(x), f)) if i < last => input = Some((f, x)),
                 Some((out, f)) => left = Some(Done { pos: f.pos, n: f.n, out }),

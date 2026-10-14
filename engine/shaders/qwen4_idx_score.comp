@@ -1,36 +1,3 @@
 #version 460
 #include "common.glsl"
-// QSA indexer block scores: score[t][b] = sum over heads of relu(q[t][h] . pooled[b]) / sqrt(dim) for the complete
-// blocks b < nb(t) = (position + t + 1) / kind, only for tokens past the dense regime (nb(t) > p.m). Each wave walks
-// BPW blocks for a group of TT tokens; lanes hold key dims l and l + 64 (dim 128), so a key is loaded once per group
-// with coalesced reads. Grid: x = cap / kind / 64 block groups (blocks past the last token's nb exit), y = token
-// groups. qwen4_idx_select then picks the top p.m.
-// a: indexer queries [t][heads][dim] (normed, rotated), b: pooled keys [cap / kind][dim], c: scores [t][cap / kind].
-// p.heads (<= 4), p.dim (128), p.kind, p.m, p.cap.
-layout(local_size_x=256) in;
-#define TT 8
-#define BPW 16
-shared float q[TT*512];
-void main(){
-uint l=gl_LocalInvocationID.x,lane=gl_SubgroupInvocationID,wave=gl_SubgroupID;
-uint n=batch(),t0=gl_WorkGroupID.y*TT;if(t0>=n)return;
-uint tn=min(TT,n-t0),stride=p.cap/p.kind,qd=p.heads*p.dim,pos0=position()+t0;
-uint nbmax=(pos0+tn)/p.kind,b0=gl_WorkGroupID.x*64+wave*BPW;
-// Nothing to score: every token of the group keeps all its blocks, or this group of blocks is not complete yet.
-if(nbmax<=p.m||gl_WorkGroupID.x*64>=nbmax)return;
-for(uint j=l;j<tn*qd;j+=256)q[j]=a_f.v[t0*qd+j];
-barrier();
-float scale=inversesqrt(float(p.dim));
-for(uint i=0;i<BPW;i++){uint b=b0+i;if(b>=nbmax)break;
-    uint kb=(b%stride)*p.dim;
-    float k0=b_f.v[kb+lane],k1=b_f.v[kb+lane+64];
-    for(uint tt=0;tt<tn;tt++){
-        uint nb=(pos0+tt+1)/p.kind;
-        if(b>=nb||nb<=p.m)continue;
-        float s=0;
-        for(uint h=0;h<p.heads;h++){uint qb=(tt*p.heads+h)*p.dim;
-            s+=max(subgroupAdd(fma(q[qb+lane],k0,q[qb+lane+64]*k1)),0.0);}
-        if(lane==0)c_f.v[(t0+tt)*stride+b]=s*scale;
-    }
-}
-}
+#include "qwen4_idx_score.glsl"

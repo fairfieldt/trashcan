@@ -1,0 +1,25 @@
+#version 460
+#extension GL_KHR_shader_subgroup_ballot : require
+#include "common.glsl"
+// Merge of qwen4_attention_grouped_dec's partial results for one (head, token): only the partitions that hold the
+// token's visible positions (64 each). Each thread loads its dim of every partition's output, and each wave the
+// partitions' maxima and sums (a lane per partition, clamped loads and selects: branches would move the loads to their
+// uses), so the kernel waits for memory once; every wave weighs the partitions itself (max, exp, sum) and broadcasts
+// the weights, then each thread adds its dim. e: partials [t][heads][parts][dim + 2] ([max, sum, output]), d: output
+// [t][heads][dim]. p.heads, p.dim = 256, p.kind, p.m.
+layout(local_size_x=256) in;
+layout(constant_id=0) const uint parts=64;
+void main(){uint head=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x,lane=gl_SubgroupInvocationID;
+if(t>=batch())return;
+uint pos=position()+t,nb=(pos+1u)/p.kind,total=min(nb,p.m)*p.kind+pos+1u-nb*p.kind;
+uint used=min(parts,(total+63u)/64u),row=p.dim+2u,base=(t*p.heads+head)*parts*row;
+float a[parts];
+[[unroll]]for(uint j=0u;j<parts;j++)a[j]=e_f.v[base+min(j,used-1u)*row+2u+l];
+uint c=base+min(lane,used-1u)*row;
+float m0=e_f.v[c],s0=e_f.v[c+1u];
+float m=lane<used?m0:-1e30,s=lane<used?s0:0.0;
+float w=exp(m-subgroupMax(m)),den=subgroupAdd(w*s);
+// Past the used partitions the weights are 0 (exp of -1e30), so those terms add nothing.
+float acc=0.0;
+[[unroll]]for(uint j=0u;j<parts;j++)acc=fma(subgroupBroadcast(w,j),a[j],acc);
+d_f.v[(t*p.heads+head)*p.dim+l]=acc/den;}

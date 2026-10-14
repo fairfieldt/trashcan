@@ -1,0 +1,27 @@
+#version 460
+#include "common.glsl"
+// f32 projections of prefill chunks (indexer key and query, router, DeltaNet alpha/beta), the same bits as
+// qwen_matf32: lane l of a wave sums W[row][i] x[t][i] over i = l, l + 64, ... in order (fma), then a subgroupAdd
+// over the lanes. A wave holds RW rows x TW tokens, so each weight is read once per TW tokens and each activation
+// once per RW rows (qwen_matf32: one row and up to eight tokens, a load per FMA).
+// Grid: x = rows / (4 RW) (four waves), y = tokens / TW. W in set 0, x in b, y in c. p.n rows, p.k row length.
+layout(local_size_x=256) in;
+#define RW 4u
+#define TW 16u
+void main(){
+uint lane=gl_SubgroupInvocationID,row0=(gl_WorkGroupID.x*4u+gl_SubgroupID)*RW,t0=gl_WorkGroupID.y*TW,nb=batch();
+if(row0>=p.n||t0>=nb)return;
+uint rows=min(RW,p.n-row0),cols=min(TW,nb-t0);
+float s[RW][TW];
+[[unroll]]for(uint r=0u;r<RW;r++)[[unroll]]for(uint z=0u;z<TW;z++)s[r][z]=0.0;
+for(uint i=lane;i<p.k;i+=64u){
+    float w[RW],x[TW];
+    [[unroll]]for(uint r=0u;r<RW;r++)w[r]=uintBitsToFloat(ww.words[min(row0+r,p.n-1u)*p.k+i]);
+    [[unroll]]for(uint z=0u;z<TW;z++)x[z]=b_f.v[min(t0+z,nb-1u)*p.k+i];
+    [[unroll]]for(uint r=0u;r<RW;r++)[[unroll]]for(uint z=0u;z<TW;z++)s[r][z]=fma(w[r],x[z],s[r][z]);
+}
+[[unroll]]for(uint r=0u;r<RW;r++)[[unroll]]for(uint z=0u;z<TW;z++){
+    float v=subgroupAdd(s[r][z]);
+    if(lane==0u&&r<rows&&z<cols)c_f.v[(t0+z)*p.n+row0+r]=v;
+}
+}

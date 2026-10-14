@@ -7,8 +7,10 @@
 //!
 //! Dense matrices are Q4_0 repacked with f32 scales (`quant::Kind::Q4`, the Gemma kernels) or Q8_0 with f16 scales;
 //! experts are Q4_0, IQ4_NL (4.5 bits per weight) or IQ4_XS (4.25), at their GGUF size, stacked into one gate/up and
-//! one down matrix per layer with the shared expert appended as expert `experts`. Attention is dense, so a stage
-//! accepts at most `idx_budget + kpool - 1` visible tokens (the sparse block selection is not implemented here yet).
+//! one down matrix per layer with the shared expert appended as expert `experts`. QSA attends to every position up to
+//! `idx_budget + kpool - 1` visible tokens; with longer contexts (or a Q8 K/V cache) the indexer scores blocks, picks
+//! the best `idx_budget / kpool` per token and the grouped kernels attend to those (`qwen4_attention_grouped*`).
+//! Prefill chunks may be queued behind the running one: host inputs, fences and timestamps come in two slots.
 use super::{cpu::Captures, Config};
 use crate::{
     gguf::{GgmlType, Gguf, TensorInfo},
@@ -21,7 +23,10 @@ use ash::vk;
 use std::{collections::HashMap, rc::Rc};
 
 pub const TOP_K: usize = crate::qwen::gpu::TOP_K;
-const GRAPH_CACHE_CAPACITY: usize = 6;
+const GRAPH_CACHE_CAPACITY: usize = 8;
+/// A recorded graph: batch size, attention partitions, captures, mode and the submission slot whose host inputs,
+/// fence and timestamps it uses.
+type Key = (usize, u32, bool, Mode, usize);
 /// Phase timestamps per layer (n-gram module, two mixers, sublayer (sparse QSA: projections, block selection,
 /// attention), router, experts).
 const MARKS: usize = 8;
@@ -281,11 +286,13 @@ pub struct GpuStage {
     kv: KvCache,
     /// Rows of the raw indexer-key ring: the batch and the incomplete block before it.
     ring: usize,
-    input: Buffer,
-    ple_in: Buffer,
+    /// Host inputs of a forward (residual, n-gram rows, position and batch) per submission slot: a prefill chunk is
+    /// written to the free slot and queued while the previous one runs.
+    input: [Buffer; 2],
+    ple_in: [Buffer; 2],
     output: Buffer,
     params: Buffer,
-    params_host: Buffer,
+    params_host: [Buffer; 2],
     x: Buffer,
     xn: Buffer,
     lo: Buffer,
@@ -329,10 +336,13 @@ pub struct GpuStage {
     pv: Buffer,
     gv: Buffer,
     pn: Buffer,
-    fence: vk::Fence,
-    graphs: HashMap<(usize, u32, bool, Mode), Graph>,
-    /// The graph and batch of a submitted forward that `collect` has not waited for yet.
-    pending: Option<((usize, u32, bool, Mode), usize)>,
+    /// Per submission slot (slot 0 also serves the head, `tail` and `rollback`).
+    fence: [vk::Fence; 2],
+    graphs: HashMap<Key, Graph>,
+    /// The graphs and batches of submitted forwards that `wait` has not waited for yet, oldest first (at most two).
+    pending: std::collections::VecDeque<(Key, usize)>,
+    /// The graph and batch of a forward that `wait` waited for and whose output `output` has not read yet.
+    done: Option<(Key, usize)>,
     /// Command buffers scoring given hidden states with this stage's head rows (by dump and row count).
     head_graphs: HashMap<(bool, usize), Graph>,
     /// Rows scored by the last `head_submit`.
@@ -345,11 +355,14 @@ pub struct GpuStage {
     last_verify: Option<usize>,
     /// Tokens of the latest batch (`tail`).
     last_n: usize,
-    queries: vk::QueryPool,
+    queries: [vk::QueryPool; 2],
     /// GPU milliseconds of each layer's submission in the last forward (the last includes the head or output).
     pub profile: Vec<f64>,
     /// GPU milliseconds per (layer index in the stage, phase) in the last forward.
     pub phases: Vec<(usize, &'static str, f64)>,
+    /// Host CLOCK_MONOTONIC nanoseconds of the last forward's first and last GPU timestamps, on a device with
+    /// calibrated timestamps (`TRASHCAN_TP_PROFILE`).
+    pub window: Option<(f64, f64)>,
 }
 
 /// The pipeline of an expert kernel for a format (the variants are specializations of one shader).
@@ -485,6 +498,12 @@ impl GpuStage {
         // Past this many visible tokens QSA attends to selected blocks; below it every block is selected. Q8 caches
         // are read only by the sparse kernels, which select every block while there are few enough.
         let sparse = kv != KvCache::F16 || context > c.idx_budget + c.kpool - 1;
+        // The sparse kernels serve the 12 query heads of a 256-wide KV head together and score blocks against a 4 x
+        // 128 indexer (qwen4_attention_grouped, qwen4_idx_score).
+        ensure!(
+            !sparse || (c.heads == 12 * c.kv_heads && c.head_dim == 256 && c.idx_heads == 4 && c.idx_dim == 128),
+            "sparse attention needs 12 query heads per KV head of 256 and an indexer of 4 x 128"
+        );
         let ring = (max_batch + c.kpool).next_multiple_of(c.kpool);
         let (d, w) = (c.d, c.width());
         let t = |il: usize, name: &str| c.layer_tensor(g, il, name);
@@ -684,15 +703,17 @@ impl GpuStage {
         let alloc = |n: usize| gpu.buffer(n * max_batch * 4, false, false, None);
         let qd = c.heads * c.head_dim;
         let slots = c.used + 1;
-        let fence = unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
-        let queries = unsafe {
+        let fence = || unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None) };
+        let fence = [fence()?, fence()?];
+        let pool = || unsafe {
             gpu.dev.create_query_pool(
                 &vk::QueryPoolCreateInfo::default()
                     .query_type(vk::QueryType::TIMESTAMP)
                     .query_count((2 + MARKS) as u32 * layers.len() as u32),
                 None,
-            )?
+            )
         };
+        let queries = [pool()?, pool()?];
         let stage = Self {
             first,
             last,
@@ -703,11 +724,11 @@ impl GpuStage {
             context,
             kv,
             ring,
-            input: gpu.buffer(w * max_batch * 4, true, false, None)?,
-            ple_in: gpu.buffer(d * max_batch * 4, true, false, None)?,
+            input: [gpu.buffer(w * max_batch * 4, true, false, None)?, gpu.buffer(w * max_batch * 4, true, false, None)?],
+            ple_in: [gpu.buffer(d * max_batch * 4, true, false, None)?, gpu.buffer(d * max_batch * 4, true, false, None)?],
             output: gpu.buffer(w * max_batch * 4, true, false, None)?,
             params: gpu.buffer(16, false, false, None)?,
-            params_host: gpu.buffer(16, true, false, None)?,
+            params_host: [gpu.buffer(16, true, false, None)?, gpu.buffer(16, true, false, None)?],
             x: alloc(w)?,
             xn: alloc(w)?,
             lo: alloc(c.hc_rank)?,
@@ -764,7 +785,8 @@ impl GpuStage {
             pn: alloc(w)?,
             fence,
             graphs: HashMap::new(),
-            pending: None,
+            pending: std::collections::VecDeque::new(),
+            done: None,
             head_graphs: HashMap::new(),
             head_n: 1,
             snaps: Vec::new(),
@@ -775,6 +797,7 @@ impl GpuStage {
             queries,
             profile: Vec::new(),
             phases: Vec::new(),
+            window: None,
             c: c.clone(),
             gpu,
         };
@@ -782,8 +805,9 @@ impl GpuStage {
         Ok(stage)
     }
 
-    /// Indexer upkeep and block selection for one QSA layer: raw keys into the ring, pooled keys of completed blocks,
-    /// the normed and rotated indexer queries, then each token's selected blocks in `sel`.
+    /// Indexer upkeep and block selection for one QSA layer (its projections ran with the attention projections):
+    /// raw keys into the ring, pooled keys of completed blocks, the normed and rotated indexer queries, then each
+    /// token's selected blocks in `sel`.
     fn index_select(
         &self,
         current: &std::cell::Cell<vk::CommandBuffer>,
@@ -797,21 +821,7 @@ impl GpuStage {
             ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, 0],
             u,
         };
-        let (id, ih, d) = (c.idx_dim, c.idx_heads, c.d);
-        let matf32 = |wt: &Buffer, y: &Buffer, rows: usize| -> Result<()> {
-            let mut u = [0; 16];
-            u[0] = rows as u32;
-            u[1] = d as u32;
-            gpu.dispatch_matrix(
-                current.get(),
-                matf32_shader(n),
-                push([0, self.u.address, y.address, 0, 0, 0], u),
-                rows.div_ceil(4) as u32,
-                n.div_ceil(8) as u32,
-                wt,
-            )
-        };
-        matf32(&ix.k, &self.ik, id)?;
+        let (id, ih) = (c.idx_dim, c.idx_heads);
         let mut u = [0; 16];
         u[6] = id as u32;
         u[10] = self.ring as u32;
@@ -837,7 +847,6 @@ impl GpuStage {
             1,
             n as u32,
         );
-        matf32(&ix.q, &self.iq, ih * id)?;
         let mut u = [0; 16];
         u[1] = c.rot as u32;
         u[2] = (ih * id) as u32;
@@ -863,16 +872,19 @@ impl GpuStage {
         u[9] = c.kpool as u32;
         let _ = attn;
         // Scores over every block a recorded graph may see (the position changes on replay; groups past it exit).
+        // Prefill chunks read the queries through scalar loads (1.8 against 2.9 ms per 128-token chunk at 30K), up to
+        // 8 tokens from shared memory.
         gpu.dispatch(
             current.get(),
-            "qwen4_idx_score",
+            if n <= 8 { "qwen4_idx_score_lds" } else { "qwen4_idx_score" },
             push([self.iqr.address, ix.pooled.address, self.scores.address, 0, 0, 0], u),
-            (self.context / c.kpool).div_ceil(64) as u32,
+            (self.context / c.kpool).div_ceil(256) as u32,
             n.div_ceil(8) as u32,
         );
         gpu.dispatch(
             current.get(),
-            "qwen4_idx_select",
+            // Prefill chunks: 256 threads per token (many tokens fill the GPU); up to 8 tokens: 1024 threads each.
+            if n > 8 { "qwen4_idx_select256" } else { "qwen4_idx_select" },
             push([0, 0, self.scores.address, self.sel.address, 0, 0], u),
             1,
             n as u32,
@@ -985,7 +997,7 @@ impl GpuStage {
         let Some(hd) = self.head.as_ref() else {
             return Ok(false);
         };
-        ensure!(self.pending.is_none(), "the stage is still working on a forward");
+        ensure!(self.pending.is_empty(), "the stage is still working on a forward");
         // Several rows (a verification batch) are scored one after another.
         let rows = h.len() / d;
         ensure!(
@@ -1010,16 +1022,16 @@ impl GpuStage {
             self.head_graphs.insert(key, graph);
         }
         unsafe {
-            self.gpu.dev.reset_fences(&[self.fence])?;
+            self.gpu.dev.reset_fences(&[self.fence[0]])?;
         }
-        self.gpu.submit(self.head_graphs[&key].cmds[0], None, None, self.fence)?;
+        self.gpu.submit(self.head_graphs[&key].cmds[0], None, None, self.fence[0])?;
         Ok(true)
     }
 
     /// Wait for `head_submit` and return its candidates (with vocabulary ids).
     pub fn head_collect(&mut self, dump: Option<&mut Captures>) -> Result<Option<Vec<(f32, u32)>>> {
         unsafe {
-            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.wait_for_fences(&[self.fence[0]], true, 600_000_000_000)?;
         }
         if let Some(m) = dump {
             for (name, host, width) in &self.head_graphs[&(true, 1)].captures {
@@ -1032,7 +1044,7 @@ impl GpuStage {
     /// Wait for `head_submit` and return the candidates of every row it scored.
     pub fn head_collect_rows(&mut self) -> Result<Vec<Vec<(f32, u32)>>> {
         unsafe {
-            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.wait_for_fences(&[self.fence[0]], true, 600_000_000_000)?;
         }
         let hd = self.head.as_ref().context("no head rows")?;
         (0..self.head_n).map(|r| Self::read_top(hd, r)).collect()
@@ -1042,7 +1054,7 @@ impl GpuStage {
         self.gpu.device_bytes.get() as f64 / 1048576.
     }
 
-    fn record(&self, n: usize, parts: u32, dump: bool, mode: Mode) -> Result<Graph> {
+    fn record(&self, n: usize, parts: u32, dump: bool, mode: Mode, slot: usize) -> Result<Graph> {
         let verify = mode == Mode::Verify;
         let gpu = &self.gpu;
         let c = &self.c;
@@ -1073,11 +1085,11 @@ impl GpuStage {
             } else {
                 vk::PipelineStageFlags::TOP_OF_PIPE
             };
-            gpu.dev.cmd_write_timestamp(cmd, stage, self.queries, index as u32);
+            gpu.dev.cmd_write_timestamp(cmd, stage, self.queries[slot], index as u32);
         };
         unsafe {
             gpu.dev
-                .cmd_reset_query_pool(cmd, self.queries, 0, (2 + MARKS) as u32 * self.layers.len() as u32)
+                .cmd_reset_query_pool(cmd, self.queries[slot], 0, (2 + MARKS) as u32 * self.layers.len() as u32)
         };
         let base = 2 * self.layers.len();
         let mark = |graph: &mut Graph, layer: usize, name: &'static str| {
@@ -1086,10 +1098,10 @@ impl GpuStage {
         };
         stamp(cmd, 0, false);
         gpu.barrier(cmd);
-        gpu.copy(cmd, &self.params_host, 0, &self.params, 0, 16);
-        gpu.copy(cmd, &self.input, 0, &self.x, 0, n * w * 4);
+        gpu.copy(cmd, &self.params_host[slot], 0, &self.params, 0, 16);
+        gpu.copy(cmd, &self.input[slot], 0, &self.x, 0, n * w * 4);
         if self.ple.is_some() {
-            gpu.copy(cmd, &self.ple_in, 0, &self.pe, 0, n * d * 4);
+            gpu.copy(cmd, &self.ple_in[slot], 0, &self.pe, 0, n * d * 4);
         }
         let push = |ptr: [u64; 6], u: [u32; 16]| Push {
             ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, 0],
@@ -1182,17 +1194,23 @@ impl GpuStage {
                 _ => matrix(wt, x, &self.y, k, d, false),
             }
         };
-        // Small f32 projections: one wave per row and eight tokens.
+        // Small f32 projections: up to 8 tokens one wave per row and eight tokens; prefill chunks four rows and 16
+        // tokens per wave (the same bits).
         let matf32 = |wt: &Buffer, x: &Buffer, y: &Buffer, k: usize, rows: usize, defer: bool| -> Result<()> {
             let mut u = [0; 16];
             u[0] = rows as u32;
             u[1] = k as u32;
+            let (shader, gx, gy) = if n > 8 && k % 64 == 0 {
+                ("qwen4_matf32_t", rows.div_ceil(16), n.div_ceil(16))
+            } else {
+                (matf32_shader(n), rows.div_ceil(4), n.div_ceil(8))
+            };
             gpu.dispatch_matrix(
                 current.get(),
-                matf32_shader(n),
+                shader,
                 push([0, x.address, y.address, 0, 0, 0], u).defer_barrier(defer),
-                rows.div_ceil(4) as u32,
-                n.div_ceil(8) as u32,
+                gx as u32,
+                gy as u32,
                 wt,
             )
         };
@@ -1646,6 +1664,12 @@ impl GpuStage {
                 } => {
                     let (hd, kvd) = (c.head_dim, c.kv_heads * c.head_dim);
                     let qd = c.heads * hd;
+                    // The indexer's key and query projections read the same input: they join the group (first,
+                    // being small).
+                    if let Some(ix) = index {
+                        matf32(&ix.k, &self.u, &self.ik, d, c.idx_dim, true)?;
+                        matf32(&ix.q, &self.u, &self.iq, d, c.idx_heads * c.idx_dim, true)?;
+                    }
                     if n <= 8 {
                         matrix(k, &self.u, &self.kb, d, kvd, true)?;
                         matrix(v, &self.u, &self.vb, d, kvd, true)?;
@@ -1749,6 +1773,8 @@ impl GpuStage {
                             &self.iqr,
                             c.idx_heads * c.idx_dim,
                         )?;
+                        // The last token's selected blocks (u32 bits).
+                        capture(&mut graph, format!("indexer_sel-{il}"), &self.sel, c.top_blocks())?;
                         let mut u = u;
                         u[9] = c.kpool as u32;
                         u[2] = c.top_blocks() as u32;
@@ -1761,37 +1787,46 @@ impl GpuStage {
                             self.sel.address,
                         ];
                         if parts == 0 {
+                            // Prefill chunks: a workgroup per (KV head, token) serves the 12 query heads that share
+                            // the KV head, reading each K/V row once.
                             gpu.dispatch(
                                 current.get(),
                                 match self.kv {
-                                    KvCache::F16 => "qwen4_attention_sparse_full",
-                                    KvCache::Q8 => "qwen4_attention_sparse_full_q8",
-                                    KvCache::K16V8 => "qwen4_attention_sparse_full_k16v8",
+                                    KvCache::F16 => "qwen4_attention_grouped",
+                                    KvCache::Q8 => "qwen4_attention_grouped_q8",
+                                    KvCache::K16V8 => "qwen4_attention_grouped_k16v8",
                                 },
                                 push(ptr, u),
-                                c.heads as u32,
+                                c.kv_heads as u32,
                                 n as u32,
                             );
                         } else {
-                            let (_, merge) = attention_shaders(parts)?;
-                            let partial = match (self.kv, parts) {
-                                (KvCache::F16, 8) => "qwen4_attention_sparse8",
-                                (KvCache::F16, 16) => "qwen4_attention_sparse16",
-                                (KvCache::F16, 64) => "qwen4_attention_sparse64",
-                                (KvCache::F16, _) => "qwen4_attention_sparse",
-                                (KvCache::Q8, 8) => "qwen4_attention_sparse_q8_8",
-                                (KvCache::Q8, 16) => "qwen4_attention_sparse_q8_16",
-                                (KvCache::Q8, 64) => "qwen4_attention_sparse_q8_64",
-                                (KvCache::Q8, _) => "qwen4_attention_sparse_q8",
-                                (KvCache::K16V8, 8) => "qwen4_attention_sparse_k16v8_8",
-                                (KvCache::K16V8, 16) => "qwen4_attention_sparse_k16v8_16",
-                                (KvCache::K16V8, 64) => "qwen4_attention_sparse_k16v8_64",
-                                (KvCache::K16V8, _) => "qwen4_attention_sparse_k16v8",
+                            // Decode and verification batches: a workgroup per (KV head, 64 visible positions,
+                            // token) writes the partial results of the 12 query heads sharing the KV head; the
+                            // merge reads the partitions that hold the token's positions.
+                            let grouped = match (self.kv, parts) {
+                                (KvCache::F16, 8) => "qwen4_attention_grouped_dec8",
+                                (KvCache::F16, 16) => "qwen4_attention_grouped_dec16",
+                                (KvCache::F16, 32) => "qwen4_attention_grouped_dec32",
+                                (KvCache::F16, _) => "qwen4_attention_grouped_dec64",
+                                (KvCache::Q8, 8) => "qwen4_attention_grouped_dec_q8_8",
+                                (KvCache::Q8, 16) => "qwen4_attention_grouped_dec_q8_16",
+                                (KvCache::Q8, 32) => "qwen4_attention_grouped_dec_q8_32",
+                                (KvCache::Q8, _) => "qwen4_attention_grouped_dec_q8_64",
+                                (KvCache::K16V8, 8) => "qwen4_attention_grouped_dec_k16v8_8",
+                                (KvCache::K16V8, 16) => "qwen4_attention_grouped_dec_k16v8_16",
+                                (KvCache::K16V8, 32) => "qwen4_attention_grouped_dec_k16v8_32",
+                                (KvCache::K16V8, _) => "qwen4_attention_grouped_dec_k16v8_64",
                             };
-                            gpu.dispatch(current.get(), partial, push(ptr, u), c.heads as u32 * parts, n as u32);
+                            gpu.dispatch(current.get(), grouped, push(ptr, u), c.kv_heads as u32 * parts, n as u32);
                             gpu.dispatch(
                                 current.get(),
-                                merge,
+                                match parts {
+                                    8 => "qwen4_attention_merge8",
+                                    16 => "qwen4_attention_merge16",
+                                    32 => "qwen4_attention_merge32",
+                                    _ => "qwen4_attention_merge64",
+                                },
                                 push([0, 0, 0, self.o.address, self.scratch.address, 0], u),
                                 c.heads as u32,
                                 n as u32,
@@ -2075,7 +2110,7 @@ impl GpuStage {
     /// Dispatch times of the graph that ran `n` tokens at `pos` last (`TRASHCAN_Q4_PROFILE=1`): per dispatch its
     /// label, GPU milliseconds from its start to the end of all work before it, and the gap before its start.
     pub fn dispatch_profile(&self, pos: usize, n: usize) -> Result<Vec<(String, f64, f64)>> {
-        let Some(graph) = self.graphs.get(&(n, partitions(pos, n), false, Mode::Plain)) else { return Ok(Vec::new()) };
+        let Some(graph) = self.graphs.get(&(n, partitions(pos, n), false, Mode::Plain, 0)) else { return Ok(Vec::new()) };
         let Some((pool, labels)) = &graph.stamps else { return Ok(Vec::new()) };
         let mut t = vec![0u64; labels.len()];
         unsafe {
@@ -2134,7 +2169,7 @@ impl GpuStage {
     /// stage that ends the model: the MTP block's input at the end of a prompt (copied out on its own).
     pub fn tail(&mut self, m: usize) -> Result<Vec<f32>> {
         ensure!(self.last == self.c.layers, "only the stage that ends the model keeps the final residual");
-        ensure!(self.pending.is_none(), "the stage is still working on a forward");
+        ensure!(self.pending.is_empty(), "the stage is still working on a forward");
         let m = m.min(self.last_n);
         ensure!(m >= 1, "no batch has run");
         let w4 = self.c.width() * 4;
@@ -2143,11 +2178,11 @@ impl GpuStage {
         self.gpu.copy(cmd, &self.x, (self.last_n - m) * w4, &self.output, 0, m * w4);
         self.gpu.finish(cmd)?;
         unsafe {
-            self.gpu.dev.reset_fences(&[self.fence])?;
+            self.gpu.dev.reset_fences(&[self.fence[0]])?;
         }
-        self.gpu.submit(cmd, None, None, self.fence)?;
+        self.gpu.submit(cmd, None, None, self.fence[0])?;
         unsafe {
-            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.wait_for_fences(&[self.fence[0]], true, 600_000_000_000)?;
             self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]);
         }
         Ok(bytemuck::cast_slice(&self.output.read(m * w4)?).to_vec())
@@ -2180,11 +2215,11 @@ impl GpuStage {
         }
         self.gpu.finish(cmd)?;
         unsafe {
-            self.gpu.dev.reset_fences(&[self.fence])?;
+            self.gpu.dev.reset_fences(&[self.fence[0]])?;
         }
-        self.gpu.submit(cmd, None, None, self.fence)?;
+        self.gpu.submit(cmd, None, None, self.fence[0])?;
         unsafe {
-            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.wait_for_fences(&[self.fence[0]], true, 600_000_000_000)?;
             self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]);
         }
         self.last_verify = Some(keep);
@@ -2234,56 +2269,70 @@ impl GpuStage {
 
     fn submit_mode(&mut self, x: &[f32], ple: Option<&[f32]>, pos: usize, n: usize, dump: bool, mode: Mode) -> Result<()> {
         let (d, w) = (self.c.d, self.c.width());
-        ensure!(self.pending.is_none(), "the stage is still working on a forward");
+        // A forward may be queued behind one other plain one (prefill chunks), in the slot that one does not use.
+        ensure!(
+            self.pending.is_empty() || (self.pending.len() == 1 && mode == Mode::Plain && !dump && self.pending[0].0 .3 == Mode::Plain),
+            "the stage is still working on a forward"
+        );
+        let slot = self.pending.front().map_or(0, |p| 1 - p.0 .4);
         ensure!(n > 0 && n <= self.max_batch, "batch exceeds configured capacity");
         ensure!(pos + n <= self.context, "context exhausted");
         ensure!(x.len() == n * w, "residual length mismatch");
-        self.input.write(bytemuck::cast_slice(x))?;
+        self.input[slot].write(bytemuck::cast_slice(x))?;
         if self.ple.is_some() {
             let p = ple.context("this stage needs the n-gram rows")?;
             ensure!(p.len() == n * d, "n-gram rows length mismatch");
-            self.ple_in.write(bytemuck::cast_slice(p))?;
+            self.ple_in[slot].write(bytemuck::cast_slice(p))?;
         }
-        self.params_host
-            .write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
-        let key = (n, partitions(pos, n), dump, mode);
+        self.params_host[slot].write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))?;
+        let key = (n, partitions(pos, n), dump, mode, slot);
         if !self.graphs.contains_key(&key) {
             if self.graphs.len() >= GRAPH_CACHE_CAPACITY {
+                // Not the decode graphs, nor one a pending forward runs.
+                let busy: Vec<Key> = self.pending.iter().map(|p| p.0).collect();
                 let victim = *self
                     .graphs
                     .keys()
-                    .find(|k| k.0 != 1)
-                    .unwrap_or(self.graphs.keys().next().unwrap());
+                    .find(|k| k.0 != 1 && !busy.contains(k))
+                    .or_else(|| self.graphs.keys().find(|k| !busy.contains(k)))
+                    .unwrap();
                 self.graphs.remove(&victim);
             }
-            let graph = self.record(n, key.1, key.2, key.3)?;
+            let graph = self.record(n, key.1, key.2, key.3, slot)?;
             self.graphs.insert(key, graph);
         }
         let graph = &self.graphs[&key];
+        let fence = self.fence[slot];
         unsafe {
-            self.gpu.dev.reset_fences(&[self.fence])?;
+            self.gpu.dev.reset_fences(&[fence])?;
         }
         for (i, &cmd) in graph.cmds.iter().enumerate() {
             let last = i + 1 == graph.cmds.len();
             self.gpu
-                .submit(cmd, None, None, if last { self.fence } else { vk::Fence::null() })?;
+                .submit(cmd, None, None, if last { fence } else { vk::Fence::null() })?;
         }
-        self.pending = Some((key, n));
+        self.pending.push_back((key, n));
         Ok(())
     }
 
     /// Wait for the forward started by `submit`; its output (with the captures when it was submitted with `dump`).
     pub fn collect(&mut self, dump: Option<&mut Captures>) -> Result<Output> {
-        let (d, w) = (self.c.d, self.c.width());
-        let (key, n) = self.pending.take().context("no forward submitted")?;
+        self.wait()?;
+        self.output(dump)
+    }
+
+    /// Wait for the oldest forward started by `submit` and read its timestamps. Its output stays readable (`output`)
+    /// until the next forward on this stage ends, which may already be queued.
+    pub fn wait(&mut self) -> Result<()> {
+        let (key, n) = self.pending.pop_front().context("no forward submitted")?;
         let graph = &self.graphs[&key];
         unsafe {
-            self.gpu.dev.wait_for_fences(&[self.fence], true, 600_000_000_000)?;
+            self.gpu.dev.wait_for_fences(&[self.fence[key.4]], true, 600_000_000_000)?;
         }
         let mut times = vec![0u64; 2 * self.layers.len() + graph.marks.len()];
         unsafe {
             self.gpu.dev.get_query_pool_results(
-                self.queries,
+                self.queries[key.4],
                 0,
                 &mut times,
                 vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT,
@@ -2291,6 +2340,10 @@ impl GpuStage {
         }
         let period = self.gpu.period as f64 / 1e6;
         let layers = self.layers.len();
+        self.window = self.gpu.calibrate().map(|(now, ns)| {
+            let host = |t: u64| ns as f64 - now.wrapping_sub(t) as f64 * period * 1e6;
+            (host(times[0]), host(times[2 * layers - 1]))
+        });
         self.profile = times[..2 * layers]
             .chunks_exact(2)
             .map(|t| t[1].wrapping_sub(t[0]) as f64 * period)
@@ -2310,16 +2363,24 @@ impl GpuStage {
                 (li, name, ms)
             })
             .collect();
+        let verify = key.3 == Mode::Verify;
+        self.last_verify = verify.then_some(n);
+        self.last_n = n;
+        self.done = Some((key, n));
+        Ok(())
+    }
+
+    /// The output of the forward `wait` waited for (with the captures when it was submitted with `dump`).
+    pub fn output(&mut self, dump: Option<&mut Captures>) -> Result<Output> {
+        let (d, w) = (self.c.d, self.c.width());
+        let (key, n) = self.done.take().context("no forward waited for")?;
         if let Some(m) = dump {
-            for (name, host, width) in &graph.captures {
+            for (name, host, width) in &self.graphs[&key].captures {
                 let v: Vec<f32> = bytemuck::cast_slice(&host.read(width * 4)?).to_vec();
                 m.insert(name.clone(), v);
             }
         }
-        let verify = key.3 == Mode::Verify;
-        self.last_verify = verify.then_some(n);
-        self.last_n = n;
-        let rows = if verify { n } else { 1 };
+        let rows = if key.3 == Mode::Verify { n } else { 1 };
         Ok(match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
             Some(hd) => Output::Final(bytemuck::cast_slice(&hd.h.read(rows * d * 4)?).to_vec()),
             None => Output::Hidden(bytemuck::cast_slice(&self.output.read(n * w * 4)?).to_vec()),
@@ -2335,8 +2396,10 @@ impl Drop for GpuStage {
         self.graphs.clear();
         self.head_graphs.clear();
         unsafe {
-            self.gpu.dev.destroy_fence(self.fence, None);
-            self.gpu.dev.destroy_query_pool(self.queries, None);
+            for (&f, &q) in self.fence.iter().zip(&self.queries) {
+                self.gpu.dev.destroy_fence(f, None);
+                self.gpu.dev.destroy_query_pool(q, None);
+            }
         }
     }
 }

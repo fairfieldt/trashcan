@@ -1,36 +1,4 @@
 #version 460
+#extension GL_KHR_shader_subgroup_ballot : require
 #include "common.glsl"
-// QSA block selection for token t at position p: with nb = (p + 1) / kind complete blocks, keep all of them while
-// nb <= p.m, else the p.m best by the scores from qwen4_idx_score (ties to the earlier block), listed in increasing
-// block order. The 4-pass radix select runs on the order-preserving bits of the scores. One workgroup per token.
-// c: scores [t][cap / kind], d: selected blocks [t][p.m] (u32). p.kind, p.m, p.cap.
-layout(local_size_x=256) in;
-#define sc c_f
-shared uint hist[256],cnt_gt[256],cnt_eq[256];
-shared uint s_prefix,s_rem,s_gt;
-uint key(float s){uint u=floatBitsToUint(s);return (u&0x80000000u)!=0?~u:u|0x80000000u;}
-void main(){uint t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
-uint p1=position()+t+1,nb=p1/p.kind,stride=p.cap/p.kind,top=p.m;
-if(nb<=top){for(uint j=l;j<nb;j+=256)d_u.v[t*top+j]=j;return;}
-// Radix select of the top-th largest key, most significant byte first.
-if(l==0){s_prefix=0;s_rem=top;s_gt=0;}
-for(int pass=3;pass>=0;pass--){
-    hist[l]=0;barrier();
-    uint shift=uint(pass)*8u,mask=pass==3?0u:(0xffffffffu<<(shift+8u));
-    for(uint b=l;b<nb;b+=256){uint k=key(sc.v[t*stride+b]);if((k&mask)==(s_prefix&mask))atomicAdd(hist[(k>>shift)&255u],1u);}
-    barrier();
-    if(l==0){uint acc=0,rem=s_rem;int bucket=255;
-        for(;bucket>0;bucket--){if(acc+hist[bucket]>=rem)break;acc+=hist[bucket];}
-        s_prefix|=uint(bucket)<<shift;s_rem=rem-acc;s_gt+=acc;}
-    barrier();
-}
-// s_prefix is the threshold key; take every larger key and the first s_rem equal ones, in block order.
-uint th=s_prefix,ties=s_rem,chunk=(nb+255)/256,b0=l*chunk,b1=min(nb,b0+chunk);
-uint gt=0,eq=0;
-for(uint b=b0;b<b1;b++){uint k=key(sc.v[t*stride+b]);gt+=uint(k>th);eq+=uint(k==th);}
-cnt_gt[l]=gt;cnt_eq[l]=eq;barrier();
-uint eq_before=0,out_before=0;
-for(uint i=0;i<l;i++){uint take=min(cnt_eq[i],ties-min(ties,eq_before));out_before+=cnt_gt[i]+take;eq_before+=cnt_eq[i];}
-uint o=t*top+out_before,eq_seen=eq_before;
-for(uint b=b0;b<b1;b++){uint k=key(sc.v[t*stride+b]);
-    if(k>th){d_u.v[o++]=b;}else if(k==th){if(eq_seen<ties)d_u.v[o++]=b;eq_seen++;}}}
+#include "qwen4_idx_select.glsl"

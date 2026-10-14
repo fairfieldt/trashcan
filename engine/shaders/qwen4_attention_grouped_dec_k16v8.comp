@@ -1,4 +1,4 @@
 #version 460
 #define KVQ 2
 #include "common.glsl"
-#include "qwen4_attention_sparse.glsl"
+#include "qwen4_attention_grouped_dec.glsl"
