@@ -1043,6 +1043,7 @@ mod tests {
         Config {
             d: 8,
             layers: 4,
+            mtp_layer: 4,
             heads: 2,
             kv_heads: 1,
             head_dim: 8,

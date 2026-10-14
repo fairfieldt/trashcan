@@ -785,12 +785,12 @@ pub struct Draft {
 
 
 impl Draft {
-    /// The block of `mtp` (blk.{layers}), the token embedding and the first `vocab` head rows of `trunk`.
+    /// The block of `mtp` (blk.{mtp_layer}), the token embedding and the first `vocab` head rows of `trunk`.
     pub fn new(trunk: &std::path::Path, mtp: &std::path::Path, context: usize, vocab: usize, threads: usize) -> Result<Self> {
         let g = Gguf::open(trunk)?;
         let mg = Gguf::open(mtp)?;
         let c = Config::new(&g)?;
-        let il = c.layers;
+        let il = c.mtp_layer;
         let t = |name: &str| c.layer_tensor(&mg, il, name);
         let m = |name: &str| -> Result<Mat> {
             let t = t(name)?;
@@ -1247,7 +1247,7 @@ mod tests {
         // The model's indexer shape (4 heads of 128, blocks of 4, 512 blocks kept), random pooled keys and queries,
         // with ties between blocks (repeated keys).
         let c = Config {
-            d: 8, layers: 1, heads: 1, kv_heads: 1, head_dim: 8, rot: 4, rope_base: 1e4, eps: 1e-6, interval: 4,
+            d: 8, layers: 1, mtp_layer: 1, heads: 1, kv_heads: 1, head_dim: 8, rot: 4, rope_base: 1e4, eps: 1e-6, interval: 4,
             conv: 4, k_heads: 1, v_heads: 1, state: 8, vocab: 16, hc: 4, hc_rank: 2, experts: 4, used: 2, ff_exp: 4,
             ff_shexp: 4, idx_heads: 4, idx_dim: 128, idx_budget: 2048, kpool: 4, ngram: None,
         };

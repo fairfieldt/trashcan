@@ -23,8 +23,11 @@ use anyhow::{ensure, Context, Result};
 #[derive(Clone, Debug)]
 pub struct Config {
     pub d: usize,
-    /// Trunk layers (without the MTP block).
+    /// Trunk layers (without the MTP block). `TRASHCAN_Q4_LAYERS=N` (tests on one Mac) runs only the first N, the
+    /// final mixer and the head after them.
     pub layers: usize,
+    /// The MTP block's layer index: the model's trunk layers.
+    pub mtp_layer: usize,
     pub heads: usize,
     pub kv_heads: usize,
     pub head_dim: usize,
@@ -76,6 +79,12 @@ fn u64s(g: &Gguf, key: &str) -> Result<Vec<u64>> {
         .collect()
 }
 
+/// The trunk layers a run uses: all, or the first `TRASHCAN_Q4_LAYERS` (single-Mac checks of the chain code; the
+/// output is not the model's).
+fn test_layers(all: usize) -> usize {
+    std::env::var("TRASHCAN_Q4_LAYERS").ok().and_then(|v| v.parse().ok()).map_or(all, |n: usize| n.clamp(1, all))
+}
+
 impl Config {
     pub fn new(g: &Gguf) -> Result<Self> {
         let arch = g.get_str("general.architecture")?;
@@ -123,7 +132,8 @@ impl Config {
         };
         let c = Self {
             d: u("embedding_length")?,
-            layers: u("block_count")? - mtp,
+            layers: test_layers(u("block_count")? - mtp),
+            mtp_layer: u("block_count")? - mtp,
             heads: u("attention.head_count")?,
             kv_heads: u("attention.head_count_kv")?,
             head_dim: u("attention.key_length")?,

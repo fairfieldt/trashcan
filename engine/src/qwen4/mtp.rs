@@ -30,7 +30,7 @@ impl CpuMtp {
         let kv = context * c.kv_heads * c.head_dim;
         Self {
             c: c.clone(),
-            il: c.layers,
+            il: c.mtp_layer,
             k: vec![0.; kv],
             v: vec![0.; kv],
             kraw: vec![0.; context * c.idx_dim],
