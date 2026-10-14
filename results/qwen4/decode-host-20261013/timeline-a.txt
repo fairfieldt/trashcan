@@ -1,0 +1,143 @@
+126 decode steps (skipped 2), machines: incite -> indite -> inflight -> alight -> invite -> enlight
+step: median 52.729 ms, mean 52.784 ms
+clock offsets (ns, round trip): [[-12127838610, 52709], [-20120824000, 89552], [-20599279197, 111218], [-18758864766, 66324], [7866636034, 97423]] -> [[-12127885222, 46731], [-20120825957, 52730], [-20599534270, 69256], [-18758666790, 84197], [7866665825, 101489]]
+
+segment                                                       median ms    mean ms
+driver: embed + n-gram rows                                       0.561      0.585
+driver: before stage 0 (copies)                                   0.001      0.001
+driver: stage 0 submit -> GPU start                               0.201      0.203
+driver: stage 0 GPU                                               4.216      4.217
+driver: stage 0 GPU end -> fence wakeup                           0.002      0.002
+driver: stage 0 collect (stamps, output copy)                     0.015      0.015
+driver: before stage 4 (copies)                                   0.000      0.000
+driver: stage 4 submit -> GPU start                               0.007      0.007
+driver: stage 4 GPU                                               3.998      3.998
+driver: stage 4 GPU end -> fence wakeup                           0.002      0.002
+driver: stage 4 collect (stamps, output copy)                     0.012      0.012
+driver: send residual                                             0.043      0.044
+indite: hop in (first bytes)                                      0.076      0.077
+indite: hop in (rest of the frame)                                0.009      0.009
+indite: reader thread -> session                                  0.011      0.011
+indite: before stage 8 (copies)                                   0.005      0.005
+indite: stage 8 submit -> GPU start                               0.005      0.005
+indite: stage 8 GPU                                               4.071      4.071
+indite: stage 8 GPU end -> fence wakeup                           0.002      0.002
+indite: stage 8 collect (stamps, output copy)                     0.011      0.011
+indite: before stage 12 (copies)                                  0.000      0.001
+indite: stage 12 submit -> GPU start                              0.005      0.005
+indite: stage 12 GPU                                              4.084      4.085
+indite: stage 12 GPU end -> fence wakeup                          0.001      0.001
+indite: stage 12 collect (stamps, output copy)                    0.009      0.009
+indite: send residual                                             0.031      0.031
+inflight: hop in (first bytes)                                    0.100      0.115
+inflight: hop in (rest of the frame)                              0.012      0.014
+inflight: reader thread -> session                                0.022      0.026
+inflight: before stage 16 (copies)                                0.009      0.011
+inflight: stage 16 submit -> GPU start                            0.007      0.009
+inflight: stage 16 GPU                                            4.074      4.075
+inflight: stage 16 GPU end -> fence wakeup                        0.002      0.002
+inflight: stage 16 collect (stamps, output copy)                  0.019      0.025
+inflight: before stage 20 (copies)                                0.000      0.001
+inflight: stage 20 submit -> GPU start                            0.008      0.010
+inflight: stage 20 GPU                                            4.088      4.088
+inflight: stage 20 GPU end -> fence wakeup                        0.002      0.002
+inflight: stage 20 collect (stamps, output copy)                  0.016      0.019
+inflight: send residual                                           0.053      0.067
+alight: hop in (first bytes)                                      0.137      0.127
+alight: hop in (rest of the frame)                                0.019      0.016
+alight: reader thread -> session                                  0.034      0.029
+alight: before stage 24 (copies)                                  0.014      0.012
+alight: stage 24 submit -> GPU start                              0.011      0.009
+alight: stage 24 GPU                                              3.974      3.974
+alight: stage 24 GPU end -> fence wakeup                          0.002      0.002
+alight: stage 24 collect (stamps, output copy)                    0.033      0.027
+alight: before stage 28 (copies)                                  0.001      0.000
+alight: stage 28 submit -> GPU start                              0.012      0.010
+alight: stage 28 GPU                                              3.976      3.976
+alight: stage 28 GPU end -> fence wakeup                          0.002      0.002
+alight: stage 28 collect (stamps, output copy)                    0.025      0.021
+alight: send residual                                             0.091      0.074
+invite: hop in (first bytes)                                      0.097      0.105
+invite: hop in (rest of the frame)                                0.010      0.012
+invite: reader thread -> session                                  0.018      0.022
+invite: before stage 32 (copies)                                  0.008      0.009
+invite: stage 32 submit -> GPU start                              0.007      0.008
+invite: stage 32 GPU                                              4.071      4.071
+invite: stage 32 GPU end -> fence wakeup                          0.002      0.002
+invite: stage 32 collect (stamps, output copy)                    0.017      0.021
+invite: before stage 36 (copies)                                  0.000      0.000
+invite: stage 36 submit -> GPU start                              0.007      0.009
+invite: stage 36 GPU                                              4.079      4.079
+invite: stage 36 GPU end -> fence wakeup                          0.002      0.002
+invite: stage 36 collect (stamps, output copy)                    0.014      0.016
+invite: send residual                                             0.048      0.057
+enlight: hop in (first bytes)                                     0.122      0.112
+enlight: hop in (rest of the frame)                               0.019      0.015
+enlight: reader thread -> session                                 0.034      0.028
+enlight: before stage 40 (copies)                                 0.014      0.011
+enlight: stage 40 submit -> GPU start                             0.012      0.010
+enlight: stage 40 GPU                                             3.979      3.981
+enlight: stage 40 GPU end -> fence wakeup                         0.002      0.002
+enlight: stage 40 collect (stamps, output copy)                   0.037      0.029
+enlight: before stage 44 (copies)                                 0.001      0.001
+enlight: stage 44 submit -> GPU start                             0.013      0.011
+enlight: stage 44 GPU                                             4.135      4.137
+enlight: stage 44 GPU end -> fence wakeup                         0.000      0.000
+enlight: stage 44 collect (stamps, output copy)                   0.032      0.025
+enlight: send h                                                   0.049      0.039
+invite: h hop in                                                  0.081      0.080
+invite: relay h                                                   0.025      0.030
+alight: h hop in                                                  0.084      0.079
+alight: relay h                                                   0.047      0.040
+inflight: h hop in                                                0.077      0.078
+inflight: relay h                                                 0.031      0.038
+indite: h hop in                                                  0.067      0.068
+indite: relay h                                                   0.016      0.017
+driver: h hop in                                                  0.071      0.069
+driver: own head rows (h in -> candidates)                        0.889      0.890
+driver: waiting for the others' candidates                        0.360      0.375
+driver: merge                                                     0.043      0.044
+driver: bench loop until the next step                            0.002      0.010
+sum of segments (mean)                                                      52.784  (step mean 52.784)
+
+category                                                        mean ms
+GPU work of the layer stages                                     48.752
+head scoring and candidates, host side                            1.309
+residual hops (wire)                                              0.602
+embed + n-gram rows                                               0.585
+final hidden state back to the driver                             0.538
+stage submission to GPU start                                     0.295
+host copies around stages                                         0.283
+sending the residual                                              0.273
+reader thread to session thread                                   0.116
+GPU end to fence wakeup                                           0.021
+bench loop until the next step                                    0.010
+
+off the critical path                                         median ms
+alight: candidates sent after own scoring                         0.314
+alight: candidates sent after those from below                    0.187
+alight: head rows h -> candidates                                 0.897
+alight: stage 24 submit call                                      0.007
+alight: stage 28 submit call                                      0.009
+driver: head rows h -> candidates                                 0.884
+driver: stage 0 submit call                                       0.189
+driver: stage 4 submit call                                       0.004
+enlight: candidates sent after own scoring                        0.102
+enlight: head rows h -> candidates                                1.024
+enlight: stage 40 submit call                                     0.008
+enlight: stage 44 submit call                                     0.009
+indite: candidates sent after own scoring                         0.381
+indite: candidates sent after those from below                    0.063
+indite: head rows h -> candidates                                 0.903
+indite: stage 12 submit call                                      0.003
+indite: stage 8 submit call                                       0.002
+inflight: candidates sent after own scoring                       0.360
+inflight: candidates sent after those from below                  0.110
+inflight: head rows h -> candidates                               0.910
+inflight: stage 16 submit call                                    0.004
+inflight: stage 20 submit call                                    0.005
+invite: candidates sent after own scoring                         0.255
+invite: candidates sent after those from below                    0.098
+invite: head rows h -> candidates                                 0.908
+invite: stage 32 submit call                                      0.004
+invite: stage 36 submit call                                      0.005

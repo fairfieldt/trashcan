@@ -26,8 +26,11 @@ each round drafting as many tokens as the recent acceptance pays for) takes gree
 to 21.5-21.6 tok/s (+17-18%) with identical output, and costs at most 1.6% where drafts miss
 ([results/qwen4/mtp-20261012](../results/qwen4/mtp-20261012/README.md)); 22.9 with the small-batch MoE kernels, and
 27.0 with the 1-4-token kernels, which take a 2 / 3 / 4-token verification from 86 / 101 / 119-121 to 66-69 / 83-84 /
-102-105 ms. Not done yet: a cheaper head split and prefix
-checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain ([Serving](#serving)).
+102-105 ms. The host path between the stages ([results/qwen4/decode-host-20261013](../results/qwen4/decode-host-20261013/README.md):
+faster head candidate selection, binary candidate frames, fewer copies and wakeups) takes decode up 2.8% and MTP chat
+replies up 3.6% (six Macs, alternated pairs; 19.3 -> 19.8 tok/s decode with every GPU at full clock). Not done
+yet: graphs submitted ahead of their input and prefix checkpoints (see [What is left](#what-is-left)). The Responses
+server runs on the chain ([Serving](#serving)).
 
 | | |
 |---|---|
@@ -343,7 +346,9 @@ at 512, 17.4 after 8K, 17.1 after 16K, 17.0 after 30K); the 32K row is modeled f
 that round, which takes about 1.7 ms off each QSA layer's decode step at 200K. The 56 ms of the earlier breakdown:
 about 50 ms of GPU layers (0.95-1.11 ms each against 0.42 ms of bytes: 44% of the bandwidth;
 13 ms less since the decode kernels of results/qwen4/decode-kernels-20261012), ~1 ms of head slices (all Macs at once since 2026-10-12, which saved 5.9 ms),
-~3-4 ms of host work (0.39 ms per stage) and ~1 ms of Thunderbolt hops. Toward ~28 tok/s: fused decode kernels at
+~3-4 ms of host work (0.39 ms per stage) and ~1 ms of Thunderbolt hops. The host part, traced step by step
+(results/qwen4/decode-host-20261013): 6.3 ms per token on main 4c1346d, 4.5 ms since; most of what remains is
+`vkQueueSubmit` (0.11-0.22 ms for each of the 12 stages) and the hops. Toward ~28 tok/s: fused decode kernels at
 60-70% of the bandwidth (~28 ms), less host work per stage (~3 ms); at long contexts the QSA layer's ~0.2 ms over
 a DeltaNet layer (decode attention, block selection and scoring; results/qwen4/long-context-20261013).
 
@@ -462,9 +467,9 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
 
 ## What is left
 
-1. **A cheaper head split**: the Macs score their slices at once, so about 1.1 ms per token follows the last layer;
-   cutting the 0.75 ms fixed cost per slice (single-workgroup top-k passes) would shorten it, and storing the head
-   compactly (Q6_K is 6.6 bits, the repack 10) would free VRAM.
+1. **A cheaper head split**: the Macs score their slices at once, so about 1.1 ms per token followed the last layer;
+   the top-k passes are bitonic now (0.51 -> 0.13 ms per slice, results/qwen4/decode-host-20261013), and storing the
+   head compactly (Q6_K is 6.6 bits, the repack 10) would free VRAM.
 2. **The `--lean` savings** (about 60 MiB per GPU), for margin at 32K and room for 256-token prefill chunks. Q8_0
    mixers with write rows no longer read their separate down copy or f32 write rows (prefill uses the fused
    matrix too), so those uploads can go (~28 MiB per GPU).
@@ -504,6 +509,11 @@ thread per token), so long contexts need that threaded. Not measured past 8K.
    where drafting breaks even).
 10. **Prefix checkpoints**: the server continues only from the live state, so a prompt that is not an extension of
     everything processed so far starts again at position 0.
+11. **Host work per decode step** (results/qwen4/decode-host-20261013): submitting each stage's graph before its
+    input arrives took 2.4 -> 0.3 ms of submission off every token (+4.9% alone, about +4% on top of the rest). The
+    graph waits on the GPU for a host event, which amdgpu resets after 2 s and which a crashed process would leave
+    set, so this waits for a gate that bounds itself on the GPU. Frames over USB4STREAM links instead of TCP would cut
+    the 10 hops (0.06-0.08 ms each).
 
 ## Serving
 
@@ -529,6 +539,10 @@ acceptance pays for at the measured costs (above temperature 0 a draft is kept w
 sampling follows the target distribution with the same draws). No `--tp`.
 `scripts/test-server.py` passes against it, and a second chat turn reuses the first
 ([results/qwen4/chain-20261012](../results/qwen4/chain-20261012/README.md#server)).
+`scripts/latency-run.py` (how the chain runs start the engine) holds a 0 µs CPU latency request, so idle cores
+busy-poll: about 55-60 W per Mac's CPU package while the chain waits for a request (320-350 W for six Macs, against
+48 W without the engine; results/qwen4/decode-host-20261013). A long-running server should hold it only while it
+works.
 
 ## Commands
 
@@ -559,6 +573,10 @@ trashcan qwen4 stage-bench S-q2dn.gguf --ranges 0:4 --gpus 0 --context 204800 --
 trashcan qwen4 stage-bench MODEL --ranges 4:5 --gpus 0 --head-rows 0:20736 --decode 4 --prefill 0 --batch 16
 trashcan qwen4 stage-bench MODEL --ranges 0:4,4:8 --gpus 0,1 --context 32768 --batch 16,32,64,128 --decode 0
 trashcan qwen4 ngram-bench META_SHARD TABLE_SHARD --mode ram-q4|direct|buffered-cold [--ids IDS]
+trashcan qwen4 head-topk-check [--gpu 0]   # the head's candidate kernels against qwen35's topk/merge, bit for bit
+# a decode step's timeline: give every process of the chain the same prefix, then (results/qwen4/decode-host-20261013)
+TRASHCAN_Q4_TRACE=results/trace trashcan qwen4 bench ...
+python3 results/qwen4/decode-host-20261013/tools/timeline.py trace-DRIVER.json trace-NODE1.json ... trace-NODE5.json
 python3 tools/qwen4_budget.py [--context N] [--batch N] [--head-split N] [--lean] [--kv q8] [--q2-down rco]
 python3 tools/qwen4_budget.py --grid --context 204800   # six Macs, long-context options
 python3 tools/qwen4_budget.py --check

@@ -1,0 +1,8 @@
+CPU latency request: 0 us, scoped to this command
+server up after 104 s
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/flashnext/scripts/q4-turns.py", line 37, in <module>
+    text = ''.join(c['text'] for i in first['output'] if i['type'] == 'message' for c in i['content'])
+                                      ~~~~~^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+[clocks] 397 samples card0 (02:00.0) sclk/mclk: 850/1370 x55 300/150 x342  max 44C card1 (06:00.0) sclk/mclk: 850/1370 x42 300/150 x355  max 44C  log=results/clocks/host-serve-a.txt
