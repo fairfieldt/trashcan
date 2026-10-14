@@ -79,3 +79,23 @@ Wall power from the SMC (`power-loss-20261014-pstr.csv`, PSTR per Mac, one sampl
 
 The power went about 30 s after the six reached ~1.5 kW. The 2026-10-09 strip trip went the same way: about 45 s at
 ~1.65 kW on one strip ([results/qwen/tp8-mesh-20261009](../../qwen/tp8-mesh-20261009)). The cause is not confirmed.
+
+## 15e5457 (MTP rounds merged; engine of main d5ad870a), 2026-10-14 11:17, rerun after the restart
+
+New ring order (incite, inflight, alight, indite, invite, enlight). Every GPU held 850/1370 MHz through the 30K prefill.
+Peak temperatures were 54-61 °C, except invite's GPU 0 at 74 °C.
+
+| item | result |
+|---|---|
+| validate, 14-token reference prompt | greedy tokens the CPU reference's (10/10); logits rel 2.79e-4, top-10 10/10 |
+| validate, p100 | greedy tokens the CPU reference's (10/10); logits rel 3.48e-2, top-10 10/10 |
+| decode, 128 tokens after a 512-token prompt | 21.09, 21.20 tok/s |
+| prefill 512 tokens | 522.9, 523.3 tok/s |
+| prefill 2048 (decode after it) | 889.8 tok/s (20.56 tok/s) |
+| prefill 8192 | 1118.0 tok/s (19.68 tok/s) |
+| prefill 30000 | 1249.3 tok/s (19.80 tok/s) |
+| MTP, chat prompts | water 28.92, csv 31.64, transformer 29.27 tok/s (plain 20.37-20.72); output identical to plain |
+| `trashcan serve` test with MTP | 7 checks pass |
+
+Against e9f34e6: decode 20.6 -> 21.1 (host path), MTP on chat 26.2/29.9/25.7 -> 28.9/31.6/29.3 (host path and MTP rounds),
+prefill unchanged.
