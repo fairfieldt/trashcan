@@ -1,0 +1,272 @@
+ok   matvec                               set0:0 load 3; set2:b load 2; set2:c store 1
+ok   headvec                              set0:0 load 12; set2:b load 1; set2:c store 4
+ok   norm                                 set0:0 load 2; set2:a load 2; set2:b load 1; set2:c store 1; set2:e load 1 store 1; set2:extra store 1; set2:f load 1; set2:params smem 1
+ok   norm_fused                           set0:0 load 15; set2:a load 15; set2:b load 15; set2:c store 15; set2:e load 15 store 15; set2:extra store 15; set2:f load 15; set2:params smem 1
+ok   norm_rope                            set2:a load 3; set2:b load 2; set2:c store 2; set2:d store 2; set2:e load 1; set2:f store/glc 2; set2:params smem 2
+ok   rope                                 set2:a load 2; set2:b load 1; set2:c store 2; set2:d store/glc 1; set2:params smem 3
+ok   attention                            set2:a load 8; set2:b load 8; set2:c load 8; set2:d store 9; set2:params smem 3
+ok   attention_partial                    set2:a load 8; set2:b load 8; set2:c load 8; set2:e store 9; set2:params smem 3
+ok   attention_partial8                   set2:a load 8; set2:b load 8; set2:c load 8; set2:e store 9; set2:params smem 3
+ok   attention_partial16                  set2:a load 8; set2:b load 8; set2:c load 8; set2:e store 9; set2:params smem 3
+ok   attention_partial64                  set2:a load 8; set2:b load 8; set2:c load 8; set2:e store 9; set2:params smem 3
+ok   attention_partial128                 set2:a load 8; set2:b load 8; set2:c load 8; set2:e store 9; set2:params smem 3
+ok   attention_partial_heads2             set2:a load 4; set2:b load 1; set2:c load 1; set2:e store 5; set2:params smem 3
+ok   attention_partial_heads2_16          set2:a load 4; set2:b load 1; set2:c load 1; set2:e store 5; set2:params smem 3
+ok   attention_partial_heads8             set2:a load 8; set2:b load 1; set2:c load 1; set2:e store 9; set2:params smem 3
+ok   attention_partial_heads8_16          set2:a load 8; set2:b load 1; set2:c load 1; set2:e store 9; set2:params smem 3
+ok   attention_partial_heads8_64          set2:a load 8; set2:b load 1; set2:c load 1; set2:e store 9; set2:params smem 3
+ok   attention_merge                      set2:d store 1; set2:e load 33
+ok   attention_merge8                     set2:d store 1; set2:e load 9
+ok   attention_merge16                    set2:d store 1; set2:e load 17
+ok   attention_merge64                    set2:d store 1; set2:e load 65
+ok   attention_merge128                   set2:d store 1; set2:e load 129
+ok   attention_merge_u                    set2:d store 1; set2:e load 33
+ok   attention_merge_u8                   set2:d store 1; set2:e load 9
+ok   attention_merge_u16                  set2:d store 1; set2:e load 17
+ok   attention_merge_u64                  set2:d store 1; set2:e load 65
+ok   attention_merge_u128                 set2:d store 1; set2:e load 129
+ok   qwen_attn_scores                     set2:a load 2; set2:b load 1; set2:e store 16; set2:params smem 2
+ok   qwen_attn_softmax                    set2:e load 2 store 1; set2:f store 1; set2:params smem 2
+ok   qwen_attn_values                     set2:c load 1; set2:d store 16; set2:e load 2; set2:f load 4; set2:params smem 2
+ok   attn_scores                          set2:a load 2; set2:b load 1; set2:e store 16; set2:params smem 2
+ok   attn_softmax                         set2:e load 2 store 1; set2:f store 1; set2:params smem 2
+ok   attn_values                          set2:c load 1; set2:d store 16; set2:e load 2; set2:f load 4; set2:params smem 2
+FAIL attention_merge_reference            set2:d store 9; set2:e load 8 smem 2
+       s1: %23:s[6] = s_buffer_load_dword %21:s[8-11], %22:s[6] storage:buffer semantics:private,reorder
+       s2: %47:s[12-13] = s_buffer_load_dwordx2 %45:s[8-11], %46:s[12] storage:buffer semantics:private,reorder
+ok   geglu                                set2:a load 1; set2:b load 1; set2:c store 1; set2:params smem 1
+ok   topk                                 set2:a load 1; set2:c store 1; set2:params smem 1
+ok   merge                                set2:a load 2; set2:c store 1; set2:params smem 1
+ok   matvecq4                             set0:0 load 8; set2:b load 2; set2:c store 4
+ok   matvecq4narrow                       set0:0 load 4; set2:b load 2; set2:c store 2
+ok   matvecq4_r2                          set0:0 load 4; set2:b load 2; set2:c store 2
+ok   attention_partial_p2                 set2:a load 8; set2:b load 24; set2:c load 24; set2:e store 9; set2:params smem 3
+ok   attention_partial_p2_8               set2:a load 8; set2:b load 24; set2:c load 24; set2:e store 9; set2:params smem 3
+ok   attention_partial_p2_16              set2:a load 8; set2:b load 24; set2:c load 24; set2:e store 9; set2:params smem 3
+ok   attention_partial_p2_64              set2:a load 8; set2:b load 24; set2:c load 24; set2:e store 9; set2:params smem 3
+ok   attention_partial_p2_128             set2:a load 8; set2:b load 24; set2:c load 24; set2:e store 9; set2:params smem 3
+ok   matvecq4_r2u2                        set0:0 load 12; set2:b load 6; set2:c store 2
+ok   multivec                             set0:0 load 4; set2:b load 24; set2:c store 8; set2:params smem 1
+ok   multivec2                            set0:0 load 4; set2:b load 6; set2:c store 2; set2:params smem 1
+ok   multivec4                            set0:0 load 16; set2:b load 12; set2:c store 16; set2:params smem 1
+ok   multivec4x2                          set0:0 load 16; set2:b load 6; set2:c store 8; set2:params smem 1
+ok   multivec4x3                          set0:0 load 16; set2:b load 9; set2:c store 12; set2:params smem 1
+ok   multivec4_reference                  set0:0 load 16; set2:b load 12; set2:c store 16; set2:params smem 1
+FAIL visibility                           set2:a store 1; set2:params smem 1; untraced load 1 store 1
+       untraced: v1: %30:v[1] = buffer_load_dword %28:s[8-11], %29:v[1], 0 offen storage:buffer semantics:private,reorder
+ok   gemm                                 set0:0 load 2; set2:b load 1; set2:c store 16; set2:params smem 1
+ok   gemm2                                set0:0 load 4; set2:b load 4; set2:c store 16; set2:params smem 1
+ok   qwen_add_norm                        set2:a load 2 store 1; set2:b load 1; set2:c store 1; set2:d load 1; set2:params smem 1
+ok   qwen_add_norm_j16                    set2:a load 16 store 16; set2:b load 16; set2:c store 16; set2:d load 16; set2:params smem 1
+ok   qwen_add_norm_j20                    set2:a load 20 store 20; set2:b load 20; set2:c store 20; set2:d load 20; set2:params smem 1
+ok   qwen_matf32                          set0:0 load 2; set2:b load 12; set2:c store 8; set2:params smem 1
+ok   qwen_matf32_u16                      set0:0 load 17; set2:b load 72; set2:c store 8; set2:params smem 1
+ok   qwen_conv                            set2:a load 1; set2:b load 1; set2:c load 3 store 3; set2:d store 1; set2:e store 3; set2:params smem 2
+FAIL qwen_gdn                             set2:a load 4 smem 1; set2:b smem 2; set2:c load 2 store 2; set2:d store 1; set2:e smem 2; set2:f store 2; set2:params smem 2
+       s1: %85:s[16] = s_buffer_load_dword %75:s[12-15], %84:s[16] storage:buffer semantics:private,reorder
+       s1: %87:s[11] = s_buffer_load_dword %75:s[12-15], %86:s[11] storage:buffer semantics:private,reorder
+       s1: %135:s[19] = s_buffer_load_dword %133:s[28-31], %134:s[19] storage:buffer semantics:private,reorder
+       s1: %153:s[18] = s_buffer_load_dword %133:s[28-31], %152:s[18] storage:buffer semantics:private,reorder
+       s1: %159:s[13] = s_buffer_load_dword %99:s[20-23], %158:s[13] storage:buffer semantics:private,reorder
+ok   qwen_gated_norm                      set2:a load 2 store 1; set2:b load 1; set2:c load 1; set2:params smem 1
+ok   qwen_qk                              set2:a load 3; set2:b load 2; set2:c store 1; set2:f store/glc 1; set2:params smem 2
+ok   qwen_gate                            set2:a load 1 store 1; set2:b load 1; set2:params smem 1
+ok   qwen_swiglu                          set2:a load 1; set2:b load 1; set2:c store 1; set2:params smem 1
+ok   qwen_q4c2                            set0:0 load 8; set2:b load 4; set2:c store 8; set2:params smem 1
+ok   qwen_q4c3                            set0:0 load 8; set2:b load 6; set2:c store 12; set2:params smem 1
+ok   qwen_q4c4                            set0:0 load 8; set2:b load 8; set2:c store 16; set2:params smem 1
+ok   qwen_topk                            set2:a load 2; set2:c store 1; set2:params smem 1
+ok   qwen4_hc_norm                        set2:a load 10 store 10; set2:b load 10; set2:c store 10; set2:d load 10; set2:e load/glc 1; set2:params smem 1
+ok   qwen4_hc_mix                         set2:a load 1; set2:b load 1; set2:c store 1; set2:params smem 1
+ok   qwen4_act                            set2:a load 1 store 1; set2:params smem 1
+ok   qwen4_gated_norm                     set2:a load 2 store 2; set2:b load 2; set2:c load 2; set2:params smem 1
+ok   qwen4_gdn                            set2:a load 3; set2:b load/glc 2; set2:c load 2 store 2; set2:d store 1; set2:e load/glc 2; set2:f store 2; set2:params smem 2
+ok   qwen4_gdn_prep                       set2:a load 2 store 2; set2:c load 2 store 2; set2:e load 2; set2:params smem 1
+ok   qwen4_gdn_rows                       set2:b load 4; set2:c load 32 store 32; set2:d store 1; set2:e load 2; set2:params smem 2
+ok   qwen4_topk                           set2:a load 18 store 9; set2:c store 2; set2:d store 2; set2:params smem 2
+ok   qwen4_moe_gu                         set0:0 load 10; set2:b load 2; set2:c store 4; set2:d load/glc 1; set2:params smem 1
+ok   qwen4_moe_gu_iq4nl                   const load 1; set0:0 load 10; set2:b load 2; set2:c store 4; set2:d load/glc 1; set2:params smem 1
+ok   qwen4_moe_gu_iq4xs                   const load 1; set0:0 load 10; set2:b load 2; set2:c store 4; set2:d load/glc 1; set2:params smem 1
+ok   qwen4_moe_down                       set0:0 load 8; set2:b load 2; set2:c store 4; set2:d load/glc 1; set2:e load/glc 1; set2:params smem 1
+ok   qwen4_moe_down_iq4nl                 const load 1; set0:0 load 8; set2:b load 2; set2:c store 4; set2:d load/glc 1; set2:e load/glc 1; set2:params smem 1
+ok   qwen4_moe_down_iq4xs                 const load 1; set0:0 load 8; set2:b load 2; set2:c store 4; set2:d load/glc 1; set2:e load/glc 1; set2:params smem 1
+ok   qwen4_moe_down_q2                    set0:0 load 8; set2:b load 4; set2:c store 4; set2:d load/glc 1; set2:e load/glc 1; set2:params smem 1
+ok   qwen4_moe_tiles                      set2:a load 2; set2:c store 3; set2:d store 1; set2:params smem 1
+FAIL qwen4_moe_gu_tiles                   set0:0 load 80; set2:b smem 288; set2:c store 36; set2:d smem 2; set2:e smem 8
+       s1: %7:s[3] = s_buffer_load_dword %6:s[12-15], 0 storage:buffer semantics:private,reorder
+       s2: %13:s[8-9] = s_buffer_load_dwordx2 %6:s[12-15], %12:s[8] storage:buffer semantics:private,reorder
+       s1: %23:s[10] = s_buffer_load_dword %19:s[12-15], %22:s[10] storage:buffer semantics:private,reorder
+       s1: %36:s[16] = s_buffer_load_dword %19:s[12-15], %35:s[16] storage:buffer semantics:private,reorder
+       s1: %42:s[17] = s_buffer_load_dword %19:s[12-15], %41:s[17] storage:buffer semantics:private,reorder
+       s1: %48:s[18] = s_buffer_load_dword %19:s[12-15], %47:s[18] storage:buffer semantics:private,reorder
+FAIL qwen4_moe_gu_tiles_iq4nl             const load 1; set0:0 load 80; set2:b smem 288; set2:c store 36; set2:d smem 2; set2:e smem 8
+       s1: %13:s[3] = s_buffer_load_dword %12:s[12-15], 0 storage:buffer semantics:private,reorder
+       s2: %19:s[8-9] = s_buffer_load_dwordx2 %12:s[12-15], %18:s[8] storage:buffer semantics:private,reorder
+       s1: %27:s[10] = s_buffer_load_dword %24:s[12-15], %26:s[10] storage:buffer semantics:private,reorder
+       s1: %40:s[16] = s_buffer_load_dword %24:s[12-15], %39:s[16] storage:buffer semantics:private,reorder
+       s1: %46:s[17] = s_buffer_load_dword %24:s[12-15], %45:s[17] storage:buffer semantics:private,reorder
+       s1: %52:s[18] = s_buffer_load_dword %24:s[12-15], %51:s[18] storage:buffer semantics:private,reorder
+FAIL qwen4_moe_gu_tiles_iq4xs             const load 1; set0:0 load 80; set2:b smem 288; set2:c store 36; set2:d smem 2; set2:e smem 8
+       s1: %13:s[3] = s_buffer_load_dword %12:s[12-15], 0 storage:buffer semantics:private,reorder
+       s2: %19:s[8-9] = s_buffer_load_dwordx2 %12:s[12-15], %18:s[8] storage:buffer semantics:private,reorder
+       s1: %27:s[10] = s_buffer_load_dword %24:s[12-15], %26:s[10] storage:buffer semantics:private,reorder
+       s1: %40:s[16] = s_buffer_load_dword %24:s[12-15], %39:s[16] storage:buffer semantics:private,reorder
+       s1: %46:s[17] = s_buffer_load_dword %24:s[12-15], %45:s[17] storage:buffer semantics:private,reorder
+       s1: %52:s[18] = s_buffer_load_dword %24:s[12-15], %51:s[18] storage:buffer semantics:private,reorder
+FAIL qwen4_moe_down_tiles                 set0:0 load 40; set2:b smem 288; set2:c store 36; set2:d smem 2; set2:e smem 8; set2:f smem 36
+       s1: %7:s[3] = s_buffer_load_dword %6:s[12-15], 0 storage:buffer semantics:private,reorder
+       s2: %25:s[10-11] = s_buffer_load_dwordx2 %6:s[12-15], %24:s[10] storage:buffer semantics:private,reorder
+       s1: %31:s[16] = s_buffer_load_dword %27:s[12-15], %30:s[16] storage:buffer semantics:private,reorder
+       s1: %43:s[18] = s_buffer_load_dword %27:s[12-15], %42:s[18] storage:buffer semantics:private,reorder
+       s1: %49:s[19] = s_buffer_load_dword %27:s[12-15], %48:s[19] storage:buffer semantics:private,reorder
+       s1: %55:s[20] = s_buffer_load_dword %27:s[12-15], %54:s[20] storage:buffer semantics:private,reorder
+FAIL qwen4_moe_down_tiles_iq4nl           const load 1; set0:0 load 40; set2:b smem 288; set2:c store 36; set2:d smem 2; set2:e smem 8; set2:f smem 36
+       s1: %13:s[3] = s_buffer_load_dword %12:s[12-15], 0 storage:buffer semantics:private,reorder
+       s2: %30:s[10-11] = s_buffer_load_dwordx2 %12:s[12-15], %29:s[10] storage:buffer semantics:private,reorder
+       s1: %35:s[16] = s_buffer_load_dword %32:s[12-15], %34:s[16] storage:buffer semantics:private,reorder
+       s1: %47:s[18] = s_buffer_load_dword %32:s[12-15], %46:s[18] storage:buffer semantics:private,reorder
+       s1: %53:s[19] = s_buffer_load_dword %32:s[12-15], %52:s[19] storage:buffer semantics:private,reorder
+       s1: %59:s[20] = s_buffer_load_dword %32:s[12-15], %58:s[20] storage:buffer semantics:private,reorder
+ok   qwen4_moe_sum                        set2:a load 1; set2:c store 1; set2:params smem 1
+ok   qwen4_moe_down_w                     set0:0 load 8; set2:b load 4; set2:c store 4; set2:d load 1; set2:e load 1; set2:params smem 1
+ok   qwen4_moe_down_w_iq4nl               const load 1; set0:0 load 8; set2:b load 4; set2:c store 4; set2:d load 1; set2:e load 1; set2:params smem 1
+ok   qwen4_router                         set0:0 load 20; set2:b load 20; set2:c store 1; set2:params smem 1
+ok   qwen4_router_c4                      set0:0 load 8; set2:b load 32; set2:c store 4; set2:params smem 1
+ok   qwen4_router_gemm                    set0:0 load 2; set2:b load 1; set2:c store 16; set2:params smem 1
+ok   qwen4_ple_gate                       set2:b load 1; set2:d load 4; set2:e store 4; set2:extra load 1; set2:f store 4; set2:params smem 1
+ok   qwen4_ple_sums                       set2:a load 4; set2:b load 1; set2:c load 4; set2:d load 8; set2:extra store 1; set2:params smem 1
+ok   qwen4_combine                        set2:a load 4 store 4; set2:b load 1; set2:e load/glc 4; set2:params smem 1
+ok   qwen4_matf32                         set0:0 load 20; set2:b load 20; set2:c store 1; set2:params smem 1
+ok   qwen4_matf32_c4                      set0:0 load 20; set2:b load 80; set2:c store 4; set2:params smem 1
+ok   qwen4_matf32_t                       set0:0 load 4; set2:b load 16; set2:c store 64; set2:params smem 1
+ok   qwen4_ple_conv                       set2:a load 1 store 1; set2:b load 1; set2:c load 1; set2:d load 1; set2:e load 9 store 9; set2:params smem 2
+ok   qwen4_idx_store                      set2:a load 1; set2:c store 1; set2:params smem 2
+ok   qwen4_idx_pool                       set2:a load 2; set2:b load 2; set2:c store 2; set2:d load 2; set2:params smem 2
+ok   qwen4_idx_select                     set2:c load 17; set2:d store 2; set2:params smem 2
+ok   qwen4_idx_select256                  set2:c load 17; set2:d store 2; set2:params smem 2
+FAIL qwen4_idx_score                      set2:a smem 1024; set2:b load 32; set2:c store 8; set2:params smem 2
+       s4: %161:s[28-31] = s_buffer_load_dwordx4 %158:s[24-27], %160:s[8] storage:buffer semantics:private,reorder
+       s4: %165:s[32-35] = s_buffer_load_dwordx4 %158:s[24-27], %164:s[10] storage:buffer semantics:private,reorder
+       s4: %181:s[36-39] = s_buffer_load_dwordx4 %158:s[24-27], %180:s[11] storage:buffer semantics:private,reorder
+       s4: %185:s[40-43] = s_buffer_load_dwordx4 %158:s[24-27], %184:s[13] storage:buffer semantics:private,reorder
+       s4: %203:s[44-47] = s_buffer_load_dwordx4 %158:s[24-27], %202:s[14] storage:buffer semantics:private,reorder
+       s4: %207:s[48-51] = s_buffer_load_dwordx4 %158:s[24-27], %206:s[15] storage:buffer semantics:private,reorder
+ok   qwen4_idx_score_lds                  set2:a load 1; set2:b load 32; set2:c store 1; set2:params smem 2
+FAIL qwen4_attention_grouped              set2:a smem 48; set2:b load 2; set2:c load 8; set2:d store 12; set2:f load 1; set2:params smem 2
+       s4: %266:s[32-35] = s_buffer_load_dwordx4 %195:s[28-31], %265:s[15] storage:buffer semantics:private,reorder
+       s4: %280:s[36-39] = s_buffer_load_dwordx4 %195:s[28-31], %279:s[20] storage:buffer semantics:private,reorder
+       s4: %294:s[40-43] = s_buffer_load_dwordx4 %195:s[28-31], %293:s[25] storage:buffer semantics:private,reorder
+       s4: %308:s[44-47] = s_buffer_load_dwordx4 %195:s[28-31], %307:s[26] storage:buffer semantics:private,reorder
+       s4: %322:s[48-51] = s_buffer_load_dwordx4 %195:s[28-31], %321:s[27] storage:buffer semantics:private,reorder
+       s4: %332:s[52-55] = s_buffer_load_dwordx4 %195:s[28-31], %331:s[52] storage:buffer semantics:private,reorder
+FAIL qwen4_attention_grouped_q8           set2:a smem 96; set2:b load 3; set2:c load 16; set2:d store 12; set2:f load 1; set2:params smem 2
+       s4: %248:s[40-43] = s_buffer_load_dwordx4 %199:s[28-31], %247:s[39] storage:buffer semantics:private,reorder
+       s4: %254:s[44-47] = s_buffer_load_dwordx4 %199:s[28-31], %253:s[44] storage:buffer semantics:private,reorder
+       s4: %258:s[48-51] = s_buffer_load_dwordx4 %199:s[28-31], %257:s[48] storage:buffer semantics:private,reorder
+       s4: %262:s[52-55] = s_buffer_load_dwordx4 %199:s[28-31], %261:s[52] storage:buffer semantics:private,reorder
+       s4: %266:s[56-59] = s_buffer_load_dwordx4 %199:s[28-31], %265:s[56] storage:buffer semantics:private,reorder
+       s4: %270:s[60-63] = s_buffer_load_dwordx4 %199:s[28-31], %269:s[60] storage:buffer semantics:private,reorder
+FAIL qwen4_attention_grouped_k16v8        set2:a smem 48; set2:b load 2; set2:c load 16; set2:d store 12; set2:f load 1; set2:params smem 2
+       s4: %266:s[32-35] = s_buffer_load_dwordx4 %195:s[28-31], %265:s[15] storage:buffer semantics:private,reorder
+       s4: %280:s[36-39] = s_buffer_load_dwordx4 %195:s[28-31], %279:s[20] storage:buffer semantics:private,reorder
+       s4: %294:s[40-43] = s_buffer_load_dwordx4 %195:s[28-31], %293:s[25] storage:buffer semantics:private,reorder
+       s4: %308:s[44-47] = s_buffer_load_dwordx4 %195:s[28-31], %307:s[26] storage:buffer semantics:private,reorder
+       s4: %322:s[48-51] = s_buffer_load_dwordx4 %195:s[28-31], %321:s[27] storage:buffer semantics:private,reorder
+       s4: %332:s[52-55] = s_buffer_load_dwordx4 %195:s[28-31], %331:s[52] storage:buffer semantics:private,reorder
+ok   qwen4_attention_grouped_dec8         set2:a load 12; set2:b load 8; set2:c load 1; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec16        set2:a load 12; set2:b load 8; set2:c load 1; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec32        set2:a load 12; set2:b load 8; set2:c load 1; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec64        set2:a load 12; set2:b load 8; set2:c load 1; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_merge8               set2:d store 1; set2:e load 9; set2:params smem 2
+ok   qwen4_attention_merge16              set2:d store 1; set2:e load 17; set2:params smem 2
+ok   qwen4_attention_merge32              set2:d store 1; set2:e load 33; set2:params smem 2
+ok   qwen4_attention_merge64              set2:d store 1; set2:e load 65; set2:params smem 2
+ok   qwen4_attention_grouped_dec_q8_8     set2:a load 12; set2:b load 5; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_q8_16    set2:a load 12; set2:b load 5; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_q8_32    set2:a load 12; set2:b load 5; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_q8_64    set2:a load 12; set2:b load 5; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_k16v8_8  set2:a load 12; set2:b load 8; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_k16v8_16 set2:a load 12; set2:b load 8; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_k16v8_32 set2:a load 12; set2:b load 8; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_attention_grouped_dec_k16v8_64 set2:a load 12; set2:b load 8; set2:c load 2; set2:e store 13; set2:f load 1; set2:params smem 2
+ok   qwen4_kv_store                       set2:a load 32; set2:b load 32; set2:c store 8 store/glc 1; set2:d store 8 store/glc 1; set2:params smem 2
+ok   qwen4_q8_mvw4_r4                     set0:0 load 8; set2:b load 2; set2:c store 4; set2:params smem 1
+ok   qwen4_q8_mvw4_r4_c2                  set0:0 load 8; set2:b load 4; set2:c store 8; set2:params smem 1
+ok   qwen4_q8_mvw4_r4_c3                  set0:0 load 8; set2:b load 6; set2:c store 12; set2:params smem 1
+ok   qwen4_q8_mvw4_r4_c4                  set0:0 load 8; set2:b load 8; set2:c store 16; set2:params smem 1
+ok   qwen4_q8_mvw4_r2                     set0:0 load 4; set2:b load 2; set2:c store 2; set2:params smem 1
+ok   qwen4_q8_mvw4_r2_c2                  set0:0 load 4; set2:b load 4; set2:c store 4; set2:params smem 1
+ok   qwen4_q8_mvw4_r2_c3                  set0:0 load 4; set2:b load 6; set2:c store 6; set2:params smem 1
+ok   qwen4_q8_mvw4_r2_c4                  set0:0 load 4; set2:b load 8; set2:c store 8; set2:params smem 1
+ok   qwen4_q8_gemm                        set0:0 load 2; set2:b load 1; set2:c store 16; set2:params smem 1
+ok   qwen4_q8_gemm_mix                    set0:0 load 2; set2:b load 1; set2:c store 4; set2:d load 16; set2:params smem 1
+FAIL qwen4_q8_gemm_s16r1p                 set0:0 load 10; set2:b smem 256; set2:c store 16; set2:params smem 1
+       s4: %259:s[52-55] = s_buffer_load_dwordx4 %257:s[48-51], %258:s[30] storage:buffer semantics:private,reorder
+       s4: %270:s[56-59] = s_buffer_load_dwordx4 %257:s[48-51], %269:s[46] storage:buffer semantics:private,reorder
+       s4: %281:s[60-63] = s_buffer_load_dwordx4 %257:s[48-51], %280:s[47] storage:buffer semantics:private,reorder
+       s4: %292:s[68-71] = s_buffer_load_dwordx4 %257:s[48-51], %291:s[64] storage:buffer semantics:private,reorder
+       s4: %303:s[72-75] = s_buffer_load_dwordx4 %257:s[48-51], %302:s[65] storage:buffer semantics:private,reorder
+       s4: %314:s[76-79] = s_buffer_load_dwordx4 %257:s[48-51], %313:s[66] storage:buffer semantics:private,reorder
+FAIL qwen4_q8_gemm_s8r1po                 set0:0 load 10; set2:b smem 128; set2:c store 8; set2:params smem 1
+       s4: %219:s[40-43] = s_buffer_load_dwordx4 %217:s[36-39], %218:s[5] storage:buffer semantics:private,reorder
+       s4: %230:s[44-47] = s_buffer_load_dwordx4 %217:s[36-39], %229:s[6] storage:buffer semantics:private,reorder
+       s4: %241:s[48-51] = s_buffer_load_dwordx4 %217:s[36-39], %240:s[7] storage:buffer semantics:private,reorder
+       s4: %252:s[52-55] = s_buffer_load_dwordx4 %217:s[36-39], %251:s[16] storage:buffer semantics:private,reorder
+       s4: %263:s[56-59] = s_buffer_load_dwordx4 %217:s[36-39], %262:s[17] storage:buffer semantics:private,reorder
+       s4: %274:s[60-63] = s_buffer_load_dwordx4 %217:s[36-39], %273:s[19] storage:buffer semantics:private,reorder
+FAIL qwen4_q8_gemm_s4r4om                 set0:0 load 20; set2:b smem 64; set2:c store 4; set2:d load 16; set2:params smem 1
+       s4: %276:s[20-23] = s_buffer_load_dwordx4 %274:s[12-15], %275:s[6] storage:buffer semantics:private,reorder
+       s4: %311:s[24-27] = s_buffer_load_dwordx4 %274:s[12-15], %310:s[7] storage:buffer semantics:private,reorder
+       s4: %346:s[44-47] = s_buffer_load_dwordx4 %274:s[12-15], %345:s[9] storage:buffer semantics:private,reorder
+       s4: %381:s[48-51] = s_buffer_load_dwordx4 %274:s[12-15], %380:s[5] storage:buffer semantics:private,reorder
+       s4: %483:s[52-55] = s_buffer_load_dwordx4 %274:s[12-15], %482:s[11] storage:buffer semantics:private,reorder
+       s4: %517:s[56-59] = s_buffer_load_dwordx4 %274:s[12-15], %516:s[16] storage:buffer semantics:private,reorder
+ok   qwen4_sum_parts                      set2:a load 2; set2:c store 1; set2:params smem 1
+FAIL qwen4_mix_down                       set0:0 load 8; set2:a load 2; set2:b load 2; set2:c store 5; set2:d smem 1; set2:e load 2; set2:params smem 1
+       s1: %76:s[23] = s_buffer_load_dword %74:s[24-27], %75:s[23] storage:buffer semantics:private,reorder
+FAIL qwen4_mix_down_q8                    set0:0 load 8; set2:a load 1; set2:b load 1; set2:c store 5; set2:d smem 1; set2:e load 1; set2:params smem 1
+       s1: %75:s[23] = s_buffer_load_dword %73:s[24-27], %74:s[23] storage:buffer semantics:private,reorder
+FAIL qwen4_mix_up                         set0:0 load 32; set2:a load 4 store 4; set2:b load 2 smem 1; set2:c store 1; set2:d smem 1; set2:e load 4; set2:f load 1; set2:params smem 1
+       s4: %827:s[28-31] = s_buffer_load_dwordx4 %825:s[28-31], %826:s[0] storage:buffer semantics:private,reorder
+       s4: %907:s[20-23] = s_buffer_load_dwordx4 %828:s[36-39], %906:s[0] storage:buffer semantics:private,reorder
+FAIL qwen4_mix_up_q8                      set0:0 load 32; set2:a load 4 store 4; set2:b load 1 smem 1; set2:c store 1; set2:d smem 1; set2:e load 4; set2:f load 1; set2:params smem 1
+       s4: %597:s[28-31] = s_buffer_load_dwordx4 %595:s[28-31], %596:s[0] storage:buffer semantics:private,reorder
+       s4: %677:s[20-23] = s_buffer_load_dwordx4 %599:s[36-39], %676:s[0] storage:buffer semantics:private,reorder
+ok   qwen4_mix_act                        set2:a load 1; set2:c store 1; set2:d store 1; set2:params smem 1
+FAIL qwen4_mix_down_sk                    set0:0 load 8; set2:a load 2; set2:b load 2; set2:c load/glc 24 store/glc 5; set2:d smem 1; set2:e load 2; set2:extra store/glc 2; set2:f store 3; set2:params smem 1
+       s1: %89:s[8] = s_buffer_load_dword %87:s[16-19], %88:s[8] storage:buffer semantics:private,reorder
+FAIL qwen4_mix_down_sk_q8                 set0:0 load 8; set2:a load 1; set2:b load 1; set2:c load/glc 24 store/glc 5; set2:d smem 1; set2:e load 1; set2:extra store/glc 2; set2:f store 3; set2:params smem 1
+       s1: %89:s[8] = s_buffer_load_dword %87:s[16-19], %88:s[8] storage:buffer semantics:private,reorder
+FAIL qwen4_mix_down_sk4                   set0:0 load 8; set2:a load 8; set2:b load 8; set2:c load/glc 96 store/glc 20; set2:d smem 4; set2:e load 2; set2:extra store/glc 2; set2:f store 12; set2:params smem 1
+       s1: %90:s[8] = s_buffer_load_dword %88:s[16-19], %89:s[8] storage:buffer semantics:private,reorder
+       s1: %103:s[17] = s_buffer_load_dword %101:s[20-23], %102:s[17] storage:buffer semantics:private,reorder
+       s1: %116:s[25] = s_buffer_load_dword %114:s[20-23], %115:s[25] storage:buffer semantics:private,reorder
+       s1: %130:s[10] = s_buffer_load_dword %128:s[48-51], %129:s[10] storage:buffer semantics:private,reorder
+FAIL qwen4_mix_down_sk4_q8                set0:0 load 8; set2:a load 4; set2:b load 4; set2:c load/glc 96 store/glc 20; set2:d smem 4; set2:e load 1; set2:extra store/glc 2; set2:f store 12; set2:params smem 1
+       s1: %90:s[8] = s_buffer_load_dword %88:s[16-19], %89:s[8] storage:buffer semantics:private,reorder
+       s1: %103:s[17] = s_buffer_load_dword %101:s[20-23], %102:s[17] storage:buffer semantics:private,reorder
+       s1: %116:s[25] = s_buffer_load_dword %114:s[20-23], %115:s[25] storage:buffer semantics:private,reorder
+       s1: %130:s[10] = s_buffer_load_dword %128:s[48-51], %129:s[10] storage:buffer semantics:private,reorder
+ok   qwen4_mix_down_skw_c1                set0:0 load 8; set2:a load 2; set2:b load 2; set2:c load/glc 12 store/glc 5; set2:d load/glc 1; set2:e load 2; set2:extra store/glc 2; set2:f store 3; set2:params smem 1
+ok   qwen4_mix_down_skw_c2                set0:0 load 8; set2:a load 4; set2:b load 4; set2:c load/glc 24 store/glc 10; set2:d load/glc 2; set2:e load 2; set2:extra store/glc 2; set2:f store 6; set2:params smem 1
+ok   qwen4_mix_down_skw_c3                set0:0 load 8; set2:a load 6; set2:b load 6; set2:c load/glc 36 store/glc 15; set2:d load/glc 3; set2:e load 2; set2:extra store/glc 2; set2:f store 9; set2:params smem 1
+ok   qwen4_mix_down_skw_c4                set0:0 load 8; set2:a load 8; set2:b load 8; set2:c load/glc 48 store/glc 20; set2:d load/glc 4; set2:e load 2; set2:extra store/glc 2; set2:f store 12; set2:params smem 1
+ok   qwen4_mix_rows_up_c1                 set0:0 load 5; set2:a load 4 store 4; set2:b load 1 load/glc 1; set2:c store 1; set2:d load/glc 1; set2:e load 4; set2:f load 1; set2:params smem 1
+ok   qwen4_mix_rows_up_c2                 set0:0 load 5; set2:a load 4 store 4; set2:b load 2 load/glc 1; set2:c store 1; set2:d load/glc 1; set2:e load 4; set2:f load 1; set2:params smem 1
+ok   qwen4_mix_rows_up_c3                 set0:0 load 5; set2:a load 4 store 4; set2:b load 3 load/glc 1; set2:c store 1; set2:d load/glc 1; set2:e load 4; set2:f load 1; set2:params smem 1
+ok   qwen4_mix_rows_up_c4                 set0:0 load 5; set2:a load 4 store 4; set2:b load 4 load/glc 1; set2:c store 1; set2:d load/glc 1; set2:e load 4; set2:f load 1; set2:params smem 1
+ok   qwen4_q8_mvk2_c1                     set0:0 load 4; set2:b load 2; set2:c store 2; set2:params smem 1
+ok   qwen4_q8_mvk4_c2                     set0:0 load 8; set2:b load 4; set2:c store 8; set2:params smem 1
+ok   qwen4_q8_mvk4_c3                     set0:0 load 8; set2:b load 6; set2:c store 12; set2:params smem 1
+ok   qwen4_q8_mvk4_c4                     set0:0 load 8; set2:b load 8; set2:c store 16; set2:params smem 1
+ok   qwen4_head_topk                      set2:a load 2; set2:c store 1; set2:params smem 1
+ok   qwen4_head_merge                     set2:a load 1; set2:c store 1; set2:params smem 1
+ok   qwen4_stream_probe                   set0:0 load 8; set2:c store 1
+ok   qwen4_stream_probe2                  set0:0 load 8; set2:c store 1
+ok   qwen4_stream_probe1                  set0:0 load 12; set2:c store 1
+FAIL qwen4_cache_probe                    set2:a load 1; set2:b smem 1; set2:c store 1; set2:f store 1
+       s1: %62:s[10] = s_buffer_load_dword %58:s[12-15], %61:s[10] storage:buffer semantics:private,reorder
+ok   qwen4_moe_gu2_iq4xs                  const load 1; set0:0 load 6; set2:b load 2; set2:c store 2; set2:d load/glc 1; set2:params smem 1
+ok   allreduce_partial                    set2:a store 1
+ok   allreduce_check                      set2:a load 1 store 1; set2:b load 1; set2:c store 2
+ok   allreduce_work                       set2:a load 1; set2:c store 1

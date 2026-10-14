@@ -2,9 +2,10 @@
 // (KV head, partition of 64 visible positions, token) writes partial results for the G = 12 query heads that share
 // the KV head, in attention_merge's layout ([max, sum, unnormalized output] per head and partition; only the
 // partitions holding the token's positions, which qwen4_attention_merge reads). A lane takes a position: each wave
-// scores a quarter of its K row (64 dims) against the 12 queries (wave-uniform, scalar loads), the waves' partial
-// sums meet in shared memory, each wave turns 3 heads' scores into probabilities, then each wave adds 16 positions'
-// V rows times all 12 heads' probabilities (4 dims per lane), and the four waves' sums merge in shared memory.
+// scores a quarter of its K row (64 dims) against the 12 queries (the same for every lane: a lane loads a dim, the
+// wave broadcasts them; no scalar loads of what qwen_qk wrote), the waves' partial sums meet in shared memory, each
+// wave turns 3 heads' scores into probabilities, then each wave adds 16 positions' V rows times all 12 heads'
+// probabilities (4 dims per lane), and the four waves' sums merge in shared memory.
 // The loops over heads, positions and merge rounds stay loops: a decode step runs this code once per wave, and on
 // GCN1 every dispatch fetches its instructions anew (about 7 us per KB of code executed once; fully unrolled, the
 // kernel was 12.5 KB and took 169 us at 2049 positions, 137 us at 129).
@@ -19,7 +20,7 @@ layout(constant_id=0) const uint parts=64;
 #define G 12u
 #define DIM 256u
 #define QROW (DIM/4u+DIM/64u)
-layout(set=2,binding=0,std430) readonly restrict buffer Queries { vec4 v[]; } qs4;
+layout(set=2,binding=0,std430) readonly restrict buffer Queries { float v[]; } qs;
 layout(set=2,binding=1,std430) readonly restrict buffer KRows { uvec4 v[]; } krow;
 layout(set=2,binding=2,std430) readonly restrict buffer VRows { uvec2 v[]; } vrow;
 layout(set=2,binding=2,std430) readonly restrict buffer VWords { uint v[]; } vword;
@@ -63,9 +64,12 @@ uint kr=(key*p.kvheads+kh)*(DIM/8u)+w*8u;
     kq[2u*u]=vec4(unpackHalf2x16(kk.x),unpackHalf2x16(kk.y));kq[2u*u+1u]=vec4(unpackHalf2x16(kk.z),unpackHalf2x16(kk.w));
 }
 #endif
+// This wave's quarter of the 12 queries, a dim per lane, in its part of buf (each head's scores replace its queries).
+[[unroll]]for(uint h=0u;h<G;h++)PART((w*G+h)*64u+lane)=qs.v[(h0+h)*DIM+w*64u+lane];
 [[dont_unroll]]for(uint h=0u;h<G;h++){
-    float acc=0.0;
-    [[unroll]]for(uint j=0u;j<16u;j++)acc+=dot(qs4.v[(h0+h)*64u+w*16u+j],kq[j]);
+    float acc=0.0,qv=PART((w*G+h)*64u+lane);
+    [[unroll]]for(uint j=0u;j<16u;j++)acc+=dot(vec4(subgroupBroadcast(qv,4u*j),subgroupBroadcast(qv,4u*j+1u),
+        subgroupBroadcast(qv,4u*j+2u),subgroupBroadcast(qv,4u*j+3u)),kq[j]);
     PART((w*G+h)*64u+lane)=acc;
 }
 barrier();

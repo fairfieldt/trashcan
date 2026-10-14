@@ -112,6 +112,13 @@ pub enum Cmd {
         #[arg(long, default_value_t = 200)]
         iterations: u32,
     },
+    /// Diagnostic: the cost of barriers between dispatches on GPU `gpu` (full, execution-only, none).
+    BarrierBench {
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+        #[arg(long, default_value_t = 400)]
+        iterations: u32,
+    },
     /// Allocate device-local memory in `chunk_mib` pieces on each GPU until allocation fails; report the totals.
     VramProbe {
         #[arg(long, default_value_t = 64)]
@@ -306,6 +313,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::HeadTopkCheck { gpu, iterations } => super::bench::head_topk_check(gpu, iterations),
+        Cmd::BarrierBench { gpu, iterations } => super::bench::barrier_bench(gpu, iterations),
         Cmd::VramProbe { chunk_mib } => {
             // RADV over-commits device-local memory into system RAM, so never allocate past the device-local heap:
             // allocate chunks while the driver's budget (VK_EXT_memory_budget) still covers the heap's usage.

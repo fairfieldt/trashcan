@@ -40,6 +40,10 @@ pub struct Device {
     arena: RefCell<Option<Vec<Chunk>>>,
     /// An `Uploader` has copies in flight: a buffer dropped meanwhile (an error while loading) waits for them.
     uploading: Cell<bool>,
+    /// Dispatches recorded now end with light barriers (`light_barriers`).
+    light: Cell<bool>,
+    /// The result of `light_barriers_ok`'s self-test, once run.
+    light_ok: Cell<Option<bool>>,
 }
 
 /// One allocation of the arena: memory type, size, bytes handed out.
@@ -86,6 +90,38 @@ impl Push {
     pub fn defer_barrier(mut self, defer: bool) -> Self {
         self.u[14] = u32::from(defer);
         self
+    }
+}
+
+/// The kernels that read nothing an earlier dispatch wrote through the scalar cache, by the ISA audit of
+/// results/qwen4/decode-kernels-20261014 (tools/coherence_audit.py --rule smem on RADV's Tahiti programs): after a light
+/// barrier (`Device::compute_barrier` mode 3), a dispatch of any other kernel gets a full barrier first.
+const SCALAR_SAFE: &[&str] = &[
+    "qwen4_act", "qwen4_attention_grouped_dec8", "qwen4_attention_grouped_dec16", "qwen4_attention_grouped_dec32",
+    "qwen4_attention_grouped_dec64", "qwen4_attention_grouped_dec_k16v8_8", "qwen4_attention_grouped_dec_k16v8_16",
+    "qwen4_attention_grouped_dec_k16v8_32", "qwen4_attention_grouped_dec_k16v8_64", "qwen4_attention_grouped_dec_q8_8",
+    "qwen4_attention_grouped_dec_q8_16", "qwen4_attention_grouped_dec_q8_32", "qwen4_attention_grouped_dec_q8_64",
+    "qwen4_attention_merge8", "qwen4_attention_merge16", "qwen4_attention_merge32", "qwen4_attention_merge64",
+    "qwen4_combine", "qwen4_gated_norm", "qwen4_gdn", "qwen4_gdn_prep", "qwen4_gdn_rows", "qwen4_hc_mix",
+    "qwen4_hc_norm", "qwen4_head_merge", "qwen4_head_topk", "qwen4_idx_pool", "qwen4_idx_score_lds",
+    "qwen4_idx_select", "qwen4_idx_select256", "qwen4_idx_store", "qwen4_kv_store", "qwen4_matf32", "qwen4_matf32_c4",
+    "qwen4_matf32_t", "qwen4_mix_act", "qwen4_mix_down_skw_c1", "qwen4_mix_down_skw_c2", "qwen4_mix_down_skw_c3",
+    "qwen4_mix_down_skw_c4", "qwen4_mix_rows_up_c1", "qwen4_mix_rows_up_c2", "qwen4_mix_rows_up_c3",
+    "qwen4_mix_rows_up_c4", "qwen4_moe_down", "qwen4_moe_down_iq4nl", "qwen4_moe_down_iq4xs", "qwen4_moe_down_q2",
+    "qwen4_moe_down_w", "qwen4_moe_down_w_iq4nl", "qwen4_moe_gu", "qwen4_moe_gu2_iq4xs", "qwen4_moe_gu_iq4nl",
+    "qwen4_moe_gu_iq4xs", "qwen4_moe_sum", "qwen4_moe_tiles", "qwen4_ple_conv", "qwen4_ple_gate", "qwen4_ple_sums",
+    "qwen4_q8_gemm", "qwen4_q8_gemm_mix", "qwen4_q8_mvk2_c1", "qwen4_q8_mvk4_c2", "qwen4_q8_mvk4_c3",
+    "qwen4_q8_mvk4_c4", "qwen4_q8_mvw4_r2", "qwen4_q8_mvw4_r2_c2", "qwen4_q8_mvw4_r2_c3", "qwen4_q8_mvw4_r2_c4",
+    "qwen4_q8_mvw4_r4", "qwen4_q8_mvw4_r4_c2", "qwen4_q8_mvw4_r4_c3", "qwen4_q8_mvw4_r4_c4", "qwen4_router",
+    "qwen4_router_c4", "qwen4_router_gemm", "qwen4_sum_parts", "qwen4_topk", "qwen_conv", "qwen_gate", "qwen_matf32",
+    "qwen_qk",
+];
+
+/// Light barriers while alive (`Device::light_barriers`).
+pub struct LightBarriers<'a>(&'a Device);
+impl Drop for LightBarriers<'_> {
+    fn drop(&mut self) {
+        self.0.light.set(false);
     }
 }
 
@@ -527,6 +563,8 @@ impl Device {
             ("qwen4_q8_mvk4", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_q8_mvk4.spv")).as_slice()),
             ("qwen4_head_topk", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_topk.spv")).as_slice()),
             ("qwen4_head_merge", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_head_merge.spv")).as_slice()),
+            ("qwen4_stream_probe", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_stream_probe.spv")).as_slice()),
+            ("qwen4_cache_probe", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_cache_probe.spv")).as_slice()),
             ("qwen4_moe_gu2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu2.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
@@ -619,6 +657,7 @@ impl Device {
                     ("qwen4_mix_down_skw_c4", Some(4)),
                 ],
                 "qwen4_q8_mvk2" => &[("qwen4_q8_mvk2_c1", Some(1))],
+                "qwen4_stream_probe" => &[("qwen4_stream_probe", Some(4)), ("qwen4_stream_probe2", Some(2)), ("qwen4_stream_probe1", Some(1))],
                 "qwen4_moe_gu2" => &[("qwen4_moe_gu2_iq4xs", Some(2))],
                 "qwen4_q8_mvk4" => &[
                     ("qwen4_q8_mvk4_c2", Some(2)),
@@ -752,6 +791,8 @@ impl Device {
             calibrated,
             arena: RefCell::new(None),
             uploading: Cell::new(false),
+            light: Cell::new(false),
+            light_ok: Cell::new(None),
         }))
     }
     /// Place later device-local buffers (not host-visible, not external) in shared allocations of `CHUNK`
@@ -1152,6 +1193,10 @@ impl Device {
     }
     /// `dispatch` with `label` for its profiling timestamps (`Stamps`).
     fn dispatch_as(&self, cmd: vk::CommandBuffer, shader: &str, p: Push, x: u32, y: u32, label: impl Fn() -> String) {
+        let light = self.light.get();
+        if light && !SCALAR_SAFE.contains(&shader) {
+            self.compute_barrier(cmd, 0);
+        }
         let key = p.ptr;
         let cached = { self.bindings.borrow().get(&key).copied() };
         let set = if let Some(set) = cached {
@@ -1232,6 +1277,92 @@ impl Device {
             self.stamp(cmd, true, &label);
         }
         if p.u[14] == 0 {
+            self.compute_barrier(cmd, if light { 3 } else { 0 });
+        }
+    }
+    /// Record dispatches with light barriers (`compute_barrier` mode 3) while the returned guard lives, if `on` and
+    /// the self-test (`light_barriers_ok`) passed; with full ones otherwise.
+    pub fn light_barriers(self: &Rc<Self>, on: bool) -> Result<LightBarriers<'_>> {
+        let ok = on && self.light_barriers_ok()?;
+        self.light.set(ok);
+        Ok(LightBarriers(self))
+    }
+    /// Whether a light barrier gives later dispatches' vector loads what earlier dispatches wrote, checked once per
+    /// device with qwen4_cache_probe: 1280 workgroups read the same 1 KB through the vector caches (so that every
+    /// CU caches it), one workgroup overwrites it, a light barrier, and the 1280 read again. A stale read is
+    /// logged, and dispatches keep full barriers.
+    pub fn light_barriers_ok(self: &Rc<Self>) -> Result<bool> {
+        if let Some(ok) = self.light_ok.get() {
+            return Ok(ok);
+        }
+        let (words, groups) = (256usize, 1280usize);
+        let probe = self.buffer(words * 4, false, false, None)?;
+        let res = self.buffer(2 * groups * 4, true, false, None)?;
+        let push = |kind: u32, value: f32| {
+            let mut u = [0u32; 16];
+            (u[0], u[9], u[12], u[14], u[15]) = (words as u32, kind, value.to_bits(), 1, 1);
+            Push { ptr: [probe.address, probe.address, res.address, 0, 0, probe.address, 0, 0], u }
+        };
+        let cmd = self.begin()?;
+        self.barrier(cmd);
+        self.dispatch(cmd, "qwen4_cache_probe", push(1, 1.0), 1, 1);
+        self.compute_barrier(cmd, 0);
+        self.dispatch(cmd, "qwen4_cache_probe", push(0, 0.0), groups as u32, 1);
+        self.compute_barrier(cmd, 1);
+        self.dispatch(cmd, "qwen4_cache_probe", push(1, 2.0), 1, 1);
+        self.compute_barrier(cmd, 3);
+        self.dispatch(cmd, "qwen4_cache_probe", push(0, 0.0), groups as u32, 1);
+        self.host_barrier(cmd, true);
+        self.finish(cmd)?;
+        self.run(cmd)?;
+        let r: Vec<f32> = bytemuck::cast_slice(&res.read(2 * groups * 4)?).to_vec();
+        let stale = r.chunks(2).filter(|c| c[0] != 2.0 * 64.0).count();
+        if stale > 0 {
+            eprintln!("light barriers: {stale} of {groups} workgroups read stale data in the self-test; full barriers");
+        }
+        self.light_ok.set(Some(stale == 0));
+        Ok(stale == 0)
+    }
+    /// The barrier after a dispatch. Mode 0 makes shader writes available and visible to later shaders (RADV on GFX6:
+    /// a wait for idle, an L2 write-back and invalidation, and invalidations of the vector L1 and the scalar cache).
+    /// Mode 3, the light barrier of decode-sized graphs (`light_barriers`), makes them available only (RADV on
+    /// GFX6: the same without the scalar-cache invalidation, which costs the later layers' kernels their descriptors
+    /// and constants: 4.5% of a decode step's GPU time, results/qwen4/decode-kernels-20261014). Vector loads after it
+    /// see what earlier dispatches wrote, scalar loads may not: only SCALAR_SAFE kernels run after it without a full
+    /// barrier. That rests on RADV's handling of the barrier, not on the Vulkan memory model; `light_barriers_ok`
+    /// checks it once per device. Diagnostics (`qwen4 barrier-bench`): mode 1 only the execution dependency, mode 2
+    /// the execution dependency and invalidations of the vector L1 and scalar cache (RADV: a uniform read as the
+    /// destination access).
+    pub fn compute_barrier(&self, cmd: vk::CommandBuffer, mode: u8) {
+        if mode == 1 {
+            unsafe {
+                self.dev.cmd_pipeline_barrier(
+                    cmd,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::PipelineStageFlags::COMPUTE_SHADER,
+                    vk::DependencyFlags::empty(),
+                    &[],
+                    &[],
+                    &[],
+                )
+            };
+        } else if mode == 2 {
+            self.scoped_barrier(
+                cmd,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::AccessFlags::empty(),
+                vk::AccessFlags::UNIFORM_READ,
+            );
+        } else if mode == 3 {
+            self.scoped_barrier(
+                cmd,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::PipelineStageFlags::COMPUTE_SHADER,
+                vk::AccessFlags::SHADER_WRITE,
+                vk::AccessFlags::empty(),
+            );
+        } else {
             self.scoped_barrier(
                 cmd,
                 vk::PipelineStageFlags::COMPUTE_SHADER,

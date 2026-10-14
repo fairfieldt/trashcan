@@ -32,3 +32,11 @@ The Mac Pros' D700s (incite, invite, indite, enlight, inflight, alight) are shar
 checkout); use a `~/trashcan-exp/NAME` workspace. Build with `scripts/cross-build.sh` in the kbuild VM, not on
 the Macs. amdgpu resets the GPU when one job runs or waits longer than 2 s (`lockup_timeout` default on 7.3 and 7.2.9), so
 keep each queue submission well under that, and never leave GPU work waiting on a host event without a bound.
+
+# Light barriers in Flash-Next decode
+
+Flash-Next graphs of up to 8 tokens end their dispatches with shader-write -> none barriers (`Device::compute_barrier`
+mode 3). They rely on RADV (Mesa 25.0.7 on GFX6) doing an L2 write-back plus an L1 invalidation for a `SHADER_WRITE`
+source, and on the kernels in `SCALAR_SAFE` (engine/src/vulkan.rs) never reading through scalar loads what an earlier
+dispatch wrote. After any Mesa upgrade, or a change to one of those shaders, rerun the ISA audit and the stress check
+of results/qwen4/decode-kernels-20261014 before measuring.

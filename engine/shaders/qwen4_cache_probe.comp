@@ -1,0 +1,16 @@
+#version 460
+#include "common.glsl"
+// Which caches a barrier invalidates (qwen4 barrier-bench; Device::light_barriers_ok). p.kind 0: every lane reads word
+// (workgroup * 256 + lane) % p.n of a through the vector cache and each workgroup word workgroup % p.n through the
+// scalar cache (b is the same buffer, read-only), and writes both to c[workgroup][2]; p.kind 1: workgroup 0 writes
+// p.r0 to every word of a (through f, a second binding of the same buffer).
+layout(local_size_x=256) in;
+layout(set=2,binding=1,std430) readonly restrict buffer ScalarView { float v[]; } sv;
+void main(){
+uint l=gl_LocalInvocationID.x,wg=gl_WorkGroupID.x;
+if(p.kind==1){if(wg==0)for(uint i=l;i<p.n;i+=256)f_f.v[i]=uintBitsToFloat(p.r0);return;}
+float v=a_f.v[(wg*256+l)%p.n];
+float s=sv.v[wg%p.n];
+float t=subgroupAdd(v);
+if(l==0){c_f.v[wg*2]=t;c_f.v[wg*2+1]=s;}
+}

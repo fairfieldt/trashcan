@@ -1,0 +1,42 @@
+#version 460
+#include "common.glsl"
+// Diagnostic (qwen4 barrier-bench): read p.n 16-byte words of the weight buffer and write one word per lane so the
+// loads stay. p.kind 0: a grid-stride loop, four loads in flight per lane (W = 4: uvec4 loads, a wave reads 1 KB per
+// instruction; W = 2: uvec2, 512 bytes). p.kind 1: matrix rows as the decode kernels read them: wave g takes rows
+// p.m g .. p.m g + p.m - 1 (p.k bytes each) and in each step reads 64 W words (W = 2: 512 bytes, as the Q8_0 kernels;
+// W = 1: 256 bytes, as gate/up) of every row; p.kind 2: the same bytes per step, but a wave's rows of a step are
+// adjacent (2 KB contiguous for 4 rows of 512). c: out [threads].
+layout(constant_id=0) const uint W=4;
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WQ { uvec4 q[]; } wq;
+layout(binding=0,std430) readonly restrict buffer WQ2 { uvec2 q[]; } wq2;
+layout(binding=0,std430) readonly restrict buffer WQ1 { uint q[]; } wq1;
+void main(){
+uint id=gl_GlobalInvocationID.x,stride=gl_NumWorkGroups.x*256,lane=gl_SubgroupInvocationID;
+uint wave=id/64,waves=stride/64;
+uvec4 acc=uvec4(0);
+if(p.kind==0){
+    if(W==4){uint n=p.n;
+        for(uint i=id;i<n;i+=4*stride){
+            uvec4 a=wq.q[i],b=wq.q[min(i+stride,n-1)],c=wq.q[min(i+2*stride,n-1)],d=wq.q[min(i+3*stride,n-1)];
+            acc^=a^b^c^d;}
+    }else{uint n=p.n*2;
+        for(uint i=id;i<n;i+=4*stride){
+            uvec2 a=wq2.q[i],b=wq2.q[min(i+stride,n-1)],c=wq2.q[min(i+2*stride,n-1)],d=wq2.q[min(i+3*stride,n-1)];
+            acc.xy^=a^b^c^d;}
+    }
+}else{
+    // Rows of p.k bytes; groups of R rows per wave (4 for uvec2 loads, 8 for words); steps of 64 W words per row.
+    const uint R=W==1?8u:4u;
+    uint rowwords=p.k/(4*W),steps=rowwords/64,groups=(p.n*16/p.k)/R;
+    for(uint g=wave;g<groups;g+=waves){
+        for(uint s=0;s<steps;s++){
+            [[unroll]]for(uint r=0;r<R;r++){
+                uint at=p.kind==1?((g*R+r)*rowwords+s*64+lane):(((g*steps+s)*R+r)*64+lane);
+                if(W==2){acc.xy^=wq2.q[at];}else{acc.x^=wq1.q[at];}
+            }
+        }
+    }
+}
+c_u.v[id]=acc.x^acc.y^acc.z^acc.w;
+}

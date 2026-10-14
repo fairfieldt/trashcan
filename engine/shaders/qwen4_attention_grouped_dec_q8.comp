@@ -1,4 +1,5 @@
 #version 460
+#extension GL_KHR_shader_subgroup_ballot : require
 #define KVQ 1
 #include "common.glsl"
 #include "qwen4_attention_grouped_dec.glsl"

@@ -280,3 +280,242 @@ pub fn stage_bench(
             .collect::<Vec<_>>()).collect::<Vec<_>>()}),
     )
 }
+
+/// Diagnostic (results/qwen4/decode-kernels-20261014): what a barrier between dispatches costs on GPU `gpu`. Each case
+/// repeats a short sequence of dispatches `iterations` times with timestamps around every dispatch, after each either
+/// the engine's barrier (`full`: shader writes visible to later shaders; RADV writes back and invalidates the L2 for it
+/// on GFX6), an execution-only barrier (`exec`) or none. Kernels: a one-workgroup activation (`tiny`), the same over
+/// 1 MiB (`writer`, 4096 workgroups), the MoE top-k (one wave, 2.7 KB of code) and the Q8_0 matrix-vector kernel on a
+/// 6144 x 2560 matrix (`mv`, 16.7 MB). Prints one JSON line per case: per step its mean µs and the mean gap before it.
+pub fn barrier_bench(gpu: usize, iterations: u32) -> Result<()> {
+    use anyhow::Context;
+    use ash::vk;
+    let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
+    let pd = *inst.amd_gpus()?.get(gpu).context("no such GPU")?;
+    let d = crate::vulkan::Device::new(inst, pd)?;
+    let cap = 4096u32;
+    let q = unsafe {
+        d.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(cap), None)?
+    };
+    let params = d.upload(bytemuck::cast_slice(&[0u32, 1, 0, 0]))?;
+    let small = d.upload(bytemuck::cast_slice(&[0.5f32; 64]))?;
+    let big = d.upload(bytemuck::cast_slice(&vec![0.25f32; 1 << 18]))?;
+    let logits: Vec<f32> = (0..513u32).map(|i| ((i * 7919) % 513) as f32 / 64. - 4.).collect();
+    let logits = d.upload(bytemuck::cast_slice(&logits))?;
+    let ids = d.buffer(64 * 4, false, false, None)?;
+    let wts = d.buffer(64 * 4, false, false, None)?;
+    let (rows, k) = (6144usize, 2560usize);
+    let blocks = rows * k / 32;
+    let mat = d.upload(&vec![0u8; blocks * 34])?;
+    let x = d.upload(bytemuck::cast_slice(&vec![0.01f32; k]))?;
+    let y = d.buffer(rows * 4, false, false, None)?;
+    const STREAM: usize = 256 << 20;
+    let stream = d.buffer(STREAM, false, false, None)?;
+    let sink = d.buffer(4096 * 256 * 4, false, false, None)?;
+    let push = |ptr: [u64; 6], u: [u32; 16]| crate::vulkan::Push {
+        ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], params.address, 0],
+        u,
+    };
+    let act = |n: usize| {
+        let mut u = [0u32; 16];
+        (u[0], u[9], u[12], u[15]) = (n as u32, 0, 1f32.to_bits(), 1);
+        u
+    };
+    // A step: dispatch `kind`, then barrier `mode` (0 full, 1 exec, 2 lite, 3 light: `Device::compute_barrier`; 4 none).
+    let step = |cmd: vk::CommandBuffer, kind: &str, mode: u8| -> Result<()> {
+        match kind {
+            "tiny" => d.dispatch(cmd, "qwen4_act", push([small.address, 0, 0, 0, 0, 0], act(64)).defer_barrier(true), 1, 1),
+            "writer" => {
+                d.dispatch(cmd, "qwen4_act", push([big.address, 0, 0, 0, 0, 0], act(1 << 18)).defer_barrier(true), 4096, 1)
+            }
+            "topk" => {
+                let mut u = [0u32; 16];
+                (u[0], u[1], u[2], u[15]) = (512, 1, 10, 1);
+                d.dispatch(cmd, "qwen4_topk", push([logits.address, 0, ids.address, wts.address, 0, 0], u).defer_barrier(true), 1, 1)
+            }
+            "mv" => {
+                let mut u = [0u32; 16];
+                (u[0], u[1], u[3], u[15]) = (rows as u32, k as u32, (blocks / 2) as u32, 1);
+                let p = push([0, x.address, y.address, 0, 0, 0], u).defer_barrier(true);
+                d.dispatch_matrix(cmd, "qwen4_q8_mvw4_r4", p, (rows / 16) as u32, 1, &mat)?
+            }
+            s if s.starts_with("stream") => {
+                // stream{2}_{workgroups}: STREAM bytes, uvec4 (or uvec2) loads.
+                let (shader, wg) = match s.strip_prefix("stream2_") {
+                    Some(w) => ("qwen4_stream_probe2", w),
+                    None => ("qwen4_stream_probe", &s[6..]),
+                };
+                let mut u = [0u32; 16];
+                u[0] = (STREAM / 16) as u32;
+                let p = push([0, 0, sink.address, 0, 0, 0], u).defer_barrier(true);
+                d.dispatch_matrix(cmd, shader, p, wg.parse::<u32>()?, 1, &stream)?
+            }
+            s if s.starts_with("rows") || s.starts_with("tiled") => {
+                // {rows,tiled}{q8,iq4}_{workgroups}: STREAM bytes as matrix rows read the decode kernels' way (4 rows
+                // of 2560 bytes, 512 per step; 8 rows of 1280 bytes, 256 per step), or the same steps contiguous.
+                let (pat, wg) = s.split_once('_').context("pattern")?;
+                let (shader, rowbytes) = if pat.ends_with("q8") { ("qwen4_stream_probe2", 2560) } else { ("qwen4_stream_probe1", 1280) };
+                let mut u = [0u32; 16];
+                (u[0], u[1], u[9]) = ((STREAM / 16) as u32, rowbytes, if pat.starts_with("rows") { 1 } else { 2 });
+                let p = push([0, 0, sink.address, 0, 0, 0], u).defer_barrier(true);
+                d.dispatch_matrix(cmd, shader, p, wg.parse::<u32>()?, 1, &stream)?
+            }
+            _ => unreachable!(),
+        }
+        if mode < 4 {
+            d.compute_barrier(cmd, mode);
+        }
+        Ok(())
+    };
+    let cases: [(&str, &[&str], u8, u32); 35] = [
+        ("rows-q8-640", &["rowsq8_640"], 0, 6),
+        ("tiled-q8-640", &["tiledq8_640"], 0, 6),
+        ("rows-q8-1280", &["rowsq8_1280"], 0, 6),
+        ("tiled-q8-1280", &["tiledq8_1280"], 0, 6),
+        ("rows-iq4-640", &["rowsiq4_640"], 0, 6),
+        ("tiled-iq4-640", &["tilediq4_640"], 0, 6),
+        ("rows-iq4-1280", &["rowsiq4_1280"], 0, 6),
+        ("tiled-iq4-1280", &["tilediq4_1280"], 0, 6),
+        ("stream-320", &["stream320"], 0, 6),
+        ("stream-640", &["stream640"], 0, 6),
+        ("stream-1280", &["stream1280"], 0, 6),
+        ("stream-2560", &["stream2560"], 0, 6),
+        ("stream2-640", &["stream2_640"], 0, 6),
+        ("stream2-1280", &["stream2_1280"], 0, 6),
+        ("stream2-2560", &["stream2_2560"], 0, 6),
+        ("tiny-full", &["tiny"], 0, iterations),
+        ("tiny-exec", &["tiny"], 1, iterations),
+        ("tiny-lite", &["tiny"], 2, iterations),
+        ("tiny-light", &["tiny"], 3, iterations),
+        ("tiny-none", &["tiny"], 4, iterations),
+        ("writer-tiny-full", &["writer", "tiny"], 0, iterations / 2),
+        ("writer-tiny-lite", &["writer", "tiny"], 2, iterations / 2),
+        ("topk-full", &["topk"], 0, iterations),
+        ("topk-exec", &["topk"], 1, iterations),
+        ("topk-lite", &["topk"], 2, iterations),
+        ("topk-light", &["topk"], 3, iterations),
+        ("mv-full", &["mv"], 0, iterations / 4),
+        ("mv-lite", &["mv"], 2, iterations / 4),
+        ("mv-topk-full", &["mv", "topk"], 0, iterations / 4),
+        ("mv-topk-exec", &["mv", "topk"], 1, iterations / 4),
+        ("mv-topk-lite", &["mv", "topk"], 2, iterations / 4),
+        ("mv-topk-light", &["mv", "topk"], 3, iterations / 4),
+        ("mv-tiny-full", &["mv", "tiny"], 0, iterations / 4),
+        ("mv-tiny-exec", &["mv", "tiny"], 1, iterations / 4),
+        ("mv-tiny-lite", &["mv", "tiny"], 2, iterations / 4),
+    ];
+    let us = d.period as f64 / 1e3;
+    for (name, seq, mode, n) in cases {
+        let n = n.min(cap / (2 * seq.len() as u32)).max(2);
+        let cmd = d.begin()?;
+        unsafe { d.dev.cmd_reset_query_pool(cmd, q, 0, cap) };
+        d.barrier(cmd);
+        let mut i = 0;
+        for _ in 0..n {
+            for kind in seq {
+                unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, i) };
+                step(cmd, kind, mode)?;
+                unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, i + 1) };
+                i += 2;
+            }
+        }
+        d.finish(cmd)?;
+        d.run_reusable(cmd)?;
+        d.run(cmd)?;
+        let mut t = vec![0u64; i as usize];
+        unsafe { d.dev.get_query_pool_results(q, 0, &mut t, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+        // The first repetition is left out (cold).
+        let per = 2 * seq.len();
+        let mut out = Vec::new();
+        for (s, kind) in seq.iter().enumerate() {
+            let (mut dur, mut gap, mut cnt) = (0f64, 0f64, 0f64);
+            for r in 1..n as usize {
+                let a = r * per + 2 * s;
+                dur += t[a + 1].wrapping_sub(t[a]) as f64 * us;
+                gap += t[a].wrapping_sub(t[a - 1]) as f64 * us;
+                cnt += 1.;
+            }
+            out.push(serde_json::json!({"kernel": kind, "us": dur / cnt, "gap_us": gap / cnt}));
+        }
+        let total = t[i as usize - 1].wrapping_sub(t[per - 1]) as f64 * us / (n - 1) as f64;
+        println!("{}", serde_json::json!({"gpu": gpu, "case": name, "iterations": n, "us_per_iteration": total, "steps": out}));
+    }
+    // Which caches a barrier invalidates (qwen4_cache_probe): fill a buffer with 1, read it in every workgroup through
+    // the vector and scalar caches, write 2 to it from one workgroup after an execution-only barrier, then the barrier
+    // under test, then read it again: workgroups that still see 1 read a stale vector-cache line or scalar-cache entry.
+    // With 4096 words every workgroup reads its own 1 KB of 16 KB, with 256 words all read the same 1 KB (so that
+    // every CU has it cached, as in `Device::light_barriers_ok`). Each barrier is also timed after a one-workgroup
+    // dispatch, as above.
+    let probes = [(4096usize, d.buffer(4096 * 4, false, false, None)?), (256, d.buffer(256 * 4, false, false, None)?)];
+    let res = d.buffer(2 * 1280 * 4, true, false, None)?;
+    let flags = vk::AccessFlags::empty();
+    let variants: [(&str, vk::AccessFlags, vk::AccessFlags, vk::PipelineStageFlags); 9] = [
+        ("full", vk::AccessFlags::SHADER_WRITE, vk::AccessFlags::SHADER_READ | vk::AccessFlags::SHADER_WRITE, vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("exec", flags, flags, vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("none-uniform", flags, vk::AccessFlags::UNIFORM_READ, vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("none-shader_read", flags, vk::AccessFlags::SHADER_READ, vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("write-none", vk::AccessFlags::SHADER_WRITE, flags, vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("none-indirect", flags, vk::AccessFlags::INDIRECT_COMMAND_READ, vk::PipelineStageFlags::DRAW_INDIRECT | vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("none-transfer_read", flags, vk::AccessFlags::TRANSFER_READ, vk::PipelineStageFlags::TRANSFER | vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("none-memory_read", flags, vk::AccessFlags::MEMORY_READ, vk::PipelineStageFlags::COMPUTE_SHADER),
+        ("write-uniform", vk::AccessFlags::SHADER_WRITE, vk::AccessFlags::UNIFORM_READ, vk::PipelineStageFlags::COMPUTE_SHADER),
+    ];
+    let barrier = |cmd: vk::CommandBuffer, src: vk::AccessFlags, dst: vk::AccessFlags, stage: vk::PipelineStageFlags| {
+        let b = [vk::MemoryBarrier::default().src_access_mask(src).dst_access_mask(dst)];
+        let b: &[vk::MemoryBarrier] = if src.is_empty() && dst.is_empty() { &[] } else { &b };
+        unsafe {
+            d.dev.cmd_pipeline_barrier(cmd, vk::PipelineStageFlags::COMPUTE_SHADER, stage, vk::DependencyFlags::empty(), b, &[], &[])
+        };
+    };
+    for (name, src, dst, stage) in variants {
+        let mut stale = Vec::new();
+        for (words, probe) in &probes {
+            let probe_push = |kind: u32, value: f32| {
+                let mut u = [0u32; 16];
+                (u[0], u[9], u[12], u[15]) = (*words as u32, kind, value.to_bits(), 1);
+                push([probe.address, probe.address, res.address, 0, 0, probe.address], u).defer_barrier(true)
+            };
+            let cmd = d.begin()?;
+            d.barrier(cmd);
+            d.dispatch(cmd, "qwen4_cache_probe", probe_push(1, 1.0), 1, 1);
+            d.compute_barrier(cmd, 0);
+            d.dispatch(cmd, "qwen4_cache_probe", probe_push(0, 0.0), 1280, 1);
+            d.compute_barrier(cmd, 1);
+            d.dispatch(cmd, "qwen4_cache_probe", probe_push(1, 2.0), 1, 1);
+            barrier(cmd, src, dst, stage);
+            d.dispatch(cmd, "qwen4_cache_probe", probe_push(0, 0.0), 1280, 1);
+            d.host_barrier(cmd, true);
+            d.finish(cmd)?;
+            d.run(cmd)?;
+            let r: Vec<f32> = bytemuck::cast_slice(&res.read(2 * 1280 * 4)?).to_vec();
+            stale.push(r.chunks(2).filter(|c| c[0] != 128.0).count());
+            stale.push(r.chunks(2).filter(|c| c[1] != 2.0).count());
+        }
+        // Timing: a one-workgroup dispatch followed by this barrier.
+        let n = 400u32;
+        let cmd = d.begin()?;
+        unsafe { d.dev.cmd_reset_query_pool(cmd, q, 0, 2) };
+        d.barrier(cmd);
+        for k in 0..n {
+            if k == 1 {
+                unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::TOP_OF_PIPE, q, 0) };
+            }
+            d.dispatch(cmd, "qwen4_act", push([small.address, 0, 0, 0, 0, 0], act(64)).defer_barrier(true), 1, 1);
+            barrier(cmd, src, dst, stage);
+        }
+        unsafe { d.dev.cmd_write_timestamp(cmd, vk::PipelineStageFlags::BOTTOM_OF_PIPE, q, 1) };
+        d.finish(cmd)?;
+        d.run(cmd)?;
+        let mut t = [0u64; 2];
+        unsafe { d.dev.get_query_pool_results(q, 0, &mut t, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+        let per = t[1].wrapping_sub(t[0]) as f64 * us / (n - 1) as f64;
+        println!(
+            "{}",
+            serde_json::json!({"gpu": gpu, "barrier": name, "workgroups": 1280, "vector_stale": stale[0],
+                "scalar_stale": stale[1], "vector_stale_1k": stale[2], "scalar_stale_1k": stale[3],
+                "us_per_tiny_dispatch": per})
+        );
+    }
+    unsafe { d.dev.destroy_query_pool(q, None) };
+    Ok(())
+}

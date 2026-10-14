@@ -28,7 +28,7 @@ uint rows=p.m+4,first=gl_WorkGroupID.x*16+gl_SubgroupID*4,P=p.m+8;
 bool comb=(p.flags&1)!=0;
 float ws[4],ss[4],acc[4][4];
 uint tt[4];
-[[unroll]]for(uint z=0;z<4;z++){tt[z]=min(t0+z,nb-1);ws[z]=comb?d_f.v[tt[z]*P+p.m+s]:0.0;ss[z]=0;
+[[unroll]]for(uint z=0;z<4;z++){tt[z]=min(t0+z,nb-1);ws[z]=comb?d_fc.v[tt[z]*P+p.m+s]:0.0;ss[z]=0;
     [[unroll]]for(uint r=0;r<4;r++)acc[r][z]=0;}
 uint rb[4];[[unroll]]for(uint r=0;r<4;r++)rb[r]=min(first+r,rows-1)*blocks;
 for(uint b=s*sb+lane/4;b<(s+1)*sb;b+=16){

@@ -7,5 +7,5 @@ layout(local_size_x=256) in;
 void main(){uint i=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y;if(i>=p.n||t>=batch())return;
 // Up to 4 streams; all loads before the stores.
 float y=b_f.v[t*p.n+i],x[4],ws[4];
-[[unroll]]for(uint s=0;s<4;s++){uint c=min(s,p.heads-1);x[s]=a_f.v[(t*p.heads+c)*p.n+i];ws[s]=e_f.v[t*(p.m==0?p.heads:p.m)+p.offset+c];}
+[[unroll]]for(uint s=0;s<4;s++){uint c=min(s,p.heads-1);x[s]=a_f.v[(t*p.heads+c)*p.n+i];ws[s]=e_fc.v[t*(p.m==0?p.heads:p.m)+p.offset+c];}
 [[unroll]]for(uint s=0;s<4;s++)if(s<p.heads)a_f.v[(t*p.heads+s)*p.n+i]=fma(ws[s],y,x[s]);}

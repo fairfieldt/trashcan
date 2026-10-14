@@ -10,7 +10,7 @@ layout(local_size_x=256) in;
 shared float part[4];
 void main(){uint s=gl_WorkGroupID.x,t=gl_WorkGroupID.y,l=gl_LocalInvocationID.x;if(t>=batch())return;
 uint base=(t*p.heads+s)*p.n;float ss=0,x[10];
-float ws=(p.flags&1)!=0?e_f.v[t*(p.m==0?p.heads:p.m)+p.offset+s]:0;
+float ws=(p.flags&1)!=0?e_fc.v[t*(p.m==0?p.heads:p.m)+p.offset+s]:0;
 [[unroll]]for(uint j=0;j<10;j++){uint i=l+256*j;if(i<p.n){x[j]=a_f.v[base+i];
     if((p.flags&1)!=0){x[j]=fma(ws,b_f.v[t*p.n+i],x[j]);a_f.v[base+i]=x[j];}ss=fma(x[j],x[j],ss);}}
 float v=subgroupAdd(ss);if(gl_SubgroupInvocationID==0)part[gl_SubgroupID]=v;

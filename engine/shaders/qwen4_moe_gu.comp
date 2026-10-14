@@ -21,7 +21,7 @@ void main(){
 init_lut();
 uint lane=gl_SubgroupInvocationID,part=lane&3u,bl=lane>>2,w=gl_SubgroupID,ts=gl_WorkGroupID.y,t=ts/p.m;
 if(t>=batch())return;
-uint e=d_u.v[ts],first=gl_WorkGroupID.x*16+w*4,uoff=p.n*RW;
+uint e=d_uc.v[ts],first=gl_WorkGroupID.x*16+w*4,uoff=p.n*RW;
 // Word of (gate row first, block bl, part); the lane's scale row is gate row first + part (and its up row).
 uint wi=p.stride+((e*2*p.n+first)*BLOCKS+bl)*4+part;
 uint sb=(e*2*p.n+first+part)*BLOCKS+bl,ub=p.n*BLOCKS,ib=bl&7u;

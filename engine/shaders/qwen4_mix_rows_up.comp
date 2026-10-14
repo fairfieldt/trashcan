@@ -1,12 +1,14 @@
 #version 460
+#extension GL_KHR_shader_subgroup_ballot : require
 #include "common.glsl"
 // Second half of a Q8_0 hyper-connection mixer with a bottleneck of 320, for C = 1-4 tokens per workgroup, a lane per
 // row: one workgroup per 16 elements of every stream (64 rows of the up projection: lane l takes stream l / 16,
 // element 16 g + l % 16); wave w of 5 takes line w of the rows (64 of the 320 columns), decoding every weight once for
-// the C tokens, whose bottleneck values are the same for every lane (scalar loads), so the workgroup reads 64 whole
-// consecutive rows (20 KB) and the waves' sums meet in LDS. Then, as qwen4_mix_up, the read gates give the sublayer
-// input u_i = mean_s sigmoid(g_s,i) * xn_s,i with xn = x * inv_s * gamma, after the pending combine
-// x += w_prev * y (flags & 1, stored in place). The epilogue's inputs are loaded first, with the weights.
+// the C tokens, whose bottleneck values are the same for every lane (a lane loads one, the wave broadcasts them; no
+// scalar loads of what the first half wrote), so the workgroup reads 64 whole consecutive rows (20 KB) and the waves'
+// sums meet in LDS. Then, as qwen4_mix_up, the read gates give the sublayer input
+// u_i = mean_s sigmoid(g_s,i) * xn_s,i with xn = x * inv_s * gamma, after the pending combine x += w_prev * y
+// (flags & 1, stored in place). The epilogue's inputs are loaded first, with the weights.
 // (qwen4_mix_up reads the matrix once per token: 51 against 42 us for one token, 91 / 123 / 148 against
 // 45-48 / 50-52 / 56-58 for 2 / 3 / 4: results/qwen4/verify-batches-20261012.)
 // a: x [t][hc][n], b: mixer out [t][m + 8] (bottleneck at 0, inv norms at m + 4), c: u [t][n], d: previous mixer out
@@ -28,15 +30,17 @@ uint dw=ww.words[blk/2];
 // The epilogue thread's token and element (clamped, so every thread loads unconditionally).
 uint ez=min(tid/16,C-1),ei=i0+tid%16,et=min(t0+ez,nb-1);
 float x[4],wp[4],inv[4],gm[4],y=f_f.v[et*p.n+ei];
-[[unroll]]for(uint s=0;s<4;s++){x[s]=a_f.v[(et*4+s)*p.n+ei];wp[s]=d_f.v[et*P+p.m+s];inv[s]=b_f.v[et*P+p.m+4+s];
+[[unroll]]for(uint s=0;s<4;s++){x[s]=a_f.v[(et*4+s)*p.n+ei];wp[s]=d_fc.v[et*P+p.m+s];inv[s]=b_fc.v[et*P+p.m+4+s];
     gm[s]=e_f.v[s*p.n+ei];}
-uint xo[4];[[unroll]]for(uint z=0;z<4;z++)xo[z]=(min(t0+z,nb-1)*P)/4+wv*16;
+float bl[4];[[unroll]]for(uint z=0;z<4;z++)bl[z]=b_f.v[min(t0+z,nb-1)*P+wv*64+lane];
 vec2 d=unpackHalf2x16(dw);
 float acc[4];[[unroll]]for(uint z=0;z<4;z++)acc[z]=0;
 [[unroll]]for(uint h=0;h<2;h++){
     float s[4];[[unroll]]for(uint z=0;z<4;z++)s[z]=0;
     [[unroll]]for(uint j=0;j<8;j++){vec4 w=i8(q[h*2+j/4][j%4]);
-        [[unroll]]for(uint z=0;z<C;z++){vec4 xv=b_v4.v[xo[z]+h*8+j];s[z]=fma(w.x,xv.x,s[z]);s[z]=fma(w.y,xv.y,s[z]);
+        [[unroll]]for(uint z=0;z<C;z++){uint o=(h*8+j)*4;vec4 xv=vec4(subgroupBroadcast(bl[z],o),
+            subgroupBroadcast(bl[z],o+1),subgroupBroadcast(bl[z],o+2),subgroupBroadcast(bl[z],o+3));
+            s[z]=fma(w.x,xv.x,s[z]);s[z]=fma(w.y,xv.y,s[z]);
             s[z]=fma(w.z,xv.z,s[z]);s[z]=fma(w.w,xv.w,s[z]);}}
     [[unroll]]for(uint z=0;z<C;z++)acc[z]=fma(s[z],d[h],acc[z]);
 }

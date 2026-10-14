@@ -39,6 +39,12 @@ layout(set=2,binding=7,std430) buffer Binding_extra_f { float v[]; } extra_f;
 layout(set=2,binding=7,std430) buffer Binding_extra_u { uint v[]; } extra_u;
 layout(set=2,binding=7,std430) buffer Binding_extra_h { uint16_t v[]; } extra_h;
 layout(set=2,binding=7,std430) buffer Binding_extra_v4 { vec4 v[]; } extra_v4;
+// Wave-uniform reads of what an earlier dispatch wrote use these views: ACO makes coherent loads vector loads (glc),
+// never scalar ones, and the barriers of decode graphs leave the scalar cache as it is (Device::compute_barrier).
+layout(set=2,binding=1,std430) coherent readonly buffer Binding_b_fc { float v[]; } b_fc;
+layout(set=2,binding=3,std430) coherent readonly buffer Binding_d_fc { float v[]; } d_fc;
+layout(set=2,binding=3,std430) coherent readonly buffer Binding_d_uc { uint v[]; } d_uc;
+layout(set=2,binding=4,std430) coherent readonly buffer Binding_e_fc { float v[]; } e_fc;
 layout(push_constant, std430) uniform Push {
     // r2 is a CPU-only flag for deferring the trailing barrier across independent dispatches.
     uint64_t a,b,c,d,e,f,params,extra;

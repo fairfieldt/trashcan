@@ -1177,6 +1177,9 @@ impl GpuStage {
         let gpu = &self.gpu;
         let c = &self.c;
         let (d, w, hc) = (c.d, c.width(), c.hc);
+        // A decode-sized graph (one command buffer) ends its dispatches with light barriers: the next layers keep the
+        // scalar cache's descriptors and constants (results/qwen4/decode-kernels-20261014).
+        let _light = gpu.light_barriers(n <= 8)?;
         let current = std::cell::Cell::new(gpu.begin()?);
         let mut graph = Graph {
             gpu: gpu.clone(),

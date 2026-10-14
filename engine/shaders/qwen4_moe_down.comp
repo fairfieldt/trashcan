@@ -14,7 +14,7 @@ if(t>=batch())return;
 uint first=gl_WorkGroupID.x*16+gl_SubgroupID*4;
 vec4 acc=vec4(0);
 for(uint j=0;j<p.m;j++){
-    uint e=d_u.v[t*p.m+j],xb=(t*p.m+j)*(p.k/4);
+    uint e=d_uc.v[t*p.m+j],xb=(t*p.m+j)*(p.k/4);
     vec4 s=vec4(0);
     if(FMT==3){
         uint blocks64=p.k/64;
@@ -34,7 +34,7 @@ for(uint j=0;j<p.m;j++){
             s[r]=fma(dot(qlo(q),x0)+dot(qhi(q),x1),bscale(blk),s[r]);
         }
     }
-    acc=fma(vec4(e_f.v[t*p.m+j]),s,acc);
+    acc=fma(vec4(e_fc.v[t*p.m+j]),s,acc);
 }
 acc=subgroupAdd(acc);
 if(lane==0)[[unroll]]for(uint r=0;r<4;r++)if(first+r<p.n)c_f.v[t*p.n+first+r]=acc[r];
