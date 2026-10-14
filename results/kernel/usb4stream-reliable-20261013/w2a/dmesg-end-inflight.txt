@@ -1,0 +1,60 @@
+[  165.093102] thunderbolt 0-3: failed request link state change, aborting
+[  166.117250] thunderbolt 0-3: failed request link state change, aborting
+[  167.141178] thunderbolt 0-3: failed request link state change, aborting
+[  168.165170] thunderbolt 0-3: failed request link state change, aborting
+[  169.189243] thunderbolt 0-3: failed request link state change, aborting
+[  170.213284] thunderbolt 0-3: failed request link state change, aborting
+[  171.237350] thunderbolt 0-3: failed request link state change, aborting
+[  172.261274] thunderbolt 0-3: failed request link state change, aborting
+[  173.285385] thunderbolt 0-3: failed request link state change, aborting
+[  174.309417] thunderbolt 0-3: failed request link state change, aborting
+[  175.333398] thunderbolt 0-3: failed request link state change, aborting
+[  176.357388] thunderbolt 0-3: failed request link state change, aborting
+[  177.381440] thunderbolt 0-3: failed request link state change, aborting
+[  178.409287] thunderbolt 0-3: failed request link state change, aborting
+[  179.429536] thunderbolt 0-3: failed request link state change, aborting
+[  180.453535] thunderbolt 0-3: failed request link state change, aborting
+[  181.477466] thunderbolt 0-3: failed request link state change, aborting
+[  182.501530] thunderbolt 0-3: failed request link state change, aborting
+[  183.525525] thunderbolt 0-3: failed request link state change, aborting
+[  184.549624] thunderbolt 0-3: failed request link state change, aborting
+[  185.573627] thunderbolt 0-3: failed request link state change, aborting
+[  186.597657] thunderbolt 0-3: failed request link state change, aborting
+[  187.625439] thunderbolt 0-3: failed request link state change, aborting
+[  188.645653] thunderbolt 0-3: failed request link state change, aborting
+[  189.669569] thunderbolt 0-3: failed request link state change, aborting
+[  190.693629] thunderbolt 0-3: failed request link state change, aborting
+[  191.721642] thunderbolt 0-3: failed request link state change, aborting
+[  192.741674] thunderbolt 0-3: failed request link state change, aborting
+[  193.765733] thunderbolt 0-3: failed request link state change, aborting
+[  194.789614] thunderbolt 0-3: failed request link state change, aborting
+[  195.813713] thunderbolt 0-3: failed request link state change, aborting
+[  196.837727] thunderbolt 0-3: failed request link state change, aborting
+[  197.861749] thunderbolt 0-3: failed request link state change, aborting
+[  198.885712] thunderbolt 0-3: failed request link state change, aborting
+[  199.909689] thunderbolt 0-3: failed request link state change, aborting
+[  200.933716] thunderbolt 0-3: failed request link state change, aborting
+[  201.957829] thunderbolt 0-3: failed request link state change, aborting
+[  202.981755] thunderbolt 0-3: failed request link state change, aborting
+[  204.005818] thunderbolt 0-3: failed request link state change, aborting
+[  205.029851] thunderbolt 0-3: failed request link state change, aborting
+[  206.053840] thunderbolt 0-3: failed request link state change, aborting
+[  206.349399] ACPI: bus type thunderbolt unregistered
+[  213.183337] ACPI: bus type thunderbolt registered
+[  213.183866] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  213.188350] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  213.192757] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  216.454164] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  216.454191] thunderbolt 1-3: Linux alight
+[  217.478367] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  217.478386] thunderbolt 0-3: Linux incite
+[  236.987071] ACPI: bus type thunderbolt unregistered
+[  243.758262] ACPI: bus type thunderbolt registered
+[  243.758794] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  243.762588] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  243.768646] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  248.071038] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  248.071053] thunderbolt 1-3: Linux alight
+[  248.071066] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  248.071077] thunderbolt 0-3: Linux incite
+[  445.745810] TCP: thunderbolt1: Driver has suspect GRO implementation, TCP performance may be compromised.

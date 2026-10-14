@@ -151,7 +151,9 @@ heads, the ranks reading one KV head each hold and compute it), a slice of the F
 state is replicated. Each rank runs the unchanged kernels with the per-rank head counts;
 value head h reads key head h % k_heads, so taking each group of k_heads value heads' share in order keeps that
 mapping locally. Each mixer and FFN ends a segment with its partial output projection in host memory; the host
-adds the ranks' partials and all-reduces the sum with the other machines (`link.rs`, TCP or USB4STREAM; `Mesh` in
+adds the ranks' partials and all-reduces the sum with the other machines (`link/`, a lane per cable, each on the
+cable's USB4STREAM when both machines have it and over TCP otherwise: TP4 on two Macs decodes 10.7% faster on the
+stream than over TCP, results/kernel/usb4stream-reliable-20261013; `Mesh` in
 `tp.rs`): two all-reduces per layer, 2 × layers + 1 segments per forward. A group is 2, 4 or 8 machines. With four,
 the all-reduce takes two rounds of recursive doubling over a ring of cables (machines 0-1, 0-2, 1-3, 2-3), each round
 sending half the vector to each of a machine's two partners; every machine adds each element in the same pairs, so
@@ -187,16 +189,15 @@ A forward runs one of three ways:
 
 ```sh
 trashcan qwen-bench MODEL --tp --pp 512 --tg 128                       # this machine's GPUs
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2   # the other machine
-trashcan qwen-chat MODEL --mtp MTP.gguf --tp-stream /dev/tbstream0,/dev/tbstream1,/dev/tbstream2 "Hello"
-trashcan qwen-tp-node MODEL --listen 0.0.0.0:7072                       # or TCP, one connection per link
-trashcan qwen-chat MODEL --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"
-# four machines (TP8): start the nodes, then the driver (machine 0); --peer MACHINE=DEVICE[,DEVICE...] per cable.
-# All six cables (results/qwen/tp8-mesh-20261009); without the incite-indite and invite-enlight ones, the ring.
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 1=/dev/tbstream0 --peer 2=/dev/tbstream1 --peer 0=/dev/tbstream2   # indite
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0=/dev/tbstream0 --peer 1=/dev/tbstream1 --peer 3=/dev/tbstream2   # enlight
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0=/dev/tbstream0 --peer 2=/dev/tbstream1 --peer 3=/dev/tbstream2   # invite
-trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 --tp-peer 3=/dev/tbstream2 "Hello"   # incite
+trashcan qwen-tp-node MODEL --mtp MTP.gguf                             # the other machine (lanes on 0.0.0.0:7072)
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"   # a lane per cable
+# four machines (TP8): start the nodes, then the driver (machine 0). --peer M=ADDRESS,... names a higher machine this
+# one is cabled to (one address per cable), --peer M a lower one (it connects here). The cables of
+# results/qwen/tp8-mesh-20261009 (all six; without incite-indite and invite-enlight, the ring):
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 0 --peer 1 --peer 2                                   # indite
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0 --peer 1 --peer 3=indite.tb2:7072                  # enlight
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0 --peer 2=enlight.tb0:7072 --peer 3=indite.tb2:7072 # invite
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=invite.tb1:7072 --tp-peer 2=enlight.tb2:7072 --tp-peer 3=indite.tb0:7072 "Hello"   # incite
 ```
 
 Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-20261007](../results/qwen/tp8-20261007/)):

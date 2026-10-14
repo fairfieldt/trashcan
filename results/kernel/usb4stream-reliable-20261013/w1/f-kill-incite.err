@@ -1,0 +1,4 @@
+link indite (indite.tb0:7075): stream up (0-3.1/trashcan /dev/tbstream0), epoch 5e157969
+link indite (indite.tb0:7075): stream down (the other side closed its stream); continuing over TCP
+link-test: {"path":"tcp","t":2.998,"unix":1791938557.4545903,"was":"stream"}
+Error: indite (indite.tb0:7075): 10.99.19.1:60572 -> 10.99.19.2:7075 (read: Connection reset by peer (os error 104))

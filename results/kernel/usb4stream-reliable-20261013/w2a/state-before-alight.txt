@@ -1,0 +1,10 @@
+alight 1792002967.332533386
+thunderbolt_stream 0
+thunderbolt_net 0
+thunderbolt 2
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	indite	0	0	2	up	thunderbolt1	10.99.54.2	10.99.54.1
+1-3	inflight	1	1	2	up	thunderbolt0	10.99.86.18	10.99.86.17
+901 /usr/local/bin/gpuq agent --hub https://gpuq.tdf.sh --name alight --gpu 2x FirePro D700 --probe amd --lock /home/fairfieldt/trashcan-exp/.lock --ignore Xorg,Xwayland,gnome-shell --ignore-cgroup /session.slice/
+77091 bash -c ~/trashcan-exp/flashnext/stream-ops.sh state; grep . /sys/kernel/config/thunderbolt/stream/*/trashcan/throttling 2>/dev/null
+77092 /bin/bash /home/fairfieldt/trashcan-exp/flashnext/stream-ops.sh state

@@ -1,0 +1,5 @@
+CPU latency request: 0 us, scoped to this command
+tp: 4 ranks over 2 machine(s), GPUs per machine [2, 2], f16 all-reduce payload
+GPU0: rank 0 of 4, 4341.7 MiB allocated
+GPU1: rank 1 of 4, 4341.7 MiB allocated
+[clocks] 154 samples card0 (02:00.0) sclk/mclk: 850/1370 x89 300/1370 x1 450/1370 x4 300/150 x60  max 50C card1 (06:00.0) sclk/mclk: 850/1370 x70 450/1370 x1 300/150 x83  max 49C  log=results/clocks/stream-tp4b-dec-tcp-1.txt

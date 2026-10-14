@@ -1,0 +1,12 @@
+incite inflight /dev/tbstream0
+inflight incite /dev/tbstream0
+inflight alight /dev/tbstream1
+alight inflight /dev/tbstream1
+alight indite /dev/tbstream0
+indite alight /dev/tbstream0
+indite invite /dev/tbstream1
+invite indite /dev/tbstream1
+invite enlight /dev/tbstream0
+enlight invite /dev/tbstream0
+enlight incite /dev/tbstream1
+incite enlight /dev/tbstream1

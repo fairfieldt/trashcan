@@ -1,0 +1,8 @@
+[17:42:55] probe on incite /dev/tbstream0, indite /dev/tbstream0
+[17:42:58] run 11: client incite, 112 B, follow 0, 40 rounds
+[17:43:01] run 12: client indite, 112 B, follow 0, 40 rounds
+[17:43:04] run 13: client incite, 112 B, follow 1, 200 rounds
+[17:43:06] run 14: client incite, 112 B, follow 3, 200 rounds
+[17:43:09] run 15: client incite, 4096 B, follow 0, 40 rounds
+[17:43:11] run 16: client indite, 112 B, follow 1, 200 rounds
+[17:43:11] probe done

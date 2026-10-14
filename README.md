@@ -57,7 +57,7 @@ target/release/trashcan qwen-chat ~/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.g
 
 Add `--mtp ~/models/qwen3.5-9b/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf` for speculative decoding with the model's
 own MTP layer; follow-up turns reuse the cached prefix. `--tp` splits every layer across the GPUs instead, and
-`--tp-stream`/`--tp-connect` across two Macs (`trashcan qwen-tp-node` on the other one); Qwen3.8-27B runs that way
+`--tp-connect` across two Macs (an address per cable; `trashcan qwen-tp-node` on the other one); Qwen3.8-27B runs that way
 on incite and invite at 150 tok/s prefill and 28.4 tok/s decode, 39.5 with MTP
 ([results/qwen/tp-merged-20261006](results/qwen/tp-merged-20261006/README.md), docs/qwen.md).
 

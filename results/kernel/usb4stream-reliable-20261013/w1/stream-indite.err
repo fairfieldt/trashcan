@@ -1,0 +1,13 @@
+link inflight (inflight.tb1:7075): stream up (1-3.1/trashcan /dev/tbstream1), epoch b920d185
+link inflight (inflight.tb1:7075): stream up (1-3.1/trashcan /dev/tbstream1), epoch 42ec0fcf
+link inflight (inflight.tb1:7075): stream up (1-3.1/trashcan /dev/tbstream1), epoch 72afefef
+link inflight (inflight.tb1:7075): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2c8cfe9b
+link inflight (inflight.tb1:7075): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5cce0993
+link inflight (inflight.tb1:7075): stream down (nothing acknowledged for 100ms); continuing over TCP
+link-test: {"path":"tcp","t":0.102,"unix":1791937941.0223122,"was":"stream"}
+link inflight (inflight.tb1:7075): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5cce0994
+link-test: {"path":"stream","t":1.112,"unix":1791937942.0316825,"was":"tcp"}
+link inflight (inflight.tb1:7075): stream down (the other side gave the stream up); continuing over TCP
+link-test: {"i":571,"ms":101.10873400000001,"path":"tcp","slow":"chain","t":1.205,"unix":1791937942.1317468}
+link-test: {"path":"tcp","t":1.212,"unix":1791937942.1317616,"was":"stream"}
+link-test: {"i":572,"ms":530.254891,"path":"tcp","slow":"chain","t":1.736,"unix":1791937942.6620812}

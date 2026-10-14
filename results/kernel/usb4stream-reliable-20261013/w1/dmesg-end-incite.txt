@@ -1,0 +1,60 @@
+[24045.908550] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[24049.168630] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[24049.168649] thunderbolt 0-3: Linux indite
+[24051.216245] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[24051.216264] thunderbolt 1-3: Linux enlight
+[24068.882338] ACPI: bus type thunderbolt unregistered
+[24074.650343] ACPI: bus type thunderbolt registered
+[24074.651247] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[24074.657355] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[24074.662795] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[24077.937269] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[24077.937280] thunderbolt 0-3: Linux indite
+[24079.985571] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[24079.985590] thunderbolt 1-3: Linux enlight
+[26930.969227] thunderbolt 1-3: failed to send properties changed notification
+[26930.969254] thunderbolt 0-3: failed to send properties changed notification
+[26933.017277] thunderbolt 0-3: failed to send properties changed notification
+[26933.019150] ACPI: bus type thunderbolt unregistered
+[26936.784991] ACPI: bus type thunderbolt registered
+[26936.785530] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[26936.788856] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[26936.794976] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[26940.062185] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[26940.062197] thunderbolt 0-3: Linux indite
+[26942.106146] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[26942.106164] thunderbolt 1-3: Linux enlight
+[26960.570537] thunderbolt 0-3: failed to send properties changed notification
+[26960.574551] thunderbolt 1-3: failed to send properties changed notification
+[26962.618618] thunderbolt 0-3: failed to send properties changed notification
+[26962.620718] ACPI: bus type thunderbolt unregistered
+[26966.449996] ACPI: bus type thunderbolt registered
+[26966.450955] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[26966.456000] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[26966.461379] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[26969.723423] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[26969.723443] thunderbolt 0-3: Linux indite
+[26971.771487] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[26971.771506] thunderbolt 1-3: Linux enlight
+[28596.540036] tbstream: RX CRC error
+[28619.349222] tbstream: RX CRC error
+[29591.967737] tbstream: RX CRC error
+[29891.032436] ACPI: bus type thunderbolt unregistered
+[29895.804544] ACPI: bus type thunderbolt registered
+[29895.805473] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[29895.811818] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[29895.818323] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[29901.157559] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[29901.157579] thunderbolt 1-3: Linux enlight
+[29909.317834] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[29909.317845] thunderbolt 0-3: Linux indite
+[30000.329826] thunderbolt 1-3: failed to send properties changed notification
+[30000.334203] ACPI: bus type thunderbolt unregistered
+[30004.052422] ACPI: bus type thunderbolt registered
+[30004.052950] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[30004.056294] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[30004.068389] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[30009.386756] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[30009.386776] thunderbolt 1-3: Linux enlight
+[30017.578911] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[30017.578923] thunderbolt 0-3: Linux indite

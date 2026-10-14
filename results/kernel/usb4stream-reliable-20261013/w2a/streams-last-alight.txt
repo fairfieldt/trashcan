@@ -1,0 +1,2 @@
+indite	up	/dev/tbstream0
+inflight	up	/dev/tbstream1

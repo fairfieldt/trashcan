@@ -1,0 +1,7 @@
+==
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	incite	0	0	2	up	thunderbolt0	10.99.19.2	10.99.19.1
+1-3	?	1	?	2	firmware	-	-	-
+thunderbolt_stream     40960  0
+thunderbolt_net        53248  0
+thunderbolt           581632  2 thunderbolt_stream,thunderbolt_net

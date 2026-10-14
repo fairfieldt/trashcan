@@ -1,0 +1,36 @@
+link-test: serving on 0.0.0.0:7075
+link: no stream: thunderbolt1: no stream 0-3.1/trashcan (tblink creates it)
+link-test: 10.99.21.1:57962: Test { mode: Pingpong, size: 64, count: 5000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over tcp
+link: no stream: thunderbolt1: no stream 0-3.1/trashcan (tblink creates it)
+link-test: 10.99.21.1:57972: Test { mode: Pingpong, size: 20480, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over tcp
+link: no stream: thunderbolt1: no stream 0-3.1/trashcan (tblink creates it)
+link-test: 10.99.21.1:57974: Test { mode: Exchange, size: 40960, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over tcp
+link: no stream: thunderbolt1: no stream 0-3.1/trashcan (tblink creates it)
+link-test: 10.99.21.1:36396: Test { mode: Bulk, size: 5242880, count: 20, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over tcp
+link: no stream: thunderbolt1: no stream 0-3.1/trashcan (tblink creates it)
+link-test: 10.99.21.1:36398: Test { mode: Chain, size: 64, count: 1000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over tcp
+link-test: serving on 0.0.0.0:7075
+link incite (10.99.21.1:52244): stream up (0-3.1/trashcan /dev/tbstream0), epoch f5e60f94
+link-test: 10.99.21.1:52244: Test { mode: Pingpong, size: 64, count: 200, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:52258): stream up (0-3.1/trashcan /dev/tbstream0), epoch 9ab28ba8
+link-test: 10.99.21.1:52258: Test { mode: Pingpong, size: 64, count: 5000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:40582): stream up (0-3.1/trashcan /dev/tbstream0), epoch 357a1805
+link-test: 10.99.21.1:40582: Test { mode: Pingpong, size: 20480, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:44010): stream up (0-3.1/trashcan /dev/tbstream0), epoch 2a877bc6
+link-test: 10.99.21.1:44010: Test { mode: Exchange, size: 40960, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:44026): stream up (0-3.1/trashcan /dev/tbstream0), epoch 95a6a143
+link-test: 10.99.21.1:44026: Test { mode: Bulk, size: 5242880, count: 20, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:44042): stream up (0-3.1/trashcan /dev/tbstream0), epoch 0943fee8
+link-test: 10.99.21.1:44042: Test { mode: Chain, size: 64, count: 1000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:45922): stream up (0-3.1/trashcan /dev/tbstream0), epoch 80cc7500
+link-test: 10.99.21.1:45922: Test { mode: Soak, size: 64, count: 10000, seconds: 600.0, seed: 1, server_drops_stream: 0.0 } over stream
+link incite (10.99.21.1:43774): stream up (0-3.1/trashcan /dev/tbstream0), epoch 6bf4e328
+link-test: 10.99.21.1:43774: Test { mode: Chain, size: 64, count: 200000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link-test: serving on 0.0.0.0:7075
+link incite (10.99.21.1:43778): stream up (0-3.1/trashcan /dev/tbstream0), epoch 38a7f1af
+link-test: 10.99.21.1:43778: Test { mode: Chain, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link-test: serving on 0.0.0.0:7075
+link-test: 10.99.21.1:36832: Test { mode: Chain, size: 64, count: 1000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over tcp
+link incite (10.99.21.1:36832): stream epoch 3d744d22 not opened (the other side gave the stream up)
+link incite (10.99.21.1:36832): stream up (0-3.1/trashcan /dev/tbstream0), epoch 3d744d23
+link incite (10.99.21.1:36832): stream down (nothing acknowledged for 100ms); continuing over TCP

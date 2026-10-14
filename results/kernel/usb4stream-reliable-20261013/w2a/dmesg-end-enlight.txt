@@ -1,0 +1,33 @@
+[    1.051563] ACPI: bus type thunderbolt registered
+[    1.052050] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.056477] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.059571] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    3.467926] Modules linked in: apple_gmux(+) soundcore video wmi fjes(-) button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci xhci_pci libata xhci_hcd ehci_pci iTCO_wdt ehci_hcd tg3 intel_pmc_bxt watchdog thunderbolt usbcore scsi_mod libphy i2c_i801 ioatdma lpc_ich i2c_smbus scsi_common mdio_bus configfs dca usb_common
+[    8.420816] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[    8.421818] thunderbolt 0-3: Linux (none)
+[   14.560994] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[   14.561014] thunderbolt 1-3: Linux incite
+[   15.648592] thunderbolt 1-3: failed to send properties changed notification
+[  192.249713] thunderbolt 1-3: failed to send properties changed notification
+[  192.249724] thunderbolt 0-3: failed to send properties changed notification
+[  194.297689] thunderbolt 0-3: failed to send properties changed notification
+[  194.300018] ACPI: bus type thunderbolt unregistered
+[  198.047080] ACPI: bus type thunderbolt registered
+[  198.047610] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  198.051521] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  198.056729] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  203.386007] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  203.386032] thunderbolt 0-3: Linux invite
+[  210.315789] thunderbolt 1-3: error waiting for link width to become 14
+[  211.322339] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  211.322358] thunderbolt 1-3: Linux incite
+[  221.786411] ACPI: bus type thunderbolt unregistered
+[  228.561611] ACPI: bus type thunderbolt registered
+[  228.562152] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  228.565452] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  228.569860] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  233.882321] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  233.882347] thunderbolt 0-3: Linux invite
+[  233.978296] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  233.978317] thunderbolt 1-3: Linux incite
+[  430.817899] TCP: thunderbolt0: Driver has suspect GRO implementation, TCP performance may be compromised.

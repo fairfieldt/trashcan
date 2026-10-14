@@ -1,0 +1,6 @@
+CPU latency request: 0 us, scoped to this command
+link enlight (enlight.tb1:7072): stream up (1-3.1/trashcan /dev/tbstream1), epoch c8f986f3
+tp: 4 ranks over 2 machine(s), GPUs per machine [2, 2], f16 all-reduce payload
+GPU0: rank 0 of 4, 4341.7 MiB allocated
+GPU1: rank 1 of 4, 4341.7 MiB allocated
+[clocks] 202 samples card0 (02:00.0) sclk/mclk: 850/1370 x88 300/1370 x1 450/1370 x1 300/150 x111 450/150 x1  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x75 450/1370 x1 300/150 x126  max 61C  log=results/clocks/stream-tp4-dec-mine-1.txt

@@ -1,0 +1,9 @@
+0-3: stream 0-3.1/trashcan, /dev/tbstream0, HopIDs 15/15
+1-3: stream 1-3.1/trashcan, /dev/tbstream1, HopIDs 15/15
+==
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	indite	0	0	2	up	thunderbolt0	10.99.19.1	10.99.19.2
+1-3	enlight	1	1	2	up	thunderbolt1	10.99.20.17	10.99.20.18
+thunderbolt_stream     40960  0
+thunderbolt_net        53248  0
+thunderbolt           581632  2 thunderbolt_stream,thunderbolt_net

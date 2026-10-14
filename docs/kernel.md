@@ -95,26 +95,53 @@ shuts down cleanly either way.
 - `thunderbolt_net`: nodes load it with `throttling=32000` (`/etc/modprobe.d/thunderbolt-net.conf`, from
   `nodes/macpro/root/`) for 40 us round trips; the kernel default of 128000 gives 128 us. NetworkManager
   leaves `thunderbolt*` interfaces alone (`/etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf`).
-- USB4STREAM: `sudo modprobe thunderbolt_stream` (nothing loads it automatically), then create the stream on one
-  end and fill in the other end's HopIDs by hand; the far end only auto-configures if the peer's properties arrived
-  before its directory was created. For one cable from `0-3` to `1-3`:
+- USB4STREAM: `tblink` (`nodes/macpro/root`) loads `thunderbolt_stream` and gives every working link to another
+  node the stream `trashcan` under the link's XDomain stream service, with input and output HopID 15 at both ends
+  (thunderbolt_net takes the lowest free ones from 8; the controllers allow up to 15), and creates it again whenever
+  it is missing or sits under a stale service name; `tblink links` shows each link's `/dev/tbstreamN`, and the devices
+  belong to `render` (`/etc/udev/rules.d/70-tbstream.rules`). By hand, for one cable from `0-3` to `1-3`:
 
   ```bash
   cfg=/sys/kernel/config/thunderbolt/stream
-  sudo mkdir -p $cfg/0-3.1/data $cfg/1-3.1/data
-  echo -1 | sudo tee $cfg/0-3.1/data/in_hopid $cfg/0-3.1/data/out_hopid
-  sudo cat $cfg/0-3.1/data/out_hopid | sudo tee $cfg/1-3.1/data/in_hopid
-  sudo cat $cfg/0-3.1/data/in_hopid | sudo tee $cfg/1-3.1/data/out_hopid
+  sudo mkdir -p $cfg/0-3.1/NAME $cfg/1-3.1/NAME
+  echo 15 | sudo tee $cfg/0-3.1/NAME/in_hopid $cfg/0-3.1/NAME/out_hopid $cfg/1-3.1/NAME/in_hopid $cfg/1-3.1/NAME/out_hopid
   ```
 
-  `index` in each directory gives the `/dev/tbstreamX` number. Measured: 25 us round trip for 64 B, 9.6-9.7 Gb/s one
-  way per cable, 15.9 Gb/s with one stream on each of three cables at once (`results/kernel/tb-loopback-20261006/`).
-- USB4STREAM between two Macs (`results/qwen/tp4-viability-20261006/`, whose `tbstream-up.sh` creates one stream per
-  cable): a 64 B exchange takes 13.5 us and a 20 KiB one 21.8 us over three streams, against 38 and 71-116 us over
-  TCP. Without Tx flow control (patch 0005) a sender can overrun the other end's 256-frame receive ring, which drops
-  data and logs `tbstream: RX CRC error`, so keep less than the ring in flight (the engine's lanes move at most
-  256 KiB per stream per round). Frames sent before the other end opens its stream pile up and arrive as a burst
-  later. Closing a stream sends a CLOSE frame; the other end then reads end of file until it reopens.
+  `index` in each directory gives the `/dev/tbstreamX` number. The engine's links (`engine/src/link`) find a link's
+  stream from the TCP connection's interface and move their data to it, with their own sequence numbers,
+  acknowledgements, CRC32C, credits and retransmission, falling back to TCP
+  (`results/kernel/usb4stream-reliable-20261013/`). Measured on a loopback cable: 25 us round trip for 64 B, 9.6-9.7
+  Gb/s one way per cable, 15.9 Gb/s with one stream on each of three cables at once
+  (`results/kernel/tb-loopback-20261006/`).
+- What the driver does (7.2.9 with 0005), measured between two Macs (`results/kernel/usb4stream-reliable-20261013/`):
+  a receiving controller reads a frame only once up to three more have arrived behind it on that stream (0, 1 or 3
+  by receiving end, the same at every ring position and with the interrupt throttling at 0; a ping-pong of single
+  frames waits for whatever comes next, with three more frames written right after each 46-142 us round trips from
+  Python); the Tx ring has no flow control, so frames that find the other end's 256-frame ring
+  full are lost without a trace; frames flagged with a CRC error or a buffer overrun are logged (`tbstream: RX CRC
+  error`) and passed to the reader like good ones; `read()` returns consecutive frames back to back; frames written
+  while the other end is closed pile up and arrive in a burst when it opens (past the ring's 256 frames they are
+  lost), and every close sends a CLOSE, so the end that closes last leaves one waiting at the other, which reads it as
+  end of file at its next open (main's TP lanes then fail their handshake); every close takes 500-530 ms (it waits for the receive ring to drain, which never happens); an fd kept open
+  across an XDomain reconnect stays valid but carries nothing; a stream's configfs group is named after the service
+  (`0-3.1`), whose index can change at a reconnect.
+- Between two Macs with the engine's links (link-test, every byte checked, three extra frames after every write): a
+  64 B ping-pong takes 32-47 us p50 on a stream against 40-95 us over TCP, a 40 KiB exchange 79-88 us against 169-219,
+  a chain token (40 KiB on, 10 KiB back) 121-160 us against 283-351, and 5 MiB one way runs at 556-604 MB/s against
+  292-470. End to end on six Macs, Flash-Next decodes 2.2% and MTP 2.0% faster on the streams than over TCP; Qwen3.8-27B
+  TP4 on two Macs decodes 10.7% faster (MTP 4.0% slower in one pair). The old lanes (`results/qwen/tp4-viability-20261006/`) only exchanged: 13.5 us for 64 B and 21.8 us for 20 KiB over
+  three streams, against 38 and 71-116 us over TCP.
+- Fixes worth making in the driver (proposed, not applied; the engine works without them):
+
+  | Fix | Expected benefit |
+  |---|---|
+  | Read a received frame as soon as it completes: find whether the completion is in memory and only unreported (7.3's `busy_poll`, which polls the rings, tests that) or late in the controller | No extra frames after each write; request/reply traffic at the stream's latency |
+  | Flush only the Tx ring on release (the Rx ring's in-flight list never empties) | A close in milliseconds instead of at least 0.5 s: faster session turnover, `rmmod` and resets not held up |
+  | Re-post frames flagged with a CRC error or a buffer overrun instead of returning their bytes, and count them (a configfs attribute) | Damaged data never reaches a reader; the loss shows as a gap and in a counter instead of in dmesg |
+  | When the XDomain goes away under an open fd, stop its rings and fail later reads, writes and polls (`-ENXIO`/`EPOLLHUP`) until it is reopened | A dead stream is reported at once instead of found by timeouts |
+  | Name configfs groups by the XDomain and the service key, or re-attach a group whose service index changed | Streams survive reconnects without being recreated |
+
+  The second and third are compile-checked diffs in `results/kernel/usb4stream-reliable-20261013/proposed/`.
 - Known upstream bug: removing a stream directory after a failed start warns in `ida_free` from
   `tbstream_dev_release` (fix drafted in `kernel/upstream/usb4stream-falcon-ridge/`, not applied locally).
 
@@ -136,6 +163,11 @@ shuts down cleanly either way.
   cycle (three Thunderbolt cables were also attached).
 - A reboot that never reaches the startup chime with Thunderbolt cables attached is the firmware hang above, not a
   kernel problem.
+- Do not reload the Thunderbolt modules on a node that is part of a run. On 2026-10-13 a `tblink reload` on inflight
+  left its links down ("failed request link state change, aborting" every second), two resets of a neighbouring pair
+  did not bring them back, and the reset of all six Macs that followed hung inflight in a NULL pointer dereference in
+  `tb_xdp_handle_request` after "failed to allocate host router" (`results/kernel/usb4stream-reliable-20261013/`); it
+  needed a power cycle.
 - After hard power cuts on 2026-10-06 the left Ethernet port (`enp12s0`) stopped getting a link; the cable is now
   in `enp11s0` (DHCP).
 

@@ -1,0 +1,8 @@
+0-3.1: removed stale stream
+==
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	enlight	0	0	2	up	thunderbolt0	10.99.36.1	10.99.36.2
+1-3	alight	1	1	2	up	thunderbolt1	10.99.38.17	10.99.38.18
+thunderbolt_stream     40960  0
+thunderbolt_net        53248  0
+thunderbolt           581632  2 thunderbolt_stream,thunderbolt_net

@@ -1,0 +1,10 @@
+invite 1792004012.847658269
+thunderbolt_stream 0
+thunderbolt_net 0
+thunderbolt 2
+xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
+0-3	enlight	0	0	2	up	thunderbolt0	10.99.36.1	10.99.36.2
+1-3	indite	1	1	2	up	thunderbolt1	10.99.35.17	10.99.35.18
+917 /usr/local/bin/gpuq agent --hub https://gpuq.tdf.sh --name invite --gpu 2x FirePro D700 --probe amd --lock /home/fairfieldt/trashcan-exp/.lock --ignore Xorg,Xwayland,gnome-shell --ignore-cgroup /session.slice/
+98766 bash -c ~/trashcan-exp/flashnext/stream-ops.sh state; grep . /sys/kernel/config/thunderbolt/stream/*/trashcan/throttling 2>/dev/null
+98767 /bin/bash /home/fairfieldt/trashcan-exp/flashnext/stream-ops.sh state

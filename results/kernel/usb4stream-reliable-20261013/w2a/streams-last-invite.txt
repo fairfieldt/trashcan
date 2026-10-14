@@ -1,0 +1,2 @@
+enlight	up	/dev/tbstream0
+indite	up	/dev/tbstream1

@@ -1,0 +1,78 @@
+#!/usr/bin/env python3
+"""Stand-in for ssh in a window script's simulation (simtest.sh): no Mac is touched. Answers the remote commands the
+window scripts send with plausible output after a short sleep, and logs each one to $SIMLOG."""
+import json, os, re, sys, time
+
+args = sys.argv[1:]
+while args and args[0].startswith('-'):
+    args = args[2:] if args[0] in ('-o', '-F', '-i', '-p') else args[1:]
+host, cmd = args[0], ' '.join(args[1:])
+host = host.split('.')[0]
+with open(os.environ.get('SIMLOG', '/dev/null'), 'a') as f:
+    f.write(f'{time.time():.3f} {host}: {cmd}\n')
+
+RING = ['incite', 'inflight', 'alight', 'indite', 'invite', 'enlight']
+nxt = {h: RING[(i + 1) % 6] for i, h in enumerate(RING)}
+prv = {h: RING[i - 1] for i, h in enumerate(RING)}
+
+
+def links():
+    print('xdomain\tpeer\tlocal_bus\tpeer_bus\tlanes\tstate\tiface\taddress\tpeer_address\tstream')
+    for bus, peer in ((0, nxt[host]), (1, prv[host])):
+        print(f'{bus}-3\t{peer}\t{bus}\t{1 - bus}\t2\tup\tthunderbolt{bus}\t10.0.0.{bus + 1}\t10.0.0.{bus + 2}\t/dev/tbstream{bus}')
+
+
+def result(label, mode, size):
+    st = {k: 0 for k in ('sent_stream', 'sent_tcp', 'got_stream', 'got_tcp', 'frames', 'rewinds', 'naks_sent', 'naks_got',
+                         'crc_errors', 'resync_bytes', 'stale', 'duplicates', 'gaps', 'epochs', 'ups', 'fallbacks',
+                         'tcp_failovers', 'pushes')}
+    lanes = [{'path': 'stream', 'stats': st}]
+    lat = {'p50': 50.0, 'p90': 60.0, 'p99': 80.0, 'max': 200.0, 'mean': 55.0, 'n': 100}
+    r = {'checked_bytes': 1000000, 'elapsed_s': 0.2, 'events': [], 'slow': [], 'lanes': lanes, 'lat_us': lat,
+         'server': {'lanes': lanes}, 'setup_ms': 5.0, 'start_unix': time.time()}
+    if mode == 'bulk':
+        r['mb_s'] = {'client_to_server': 500.0, 'server_to_client': 500.0}
+    if mode == 'soak':
+        r.update(rounds=10, chain_us=lat, exchange_40k_us=lat, bulk_5m_mb_s={'client_to_server': 500.0, 'server_to_client': 500.0},
+                 pingpong_64_us=lat)
+    return {'label': label, 'connect': ['x'], 'test': {'mode': mode, 'size': size}, 'result': r}
+
+
+if 'tblink links' in cmd:
+    links()
+elif 'stream-tbcheck.py pp' in cmd:
+    time.sleep(0.3)
+    m = re.search(r'pp (\S+) (client|server) (\d+) (\d+) (\d+) (\d+)', cmd)
+    side, n, follow = m.group(2), int(m.group(3)), int(m.group(5))
+    u = {'n': n, 'p50': 60.0, 'p90': 70.0, 'max': 90.0}
+    print(json.dumps({'step': 'pp', 'side': side, 'dev': m.group(1), 'size': 112, 'follow': follow, 'run': 1, 'rounds': n,
+                      'frames_seen': n, 'stale': 0, 'us': u, 'fillers': {'n': n, 'p50': 0, 'p90': 0, 'max': 0},
+                      'fillers_total': 0, 'first_rounds': [], 'close_ms': 500.0, 'host': host}))
+elif 'stream-tbcheck.py pos' in cmd:
+    time.sleep(0.3)
+    side = 'client' if ' client ' in cmd else 'server'
+    if side == 'client':
+        print(json.dumps({'step': 'pos', 'side': side, 'run': 1, 'rounds': 40,
+                          'fillers_by_position_mod_4': {'0': [3], '1': [2], '2': [1], '3': [0]}, 'raw': [], 'host': host}))
+    else:
+        print(json.dumps({'step': 'pos', 'side': side, 'run': 1, 'answered': 40, 'host': host}))
+elif 'stream-tbcheck.py drain' in cmd:
+    time.sleep(0.5)
+    print(json.dumps({'step': 'drain', 'dev': '/dev/tbstream0', 'bytes': 0, 'eofs': 0, 'close_ms': 500.0, 'host': host}))
+elif 'link-test run' in cmd:
+    m = re.search(r'--label (\S+).*--mode (\S+)', cmd)
+    size = re.search(r'--size (\d+)', cmd)
+    mode = m.group(2)
+    time.sleep(1.0 if mode == 'soak' else 0.2)
+    print(json.dumps(result(m.group(1), mode, int(size.group(1)) if size else 64)))
+elif 'temp1_input' in cmd:
+    print('50000\n50000')
+elif 'diff -r' in cmd:
+    print('dumps byte-identical\n1 2 3\n1 2 3')
+elif cmd.startswith('test -f /home/fairfieldt/models/qwen3.8-27b'):
+    sys.exit(0 if host in ('incite', 'enlight') else 1)
+elif 'md5sum' in cmd:
+    print('c7549a6b1d32  trashcan-stream')
+elif 'sleep' in cmd:
+    time.sleep(0.2)
+sys.exit(0)

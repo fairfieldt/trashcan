@@ -1,0 +1,12 @@
+{"step": "pos", "side": "client", "dev": "/dev/tbstream1", "run": 202, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 503.15691700006937, "host": "indite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 202, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 512.1938739998768, "host": "incite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream1", "run": 202, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 504.2511469996498, "host": "enlight"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 202, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 519.4859069997619, "host": "alight"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream0", "run": 202, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 507.0139299996299, "host": "invite"}
+{"step": "pos", "side": "client", "dev": "/dev/tbstream1", "run": 202, "rounds": 0, "fillers_by_position_mod_4": {}, "raw": [], "close_ms": 528.6276460001318, "host": "inflight"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream0", "run": 202, "answered": 0, "close_ms": 504.9848270000439, "host": "inflight"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream0", "run": 202, "answered": 0, "close_ms": 508.4315149997565, "host": "enlight"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream1", "run": 202, "answered": 0, "close_ms": 502.1016129999225, "host": "invite"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream0", "run": 202, "answered": 0, "close_ms": 530.7115810001051, "host": "indite"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream1", "run": 202, "answered": 0, "close_ms": 532.1050560000913, "host": "alight"}
+{"step": "pos", "side": "server", "dev": "/dev/tbstream1", "run": 202, "answered": 0, "close_ms": 527.2987729999841, "host": "incite"}

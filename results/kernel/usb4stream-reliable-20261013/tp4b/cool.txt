@@ -1,0 +1,3 @@
+cool after 140 s: incite 45 45 enlight 60 60 
+cool after 77 s: incite 45 45 enlight 60 60 
+cool after 67 s: incite 46 45 enlight 60 60 

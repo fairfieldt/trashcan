@@ -1,0 +1,44 @@
+[11:36:04] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/w2a-20261014-113600
+[11:36:04] ring: incite->inflight.tb0 inflight->alight.tb1 alight->indite.tb0 indite->invite.tb1 invite->enlight.tb0 enlight->incite.tb1 
+[11:36:04] preflight: files and sudo on every Mac
+[11:36:05] preflight ok: [14.8, 14.9, 15.0, 15.1, 16.1, 18.1] GB/s CRC32C
+[11:36:09] 1. link-test over TCP, every link at once (no streams yet)
+[11:36:18] 2. streams: one pass of this branch's tblink on every Mac
+== incite 11:36:22
+inflight	up	/dev/tbstream0
+enlight	up	/dev/tbstream1
+== indite 11:36:26
+alight	up	/dev/tbstream0
+invite	up	/dev/tbstream1
+== inflight 11:36:30
+incite	up	/dev/tbstream0
+alight	up	/dev/tbstream1
+== alight 11:36:35
+indite	up	/dev/tbstream0
+inflight	up	/dev/tbstream1
+== invite 11:36:40
+enlight	up	/dev/tbstream0
+indite	up	/dev/tbstream1
+== enlight 11:36:45
+invite	up	/dev/tbstream0
+incite	up	/dev/tbstream1
+[11:36:53]   devices: incite inflight /dev/tbstream0;inflight incite /dev/tbstream0;inflight alight /dev/tbstream1;alight inflight /dev/tbstream1;alight indite /dev/tbstream0;indite alight /dev/tbstream0;indite invite /dev/tbstream1;invite indite /dev/tbstream1;invite enlight /dev/tbstream0;enlight invite /dev/tbstream0;enlight incite /dev/tbstream1;incite enlight /dev/tbstream1;
+[11:36:53] 3. raw ping-pong on every link, throttling 8192 (as created)
+[11:36:55]   throttling:  12 8192;
+[11:38:03] 4. throttling 0, raw ping-pong again
+[11:38:06]   throttling:  12 0;
+[11:38:24]   throttling:  24 8192;
+[11:38:24]   throttling 0 does not release them on every link: trashcan-stream-push (one more frame after each write) at throttling 8192
+[11:38:24] 5. link-test over the streams, every link at once (trashcan-stream-push)
+[11:38:28]   6 of 6 links on the stream
+[11:39:17] 6. soak: every link, 10 minutes
+[11:49:19] 7. faults (no reloads or resets)
+[11:49:20] 7a peer killed mid-session (incite -> inflight), then a new session
+[11:49:40] 7b the server gives its stream up 2 s into a session (inflight -> alight)
+[11:50:05] 7c the server stopped for 2 s mid-session (alight -> indite)
+[11:52:31] 7d damaged and lost frames (indite -> invite): every 97th frame lost, every 101st damaged
+[11:52:44] 7e ring overrun: 300 frames past the credits (invite -> enlight)
+[11:52:45] 7f two processes on one cable (enlight -> incite)
+[11:53:07] 7g delayed start: the client 8 s before the server (incite -> inflight)
+[11:53:23] 8. cleanup
+[11:53:34] done; 1 result files with errors

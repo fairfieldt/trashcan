@@ -1,0 +1,2 @@
+alight	up	/dev/tbstream0
+invite	up	/dev/tbstream1

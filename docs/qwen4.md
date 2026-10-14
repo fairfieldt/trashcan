@@ -522,8 +522,8 @@ step 4.8 and 5.1-5.8 ms, `draft-bench`; 2.0 and 3.0-5.9 ms before,
 11. **Host work per decode step** (results/qwen4/decode-host-20261013): submitting each stage's graph before its
     input arrives took 2.4 -> 0.3 ms of submission off every token (+4.9% alone, about +4% on top of the rest). The
     graph waits on the GPU for a host event, which amdgpu resets after 2 s and which a crashed process would leave
-    set, so this waits for a gate that bounds itself on the GPU. Frames over USB4STREAM links instead of TCP would cut
-    the 10 hops (0.06-0.08 ms each).
+    set, so this waits for a gate that bounds itself on the GPU. Frames over USB4STREAM links instead of TCP: decode
+    +2.2%, MTP +2.0% on six Macs (results/kernel/usb4stream-reliable-20261013).
 
 ## Serving
 
@@ -540,7 +540,11 @@ trashcan serve G-iq4-00001-of-00006.gguf --host 0.0.0.0 --port 8000 \
     --head-split 12 --context 32768 --batch 128 --ngram disk
 ```
 
-Each `--nodes` address is resolved on the previous machine of the chain (`<peer>.tb<bus>` names from `tblink`).
+Each `--nodes` address is resolved on the previous machine of the chain (`<peer>.tb<bus>` names from `tblink`). Each
+hop is a link (`engine/src/link`): opened over TCP on that cable, it moves to the cable's USB4STREAM when both
+machines have it (tblink makes one on every link) and falls back to TCP if the stream fails, without losing or
+repeating a byte. On the streams the six Macs decode 2.2% and run MTP 2.0% faster than over TCP, with identical output
+(results/kernel/usb4stream-reliable-20261013).
 A request continues from the live state when everything processed so far (the previous prompt and its reply) is a
 prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet
 and n-gram states only run forward. `--no-prefix-cache` always starts at 0. `--mtp mtp-G-iq4.gguf [--draft-tokens 3]

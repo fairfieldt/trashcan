@@ -1,0 +1,60 @@
+[  228.216441] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  233.523842] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  233.523873] thunderbolt 0-3: Linux incite
+[  240.453497] thunderbolt 1-3: error waiting for link width to become 14
+[  241.460020] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  241.460043] thunderbolt 1-3: Linux inflight
+[  257.026068] ACPI: bus type thunderbolt unregistered
+[  263.775263] ACPI: bus type thunderbolt registered
+[  263.775958] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  263.781362] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  263.787865] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  269.109756] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[  269.109781] thunderbolt 0-3: Linux incite
+[  269.141311] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[  269.141323] thunderbolt 1-3: Linux inflight
+[  311.485716] TCP: thunderbolt0: Driver has suspect GRO implementation, TCP performance may be compromised.
+[ 1393.738611] ACPI: bus type thunderbolt unregistered
+[ 1400.532799] ACPI: bus type thunderbolt registered
+[ 1400.533666] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[ 1400.538062] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[ 1400.543099] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[ 1404.843550] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[ 1404.843575] thunderbolt 1-3: Linux inflight
+[ 1405.867565] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[ 1405.867579] thunderbolt 0-3: Linux incite
+[ 1424.588035] thunderbolt 0-3: failed to send properties changed notification
+[ 1424.589467] ACPI: bus type thunderbolt unregistered
+[ 1429.272652] ACPI: bus type thunderbolt registered
+[ 1429.273094] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[ 1429.278796] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[ 1429.282657] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[ 1433.580832] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[ 1433.580865] thunderbolt 1-3: Linux inflight
+[ 1434.604816] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[ 1434.604834] thunderbolt 0-3: Linux incite
+[ 4284.584424] ACPI: bus type thunderbolt unregistered
+[ 4291.471964] ACPI: bus type thunderbolt registered
+[ 4291.472422] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[ 4291.475803] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[ 4291.480167] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[ 4295.773777] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[ 4295.773803] thunderbolt 1-3: Linux inflight
+[ 4296.793994] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[ 4296.794019] thunderbolt 0-3: Linux incite
+[ 4314.250191] ACPI: bus type thunderbolt unregistered
+[ 4321.105811] ACPI: bus type thunderbolt registered
+[ 4321.106456] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[ 4321.112917] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[ 4321.118393] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[ 4325.407798] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[ 4325.407814] thunderbolt 1-3: Linux inflight
+[ 4326.432219] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[ 4326.432233] thunderbolt 0-3: Linux incite
+[ 5833.246712] tbstream: RX CRC error
+[ 5837.247419] tbstream: RX CRC error
+[ 5839.556010] tbstream: RX CRC error
+[ 6602.000815] tbstream: RX CRC error
+[ 6608.330229] tbstream: RX CRC error
+[ 6610.612844] tbstream: RX CRC error
+[ 6612.940421] tbstream: RX CRC error

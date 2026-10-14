@@ -1,0 +1,18 @@
+link-test: serving on 0.0.0.0:7075
+link alight (10.99.54.2:60938): stream up (0-3.1/trashcan /dev/tbstream0), epoch 837e0775
+link-test: 10.99.54.2:60938: Test { mode: Pingpong, size: 64, count: 5000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:60950): stream up (0-3.1/trashcan /dev/tbstream0), epoch 5bd88b9b
+link-test: 10.99.54.2:60950: Test { mode: Pingpong, size: 20480, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:60958): stream up (0-3.1/trashcan /dev/tbstream0), epoch 6de36dc3
+link-test: 10.99.54.2:60958: Test { mode: Exchange, size: 40960, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:60970): stream up (0-3.1/trashcan /dev/tbstream0), epoch 61f68a9f
+link-test: 10.99.54.2:60970: Test { mode: Bulk, size: 5242880, count: 20, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:60978): stream up (0-3.1/trashcan /dev/tbstream0), epoch becbc040
+link-test: 10.99.54.2:60978: Test { mode: Chain, size: 64, count: 1000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:60980): stream up (0-3.1/trashcan /dev/tbstream0), epoch 34ba38a9
+link-test: 10.99.54.2:60980: Test { mode: Soak, size: 64, count: 10000, seconds: 120.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:42968): stream up (0-3.1/trashcan /dev/tbstream0), epoch fc0584dd
+link-test: 10.99.54.2:42968: Test { mode: Chain, size: 64, count: 30000, seconds: 60.0, seed: 1, server_drops_stream: 0.0 } over stream
+link alight (10.99.54.2:42968): stream down (the other side closed its stream); continuing over TCP
+link alight (10.99.54.2:42968): stream epoch fc0584de not opened (the other side gave the stream up)
+link alight (10.99.54.2:42968): stream up (0-3.1/trashcan /dev/tbstream0), epoch fc0584df

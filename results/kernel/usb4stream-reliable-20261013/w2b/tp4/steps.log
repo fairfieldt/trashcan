@@ -1,0 +1,16 @@
+[12:21:07] pair incite + enlight (enlight.tb1); streams: incite /dev/tbstream1, enlight /dev/tbstream1
+[12:21:07] warm-up (page caches; not counted)
+[12:21:13]   stream-tp4-warm rc=1: 
+[12:21:13] decode and prefill 512, alternated
+[12:21:19]   stream-tp4-dec-main-1 rc=1: 
+[12:22:21]   stream-tp4-dec-mine-1 rc=0: "pp_tok_s":138.7754211218554 "tg_tok_s":27.081769043365814 
+[12:22:26]   stream-tp4-dec-main-2 rc=1: 
+[12:23:14]   stream-tp4-dec-mine-2 rc=0: "pp_tok_s":142.32086437845362 "tg_tok_s":26.5590173311654 
+[12:23:14] MTP, one alternated pair, cards cooled to 55 C before each
+[12:32:42]   stream-tp4-mtp-main-1 rc=1: 
+[12:33:31]   stream-tp4-mtp-mine-1 rc=0: "pp_tok_s":133.18849919941965 "tg_tok_s":31.6071529340835 
+[12:33:31] gates with this branch
+[12:34:04]   stream-tp4-val-mine rc=1: 
+[12:34:50]   stream-tp4-check-mtp-mine rc=0: 
+[12:35:33]   stream-tp4-check-v3-mine rc=0: 
+[12:35:33] done

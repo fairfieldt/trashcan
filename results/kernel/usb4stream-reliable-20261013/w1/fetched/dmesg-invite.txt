@@ -1,0 +1,52 @@
+[Tue Oct 13 17:03:09 2026] MDS CPU bug present and SMT on, data leak possible. See https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/mds.html for more details.
+[Tue Oct 13 17:03:09 2026] ACPI: [Firmware Bug]: BIOS _OSI(Linux) query ignored
+[Tue Oct 13 17:03:09 2026] PCI: Using host bridge windows from ACPI; if necessary, use "pci=nocrs" and report a bug
+[Tue Oct 13 17:03:10 2026] ACPI: bus type thunderbolt registered
+[Tue Oct 13 17:03:10 2026] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[Tue Oct 13 17:03:10 2026] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[Tue Oct 13 17:03:10 2026] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[Tue Oct 13 17:03:10 2026] ehci-pci 0000:00:1d.0: debug port 2
+[Tue Oct 13 17:03:12 2026] systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...
+[Tue Oct 13 17:03:12 2026] systemd[1]: Mounted sys-kernel-debug.mount - Kernel Debug File System.
+[Tue Oct 13 17:03:12 2026] WARNING: drivers/platform/x86/apple-gmux.c:884 at gmux_probe.cold+0x65/0x3d6 [apple_gmux], CPU#9: (udev-worker)/560
+[Tue Oct 13 17:03:12 2026] Modules linked in: i2c_algo_bit(+) apple_gmux(+) mei(+) bcma(+) video soundcore wmi fjes(-) button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci xhci_pci iTCO_wdt ehci_pci intel_pmc_bxt libata xhci_hcd ehci_hcd watchdog tg3 thunderbolt scsi_mod usbcore libphy i2c_i801 ioatdma i2c_smbus lpc_ich scsi_common mdio_bus configfs dca usb_common
+[Tue Oct 13 17:03:12 2026] Call Trace:
+[Tue Oct 13 17:03:23 2026] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:03:23 2026] thunderbolt 1-3: Linux alight
+[Tue Oct 13 17:03:23 2026] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:03:23 2026] thunderbolt 0-3: Linux enlight
+[Tue Oct 13 17:03:24 2026] thunderbolt 1-3: failed to send properties changed notification
+[Tue Oct 13 17:03:24 2026] thunderbolt 0-3: failed to send properties changed notification
+[Tue Oct 13 17:04:21 2026] thunderbolt 0-3: failed to send properties changed notification
+[Tue Oct 13 17:04:21 2026] ACPI: bus type thunderbolt unregistered
+[Tue Oct 13 17:04:27 2026] ACPI: bus type thunderbolt registered
+[Tue Oct 13 17:04:27 2026] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[Tue Oct 13 17:04:27 2026] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[Tue Oct 13 17:04:27 2026] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[Tue Oct 13 17:04:39 2026] thunderbolt 1-3: error waiting for link width to become 14
+[Tue Oct 13 17:04:39 2026] thunderbolt 0-3: error waiting for link width to become 14
+[Tue Oct 13 17:04:40 2026] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:04:40 2026] thunderbolt 1-3: Linux alight
+[Tue Oct 13 17:04:40 2026] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:04:40 2026] thunderbolt 0-3: Linux enlight
+[Tue Oct 13 17:04:49 2026] ACPI: bus type thunderbolt unregistered
+[Tue Oct 13 17:04:56 2026] ACPI: bus type thunderbolt registered
+[Tue Oct 13 17:04:56 2026] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[Tue Oct 13 17:04:56 2026] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[Tue Oct 13 17:04:56 2026] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[Tue Oct 13 17:05:01 2026] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:05:01 2026] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:05:01 2026] thunderbolt 1-3: Linux alight
+[Tue Oct 13 17:05:01 2026] thunderbolt 0-3: Linux enlight
+[Tue Oct 13 17:05:49 2026] TCP: thunderbolt1: Driver has suspect GRO implementation, TCP performance may be compromised.
+[Tue Oct 13 17:32:19 2026] tbstream: RX CRC error
+[Tue Oct 13 17:48:31 2026] tbstream: RX CRC error
+[Tue Oct 13 17:58:54 2026] ACPI: bus type thunderbolt unregistered
+[Tue Oct 13 17:59:10 2026] ACPI: bus type thunderbolt registered
+[Tue Oct 13 17:59:10 2026] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[Tue Oct 13 17:59:10 2026] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[Tue Oct 13 17:59:10 2026] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[Tue Oct 13 17:59:16 2026] thunderbolt 0-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:59:16 2026] thunderbolt 0-3: Linux enlight
+[Tue Oct 13 17:59:16 2026] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 13 17:59:16 2026] thunderbolt 1-3: Linux alight
