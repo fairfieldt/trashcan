@@ -5,6 +5,7 @@ mod generation;
 mod gguf;
 mod gpu;
 mod link;
+mod linktest;
 mod micro;
 mod model;
 mod prefill_micro;
@@ -36,6 +37,9 @@ enum Cmd {
     Serve(server::Options),
     /// Time cross-machine all-reduces for tensor parallelism over Thunderbolt, checking every value.
     AllreduceBench(allreduce::Options),
+    /// Links between machines under load, every byte checked (see linktest.rs).
+    #[command(subcommand)]
+    LinkTest(linktest::Cmd),
     /// Show both GPUs and check every Vulkan feature and extension the engine depends on.
     Devices,
     /// Measure a repacked matrix kernel; check small batches against the original GPU kernel and CPU rows.
@@ -344,23 +348,21 @@ enum Cmd {
         #[arg(long)]
         mtp: Option<PathBuf>,
     },
-    /// Serve the other machine's GPUs of a tensor-parallel group (`--tp-connect` or `--tp-stream` on the driver).
+    /// Serve this machine's GPUs in a tensor-parallel group (`--tp-connect` or `--tp-peer` on the driver).
     QwenTpNode {
         model: PathBuf,
         /// MTP layer GGUF, used when the driver drafts.
         #[arg(long)]
         mtp: Option<PathBuf>,
-        /// Accept TCP lanes on this address, one connection per Thunderbolt link.
-        #[arg(long)]
-        listen: Option<String>,
-        /// USB4STREAM devices instead, one per cable, in the same cable order on both machines.
-        #[arg(long, value_delimiter = ',')]
-        stream: Vec<String>,
+        /// Accept the lanes of lower machines here, one per cable; each moves to its cable's USB4STREAM when both
+        /// machines have it.
+        #[arg(long, default_value = "0.0.0.0:7072")]
+        listen: String,
         /// This machine's index in a group of 2, 4 or 8 machines (0 is the driver), with --peer.
         #[arg(long, default_value_t = 1)]
         machine: usize,
-        /// MACHINE=DEVICE[,DEVICE...]: the USB4STREAM devices of the cables to each machine of the group this one
-        /// is cabled to. Four machines need the cables 0-1, 2-3, 0-2 and 1-3.
+        /// MACHINE=HOST:PORT[,HOST:PORT...] for each higher machine this one is cabled to (one address per cable,
+        /// e.g. 3=indite.tb0:7072), MACHINE for each lower one. Four machines need the cables 0-1, 2-3, 0-2 and 1-3.
         #[arg(long)]
         peer: Vec<String>,
         #[arg(long, value_delimiter = ',')]
@@ -432,31 +434,28 @@ struct QwenRun {
     /// Checkpoints kept for prefix reuse across turns (0 disables reuse).
     #[arg(long, default_value_t = 8)]
     checkpoints: usize,
-    /// Tensor parallelism: split every layer across this machine's GPUs (and the other machine's, with
-    /// --tp-connect or --tp-stream) instead of giving each GPU a range of layers.
+    /// Tensor parallelism: split every layer across this machine's GPUs (and the other machines', with
+    /// --tp-connect or --tp-peer) instead of giving each GPU a range of layers.
     #[arg(long)]
     tp: bool,
-    /// The other machine of the tensor-parallel group (`trashcan qwen-tp-node --listen`): one TCP address per
-    /// Thunderbolt link, e.g. invite.tb0:7072,invite.tb1:7072.
+    /// The other machine of the tensor-parallel group (`trashcan qwen-tp-node`): one address per cable, e.g.
+    /// invite.tb0:7072,invite.tb1:7072. Each lane moves to its cable's USB4STREAM when both machines have it.
     #[arg(long, value_delimiter = ',')]
     tp_connect: Vec<String>,
-    /// The other machine over USB4STREAM devices, one per cable, in the same cable order on both machines.
-    #[arg(long, value_delimiter = ',')]
-    tp_stream: Vec<String>,
-    /// A group of 2, 4 or 8 machines over USB4STREAM: MACHINE=DEVICE[,DEVICE...] for each machine this one (machine
-    /// 0) is cabled to, e.g. --tp-peer 1=/dev/tbstream0 --tp-peer 2=/dev/tbstream1 (see `qwen-tp-node --peer`).
+    /// A group of 2, 4 or 8 machines: MACHINE=HOST:PORT[,HOST:PORT...] for each machine this one (machine 0) is
+    /// cabled to, e.g. --tp-peer 1=invite.tb1:7072 --tp-peer 2=enlight.tb0:7072 (see `qwen-tp-node --peer`).
     #[arg(long)]
     tp_peer: Vec<String>,
 }
 impl QwenRun {
     fn chain(&self, model: &Path) -> Result<qwen::net::Chain> {
-        if self.tp || !self.tp_connect.is_empty() || !self.tp_stream.is_empty() || !self.tp_peer.is_empty() {
+        if self.tp || !self.tp_connect.is_empty() || !self.tp_peer.is_empty() {
             anyhow::ensure!(
                 self.nodes.is_empty() && !self.cpu && self.cuts.is_empty(),
                 "tensor parallelism runs without --nodes, --cpu or --cuts"
             );
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, self.gpus.clone())? else { unreachable!() };
-            let peer = qwen::tp::mesh(&self.tp_connect, &self.tp_stream, &self.tp_peer)?;
+            let peer = qwen::tp::mesh(&self.tp_connect, &self.tp_peer)?;
             let verify = self.verify.unwrap_or(if self.mtp.is_some() { self.draft_tokens + 1 } else { 0 });
             let mtp = self.mtp.as_deref();
             let mut chain = qwen::net::Chain::tensor_parallel(model, &gpus, peer, self.context, self.batch, verify, mtp, self.draft_vocab)?;
@@ -614,6 +613,7 @@ fn main() -> Result<()> {
     match Cli::parse().cmd {
         Cmd::Serve(options) => server::serve(options),
         Cmd::AllreduceBench(options) => allreduce::run(&options),
+        Cmd::LinkTest(cmd) => linktest::main(&cmd),
         Cmd::Devices => gpu::report(),
         Cmd::MatvecBench {
             model,
@@ -1049,13 +1049,9 @@ fn main() -> Result<()> {
             gpus,
             mtp,
         } => qwen::net::serve(&model, mtp, &listen, qwen::chat::devices(cpu, gpus)?),
-        Cmd::QwenTpNode { model, mtp, listen, stream, machine, peer, gpus } => {
-            anyhow::ensure!(
-                [listen.is_some(), !stream.is_empty(), !peer.is_empty()].into_iter().filter(|&b| b).count() == 1,
-                "give --listen, --stream or --peer"
-            );
+        Cmd::QwenTpNode { model, mtp, listen, machine, peer, gpus } => {
             let qwen::pipeline::Devices::Gpus(gpus) = qwen::chat::devices(false, gpus)? else { unreachable!() };
-            qwen::tp::serve(&model, mtp.as_deref(), &gpus, listen.as_deref(), &stream, machine, &peer)
+            qwen::tp::serve(&model, mtp.as_deref(), &gpus, &listen, machine, &peer)
         }
         Cmd::QwenRef {
             model,

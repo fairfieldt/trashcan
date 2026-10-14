@@ -86,18 +86,13 @@ pub struct Options {
     /// Local GPUs.
     #[arg(long, value_delimiter = ',', default_value = "0,1")]
     pub gpus: Vec<usize>,
-    /// Start a session with the other machine: one TCP address per lane, e.g. invite.tb0:7071,invite.tb1:7071.
+    /// Start a session with the other machine: one address per cable, e.g. invite.tb0:7071,invite.tb1:7071. Each
+    /// lane moves to the cable's USB4STREAM when both machines have it (link/).
     #[arg(long, value_delimiter = ',')]
     pub connect: Vec<String>,
-    /// Serve sessions started by the other machine, accepting TCP lanes on this address.
+    /// Serve sessions started by the other machine, accepting its lanes on this address.
     #[arg(long)]
     pub listen: Option<String>,
-    /// USB4STREAM devices instead of TCP, one per cable, in the same cable order on both machines.
-    #[arg(long, value_delimiter = ',')]
-    pub stream: Vec<String>,
-    /// With --stream: serve sessions instead of starting one.
-    #[arg(long)]
-    pub serve: bool,
     /// Run several configurations over the same lanes: a file of JSON objects, one per line, each overriding
     /// the command-line configuration. One result line is printed per configuration.
     #[arg(long)]
@@ -110,19 +105,9 @@ pub fn run(o: &Options) -> Result<()> {
         let listener = TcpListener::bind(addr).with_context(|| format!("listening on {addr}"))?;
         eprintln!("allreduce: serving on {addr}");
         loop {
-            if let Err(e) = Lanes::accept(&listener).and_then(|mut lanes| serve(o, &mut lanes)) {
+            if let Err(e) = Lanes::accept(&listener).and_then(|(mut lanes, _)| serve(o, &mut lanes)) {
                 eprintln!("allreduce: session failed: {e:#}");
             }
-        }
-    }
-    if o.serve {
-        ensure!(!o.stream.is_empty(), "--serve needs --stream; TCP sessions are served with --listen");
-        loop {
-            if let Err(e) = Lanes::streams(&o.stream, true).and_then(|mut lanes| serve(o, &mut lanes)) {
-                eprintln!("allreduce: session failed: {e:#}");
-            }
-            // Let the other machine close its ends before the streams reopen.
-            std::thread::sleep(Duration::from_millis(500));
         }
     }
     let mut configs = vec![o.config.clone()];
@@ -141,13 +126,7 @@ pub fn run(o: &Options) -> Result<()> {
             })
             .collect::<Result<Vec<Config>>>()?;
     }
-    let mut lanes = if !o.connect.is_empty() {
-        Some(Lanes::connect(&o.connect)?)
-    } else if !o.stream.is_empty() {
-        Some(Lanes::streams(&o.stream, false)?)
-    } else {
-        None
-    };
+    let mut lanes = if !o.connect.is_empty() { Some(Lanes::connect(&o.connect, "allreduce")?) } else { None };
     for c in &configs {
         let ranks = local_ranks(c, &o.gpus);
         if let Some(l) = lanes.as_mut() {
@@ -161,7 +140,7 @@ pub fn run(o: &Options) -> Result<()> {
             Some(l) => serde_json::from_slice(&l.recv_message()?)?,
             None => Value::Null,
         };
-        let link = lanes.as_ref().map(|l| json!({"kind": l.kind, "lanes": l.count()}));
+        let link = lanes.as_ref().map(|l| json!({"kind": l.kind(), "lanes": l.count()}));
         println!("{}", json!({"config": c, "link": link, "machine0": mine, "machine1": peer}));
     }
     if let Some(l) = lanes.as_mut() {

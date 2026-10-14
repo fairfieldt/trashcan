@@ -1,7 +1,7 @@
 //! The qwen4exp machine chain, with the protocol of `qwen::net` (frames `[u32 header length][u64 blob
-//! length][JSON header][blob]`; probe, setup and forward requests). The payload between machines is the
-//! hyper-connection residual, `hc * d` floats per token. The driver embeds tokens, gathers the n-gram rows and
-//! owns the PLE layer.
+//! length][JSON header][blob]`; probe, setup and forward requests) over links (`crate::link`: the cable's USB4STREAM
+//! when it has one, else TCP). The payload between machines is the hyper-connection residual, `hc * d` floats per
+//! token. The driver embeds tokens, gathers the n-gram rows and owns the PLE layer.
 use super::{
     cpu::Captures,
     embed,
@@ -10,40 +10,34 @@ use super::{
     pipeline::{assemble_logits, head_rows, plan, tl, Done, Local},
     trace, Config,
 };
-use crate::{gguf::Gguf, qwen::pipeline::Devices};
+use crate::{
+    gguf::Gguf,
+    link::{Accepted, Link, Options},
+    qwen::pipeline::Devices,
+};
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
     io::{BufReader, ErrorKind, IoSlice, Read, Write},
-    net::{Shutdown, TcpListener, TcpStream},
+    net::TcpListener,
     path::Path,
     sync::mpsc,
 };
 
 struct Conn {
-    r: BufReader<TcpStream>,
-    w: TcpStream,
+    r: BufReader<Link>,
+    w: Link,
     /// Toward the driver (trace marks only).
     up: bool,
 }
 
 impl Conn {
-    fn new(s: TcpStream, up: bool) -> Result<Self> {
-        s.set_nodelay(true)?;
-        Ok(Self { r: BufReader::with_capacity(1 << 20, s.try_clone()?), w: s, up })
+    fn new(link: Link, up: bool) -> Self {
+        Self { r: BufReader::with_capacity(1 << 20, link.clone()), w: link, up }
     }
-    /// Connect to the next machine, retrying for up to a minute while it is still starting (its port refuses).
+    /// Connect to the next machine (the link retries for up to a minute while it is still starting).
     fn connect(addr: &str) -> Result<Self> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
-        loop {
-            match TcpStream::connect(addr) {
-                Ok(s) => return Self::new(s, false),
-                Err(e) if e.kind() == std::io::ErrorKind::ConnectionRefused && std::time::Instant::now() < deadline => {
-                    std::thread::sleep(std::time::Duration::from_millis(100))
-                }
-                Err(e) => return Err(e).with_context(|| format!("connecting to {addr}")),
-            }
-        }
+        Ok(Self::new(Link::connect(addr, "chain")?, false))
     }
     fn send(&mut self, header: &Value, blob: &[u8]) -> Result<()> {
         trace::mark(if self.up { "tx_up0" } else { "tx_dn0" }, blob.len() as u64);
@@ -57,7 +51,7 @@ impl Conn {
     /// `recv` for a frame expected shortly (a decode step's reply): watch for it before sleeping.
     fn recv_hot(&mut self) -> Result<(Value, Vec<f32>)> {
         if self.r.buffer().is_empty() {
-            spin_readable(self.r.get_ref(), HOT);
+            self.r.get_ref().spin_readable(HOT);
         }
         self.recv()
     }
@@ -111,10 +105,10 @@ fn read_frame(r: &mut impl Read, down: bool) -> Result<(Value, Vec<f32>, u64)> {
 
 type Requests = mpsc::Receiver<Result<(Value, Vec<f32>, u64)>>;
 
-/// Read the previous machine's requests on a thread of their own, so that it can send the next prompt chunk (MiBs,
-/// more than the socket buffers take) while this machine's GPUs work.
-fn requests(s: &TcpStream) -> Result<Requests> {
-    let mut r = BufReader::with_capacity(1 << 20, s.try_clone()?);
+/// Read the previous machine's requests on a thread of their own, so that it can send the next prompt chunk (MiBs)
+/// while this machine's GPUs work.
+fn requests(link: &Link) -> Requests {
+    let mut r = BufReader::with_capacity(1 << 20, link.clone());
     let (tx, rx) = mpsc::sync_channel(4);
     std::thread::spawn(move || loop {
         let m = read_frame(&mut r, false);
@@ -125,10 +119,10 @@ fn requests(s: &TcpStream) -> Result<Requests> {
             break;
         }
         if step && r.buffer().is_empty() {
-            spin_readable(r.get_ref(), HOT);
+            r.get_ref().spin_readable(HOT);
         }
     });
-    Ok(rx)
+    rx
 }
 
 /// Whether a request belongs to decoding (a decode step's or a verification batch's forward, a rollback after one):
@@ -141,15 +135,6 @@ fn decode_step(header: &Value) -> bool {
 /// How long a thread expecting a decode step's next frame spins before it sleeps: the frames of a decode step follow
 /// each other within tens of milliseconds, and a sleeping thread wakes tens of microseconds after its data arrived.
 const HOT: std::time::Duration = std::time::Duration::from_millis(100);
-
-/// Spin until `s` has data to read, or for at most `limit`.
-fn spin_readable(s: &impl std::os::unix::io::AsRawFd, limit: std::time::Duration) {
-    let start = std::time::Instant::now();
-    let mut fd = libc::pollfd { fd: s.as_raw_fd(), events: libc::POLLIN, revents: 0 };
-    while unsafe { libc::poll(&mut fd, 1, 0) } == 0 && start.elapsed() < limit {
-        std::hint::spin_loop();
-    }
-}
 
 /// The next request; a frame expected shortly (`hot`) is watched for before sleeping.
 fn next_request(requests: &Requests, hot: bool) -> std::result::Result<Result<(Value, Vec<f32>, u64)>, mpsc::RecvError> {
@@ -317,16 +302,27 @@ pub fn serve(model: &Path, listen: &str, devices: Devices) -> Result<()> {
     eprintln!("qwen4 node: {} on {listen}, devices {devices:?}", model.display());
     for stream in listener.incoming() {
         let stream = stream?;
-        eprintln!("qwen4 node: session from {}", stream.peer_addr()?);
-        let requests = requests(&stream)?;
-        let mut up = Conn::new(stream, true)?;
+        let peer = stream.peer_addr()?;
+        let link = match Link::accept_with(stream, &Options::default()) {
+            Ok(Accepted::Link(link, _)) => link,
+            // A second path of a link over several cables (a chain link has one).
+            Ok(Accepted::Joined(_)) => continue,
+            // E.g. a runner's check that the port is open.
+            Err(e) => {
+                eprintln!("qwen4 node: no session from {peer}: {e:#}");
+                continue;
+            }
+        };
+        eprintln!("qwen4 node: session from {peer}");
+        let requests = requests(&link);
+        let mut up = Conn::new(link, true);
         let mut traced = false;
         if let Err(e) = session(model, &devices, &mut up, &requests, &mut traced) {
             eprintln!("qwen4 node: session ended: {e:#}");
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
         }
-        // The reader thread holds the socket too: close it as dropping `up` alone did.
-        let _ = up.w.shutdown(Shutdown::Both);
+        // The reader thread holds the link too: end it for both.
+        up.w.shutdown();
         if !traced {
             trace::write("node", Value::Null);
         }
@@ -938,9 +934,12 @@ mod tests {
     fn pair() -> (Conn, Conn) {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let address = listener.local_addr().unwrap().to_string();
-        let accepted = std::thread::spawn(move || listener.accept().unwrap().0);
+        let accepted = std::thread::spawn(move || match Link::accept_with(listener.accept().unwrap().0, &Options::default()) {
+            Ok(Accepted::Link(link, _)) => link,
+            _ => panic!("no link"),
+        });
         let a = Conn::connect(&address).unwrap();
-        let b = Conn::new(accepted.join().unwrap(), true).unwrap();
+        let b = Conn::new(accepted.join().unwrap(), true);
         (a, b)
     }
 

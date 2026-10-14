@@ -417,16 +417,23 @@ impl Mesh {
         Self { machine, machines: 0, links, wire: Wire::F32, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new(), stats: Stats::default() }
     }
 
-    /// Open the USB4STREAM lanes to every machine in `peers` (machine, devices). Lanes to lower machines wait for
-    /// them, all at once; lanes to higher machines are then started, so a group starts when its driver does.
-    fn open(machine: usize, peers: &[(usize, Vec<String>)]) -> Result<Self> {
-        let lower: Vec<_> = peers.iter().filter(|p| p.0 < machine).collect();
-        let mut links = std::thread::scope(|s| {
-            let waits: Vec<_> = lower.iter().map(|(m, paths)| s.spawn(move || Lanes::streams(paths, true).map(|l| (*m, l)))).collect();
-            waits.into_iter().map(|w| w.join().expect("lane thread panicked")).collect::<Result<Vec<_>>>()
-        })?;
-        for (m, paths) in peers.iter().filter(|p| p.0 > machine) {
-            links.push((*m, Lanes::streams(paths, false).with_context(|| format!("starting the lanes to machine {m}"))?));
+    /// Open the lanes to every machine in `peers` (machine, addresses of its cables). Lower machines connect to this
+    /// one's `listener`, all at once; this one then connects to the higher machines, so a group starts when its
+    /// driver does. Each lane takes its cable's USB4STREAM when both machines have it (link/).
+    fn open(machine: usize, listener: Option<&TcpListener>, peers: &[(usize, Vec<String>)]) -> Result<Self> {
+        let lower: Vec<usize> = peers.iter().map(|p| p.0).filter(|&m| m < machine).collect();
+        let mut links = Vec::new();
+        if !lower.is_empty() {
+            let l = listener.context("lower machines connect to this one: give --listen")?;
+            for (group, lanes) in Lanes::accept_groups(l, lower.len())? {
+                let m: usize = group.strip_prefix("tp ").and_then(|m| m.parse().ok()).with_context(|| format!("unexpected lanes {group:?}"))?;
+                ensure!(lower.contains(&m), "machine {m} connected, expected machines {lower:?}");
+                links.push((m, lanes));
+            }
+        }
+        for (m, addrs) in peers.iter().filter(|p| p.0 > machine) {
+            ensure!(!addrs.is_empty(), "machine {machine} connects to machine {m}: give its addresses (--peer {m}=HOST:PORT,...)");
+            links.push((*m, Lanes::connect(addrs, &format!("tp {machine}")).with_context(|| format!("connecting the lanes to machine {m}"))?));
         }
         Ok(Self::new(machine, links))
     }
@@ -918,13 +925,16 @@ impl Mesh {
     }
 }
 
-/// `--tp-peer`/`--peer` values `MACHINE=DEVICE[,DEVICE...]`: the USB4STREAM devices of the cables to that machine.
+/// `--tp-peer`/`--peer` values `MACHINE=HOST:PORT[,HOST:PORT...]`, the machines this one is cabled to and the
+/// address of each cable to it (`<peer>.tb<bus>:port`, one lane per cable); a lower machine connects to this one, so
+/// `MACHINE` alone names it.
 pub fn parse_peers(specs: &[String]) -> Result<Vec<(usize, Vec<String>)>> {
     specs
         .iter()
         .map(|s| {
-            let (m, devices) = s.split_once('=').with_context(|| format!("peer {s:?}: expected MACHINE=DEVICE[,DEVICE...]"))?;
-            Ok((m.parse().with_context(|| format!("peer {s:?}: machine"))?, devices.split(',').map(str::to_owned).collect()))
+            let (m, addrs) = s.split_once('=').unwrap_or((s, ""));
+            let addrs = addrs.split(',').filter(|a| !a.is_empty()).map(str::to_owned).collect();
+            Ok((m.parse().with_context(|| format!("peer {s:?}: expected MACHINE[=HOST:PORT,...]"))?, addrs))
         })
         .collect()
 }
@@ -1248,8 +1258,9 @@ impl TpGroup {
         let mut remote = None;
         if let Some(m) = self.mesh.as_mut() {
             // While a gated submission waits on the GPUs, a stalled exchange must fail (and drain them) well
-            // before amdgpu's job timeout.
-            let stall = if self.shards[0].tp_gated() { Duration::from_secs(2) } else { crate::link::STALL };
+            // before amdgpu's job timeout, which is 2 s on these kernels. A healthy exchange takes microseconds,
+            // and a link whose stream dies goes on over TCP within about 100 ms (link/proto.rs).
+            let stall = if self.shards[0].tp_gated() { Duration::from_millis(500) } else { crate::link::STALL };
             let last = m.all_reduce(sum, &mut self.remote[..len], stall, threads, self.c.d)?;
             exchanged = Instant::now();
             if last {
@@ -1385,17 +1396,14 @@ impl Drop for TpGroup {
     }
 }
 
-/// The other machines of a tensor-parallel group, from the driver's `--tp-connect` (TCP) or `--tp-stream` (one other
-/// machine) or `--tp-peer` (`parse_peers`).
-pub fn mesh(connect: &[String], stream: &[String], peers: &[String]) -> Result<Option<Mesh>> {
-    let given = [connect, stream, peers].iter().filter(|v| !v.is_empty()).count();
-    ensure!(given <= 1, "give one of --tp-connect, --tp-stream and --tp-peer");
+/// The other machines of a tensor-parallel group, from the driver's `--tp-connect` (one other machine) or `--tp-peer`
+/// (`parse_peers`).
+pub fn mesh(connect: &[String], peers: &[String]) -> Result<Option<Mesh>> {
+    ensure!(connect.is_empty() || peers.is_empty(), "give --tp-connect or --tp-peer");
     Ok(if !connect.is_empty() {
-        Some(Mesh::new(0, vec![(1, Lanes::connect(connect)?)]))
-    } else if !stream.is_empty() {
-        Some(Mesh::new(0, vec![(1, Lanes::streams(stream, false)?)]))
+        Some(Mesh::new(0, vec![(1, Lanes::connect(connect, "tp 0")?)]))
     } else if !peers.is_empty() {
-        Some(Mesh::open(0, &parse_peers(peers)?)?)
+        Some(Mesh::open(0, None, &parse_peers(peers)?)?)
     } else {
         None
     })
@@ -1426,37 +1434,31 @@ fn merge_counts(counts: &mut BTreeMap<usize, usize>, reply: &Value) -> Result<()
     Ok(())
 }
 
-/// Serve the ranks of `machine` in tensor-parallel groups, one driver at a time. Machine 1 of two can take TCP
-/// lanes accepted on `listen` or the USB4STREAM devices `streams` to the driver; any machine can instead name the
-/// devices to each machine it is cabled to (`peers`, see `parse_peers`).
-pub fn serve(model: &Path, mtp: Option<&Path>, gpus: &[usize], listen: Option<&str>, streams: &[String], machine: usize, peers: &[String]) -> Result<()> {
+/// Serve the ranks of `machine` in tensor-parallel groups, one driver at a time, accepting the lanes of lower
+/// machines on `listen`. Machine 1 of two needs nothing more; in a larger group every machine names the machines it
+/// is cabled to (`peers`, see `parse_peers`) and connects to the higher ones.
+pub fn serve(model: &Path, mtp: Option<&Path>, gpus: &[usize], listen: &str, machine: usize, peers: &[String]) -> Result<()> {
     let peers = parse_peers(peers)?;
-    ensure!(peers.is_empty() || (listen.is_none() && streams.is_empty()), "give --peer, or --listen or --stream");
     ensure!(machine > 0, "machine 0 drives the group");
-    ensure!(!peers.is_empty() || machine == 1, "--listen and --stream serve machine 1");
+    ensure!(!peers.is_empty() || machine == 1, "machine {machine}: give --peer for every machine it is cabled to");
     ensure!(peers.is_empty() || peers.iter().any(|p| p.0 == parent(machine)), "machine {machine} hears from machine {}: give --peer for it", parent(machine));
-    let listener = listen.map(|a| TcpListener::bind(a).with_context(|| format!("listening on {a}"))).transpose()?;
-    let place = if !peers.is_empty() { format!("machine {machine}, {peers:?}") } else { listen.map_or(format!("{streams:?}"), str::to_owned) };
-    eprintln!("tp-node: {} on {place}, GPUs {gpus:?}", model.display());
+    let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
+    eprintln!("tp-node: {} on {listen}, machine {machine}, peers {peers:?}, GPUs {gpus:?}", model.display());
     loop {
-        let mesh = match &listener {
-            Some(l) => Lanes::accept(l).map(|l| Mesh::new(1, vec![(0, l)])),
-            None if !peers.is_empty() => Mesh::open(machine, &peers),
-            None => Lanes::streams(streams, true).map(|l| Mesh::new(1, vec![(0, l)])),
+        let mesh = if peers.is_empty() {
+            Lanes::accept(&listener).map(|(l, _)| Mesh::new(1, vec![(0, l)]))
+        } else {
+            Mesh::open(machine, Some(&listener), &peers)
         };
         match mesh.and_then(|m| session(model, mtp, gpus, m)) {
             Ok(()) => eprintln!("tp-node: session ended"),
             Err(e) => eprintln!("tp-node: session ended: {e:#}"),
         }
-        if listener.is_none() {
-            // Let the other machines close their ends of the streams before they reopen.
-            std::thread::sleep(Duration::from_millis(500));
-        }
     }
 }
 
 fn session(model: &Path, mtp: Option<&Path>, gpus: &[usize], mut mesh: Mesh) -> Result<()> {
-    eprintln!("tp-node: session as machine {}, lanes to machines {:?}", mesh.machine, mesh.links.iter().map(|l| (l.0, l.1.count(), l.1.kind)).collect::<Vec<_>>());
+    eprintln!("tp-node: session as machine {}, lanes to machines {:?}", mesh.machine, mesh.links.iter().map(|l| (l.0, l.1.count(), l.1.kind())).collect::<Vec<_>>());
     let me = mesh.machine;
     loop {
         let p = parent(me);
@@ -1523,8 +1525,8 @@ mod tests {
         for (a, b) in cables {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap().to_string();
-            let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap());
-            links[a].push((b, Lanes::connect(&[addr.clone(), addr]).unwrap()));
+            let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap().0);
+            links[a].push((b, Lanes::connect(&[addr.clone(), addr], "test").unwrap()));
             links[b].push((a, accept.join().unwrap()));
         }
         links.into_iter().enumerate().map(|(m, l)| Mesh::new(m, l)).collect()
@@ -1537,8 +1539,8 @@ mod tests {
         for (a, b) in cables {
             let listener = TcpListener::bind("127.0.0.1:0").unwrap();
             let addr = listener.local_addr().unwrap().to_string();
-            let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap());
-            links[a].push((b, Lanes::connect(&[addr.clone(), addr]).unwrap()));
+            let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap().0);
+            links[a].push((b, Lanes::connect(&[addr.clone(), addr], "test").unwrap()));
             links[b].push((a, accept.join().unwrap()));
         }
         links
@@ -1799,8 +1801,8 @@ mod tests {
     fn compact_payload_between_two_machines_over_three_lanes() {
         let listener = TcpListener::bind("127.0.0.1:0").unwrap();
         let addr = listener.local_addr().unwrap().to_string();
-        let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap());
-        let a = Mesh::new(0, vec![(1, Lanes::connect(&[addr.clone(), addr.clone(), addr]).unwrap())]);
+        let accept = std::thread::spawn(move || Lanes::accept(&listener).unwrap().0);
+        let a = Mesh::new(0, vec![(1, Lanes::connect(&[addr.clone(), addr.clone(), addr], "test").unwrap())]);
         let b = Mesh::new(1, vec![(0, accept.join().unwrap())]);
         let d = 5120;
         let totals: Vec<Vec<f32>> = std::thread::scope(|s| {

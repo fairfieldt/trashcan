@@ -70,16 +70,10 @@ fn pow2(e: i32) -> f32 {
 }
 
 /// Whether F16C (and AVX for its 256-bit form) is available, detected once.
+#[cfg(target_arch = "x86_64")]
 fn f16c() -> bool {
-    #[cfg(target_arch = "x86_64")]
-    {
-        static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-        *ON.get_or_init(|| std::is_x86_feature_detected!("f16c") && std::is_x86_feature_detected!("avx") && std::env::var_os("TRASHCAN_WIRE_SOFT").is_none())
-    }
-    #[cfg(not(target_arch = "x86_64"))]
-    {
-        false
-    }
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::is_x86_feature_detected!("f16c") && std::is_x86_feature_detected!("avx") && std::env::var_os("TRASHCAN_WIRE_SOFT").is_none())
 }
 
 fn max_abs(v: &[f32]) -> f32 {

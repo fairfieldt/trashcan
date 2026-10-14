@@ -25,58 +25,19 @@ use super::{
     pipeline::{plan, Devices, Draft, Local},
     Config,
 };
-use crate::{generation::Sampler, gguf::Gguf};
+use crate::{
+    generation::Sampler,
+    gguf::Gguf,
+    link::{Accepted, Conn, Link, Options},
+};
 use anyhow::{bail, ensure, Context, Result};
 use serde_json::{json, Value};
 use std::{
-    io::{BufReader, BufWriter, Read, Write},
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     path::{Path, PathBuf},
 };
 
 pub type Candidates = Vec<(f32, u32)>;
-
-struct Conn {
-    r: BufReader<TcpStream>,
-    w: BufWriter<TcpStream>,
-}
-
-impl Conn {
-    fn new(s: TcpStream) -> Result<Self> {
-        s.set_nodelay(true)?;
-        Ok(Self {
-            r: BufReader::with_capacity(1 << 20, s.try_clone()?),
-            w: BufWriter::with_capacity(1 << 20, s),
-        })
-    }
-    fn connect(addr: &str) -> Result<Self> {
-        Self::new(TcpStream::connect(addr).with_context(|| format!("connecting to {addr}"))?)
-    }
-    fn send(&mut self, header: &Value, blob: &[u8]) -> Result<()> {
-        let h = serde_json::to_vec(header)?;
-        self.w.write_all(&(h.len() as u32).to_le_bytes())?;
-        self.w.write_all(&(blob.len() as u64).to_le_bytes())?;
-        self.w.write_all(&h)?;
-        self.w.write_all(blob)?;
-        self.w.flush()?;
-        Ok(())
-    }
-    fn recv(&mut self) -> Result<(Value, Vec<u8>)> {
-        let mut len = [0u8; 12];
-        self.r.read_exact(&mut len)?;
-        let h = u32::from_le_bytes(len[..4].try_into()?) as usize;
-        let b = u64::from_le_bytes(len[4..].try_into()?) as usize;
-        let mut header = vec![0u8; h];
-        self.r.read_exact(&mut header)?;
-        let mut blob = vec![0u8; b];
-        self.r.read_exact(&mut blob)?;
-        let header: Value = serde_json::from_slice(&header)?;
-        if let Some(e) = header.get("error") {
-            bail!("remote: {}", e.as_str().unwrap_or("error"));
-        }
-        Ok((header, blob))
-    }
-}
 
 fn floats(b: &[u8]) -> Vec<f32> {
     b.chunks_exact(4)
@@ -159,12 +120,22 @@ pub fn serve(model: &Path, mtp: Option<PathBuf>, listen: &str, devices: Devices)
     eprintln!("node: {} on {listen}, devices {devices:?}", model.display());
     for stream in listener.incoming() {
         let stream = stream?;
-        eprintln!("node: session from {}", stream.peer_addr()?);
-        let mut up = Conn::new(stream)?;
+        let peer = stream.peer_addr()?;
+        let link = match Link::accept_with(stream, &Options::default()) {
+            Ok(Accepted::Link(l, _)) => l,
+            Ok(Accepted::Joined(_)) => continue,
+            Err(e) => {
+                eprintln!("node: connection from {peer} refused: {e:#}");
+                continue;
+            }
+        };
+        eprintln!("node: session from {peer}");
+        let mut up = Conn { link };
         if let Err(e) = session(model, mtp.as_deref(), &devices, &mut up) {
             eprintln!("node: session ended: {e:#}");
             let _ = up.send(&json!({"error": format!("{e:#}")}), &[]);
         }
+        up.shutdown();
     }
     Ok(())
 }
@@ -182,7 +153,7 @@ fn session(model: &Path, mtp: Option<&Path>, devices: &Devices, up: &mut Conn) -
             let chain: Vec<String> = serde_json::from_value(chain.clone())?;
             let mut counts = vec![devices.count()];
             if let Some((next, rest)) = chain.split_first() {
-                let mut d = Conn::connect(next)?;
+                let d = Conn::connect(next)?;
                 d.send(&json!({"probe": rest}), &[])?;
                 let (reply, _) = d.recv()?;
                 counts.extend(serde_json::from_value::<Vec<usize>>(reply["devices"].clone())?);
@@ -337,7 +308,7 @@ impl Chain {
         let mut counts = vec![devices.count()];
         let mut next = None;
         if let Some((first, rest)) = nodes.split_first() {
-            let mut conn = Conn::connect(first)?;
+            let conn = Conn::connect(first)?;
             conn.send(&json!({"probe": rest}), &[])?;
             let (reply, _) = conn.recv()?;
             counts.extend(serde_json::from_value::<Vec<usize>>(reply["devices"].clone())?);

@@ -603,7 +603,7 @@ struct Rec<'a> {
 
 impl<'a> Rec<'a> {
     fn new(s: &'a GpuStage, n: usize, dump: bool) -> Result<Self> {
-        Self::at(s, n, dump, 0, 0, s.tp.is_some() && gated(n))
+        Self::at(s, n, dump, 0, 0, s.tp.is_some() && gated(n) && !dump)
     }
 
     /// A micro-batch of `n` rows starting at `row`, with its params in `slot`; `gated` records an event-gated
@@ -1520,7 +1520,9 @@ impl GpuStage {
                 self.gpu.run(cmd)?;
             }
         }
-        let gated = micro.len() == 1 && gated(n);
+        // A forward that captures its tensors (validation) is not gated: the captures and their host writes on either
+        // machine can hold the exchange past the 0.5 s a gated wait allows (tp.rs).
+        let gated = micro.len() == 1 && gated(n) && !dump;
         let mut keys = Vec::new();
         for (slot, &(row, rows)) in micro.iter().enumerate() {
             self.params_host.write_at(slot * PARAMS_STRIDE, bytemuck::cast_slice(&[(pos + row) as u32, rows as u32, 0, 0]))?;
