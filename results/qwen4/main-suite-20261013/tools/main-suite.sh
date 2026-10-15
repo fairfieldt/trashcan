@@ -2,7 +2,8 @@
 # Main's numbers, measured once per main commit for every agent (one run each; noise is about 1%): validation on the
 # 14-token reference prompt and p100, decode after a 512-token prompt (two runs), prefill at 2K, 8K and 30K tokens, MTP on
 # the chat prompts (one pass, plain and speculative), and the server test. Under chain6.sh (TICKETS set); BIN is the
-# binary on every Mac (default trashcan-4307169). DRY=1 prints the runs instead.
+# binary on every Mac (default trashcan-4307169). DRY=1 prints the runs instead. A run with any link off its stream
+# stops the suite (check_links).
 cd /Users/fairfieldt/dev/trashcan/results/qwen4/chain-20261012 || exit 1
 BIN=${BIN:-trashcan-4307169}
 TAG=${TAG:-ms-${BIN#trashcan-}}
@@ -21,6 +22,21 @@ run() { # name driver-args [extra q4run args]
     python3 tools/q4run.py --tickets "$TICKETS" --binary "$BIN" --name "$TAG-$name" --driver-host incite \
         --nodes "$NODES" "$@" --driver "$driver" > /dev/null 2>&1
     echo "$TAG-$name rc $? $(( $(date +%s) - s )) s"
+    check_links "$name"
+}
+# Every link of a run must be on its stream: the driver's `links:` line (stderr) names each link's transport. A run
+# whose links fell back to TCP stops the suite, so a link problem can't pass as a slower main. Binaries from before
+# the per-link report (1687af54) print no such line and are only noted.
+check_links() { # name
+    local line
+    line=$(ssh incite "grep -h '^links: ' $W/results/$TAG-$1.err 2>/dev/null | tail -1")
+    if [ -z "$line" ]; then echo "$TAG-$1 links: no report"; return 0; fi
+    if ! python3 -c 'import sys
+bad = [e for e in sys.argv[1][len("links: "):].split(", ") if " stream " not in e + " "]
+bad and print("\n".join("not on its stream: " + e for e in bad)); sys.exit(1 if bad else 0)' "$line"; then
+        echo "$TAG-$1: a link was not on its stream; stopping the suite"
+        exit 1
+    fi
 }
 run val14 "validate results/$TAG-val14 $C --greedy 10"
 run val100 "validate results/$TAG-val100 $C --greedy 10 --tokens-file $W/p100.ids"
