@@ -1,0 +1,5 @@
+# the first attempt (18:20): stopped after its first run by the link check; the same run under the closed-at-end rule
+pp512-base: 10 of 10 link-ends on their stream (1 closed at end)
+  inflight -> incite: closed at end (chain/dk2c2p-attempt1/inflight/node-dk2c2p-pp512-base-inflight.log)
+    link incite (10.99.21.1:37132): stream up (0-3.1/trashcan /dev/tbstream0), epoch 2144576b
+    link incite (10.99.21.1:37132): stream down (the other side closed its stream); continuing over TCP

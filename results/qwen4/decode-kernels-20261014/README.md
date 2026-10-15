@@ -1,9 +1,9 @@
 # Flash-Next decode kernels, round 2 (2026-10-14)
 
-**Result.** On six Macs (all on Linux 7.3.0-rc7, the links on USB4STREAM), against main 9baedca9: MTP chat 30.05 ->
-31.28 tok/s (+4.1%) with the same tokens, and plain decode in the same runs 20.98 -> 22.04 tok/s (+5.1%); validation
-bit-identical to main. The decode and prefill pairs wait for the stream links to come up every time: on 7.3 some links
-fell back to TCP in one arm and not the other (below).
+**Result.** On six Macs (all on Linux 7.3, the links on USB4STREAM), against main 9baedca9: decode after a 512-token
+prompt 21.46 -> 22.57 tok/s (+5.1%), after 2048 tokens 20.73 -> 21.36 (+3.0%), after 8192 20.23 -> 21.46 (+6.1%),
+prefill unchanged (one pair each, every link on its stream in both arms, after the stream fix); MTP chat 30.05 ->
+31.28 tok/s (+4.1%) with the same tokens; validation bit-identical to main.
 
 One D700 (indite GPU 0, layers 4-7: three DeltaNet layers and one QSA layer, decode after 512 tokens, s10): the stage
 takes 3.645 ms on main 9baedca9 and 3.430 ms with this round's changes (-5.9%; 3.577 ms with the two kernel changes
@@ -24,7 +24,8 @@ alone). Three changes, all with the same arithmetic as main (every captured tens
   `trashcan-dk2-c2` (sha256 0747bff75e0eb78f..., built from the engine tree of commit 79006eba), against
   `trashcan-9baedca` (6787fd3911fc8a86..., main's binary on all six Macs).
 - Mesa 25.0.7-2+deb13u1 (RADV/ACO) everywhere. The six-Mac sessions dk2c2 (13:40-13:45) and dk2c2r (13:48-13:50,
-  stopped) ran on Linux 7.3.0-rc7-p2p on all six Macs. Single-Mac sessions on indite GPU 0 (`stage-bench --ranges 4:8
+  stopped) ran on Linux 7.3.0-rc7-p2p on all six Macs, dk2c2p (18:20, stopped after one run; 18:23-18:24) on
+  7.3.0-rc7-p2p-s2. Single-Mac sessions on indite GPU 0 (`stage-bench --ranges 4:8
   --context 32768 --batch 128 --start 512 --decode 64`): s1-s7 on 7.2.9-p2p against 15e5457 (the measurements and
   kernel candidates), s8-s11 on 7.3.0-rc7-p2p (s9-s11 against 9baedca); the stress checks on indite (c1, 7.2.9) and
   enlight (c2, 7.3.0-rc7). Every timed run held 850/1370 MHz while computing (clock logs next to the JSON); A/B arms
@@ -216,7 +217,42 @@ Per dispatch on indite GPU 0 (us; main in brackets). Sources in `removed/`.
 
 ## Six Macs
 
-Session dk2c2 (`chain/dk2c2/summary.txt`), main 9baedca against c2, arms alternated. A pair counts only if both arms
+After the stream fix (7.3.0-rc7-p2p-s2 with the USB4STREAM patches 0006 and 0007 on all six), session dk2c2p
+(18:23-18:24, `chain/dk2c2p/summary.txt`, `tools/dk2-pairs.sh`) ran each pair once, arms alternated, and checked every
+run's links right after it, ready to stop at the first link-end off its stream; none was:
+
+| run | main 9baedca | c2 | change | links (both arms) |
+|---|---|---|---|---|
+| decode after a 512-token prompt (128 tokens) | 21.46 tok/s | 22.57 | **+5.1%** | all 10 link-ends on their streams |
+| prefill 2048 tokens | 889.3 tok/s | 886.0 | -0.4% | all 10 on their streams |
+| decode after 2048 (32 tokens) | 20.73 tok/s | 21.36 | **+3.0%** | |
+| prefill 8192 tokens | 1122.4 tok/s | 1129.2 | +0.6% | all 10 on their streams |
+| decode after 8192 (32 tokens) | 20.23 tok/s | 21.46 | **+6.1%** | |
+
+Prefill runs graphs of more than 8 tokens with full barriers, as on main: no change expected, none measured. Every node
+held 850/1370 MHz (invite GPU 0 up to 79 C).
+
+**Closed at end.** A node logs "stream down (the other side closed its stream); continuing over TCP" on its upstream
+link when the driver (or the previous node) closes its stream as it exits after the run; earlier runs rarely showed it
+because the nodes were usually stopped before they logged the close. `tools/transport.py` counts a link-end as on its
+stream under this name only when all of these hold: the down is logged by the node on its upstream link (to the driver
+or the previous node) and says "the other side closed its stream", it is that link-end's only down or failure and its
+last line, after an up; the other end of the link logged an up and no down, failed epoch or "not opened"; the run's rc
+is 0. Anything else stops the session. The case that made the rule: the first attempt of this session (18:20,
+`chain/dk2c2p-attempt1`) stopped after its first run (main's arm, decode after 512 tokens, rc 0, 21.28 tok/s), where
+inflight's log for its link to the driver read
+
+```
+link incite (10.99.21.1:37132): stream up (0-3.1/trashcan /dev/tbstream0), epoch 2144576b
+link incite (10.99.21.1:37132): stream down (the other side closed its stream); continuing over TCP
+```
+
+and the driver's for the same link only `link inflight (inflight.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream0),
+epoch 2144576b`. In dk2c2p, 4 link-ends were closed at end (the 512 c2 run: inflight's link to incite; the 2048 main
+run: inflight's to incite and alight's to inflight; the 2048 c2 run: inflight's to incite), every one printed with its
+lines by the check.
+
+Before the fix, session dk2c2 (`chain/dk2c2/summary.txt`), main 9baedca against c2, arms alternated. A pair counts only if both arms
 ran every link on its stream (`tools/transport.py`, from the "link ... stream up" lines of the driver's and the nodes'
 logs):
 
@@ -233,15 +269,13 @@ logs):
 Session dk2c2r (`chain/dk2c2r/summary.txt`) repeated the decode and prefill pairs, each run up to four times until all
 of its links were on streams. Both decode pairs after 512 tokens ran on streams at their first attempt: 21.28 -> 22.29
 and 21.32 -> 22.38 tok/s (+4.7%, +5.0%). The main arm of the 2048 pair failed four times (2-6 of 10 link-ends on
-streams), and the session was stopped there: repeating runs until the links come up hides the link bug, so the decode
-and prefill pairs are to run once the stream fix is rolled out. (Prefill of the 512-token prompt varies between 355
+streams), and the session was stopped there: repeating runs until the links come up hides the link bug; the pairs ran
+once the stream fix was rolled out (dk2c2p, above). (Prefill of the 512-token prompt varies between 355
 and 522 tok/s from run to run in both sessions; it runs full barriers in both arms.) Every node held 850/1370 MHz while
 computing (invite GPU 0 up to 78 C).
 
 ## What is left
 
-- **The six-Mac decode and prefill pairs**, once the stream links come up every time on 7.3 (`tools/dk2-chain.sh` with
-  `tools/transport.py` on its output; a pair counts if both arms ran the same transport on every link).
 - **The rest of a decode layer.** A DeltaNet layer now takes 0.83 ms for 117 MB (142 GB/s against the practical 205,
   0.57 ms): the mixers (4 dispatches, 170 us for 14 MB), the experts (gate/up 125 us, down 75 us for 29 MB), the small
   kernels around the recurrence (conv, gated norm, top-k: 33 us) and the barriers' gaps (still 1.0-1.4 us each: the
@@ -257,7 +291,8 @@ computing (invite GPU 0 up to 78 C).
 
 - `indite/s1` ... `s11`: stage-bench JSON, stderr and clock logs per single-Mac session (the session scripts are
   `tools/dk2-s*.sh`); `indite/c1-stress`, `enlight/c2-stress`: the stress checks' logs.
-- `chain/dk2c1`, `chain/dk2c2`: the six-Mac sessions' driver outputs and clock logs, and each node's log and clock log.
+- `chain/dk2c1`, `chain/dk2c2`, `chain/dk2c2r`, `chain/dk2c2p` (and its stopped first attempt `dk2c2p-attempt1`): the
+  six-Mac sessions' driver outputs and clock logs, each node's log and clock log, and `summary.txt`.
 - `audit/`: `c2-scalar-safe.txt` (the kept rule on the kept build), `c2-all-pipelines.txt`; `coherent-build.txt` and
   `main-build.txt` (the `--rule coherent` audit of the coherent-bindings build and of main, step 1).
 - `dumps-compared.txt`: every stage-dump comparison.
@@ -266,7 +301,8 @@ computing (invite GPU 0 up to 78 C).
 - `tools/`: `prof.py` (per-dispatch tables), `walls.py`, `twice.py`, `cmpdump.py`, `stress-cmp.sh`, `dump-cmps.sh`,
   `coherence_audit.py` and `audit-decode.sh` (the ISA audit), `vmstats.sh` (RADV statistics and programs offline in
   the kbuild VM, `RADV_FORCE_FAMILY=tahiti`), `isa.py`, `isablocks.py`, `loopmix.py`, `stats.py`, `smemcheck.py`; the
-  session scripts `dk2-s1.sh` ... `dk2-s11.sh`, `dk2-stress.sh`, `dk2-chain.sh` (under chain6.sh), `lease-run.sh`,
+  session scripts `dk2-s1.sh` ... `dk2-s11.sh`, `dk2-stress.sh`, `dk2-chain.sh` and `dk2-pairs.sh` (under chain6.sh),
+  `lease-run.sh`,
   `check-macs.sh`, `archive-removed.sh`, `copy-results.sh`; the six-Mac summaries `chain_sum.py`, `mtp_summary.py`,
   `mtp_same.py`, `valcmp.sh`, `nodeclocks.py`, `transport.py`.
 - `removed/`: the removed kernels.

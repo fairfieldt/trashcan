@@ -34,9 +34,9 @@ from 28.3 to 30.1 tok/s (+6.5% on main 7b41707; +4.4-6.6% on each main since 7da
 temperatures 0.6-1 (main 7da6f93), and take the 3K-token document from break-even to +5.5%, with every seed's output
 equal to plain decoding's ([results/qwen4/mtp-rounds-20261013](../results/qwen4/mtp-rounds-20261013/README.md)). Light barriers in
 decode-sized graphs and two decode kernels ([results/qwen4/decode-kernels-20261014](../results/qwen4/decode-kernels-20261014/README.md))
-take MTP chat replies from 30.05 to 31.28 tok/s (+4.1%) and plain decode in the same runs from 20.98 to 22.04 (+5.1%)
-on main 9baedca9 over the USB4STREAM links, with identical output (a decode step's GPU time -5.9% on one D700); the
-decode and prefill pairs wait for the 7.3 stream fix. Not done yet: graphs submitted
+take decode after a 512 / 2048 / 8192-token prompt from 21.46 / 20.73 / 20.23 to 22.57 / 21.36 / 21.46 tok/s (+5.1 /
++3.0 / +6.1%) and MTP chat replies from 30.05 to 31.28 tok/s (+4.1%) on main 9baedca9 over the USB4STREAM links, with
+identical output and prefill unchanged (a decode step's GPU time -5.9% on one D700). Not done yet: graphs submitted
 ahead of their input and prefix checkpoints (see [What is left](#what-is-left)). The Responses server runs on the chain
 ([Serving](#serving)).
 

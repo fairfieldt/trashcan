@@ -1,0 +1,31 @@
+# bench runs (tools/chain_sum.py)
+dk2c2p-pp2048-base         pp2048   889.3 tok/s  tg32  20.73 tok/s
+dk2c2p-pp2048-cand         pp2048   886.0 tok/s  tg32  21.36 tok/s
+dk2c2p-pp512-base          pp512   521.0 tok/s  tg128  21.46 tok/s
+dk2c2p-pp512-cand          pp512   521.6 tok/s  tg128  22.57 tok/s
+dk2c2p-pp8192-base         pp8192  1122.4 tok/s  tg32  20.23 tok/s
+dk2c2p-pp8192-cand         pp8192  1129.2 tok/s  tg32  21.46 tok/s
+
+pp512: decode 21.46 -> 22.57 tok/s (+5.1%), prefill 521.0 -> 521.6 tok/s (+0.1%), n = 1, 1
+pp2048: decode 20.73 -> 21.36 tok/s (+3.0%), prefill 889.3 -> 886.0 tok/s (-0.4%), n = 1, 1
+pp8192: decode 20.23 -> 21.46 tok/s (+6.1%), prefill 1122.4 -> 1129.2 tok/s (+0.6%), n = 1, 1
+
+# link transports (tools/transport.py)
+pp2048-base         8 stream; alight->inflight closed at end, inflight->incite closed at end
+pp2048-cand         9 stream; inflight->incite closed at end
+pp512-base         10 stream
+pp512-cand          9 stream; inflight->incite closed at end
+pp8192-base        10 stream
+pp8192-cand        10 stream
+
+pp2048: same transport
+pp512: same transport
+pp8192: same transport
+
+# clocks (tools/nodeclocks.py)
+driver (incite)  8 logs, 210 samples; GPU0 850/1370 x210; GPU1 850/1370 x210; max 56 C
+alight           6 logs, 236 samples; GPU0 850/1370 x236; GPU1 850/1370 x236; max 64 C
+enlight          6 logs, 251 samples; GPU0 850/1370 x251; GPU1 850/1370 x251; max 64 C
+indite           6 logs, 240 samples; GPU0 850/1370 x240; GPU1 850/1370 x240; max 60 C
+inflight         6 logs, 240 samples; GPU0 850/1370 x240; GPU1 850/1370 x240; max 57 C
+invite           6 logs, 233 samples; GPU0 850/1370 x233; GPU1 850/1370 x233; max 79 C
