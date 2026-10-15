@@ -136,3 +136,16 @@ This is invite's third GPU incident in two days, and no other Mac has had one ou
 - GPU 1 timed out on 2026-10-13 at 16:05 (7.2.9, main's code over TCP);
 - GPU 1 timed out now (7.3, the stream build).
 invite's GPU 0 also runs 10-15 °C hotter than the other eleven. invite was repasted on 2026-10-07.
+
+## invite went down as a whole, 2026-10-14 18:25:10
+
+During the main suite's pp2048 run for 4f36bf0 (7.3.0-rc7-p2p-s2), invite stopped all at once:
+- netconsole logged no kernel message, and its last telemetry came at 18:25:09.8;
+- both neighbours logged "host disconnected" for its cable in the same second (enlight thunderbolt 0-3, indite 1-3);
+- it dropped off the tailnet and didn't come back on its own.
+Shortly before, at about 18:24:50, a 50 MB binary was copied by rsync into ~/trashcan-exp/flashnext on all six,
+invite fifth.
+Separately, the USB4STREAM agent measured writes to the log directory stalling 0.3-1.27 s several times a minute on all
+five node Macs (ext4 on the internal Apple SATA SSD; results/kernel/usb4stream-busypoll-20261014/logcheck). incite, on
+an NVMe SSD, stayed under 2.2 ms. Whether either is connected to invite's failure is not known. invite was left down at
+the end of the day, as the user asked.
