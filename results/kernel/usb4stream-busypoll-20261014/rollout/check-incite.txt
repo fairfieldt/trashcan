@@ -1,0 +1,26 @@
+Linux incite 7.3.0-rc7-p2p-s2 #3p2p SMP PREEMPT_DYNAMIC Wed Oct 14 14:34:08 PDT 2026 x86_64 GNU/Linux
+BOOT_IMAGE=/vmlinuz-7.3.0-rc7-p2p-s2 root=/dev/mapper/incite--vg-root ro quiet radeon.si_support=0 amdgpu.si_support=1 panic=10
+ 17:06:50 up 12 min,  1 user,  load average: 0.22, 0.23, 0.18
+linux-image-7.3.0-rc7-p2p-s2 7.3.0~rc7-3p2p
+GRUB_DEFAULT="gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-7.3.0-rc7-p2p-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"
+02:00.0  LnkSta: Speed 8GT/s, Width x16
+02:00.0 vbios 113-C3861XA-028 runtime_status active
+06:00.0  LnkSta: Speed 8GT/s, Width x16
+06:00.0 vbios 113-C3861XB-028 runtime_status active
+amdgpu lockup_timeout='' (empty: driver default)
+fancurve active, system-crash-capture active, fan 2350 rpm
+thunderbolt_net throttling=32000
+dmesg: 1 WARNING, 0 BUG/Oops lines
+0000:02:00.0 level auto, sclk 300 mclk 150
+  echo high: rc 0
+  level high, sclk 850 mclk 1370
+  echo auto: rc 0
+0000:06:00.0 level auto, sclk 300 mclk 150
+  echo high: rc 0
+  level high, sclk 850 mclk 1370
+  echo auto: rc 0
+  p2p-verify: PASS
+exit 0
+561 samples
+card0 (02:00.0) sclk/mclk: 850/1370 x432 450/1370 x7 300/150 x122  max 48C
+card1 (06:00.0) sclk/mclk: 850/1370 x430 300/1370 x2 650/1370 x1 450/1370 x5 300/150 x122 450/150 x1  max 48C

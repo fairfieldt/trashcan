@@ -1,0 +1,68 @@
+[    0.441600] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441604] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441608] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441612] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441616] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441619] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441622] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441629] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441634] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441638] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441642] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441645] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441649] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441652] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441656] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441659] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441769] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441773] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441803] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441809] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441816] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441822] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441827] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441833] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441841] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441848] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441854] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441859] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441866] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441871] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441877] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441883] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441994] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441997] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442001] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442004] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442008] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442011] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442014] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442017] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442021] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442025] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442028] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442031] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442035] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442038] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442042] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442045] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.581840] RAS: Correctable Errors collector initialized.
+[    1.031792] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.035249] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.040682] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    2.540251] systemd[1]: bpf-restrict-fs: Failed to load BPF object: No such process
+[    3.251129] WARNING: drivers/platform/x86/apple-gmux.c:884 at gmux_probe.cold+0x65/0x3d6 [apple_gmux], CPU#17: (udev-worker)/520
+[    3.251232] CPU: 17 UID: 0 PID: 520 Comm: (udev-worker) Not tainted 7.3.0-rc7-p2p-s2 #3p2p PREEMPT(lazy) 
+[    3.262422] Call Trace:
+[    3.398022] Error: Driver 'pcspkr' is already registered, aborting...
+[    4.020507] b43 bcma0:1: probe with driver b43 failed with error -95
+[   12.387845] amdgpu 0000:02:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   12.387865] amdgpu 0000:02:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   13.090009] amdgpu 0000:06:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   13.091045] amdgpu 0000:06:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   61.915686] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[   61.919578] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[   61.924564] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[   97.718249] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[   97.725002] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[   97.730639] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed

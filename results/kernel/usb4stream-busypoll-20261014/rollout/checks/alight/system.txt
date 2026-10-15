@@ -1,0 +1,12 @@
+Linux alight 7.3.0-rc7-p2p-s2 #3p2p SMP PREEMPT_DYNAMIC Wed Oct 14 14:34:08 PDT 2026 x86_64 GNU/Linux
+BOOT_IMAGE=/boot/vmlinuz-7.3.0-rc7-p2p-s2 root=UUID=16cd34d7-50e1-4b6b-9db5-cbdd4c55f8af ro quiet radeon.si_support=0 amdgpu.si_support=1 panic=10
+ 17:06:50 up 11 min,  1 user,  load average: 0.65, 0.55, 0.34
+linux-image-7.3.0-rc7-p2p-s2 7.3.0~rc7-3p2p
+GRUB_DEFAULT="gnulinux-advanced-16cd34d7-50e1-4b6b-9db5-cbdd4c55f8af>gnulinux-7.3.0-rc7-p2p-advanced-16cd34d7-50e1-4b6b-9db5-cbdd4c55f8af"
+02:00.0  LnkSta: Speed 8GT/s, Width x16
+02:00.0 vbios 113-C3861XA-028 runtime_status active
+06:00.0  LnkSta: Speed 8GT/s, Width x16
+06:00.0 vbios 113-C3861XB-028 runtime_status active
+amdgpu lockup_timeout='' (empty: driver default)
+fancurve active, system-crash-capture active, fan 2348 rpm
+thunderbolt_net throttling=32000

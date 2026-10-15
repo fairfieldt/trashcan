@@ -1,0 +1,2 @@
+GRUB_DEFAULT="gnulinux-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b>gnulinux-7.3.0-rc7-p2p-s2-advanced-59c789b8-55b5-41a4-ae2f-fba0c8922d2b"
+installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2

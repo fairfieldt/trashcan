@@ -1,0 +1,30 @@
+Selecting previously unselected package linux-image-7.3.0-rc7-p2p-s2.
+(Reading database ... 76382 files and directories currently installed.)
+Preparing to unpack .../linux-image-7.3.0-rc7-p2p-s2_7.3.0~rc7-3p2p_amd64.deb ...
+Unpacking linux-image-7.3.0-rc7-p2p-s2 (7.3.0~rc7-3p2p) ...
+Selecting previously unselected package linux-headers-7.3.0-rc7-p2p-s2.
+Preparing to unpack .../linux-headers-7.3.0-rc7-p2p-s2_7.3.0~rc7-3p2p_amd64.deb ...
+Unpacking linux-headers-7.3.0-rc7-p2p-s2 (7.3.0~rc7-3p2p) ...
+Setting up linux-image-7.3.0-rc7-p2p-s2 (7.3.0~rc7-3p2p) ...
+update-initramfs: Generating /boot/initrd.img-7.3.0-rc7-p2p-s2
+Generating grub configuration file ...
+Found linux image: /boot/vmlinuz-7.3.0-rc7-p2p-s2
+Found initrd image: /boot/initrd.img-7.3.0-rc7-p2p-s2
+Found linux image: /boot/vmlinuz-7.3.0-rc7-p2p
+Found initrd image: /boot/initrd.img-7.3.0-rc7-p2p
+Found linux image: /boot/vmlinuz-7.2.9-p2p
+Found initrd image: /boot/initrd.img-7.2.9-p2p
+Found linux image: /boot/vmlinuz-6.12.111+deb13-amd64
+Found initrd image: /boot/initrd.img-6.12.111+deb13-amd64
+Found linux image: /boot/vmlinuz-6.12.107+deb13-amd64
+Found initrd image: /boot/initrd.img-6.12.107+deb13-amd64
+Warning: os-prober will not be executed to detect other bootable partitions.
+Systems on them will not be added to the GRUB boot configuration.
+Check GRUB_DISABLE_OS_PROBER documentation entry.
+Adding boot menu entry for UEFI Firmware Settings ...
+done
+Setting up linux-headers-7.3.0-rc7-p2p-s2 (7.3.0~rc7-3p2p) ...
+next_entry=gnulinux-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7>gnulinux-7.3.0-rc7-p2p-s2-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7
+GRUB_DEFAULT="gnulinux-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7>gnulinux-7.3.0-rc7-p2p-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7"
+installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p
+next_entry=gnulinux-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7>gnulinux-7.3.0-rc7-p2p-s2-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7

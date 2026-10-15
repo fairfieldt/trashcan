@@ -1,0 +1,4 @@
+next_entry=gnulinux-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03>gnulinux-7.3.0-rc7-p2p-s2-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03
+GRUB_DEFAULT="gnulinux-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03>gnulinux-7.3.0-rc7-p2p-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03"
+installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s3
+next_entry=gnulinux-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03>gnulinux-7.3.0-rc7-p2p-s2-advanced-f5ad8741-67fd-4764-94cb-ef3889feef03

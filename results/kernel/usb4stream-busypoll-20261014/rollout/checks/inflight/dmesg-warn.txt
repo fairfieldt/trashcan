@@ -1,0 +1,73 @@
+[    0.441953] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441957] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441961] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441964] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441968] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441972] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441975] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441978] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441983] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441987] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.441990] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.441994] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.441997] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442001] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442004] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442008] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442161] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442167] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442174] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442179] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442186] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442191] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442197] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442203] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442211] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442216] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442219] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442223] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442226] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442230] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442233] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442237] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442339] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442343] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442346] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442350] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442353] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442357] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442360] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442363] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442367] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442371] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442374] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442378] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.442381] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442385] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.442388] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.442392] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.543382] RAS: Correctable Errors collector initialized.
+[    1.011140] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.020403] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.023811] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    3.025557] systemd[1]: bpf-restrict-fs: Failed to load BPF object: No such process
+[    3.652431] WARNING: drivers/platform/x86/apple-gmux.c:884 at gmux_probe.cold+0x65/0x3d6 [apple_gmux], CPU#6: (udev-worker)/458
+[    3.652588] CPU: 6 UID: 0 PID: 458 Comm: (udev-worker) Not tainted 7.3.0-rc7-p2p-s2 #3p2p PREEMPT(lazy) 
+[    3.661655] Call Trace:
+[    3.832809] Error: Driver 'pcspkr' is already registered, aborting...
+[    4.454937] b43 bcma0:1: probe with driver b43 failed with error -95
+[   13.274896] amdgpu 0000:02:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   13.274923] amdgpu 0000:02:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   13.989411] amdgpu 0000:06:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   13.990494] amdgpu 0000:06:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   15.616564] thunderbolt 0-3: failed to send properties changed notification
+[   39.699638] thunderbolt 1-3: failed to send properties changed notification
+[   39.699639] thunderbolt 0-3: failed to send properties changed notification
+[   41.725390] thunderbolt 0-3: failed to send properties changed notification
+[   45.474098] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[   45.480440] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[   45.484723] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[   58.735371] thunderbolt 0-3: error waiting for link width to become 14
+[   81.208260] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[   81.211963] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[   81.217237] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed

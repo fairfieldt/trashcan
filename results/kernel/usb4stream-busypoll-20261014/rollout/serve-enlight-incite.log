@@ -1,0 +1,152 @@
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:46816): stream up (1-3.1/trashcan /dev/tbstream1), epoch 748c60f1, 5.3 ms after the link started
+link-test: 10.99.20.18:46816: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46822): stream up (1-3.1/trashcan /dev/tbstream1), epoch 190c9425, 6.7 ms after the link started
+link-test: 10.99.20.18:46822: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46822): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:46822: enlight (10.99.20.18:46822): 10.99.20.17:7095 -> 10.99.20.18:46822 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:46836): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2dce1816, 6.8 ms after the link started
+link-test: 10.99.20.18:46836: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46846): stream up (1-3.1/trashcan /dev/tbstream1), epoch 9375ff65, 5.3 ms after the link started
+link-test: 10.99.20.18:46846: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022978.279 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:46868): stream up (1-3.1/trashcan /dev/tbstream1), epoch fe1086ad, 11.3 ms after the link started
+link-test: 10.99.20.18:46868: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46872): stream up (1-3.1/trashcan /dev/tbstream1), epoch 7f4d7227, 7.8 ms after the link started
+link-test: 10.99.20.18:46872: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46872): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:46872: enlight (10.99.20.18:46872): 10.99.20.17:7095 -> 10.99.20.18:46872 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:46874): stream up (1-3.1/trashcan /dev/tbstream1), epoch d06c8b6c, 5.6 ms after the link started
+link-test: 10.99.20.18:46874: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46884): stream up (1-3.1/trashcan /dev/tbstream1), epoch 64dd28c1, 4.2 ms after the link started
+link-test: 10.99.20.18:46884: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022978.978 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:46906): stream up (1-3.1/trashcan /dev/tbstream1), epoch 3f922cd1, 7.0 ms after the link started
+link-test: 10.99.20.18:46906: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46920): stream up (1-3.1/trashcan /dev/tbstream1), epoch 779170af, 17.9 ms after the link started
+link-test: 10.99.20.18:46920: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46920): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:46920: enlight (10.99.20.18:46920): 10.99.20.17:7095 -> 10.99.20.18:46920 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:46926): stream up (1-3.1/trashcan /dev/tbstream1), epoch 38fcf3ef, 29.5 ms after the link started
+link-test: 10.99.20.18:46926: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:46936): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2d01ebad, 4.6 ms after the link started
+link-test: 10.99.20.18:46936: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022979.661 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:48954): stream up (1-3.1/trashcan /dev/tbstream1), epoch 213f8635, 6.7 ms after the link started
+link-test: 10.99.20.18:48954: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:48958): stream up (1-3.1/trashcan /dev/tbstream1), epoch 4af26975, 13.3 ms after the link started
+link-test: 10.99.20.18:48958: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:48958): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:48958: enlight (10.99.20.18:48958): 10.99.20.17:7095 -> 10.99.20.18:48958 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:48960): stream up (1-3.1/trashcan /dev/tbstream1), epoch a8f247b5, 3.3 ms after the link started
+link-test: 10.99.20.18:48960: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:48972): stream up (1-3.1/trashcan /dev/tbstream1), epoch c7025cf9, 21.5 ms after the link started
+link-test: 10.99.20.18:48972: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022980.265 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:48988): stream up (1-3.1/trashcan /dev/tbstream1), epoch 260dfe26, 3.8 ms after the link started
+link-test: 10.99.20.18:48988: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:48990): stream up (1-3.1/trashcan /dev/tbstream1), epoch 36641c65, 12.6 ms after the link started
+link-test: 10.99.20.18:48990: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:48990): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:48990: enlight (10.99.20.18:48990): 10.99.20.17:7095 -> 10.99.20.18:48990 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:48992): stream up (1-3.1/trashcan /dev/tbstream1), epoch e11f70e0, 6.2 ms after the link started
+link-test: 10.99.20.18:48992: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49000): stream up (1-3.1/trashcan /dev/tbstream1), epoch 4905c20a, 33.2 ms after the link started
+link-test: 10.99.20.18:49000: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022980.970 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49028): stream up (1-3.1/trashcan /dev/tbstream1), epoch 15b4ea24, 27.4 ms after the link started
+link-test: 10.99.20.18:49028: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49038): stream up (1-3.1/trashcan /dev/tbstream1), epoch 3066b569, 7.5 ms after the link started
+link-test: 10.99.20.18:49038: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49038): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49038: enlight (10.99.20.18:49038): 10.99.20.17:7095 -> 10.99.20.18:49038 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49042): stream up (1-3.1/trashcan /dev/tbstream1), epoch f05f5b61, 4.2 ms after the link started
+link-test: 10.99.20.18:49042: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49048): stream up (1-3.1/trashcan /dev/tbstream1), epoch ea87e49c, 5.4 ms after the link started
+link-test: 10.99.20.18:49048: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022981.734 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49068): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2a7ab852, 7.1 ms after the link started
+link-test: 10.99.20.18:49068: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49084): stream up (1-3.1/trashcan /dev/tbstream1), epoch 27e714c2, 9.1 ms after the link started
+link-test: 10.99.20.18:49084: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49084): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49084: enlight (10.99.20.18:49084): 10.99.20.17:7095 -> 10.99.20.18:49084 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49098): stream up (1-3.1/trashcan /dev/tbstream1), epoch 50169929, 4.8 ms after the link started
+link-test: 10.99.20.18:49098: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49106): stream up (1-3.1/trashcan /dev/tbstream1), epoch 0c90b6fd, 22.1 ms after the link started
+link-test: 10.99.20.18:49106: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022982.465 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49130): stream up (1-3.1/trashcan /dev/tbstream1), epoch b9f0b907, 20.9 ms after the link started
+link-test: 10.99.20.18:49130: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49134): stream up (1-3.1/trashcan /dev/tbstream1), epoch b69a56ca, 22.5 ms after the link started
+link-test: 10.99.20.18:49134: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49134): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49134: enlight (10.99.20.18:49134): 10.99.20.17:7095 -> 10.99.20.18:49134 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49150): stream up (1-3.1/trashcan /dev/tbstream1), epoch 6a2654eb, 3.1 ms after the link started
+link-test: 10.99.20.18:49150: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49162): stream up (1-3.1/trashcan /dev/tbstream1), epoch 8a13dfbe, 34.4 ms after the link started
+link-test: 10.99.20.18:49162: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022983.221 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49180): stream up (1-3.1/trashcan /dev/tbstream1), epoch 87f33cbc, 17.7 ms after the link started
+link-test: 10.99.20.18:49180: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49182): stream up (1-3.1/trashcan /dev/tbstream1), epoch 32ba0a89, 14.6 ms after the link started
+link-test: 10.99.20.18:49182: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49182): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49182: enlight (10.99.20.18:49182): 10.99.20.17:7095 -> 10.99.20.18:49182 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49184): stream up (1-3.1/trashcan /dev/tbstream1), epoch 54097e2e, 11.9 ms after the link started
+link-test: 10.99.20.18:49184: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49196): stream up (1-3.1/trashcan /dev/tbstream1), epoch 8c9e7af8, 6.2 ms after the link started
+link-test: 10.99.20.18:49196: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022983.915 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49224): stream up (1-3.1/trashcan /dev/tbstream1), epoch dd393c14, 4.3 ms after the link started
+link-test: 10.99.20.18:49224: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49240): stream up (1-3.1/trashcan /dev/tbstream1), epoch b8efa116, 4.6 ms after the link started
+link-test: 10.99.20.18:49240: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49240): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49240: enlight (10.99.20.18:49240): 10.99.20.17:7095 -> 10.99.20.18:49240 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49256): stream up (1-3.1/trashcan /dev/tbstream1), epoch 14f05259, 10.4 ms after the link started
+link-test: 10.99.20.18:49256: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49266): stream up (1-3.1/trashcan /dev/tbstream1), epoch a72e26a7, 15.2 ms after the link started
+link-test: 10.99.20.18:49266: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022984.607 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49278): stream up (1-3.1/trashcan /dev/tbstream1), epoch d8d062f0, 5.9 ms after the link started
+link-test: 10.99.20.18:49278: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49294): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1ec7fd53, 4.1 ms after the link started
+link-test: 10.99.20.18:49294: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49294): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49294: enlight (10.99.20.18:49294): 10.99.20.17:7095 -> 10.99.20.18:49294 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49310): stream up (1-3.1/trashcan /dev/tbstream1), epoch 0aed68fc, 6.5 ms after the link started
+link-test: 10.99.20.18:49310: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49310): stream down (the other side closed its stream); continuing over TCP
+link enlight (10.99.20.18:49316): stream up (1-3.1/trashcan /dev/tbstream1), epoch b007f6c3, 16.0 ms after the link started
+link-test: 10.99.20.18:49316: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022985.356 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49334): stream up (1-3.1/trashcan /dev/tbstream1), epoch 358a1194, 6.1 ms after the link started
+link-test: 10.99.20.18:49334: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49346): stream up (1-3.1/trashcan /dev/tbstream1), epoch 096c119b, 34.7 ms after the link started
+link-test: 10.99.20.18:49346: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49346): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49346: enlight (10.99.20.18:49346): 10.99.20.17:7095 -> 10.99.20.18:49346 (read: Connection reset by peer (os error 104))
+link enlight (10.99.20.18:49350): stream up (1-3.1/trashcan /dev/tbstream1), epoch 870544b6, 6.8 ms after the link started
+link-test: 10.99.20.18:49350: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49366): stream up (1-3.1/trashcan /dev/tbstream1), epoch 99f85dee, 4.4 ms after the link started
+link-test: 10.99.20.18:49366: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792022986.016 (fault injection)
+link-test: serving on 0.0.0.0:7095
+link enlight (10.99.20.18:49392): stream up (1-3.1/trashcan /dev/tbstream1), epoch 65b1423d, 12.5 ms after the link started
+link-test: 10.99.20.18:49392: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49394): stream up (1-3.1/trashcan /dev/tbstream1), epoch b2b446e0, 16.6 ms after the link started
+link-test: 10.99.20.18:49394: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link enlight (10.99.20.18:49394): stream down (the other side closed its stream); continuing over TCP
+link-test: 10.99.20.18:49394: enlight (10.99.20.18:49394): 10.99.20.17:7095 -> 10.99.20.18:49394 (read: Connection reset by peer (os error 104))

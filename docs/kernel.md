@@ -1,9 +1,10 @@
 # The Mac Pros' kernel
 
-All six Mac Pros run **Linux 7.3 from kernel.org, now 7.3-rc7, built as `7.3.0-rc7-p2p`**, with four local patches
-and 7.2.9's config. `7.2.9-p2p` stays installed as the fallback, and Debian's own kernels are still in the GRUB menu.
-Two more patches, 0006 and 0007 for USB4STREAM, are being rolled out as `7.3.0-rc7-p2p-s2`
-(`results/kernel/usb4stream-busypoll-20261014/`).
+All six Mac Pros run **Linux 7.3 from kernel.org, now 7.3-rc7, built as `7.3.0-rc7-p2p-s2`**, with six local patches
+(0001, 0003-0007) and 7.2.9's config. The previous build, `7.3.0-rc7-p2p` (without 0006 and 0007), and `7.2.9-p2p`
+stay installed as fallbacks, and Debian's own kernels are still in the GRUB menu. `7.3.0-rc7-p2p-s2` is
+`REV=3 KLOCAL=-p2p-s2 kernel/cross-build-7.3.sh` (package `7.3.0~rc7-3p2p`); its rollout is in
+`results/kernel/usb4stream-busypoll-20261014/` ("Rollout of 7.3.0-rc7-p2p-s2").
 
 7.3 is needed for USB4STREAM busy polling (`busy_poll` in each stream's configfs group). On the D700s it measures the
 same as 7.2.9: same VBIOS selection and clocks, P2P passes, the engine test suite passes with the same errors, and
@@ -75,7 +76,7 @@ with `--force-unsafe-io`, since the original Apple SSDs take seconds per cache f
 
 GRUB's default is pinned by entry id in `/etc/default/grub` (`GRUB_DEFAULT`), so installing a kernel never changes
 what boots, and a one-time boot that fails goes back to the default after a power cycle. `GRUB_DEFAULT` has pointed
-at `7.3.0-rc7-p2p` on all six Macs since 2026-10-14. The kernel command line is
+at `7.3.0-rc7-p2p-s2` on all six Macs since 2026-10-14 17:10 (before that, `7.3.0-rc7-p2p`). The kernel command line is
 `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`.
 
 **Unplug Thunderbolt cables that loop the machine's own controllers before rebooting.** With three cables forming a

@@ -8,7 +8,9 @@ reach their stream and 2 never did. `kernel/patches-7.3/0006` restores 7.2's beh
 enlight), back-to-back sessions (normal exits, killed clients, server crashes): 9 of 20 reached their stream within
 100 ms on 7.3, 192 of 200 with 0006, and 197 and 198 of 200 with the link's later changes, every remaining failure
 an epoch with one dead direction (now given up after 50 ms and retried at once). `0007` makes a close take under a
-millisecond instead of 500 ms. The lone-frame hold is a property of a cable direction that survives Thunderbolt
+millisecond instead of 500 ms. Rolled out as `7.3.0-rc7-p2p-s2` (0006 + 0007) with the merged link code, all six links
+churned at once: 300 of 300 sessions reached their streams within 100 ms (at most 53 ms), with no failed or one-way
+epoch. The lone-frame hold is a property of a cable direction that survives Thunderbolt
 resets and reboots; the path tables are the same on every cable, a CLOSE held by it is what reaches the next
 session, and no cable with an end on the diagnostic build `-p2p-s3` (0008 at its defaults) holds.
 
@@ -285,6 +287,25 @@ so the order A, B, A, B of the first map is the one that measures the holding di
 So a Thunderbolt reset does not clear the hold (it also survived the resets at 15:05 and 15:22), nor does a reboot on
 stock 7.3 (previous section), and a cable with an end on -p2p-s3 has none in either direction.
 
+## Rollout of 7.3.0-rc7-p2p-s2 (`rollout/`, 16:53-17:10)
+
+After the link changes were merged (main 1687af54, deployed as `trashcan-1687af5`), `tools/rollout-session.sh` under
+chain6 installed `7.3.0-rc7-p2p-s2` (0001-0007, `linux-image` sha256 `a91c727d`, headers `bbcea1ad`) on all six for
+one boot, rebooted them together (16:54; all up in 30-40 s), waited for the coordinator's Thunderbolt reset, ran
+`check.sh` on each Mac (the VBIOS images as before, `xgpu p2p-verify` passed, one dmesg warning each: apple-gmux's at
+boot, as on stock 7.3) and then `link-test churn` on all six links at once, 50 sessions each:
+
+| link | passed | time to stream p50 / max | failed epochs (client / server) | one-way epochs |
+|---|---|---|---|---|
+| incite -> inflight | 50/50 | 9 / 46 ms | 0 / 0 | 0 |
+| inflight -> alight | 50/50 | 8 / 53 ms | 0 / 0 | 0 |
+| alight -> indite | 50/50 | 10 / 27 ms | 0 / 0 | 0 |
+| indite -> invite | 50/50 | 11 / 39 ms | 0 / 0 | 0 |
+| invite -> enlight | 50/50 | 10 / 53 ms | 0 / 0 | 0 |
+| enlight -> incite | 50/50 | 7 / 35 ms | 0 / 0 | 0 |
+
+Every link passed, so the window made `7.3.0-rc7-p2p-s2` GRUB's default on all six (17:10).
+
 ## Patch 0007
 
 `kernel/patches-7.3/0007-thunderbolt-stream-no-rx-flush-on-close.patch`: `tbstream_dev_stop()` flushed the RX ring
@@ -349,4 +370,6 @@ output; the old script now hangs in the simulation, which reports and stops it. 
   `control-stock/`, `mixed/`.
 - `tools/pathmap-session.sh`, `tools/pathdump.sh`, `tools/holdopen.py`, `tools/pathmap.py`: the six-Mac path map;
   `pathmap/`, `pathmap2/` (each with `map.md`; the path dumps are gzipped).
+- `tools/rollout-session.sh`: the six-Mac rollout of -p2p-s2; `rollout/` (with each Mac's `check.sh` output in
+  `rollout/checks/`).
 - `tools/simtest.sh`, `tools/sim/`: the window simulation.

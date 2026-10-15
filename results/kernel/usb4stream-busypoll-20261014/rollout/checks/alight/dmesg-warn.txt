@@ -1,0 +1,94 @@
+[    0.445730] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445734] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445738] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445742] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445745] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445749] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445752] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445755] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445760] pci 0000:15:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445764] pci 0000:15:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445768] pci 0000:15:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445771] pci 0000:15:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445775] pci 0000:15:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445778] pci 0000:15:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445782] pci 0000:15:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445785] pci 0000:15:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445895] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445899] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445902] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445906] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445909] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445913] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445916] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445919] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445923] pci 0000:5c:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445927] pci 0000:5c:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445930] pci 0000:5c:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445933] pci 0000:5c:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.445937] pci 0000:5c:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445940] pci 0000:5c:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.445944] pci 0000:5c:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.445947] pci 0000:5c:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.446101] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.446108] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.446112] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.446116] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.446120] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.446123] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.446126] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.446129] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.446134] pci 0000:a3:06.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.446137] pci 0000:a3:06.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.446141] pci 0000:a3:06.0: bridge window [io  size 0x1000]: failed to assign
+[    0.446144] pci 0000:a3:04.0: bridge window [mem size 0x00200000]: failed to assign
+[    0.446148] pci 0000:a3:04.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.446151] pci 0000:a3:04.0: bridge window [io  size 0x1000]: failed to assign
+[    0.446155] pci 0000:a3:00.0: bridge window [mem size 0x00200000 64bit pref]: failed to assign
+[    0.446158] pci 0000:a3:00.0: bridge window [io  size 0x1000]: failed to assign
+[    0.593779] RAS: Correctable Errors collector initialized.
+[    1.046632] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[    1.050181] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[    1.053683] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[    2.592339] systemd[1]: bpf-restrict-fs: Failed to load BPF object: No such process
+[    3.290745] WARNING: drivers/platform/x86/apple-gmux.c:884 at gmux_probe.cold+0x65/0x3d6 [apple_gmux], CPU#18: (udev-worker)/494
+[    3.290895] CPU: 18 UID: 0 PID: 494 Comm: (udev-worker) Not tainted 7.3.0-rc7-p2p-s2 #3p2p PREEMPT(lazy) 
+[    3.298219] Call Trace:
+[    3.456598] Error: Driver 'pcspkr' is already registered, aborting...
+[    4.005219] b43 bcma0:1: probe with driver b43 failed with error -95
+[   12.786849] amdgpu 0000:02:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   12.786876] amdgpu 0000:02:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   13.494929] amdgpu 0000:06:00.0: Direct firmware load for amdgpu/vce_1_0_0.bin failed with error -2
+[   13.495611] amdgpu 0000:06:00.0: amdgpu_vce: Firmware "amdgpu/vce_1_0_0.bin" not found or failed to validate (-19)
+[   13.532803] thunderbolt 0-3: failed request link state change, aborting
+[   14.556874] thunderbolt 0-3: failed request link state change, aborting
+[   15.580842] thunderbolt 0-3: failed request link state change, aborting
+[   16.604769] thunderbolt 0-3: failed request link state change, aborting
+[   17.628760] thunderbolt 0-3: failed request link state change, aborting
+[   18.652734] thunderbolt 0-3: failed request link state change, aborting
+[   19.676824] thunderbolt 0-3: failed request link state change, aborting
+[   20.700900] thunderbolt 0-3: failed request link state change, aborting
+[   21.724880] thunderbolt 0-3: failed request link state change, aborting
+[   22.748865] thunderbolt 0-3: failed request link state change, aborting
+[   23.772898] thunderbolt 0-3: failed request link state change, aborting
+[   24.781081] thunderbolt 0-3: failed request link state change, aborting
+[   25.786068] thunderbolt 0-3: failed request link state change, aborting
+[   26.797253] thunderbolt 0-3: failed request link state change, aborting
+[   27.802759] thunderbolt 0-3: failed request link state change, aborting
+[   28.813928] thunderbolt 0-3: failed request link state change, aborting
+[   29.826833] thunderbolt 0-3: failed request link state change, aborting
+[   30.841053] thunderbolt 0-3: failed request link state change, aborting
+[   31.856506] thunderbolt 0-3: failed request link state change, aborting
+[   32.872997] thunderbolt 0-3: failed request link state change, aborting
+[   33.890570] thunderbolt 0-3: failed request link state change, aborting
+[   34.908839] thunderbolt 0-3: failed request link state change, aborting
+[   35.927788] thunderbolt 0-3: failed request link state change, aborting
+[   36.947605] thunderbolt 0-3: failed request link state change, aborting
+[   37.967695] thunderbolt 0-3: failed request link state change, aborting
+[   45.620941] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[   45.624842] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[   45.628878] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[   50.962021] thunderbolt 0000:16:00.0: 0:4: failed to reach state TB_PORT_UP. Ignoring port...
+[   81.349437] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[   81.354012] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[   81.358524] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed

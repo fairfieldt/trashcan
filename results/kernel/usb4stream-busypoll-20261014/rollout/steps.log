@@ -1,0 +1,50 @@
+[16:53:07] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/rollout-20261014-165307; NEW 7.3.0-rc7-p2p-s2 from ~/kernel/7.3/debs-s2, churn build ~/trashcan-exp/flashnext/trashcan-1687af5, 50 sessions per link
+[16:53:07] 1. state on the running kernels
+[16:53:17]   kernels: incite 7.3.0-rc7-p2p; inflight 7.3.0-rc7-p2p; alight 7.3.0-rc7-p2p; indite 7.3.0-rc7-p2p; invite 7.3.0-rc7-p2p-s3; enlight 7.3.0-rc7-p2p-s3; 
+[16:53:17]   packages:  6 a91c727d0b57 bbcea1ad2c03 ;
+[16:53:17]   kernel-boot.sh, check.sh, trashcan-1687af5:  6 82ad1676c0ef 41397b2c52cd d13714e20bd7 ;
+[16:53:17]   all six ring cables up on two lanes with a stream at both ends
+[16:53:17] 2. install 7.3.0-rc7-p2p-s2 on all six for the next boot only
+[16:53:47]   incite: (Reading database ... 205100 files and directories currently installed.) 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p 7.3.0-rc7-p2p-s2 
+[16:53:47]   inflight: (Reading database ... 76382 files and directories currently installed.) 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p 7.3.0-rc7-p2p-s2 
+[16:53:47]   alight: (Reading database ... 76382 files and directories currently installed.) 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p 7.3.0-rc7-p2p-s2 
+[16:53:47]   indite: (Reading database ... 76382 files and directories currently installed.) 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p 7.3.0-rc7-p2p-s2 
+[16:53:47]   invite: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s3 7.3.0-rc7-p2p-s2 
+[16:53:47]   enlight: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s3 7.3.0-rc7-p2p-s2 
+[16:53:47] waiting for /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/rollout-20261014-165307/go-reboot (up to 45 min)
+[16:54:02]   go-reboot
+[16:54:02] 3. reboot all six into 7.3.0-rc7-p2p-s2
+[16:55:06]   incite up on 7.3.0-rc7-p2p-s2 after 40 s
+[16:55:21]   inflight up on 7.3.0-rc7-p2p-s2 after 35 s
+[16:55:22]   alight up on 7.3.0-rc7-p2p-s2 after 30 s
+[16:55:22]   indite up on 7.3.0-rc7-p2p-s2 after 30 s
+[16:55:22]   invite up on 7.3.0-rc7-p2p-s2 after 30 s
+[16:55:22]   enlight up on 7.3.0-rc7-p2p-s2 after 30 s
+[16:55:22] waiting for /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/rollout-20261014-165307/links-up (up to 60 min)
+[17:06:49]   links-up
+[17:06:49] 4. the short check on each Mac (check.sh under its lease)
+[17:09:25]   incite: 02:00.0 vbios 113-C3861XA-028 runtime_status active 06:00.0 vbios 113-C3861XB-028 runtime_status active dmesg: 1 WARNING, 0 BUG/Oops lines exit 0 
+[17:09:25]   inflight: 02:00.0 vbios 113-C3861XA-028 runtime_status active 06:00.0 vbios 113-C3861XB-028 runtime_status active dmesg: 1 WARNING, 0 BUG/Oops lines exit 0 
+[17:09:25]   alight: 02:00.0 vbios 113-C3861XA-028 runtime_status active 06:00.0 vbios 113-C3861XB-028 runtime_status active dmesg: 1 WARNING, 0 BUG/Oops lines exit 0 
+[17:09:25]   indite: 02:00.0 vbios 113-C3861XA-028 runtime_status active 06:00.0 vbios 113-C3861XB-028 runtime_status active dmesg: 1 WARNING, 0 BUG/Oops lines exit 0 
+[17:09:25]   invite: 02:00.0 vbios 113-C3861XA-028 runtime_status active 06:00.0 vbios 113-C3861XB-028 runtime_status active dmesg: 1 WARNING, 0 BUG/Oops lines exit 0 
+[17:09:25]   enlight: 02:00.0 vbios 113-C3861XA-028 runtime_status active 06:00.0 vbios 113-C3861XB-028 runtime_status active dmesg: 1 WARNING, 0 BUG/Oops lines exit 0 
+[17:09:25] 5. churn on all six links at once
+[17:09:33]   kernels: incite 7.3.0-rc7-p2p-s2; inflight 7.3.0-rc7-p2p-s2; alight 7.3.0-rc7-p2p-s2; indite 7.3.0-rc7-p2p-s2; invite 7.3.0-rc7-p2p-s2; enlight 7.3.0-rc7-p2p-s2; 
+[17:09:33]   packages:  6 a91c727d0b57 bbcea1ad2c03 ;
+[17:09:33]   kernel-boot.sh, check.sh, trashcan-1687af5:  6 82ad1676c0ef 41397b2c52cd d13714e20bd7 ;
+[17:09:33]   all six ring cables up on two lanes with a stream at both ends
+[17:09:52]   incite -> inflight: pass: 50/50 passed, up p50/p99/max 9/46/46 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:09:52]   inflight -> alight: pass: 50/50 passed, up p50/p99/max 8/53/53 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:09:52]   alight -> indite: pass: 50/50 passed, up p50/p99/max 10/27/27 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:09:52]   indite -> invite: pass: 50/50 passed, up p50/p99/max 11/39/39 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:09:52]   invite -> enlight: pass: 50/50 passed, up p50/p99/max 10/53/53 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:09:53]   enlight -> incite: pass: 50/50 passed, up p50/p99/max 7/35/35 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:09:53] 6. every link passed: 7.3.0-rc7-p2p-s2 as GRUB's default on all six
+[17:09:56]   incite: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2 
+[17:10:00]   inflight: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2 
+[17:10:04]   alight: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2 
+[17:10:07]   indite: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2 
+[17:10:10]   invite: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2 
+[17:10:15]   enlight: 7.3.0-rc7-p2p-s2 installed 7.3.0~rc7-3p2p; running 7.3.0-rc7-p2p-s2 
+[17:10:15] done
