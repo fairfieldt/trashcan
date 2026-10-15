@@ -1,0 +1,156 @@
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37206): stream up (1-3.1/trashcan /dev/tbstream1), epoch 98d8e4c3, 27.3 ms after the link started [17:56:20.314]
+link-test: 10.99.86.17:37206: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37210): stream up (1-3.1/trashcan /dev/tbstream1), epoch 864ec471, 4.6 ms after the link started [17:56:20.402]
+link-test: 10.99.86.17:37210: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37210): stream down (the other side closed its stream); continuing over TCP (175 ms into the epoch: device open at 3 ms, first record at 3 ms, 1 probes and 17888 frames sent, 17885 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:20.574]
+link-test: 10.99.86.17:37210: inflight (10.99.86.17:37210): 10.99.86.18:7091 -> 10.99.86.17:37210 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37224): stream up (1-3.1/trashcan /dev/tbstream1), epoch 537eb5f9, 11.7 ms after the link started [17:56:20.591]
+link-test: 10.99.86.17:37224: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37236): stream up (1-3.1/trashcan /dev/tbstream1), epoch 904230c8, 16.8 ms after the link started [17:56:20.696]
+link-test: 10.99.86.17:37236: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025780.897 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37254): stream up (1-3.1/trashcan /dev/tbstream1), epoch 21adddc5, 17.0 ms after the link started [17:56:21.023]
+link-test: 10.99.86.17:37254: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37260): stream up (1-3.1/trashcan /dev/tbstream1), epoch c9e2ab7d, 26.4 ms after the link started [17:56:21.135]
+link-test: 10.99.86.17:37260: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37260): stream down (the other side closed its stream); continuing over TCP (125 ms into the epoch: device open at 25 ms, first record at 25 ms, 1 probes and 11120 frames sent, 11117 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:21.236]
+link-test: 10.99.86.17:37260: inflight (10.99.86.17:37260): 10.99.86.18:7091 -> 10.99.86.17:37260 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37274): stream up (1-3.1/trashcan /dev/tbstream1), epoch d8af9028, 14.9 ms after the link started [17:56:21.255]
+link-test: 10.99.86.17:37274: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37282): stream up (1-3.1/trashcan /dev/tbstream1), epoch a8858d8c, 13.9 ms after the link started [17:56:21.343]
+link-test: 10.99.86.17:37282: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025781.544 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37288): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5640ea77, 16.8 ms after the link started [17:56:21.670]
+link-test: 10.99.86.17:37288: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37288): stream down (the other side closed its stream); continuing over TCP (86 ms into the epoch: device open at 15 ms, first record at 15 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:21.741]
+link inflight (10.99.86.17:37294): stream up (1-3.1/trashcan /dev/tbstream1), epoch 37df8bf8, 14.3 ms after the link started [17:56:21.761]
+link-test: 10.99.86.17:37294: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37294): stream down (the other side closed its stream); continuing over TCP (227 ms into the epoch: device open at 13 ms, first record at 13 ms, 1 probes and 19672 frames sent, 19668 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:21.975]
+link-test: 10.99.86.17:37294: inflight (10.99.86.17:37294): 10.99.86.18:7091 -> 10.99.86.17:37294 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37300): stream up (1-3.1/trashcan /dev/tbstream1), epoch bae5b2d5, 10.3 ms after the link started [17:56:21.991]
+link-test: 10.99.86.17:37300: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37300): stream down (the other side closed its stream); continuing over TCP (81 ms into the epoch: device open at 9 ms, first record at 9 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 4, written to us 4); longest pause of this side 2 ms) [17:56:22.064]
+link inflight (10.99.86.17:37312): stream up (1-3.1/trashcan /dev/tbstream1), epoch 6a04c28e, 15.1 ms after the link started [17:56:22.086]
+link-test: 10.99.86.17:37312: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025782.287 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37334): stream up (1-3.1/trashcan /dev/tbstream1), epoch 6b277cab, 6.1 ms after the link started [17:56:22.401]
+link-test: 10.99.86.17:37334: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37342): stream up (1-3.1/trashcan /dev/tbstream1), epoch 573dbf50, 18.5 ms after the link started [17:56:22.501]
+link-test: 10.99.86.17:37342: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37342): stream down (the other side closed its stream); continuing over TCP (219 ms into the epoch: device open at 17 ms, first record at 17 ms, 1 probes and 25612 frames sent, 25612 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:22.703]
+link-test: 10.99.86.17:37342: inflight (10.99.86.17:37342): 10.99.86.18:7091 -> 10.99.86.17:37342 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37348): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5e432bbe, 14.3 ms after the link started [17:56:22.723]
+link-test: 10.99.86.17:37348: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37350): stream up (1-3.1/trashcan /dev/tbstream1), epoch dfacfd01, 15.6 ms after the link started [17:56:22.817]
+link-test: 10.99.86.17:37350: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025783.018 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37358): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5a804ccb, 7.2 ms after the link started [17:56:23.133]
+link-test: 10.99.86.17:37358: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37366): stream up (1-3.1/trashcan /dev/tbstream1), epoch 099cbf58, 17.2 ms after the link started [17:56:23.226]
+link-test: 10.99.86.17:37366: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37366): stream down (the other side closed its stream); continuing over TCP (124 ms into the epoch: device open at 16 ms, first record at 16 ms, 1 probes and 8808 frames sent, 8810 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:23.334]
+link-test: 10.99.86.17:37366: inflight (10.99.86.17:37366): 10.99.86.18:7091 -> 10.99.86.17:37366 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37382): stream up (1-3.1/trashcan /dev/tbstream1), epoch 37a93901, 6.4 ms after the link started [17:56:23.346]
+link-test: 10.99.86.17:37382: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37392): stream up (1-3.1/trashcan /dev/tbstream1), epoch 444226c1, 6.8 ms after the link started [17:56:23.426]
+link-test: 10.99.86.17:37392: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025783.627 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37422): stream up (1-3.1/trashcan /dev/tbstream1), epoch c36bcd52, 16.7 ms after the link started [17:56:24.613]
+link-test: 10.99.86.17:37422: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37438): stream up (1-3.1/trashcan /dev/tbstream1), epoch 7726985b, 10.3 ms after the link started [17:56:24.701]
+link-test: 10.99.86.17:37438: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37438): stream down (the other side closed its stream); continuing over TCP (89 ms into the epoch: device open at 9 ms, first record at 9 ms, 1 probes and 9204 frames sent, 9204 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 4, written to us 4); longest pause of this side 1 ms) [17:56:24.781]
+link-test: 10.99.86.17:37438: inflight (10.99.86.17:37438): 10.99.86.18:7091 -> 10.99.86.17:37438 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37442): stream up (1-3.1/trashcan /dev/tbstream1), epoch c5c5552f, 56.6 ms after the link started [17:56:24.843]
+link-test: 10.99.86.17:37442: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37446): stream up (1-3.1/trashcan /dev/tbstream1), epoch d49b1b9a, 13.9 ms after the link started [17:56:24.943]
+link-test: 10.99.86.17:37446: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025785.144 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:37470): stream up (1-3.1/trashcan /dev/tbstream1), epoch 172ccb4c, 5.9 ms after the link started [17:56:25.259]
+link-test: 10.99.86.17:37470: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37470): stream down (the other side closed its stream); continuing over TCP (76 ms into the epoch: device open at 4 ms, first record at 4 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:25.331]
+link inflight (10.99.86.17:37484): stream up (1-3.1/trashcan /dev/tbstream1), epoch 02f9b505, 6.8 ms after the link started [17:56:25.343]
+link-test: 10.99.86.17:37484: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37484): stream down (the other side closed its stream); continuing over TCP (161 ms into the epoch: device open at 5 ms, first record at 5 ms, 1 probes and 15544 frames sent, 15540 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:25.499]
+link-test: 10.99.86.17:37484: inflight (10.99.86.17:37484): 10.99.86.18:7091 -> 10.99.86.17:37484 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:37490): stream up (1-3.1/trashcan /dev/tbstream1), epoch 7382dcc5, 19.6 ms after the link started [17:56:25.524]
+link-test: 10.99.86.17:37490: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:37500): stream up (1-3.1/trashcan /dev/tbstream1), epoch ed6cc8a1, 7.1 ms after the link started [17:56:25.617]
+link-test: 10.99.86.17:37500: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025785.818 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:42294): stream up (1-3.1/trashcan /dev/tbstream1), epoch e5ac8d9f, 7.8 ms after the link started [17:56:25.938]
+link-test: 10.99.86.17:42294: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42304): stream up (1-3.1/trashcan /dev/tbstream1), epoch c54bf75e, 15.2 ms after the link started [17:56:26.035]
+link-test: 10.99.86.17:42304: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42304): stream down (the other side closed its stream); continuing over TCP (185 ms into the epoch: device open at 14 ms, first record at 14 ms, 1 probes and 18016 frames sent, 18016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:26.206]
+link-test: 10.99.86.17:42304: inflight (10.99.86.17:42304): 10.99.86.18:7091 -> 10.99.86.17:42304 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:42306): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1103d616, 19.6 ms after the link started [17:56:26.231]
+link-test: 10.99.86.17:42306: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42316): stream up (1-3.1/trashcan /dev/tbstream1), epoch af6f5d3c, 9.5 ms after the link started [17:56:26.326]
+link-test: 10.99.86.17:42316: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025786.528 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:42336): stream up (1-3.1/trashcan /dev/tbstream1), epoch e7aee02c, 3.8 ms after the link started [17:56:26.639]
+link-test: 10.99.86.17:42336: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42338): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5132bcd0, 3.4 ms after the link started [17:56:26.719]
+link-test: 10.99.86.17:42338: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42338): stream down (the other side closed its stream); continuing over TCP (225 ms into the epoch: device open at 2 ms, first record at 2 ms, 1 probes and 24332 frames sent, 24332 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:26.942]
+link-test: 10.99.86.17:42338: inflight (10.99.86.17:42338): 10.99.86.18:7091 -> 10.99.86.17:42338 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:42350): stream up (1-3.1/trashcan /dev/tbstream1), epoch c6ac9ac5, 21.2 ms after the link started [17:56:26.968]
+link-test: 10.99.86.17:42350: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42364): stream up (1-3.1/trashcan /dev/tbstream1), epoch da5b299f, 17.6 ms after the link started [17:56:27.092]
+link-test: 10.99.86.17:42364: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025787.293 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:42384): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5ab6e462, 17.5 ms after the link started [17:56:27.418]
+link-test: 10.99.86.17:42384: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42384): stream down (the other side closed its stream); continuing over TCP (81 ms into the epoch: device open at 15 ms, first record at 15 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:27.484]
+link inflight (10.99.86.17:42394): stream up (1-3.1/trashcan /dev/tbstream1), epoch 461a5056, 20.3 ms after the link started [17:56:27.511]
+link-test: 10.99.86.17:42394: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42394): stream down (the other side closed its stream); continuing over TCP (181 ms into the epoch: device open at 19 ms, first record at 19 ms, 1 probes and 15632 frames sent, 15632 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:27.673]
+link-test: 10.99.86.17:42394: inflight (10.99.86.17:42394): 10.99.86.18:7091 -> 10.99.86.17:42394 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:42410): stream up (1-3.1/trashcan /dev/tbstream1), epoch ccfa5e0c, 5.2 ms after the link started [17:56:27.684]
+link-test: 10.99.86.17:42410: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42410): stream down (the other side closed its stream); continuing over TCP (77 ms into the epoch: device open at 2 ms, first record at 2 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:27.759]
+link inflight (10.99.86.17:42412): stream up (1-3.1/trashcan /dev/tbstream1), epoch 98852ab4, 3.6 ms after the link started [17:56:27.768]
+link-test: 10.99.86.17:42412: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025787.969 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:42426): stream up (1-3.1/trashcan /dev/tbstream1), epoch 3bada42e, 20.7 ms after the link started [17:56:28.098]
+link-test: 10.99.86.17:42426: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42432): stream up (1-3.1/trashcan /dev/tbstream1), epoch 634d6928, 12.1 ms after the link started [17:56:28.210]
+link-test: 10.99.86.17:42432: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42432): stream down (the other side closed its stream); continuing over TCP (230 ms into the epoch: device open at 11 ms, first record at 11 ms, 1 probes and 23704 frames sent, 23700 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:28.429]
+link-test: 10.99.86.17:42432: inflight (10.99.86.17:42432): 10.99.86.18:7091 -> 10.99.86.17:42432 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:42438): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2a6a49da, 15.0 ms after the link started [17:56:28.450]
+link-test: 10.99.86.17:42438: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42446): stream up (1-3.1/trashcan /dev/tbstream1), epoch 6e18bd28, 10.5 ms after the link started [17:56:28.544]
+link-test: 10.99.86.17:42446: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025788.746 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:42460): stream up (1-3.1/trashcan /dev/tbstream1), epoch 44c0c2e7, 19.9 ms after the link started [17:56:28.874]
+link-test: 10.99.86.17:42460: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42474): stream up (1-3.1/trashcan /dev/tbstream1), epoch 71432179, 12.3 ms after the link started [17:56:28.986]
+link-test: 10.99.86.17:42474: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42474): stream down (the other side closed its stream); continuing over TCP (223 ms into the epoch: device open at 11 ms, first record at 11 ms, 1 probes and 28176 frames sent, 28176 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:29.198]
+link-test: 10.99.86.17:42474: inflight (10.99.86.17:42474): 10.99.86.18:7091 -> 10.99.86.17:42474 (read: Connection reset by peer (os error 104))
+link inflight (10.99.86.17:42482): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1e6e53b9, 7.8 ms after the link started [17:56:29.211]
+link-test: 10.99.86.17:42482: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42492): stream up (1-3.1/trashcan /dev/tbstream1), epoch b6d92679, 6.8 ms after the link started [17:56:29.289]
+link-test: 10.99.86.17:42492: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025789.490 (fault injection)
+link-test: serving on 0.0.0.0:7091
+link inflight (10.99.86.17:42514): stream up (1-3.1/trashcan /dev/tbstream1), epoch 8c5d6f57, 8.2 ms after the link started [17:56:29.608]
+link-test: 10.99.86.17:42514: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42522): stream up (1-3.1/trashcan /dev/tbstream1), epoch 4a0fb2e2, 42.7 ms after the link started [17:56:29.748]
+link-test: 10.99.86.17:42522: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:42522): stream down (the other side closed its stream); continuing over TCP (243 ms into the epoch: device open at 41 ms, first record at 41 ms, 1 probes and 22404 frames sent, 22404 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:29.950]
+link-test: 10.99.86.17:42522: inflight (10.99.86.17:42522): 10.99.86.18:7091 -> 10.99.86.17:42522 (read: Connection reset by peer (os error 104))

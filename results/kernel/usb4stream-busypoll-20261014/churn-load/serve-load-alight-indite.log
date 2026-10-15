@@ -1,0 +1,160 @@
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:39002): stream up (0-3.1/trashcan /dev/tbstream0), epoch 30dcae8a, 20.0 ms after the link started [17:56:36.940]
+link-test: 10.99.54.2:39002: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: {"i":1024,"ms":24.535377,"path":"stream","slow":"pingpong","t":0.24,"unix":1792025797.1915598}
+link alight (10.99.54.2:39012): stream up (0-3.1/trashcan /dev/tbstream0), epoch ff737d01, 36.5 ms after the link started [17:56:38.008]
+link-test: 10.99.54.2:39012: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39012): stream down (the other side closed its stream); continuing over TCP (191 ms into the epoch: device open at 19 ms, first record at 21 ms, 1 probes and 3784 frames sent, 3776 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 0); longest pause of this side 6 ms) [17:56:38.181]
+link-test: 10.99.54.2:39012: alight (10.99.54.2:39012): 10.99.54.1:7092 -> 10.99.54.2:39012 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:39014): stream up (0-3.1/trashcan /dev/tbstream0), epoch 7430a16e, 34.9 ms after the link started [17:56:38.241]
+link-test: 10.99.54.2:39014: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39020): stream up (0-3.1/trashcan /dev/tbstream0), epoch bceeae19, 32.5 ms after the link started [17:56:38.679]
+link-test: 10.99.54.2:39020: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025798.884 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:39032): stream up (0-3.1/trashcan /dev/tbstream0), epoch d43ebdeb, 27.7 ms after the link started [17:56:39.054]
+link-test: 10.99.54.2:39032: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39044): stream up (0-3.1/trashcan /dev/tbstream0), epoch bd78905c, 61.6 ms after the link started [17:56:39.525]
+link-test: 10.99.54.2:39044: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39044): stream down (the other side closed its stream); continuing over TCP (271 ms into the epoch: device open at 47 ms, first record at 48 ms, 1 probes and 3492 frames sent, 3532 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 4, written to us 4); longest pause of this side 8 ms) [17:56:39.749]
+link-test: 10.99.54.2:39044: alight (10.99.54.2:39044): 10.99.54.1:7092 -> 10.99.54.2:39044 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:39060): stream up (0-3.1/trashcan /dev/tbstream0), epoch c90daefd, 73.2 ms after the link started [17:56:39.859]
+link-test: 10.99.54.2:39060: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39074): stream up (0-3.1/trashcan /dev/tbstream0), epoch f21df46c, 79.4 ms after the link started [17:56:40.294]
+link-test: 10.99.54.2:39074: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025800.501 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:39088): stream up (0-3.1/trashcan /dev/tbstream0), epoch 04301028, 16.3 ms after the link started [17:56:40.665]
+link-test: 10.99.54.2:39088: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39102): stream up (0-3.1/trashcan /dev/tbstream0), epoch e76543bd, 70.5 ms after the link started [17:56:41.042]
+link-test: 10.99.54.2:39102: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39102): stream down (the other side closed its stream); continuing over TCP (145 ms into the epoch: device open at 55 ms, first record at 57 ms, 1 probes and 476 frames sent, 464 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 6 ms) [17:56:41.130]
+link-test: 10.99.54.2:39102: alight (10.99.54.2:39102): 10.99.54.1:7092 -> 10.99.54.2:39102 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:39116): stream up (0-3.1/trashcan /dev/tbstream0), epoch e5e2b172, 89.6 ms after the link started [17:56:41.258]
+link-test: 10.99.54.2:39116: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39132): stream up (0-3.1/trashcan /dev/tbstream0), epoch 68b29923, 68.8 ms after the link started [17:56:42.205]
+link-test: 10.99.54.2:39132: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025802.409 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:39140): stream up (0-3.1/trashcan /dev/tbstream0), epoch 8f3a2f3c, 16.4 ms after the link started [17:56:42.556]
+link-test: 10.99.54.2:39140: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39142): stream up (0-3.1/trashcan /dev/tbstream0), epoch 5639ed28, 56.4 ms after the link started [17:56:42.862]
+link-test: 10.99.54.2:39142: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39142): stream down (the other side closed its stream); continuing over TCP (132 ms into the epoch: device open at 41 ms, first record at 43 ms, 1 probes and 888 frames sent, 872 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 0); longest pause of this side 6 ms) [17:56:42.952]
+link-test: 10.99.54.2:39142: alight (10.99.54.2:39142): 10.99.54.1:7092 -> 10.99.54.2:39142 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:39152): stream up (0-3.1/trashcan /dev/tbstream0), epoch aea6b413, 60.2 ms after the link started [17:56:43.037]
+link-test: 10.99.54.2:39152: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39152): stream down (the other side closed its stream); continuing over TCP (685 ms into the epoch: device open at 38 ms, first record at 54 ms, 1 probes and 8028 frames sent, 8148 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 4, written to us 4); longest pause of this side 28 ms) [17:56:43.674]
+link alight (10.99.54.2:39158): stream up (0-3.1/trashcan /dev/tbstream0), epoch 1b410652, 62.5 ms after the link started [17:56:43.783]
+link-test: 10.99.54.2:39158: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: {"i":0,"ms":25.761498,"path":"stream","slow":"pingpong","t":0.026,"unix":1792025803.8161862}
+link-test: exiting at 1792025803.986 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:39180): stream up (0-3.1/trashcan /dev/tbstream0), epoch bf8e427c, 42.2 ms after the link started [17:56:44.180]
+link-test: 10.99.54.2:39180: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39190): stream up (0-3.1/trashcan /dev/tbstream0), epoch a325e7ae, 28.7 ms after the link started [17:56:44.494]
+link-test: 10.99.54.2:39190: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39190): stream down (the other side closed its stream); continuing over TCP (160 ms into the epoch: device open at 25 ms, first record at 26 ms, 1 probes and 5928 frames sent, 5928 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 6 ms) [17:56:44.632]
+link-test: 10.99.54.2:39190: alight (10.99.54.2:39190): 10.99.54.1:7092 -> 10.99.54.2:39190 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:39192): stream up (0-3.1/trashcan /dev/tbstream0), epoch 4b01b093, 35.1 ms after the link started [17:56:44.690]
+link-test: 10.99.54.2:39192: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:39200): stream up (0-3.1/trashcan /dev/tbstream0), epoch aea07928, 65.1 ms after the link started [17:56:45.523]
+link-test: 10.99.54.2:39200: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025805.759 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44752): stream up (0-3.1/trashcan /dev/tbstream0), epoch 818afaeb, 51.8 ms after the link started [17:56:45.971]
+link-test: 10.99.54.2:44752: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44752): stream down (the other side closed its stream); continuing over TCP (353 ms into the epoch: device open at 35 ms, first record at 36 ms, 1 probes and 8048 frames sent, 8032 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 5 ms) [17:56:46.291]
+link alight (10.99.54.2:44764): stream up (0-3.1/trashcan /dev/tbstream0), epoch 0e84ad61, 23.7 ms after the link started [17:56:46.318]
+link-test: 10.99.54.2:44764: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44764): stream down (the other side closed its stream); continuing over TCP (98 ms into the epoch: device open at 21 ms, first record at 22 ms, 1 probes and 1156 frames sent, 1160 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 0); longest pause of this side 5 ms) [17:56:46.395]
+link-test: 10.99.54.2:44764: alight (10.99.54.2:44764) closed the link without saying goodbye
+link alight (10.99.54.2:44770): stream up (0-3.1/trashcan /dev/tbstream0), epoch 26170281, 43.2 ms after the link started [17:56:46.447]
+link-test: 10.99.54.2:44770: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: {"i":301,"ms":20.036932,"path":"stream","slow":"pingpong","t":0.176,"unix":1792025806.6646905}
+link-test: {"i":418,"ms":20.884923999999998,"path":"stream","slow":"pingpong","t":0.225,"unix":1792025806.7132583}
+link alight (10.99.54.2:44782): stream up (0-3.1/trashcan /dev/tbstream0), epoch 5a1bcc7b, 42.8 ms after the link started [17:56:47.067]
+link-test: 10.99.54.2:44782: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025807.303 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44800): stream up (0-3.1/trashcan /dev/tbstream0), epoch d3049553, 55.7 ms after the link started [17:56:47.516]
+link-test: 10.99.54.2:44800: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44812): stream up (0-3.1/trashcan /dev/tbstream0), epoch 7745ef6a, 31.5 ms after the link started [17:56:47.910]
+link-test: 10.99.54.2:44812: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44812): stream down (the other side closed its stream); continuing over TCP (759 ms into the epoch: device open at 16 ms, first record at 18 ms, 1 probes and 5448 frames sent, 5684 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 59 reports from it (of ours read 4, written to us 415); longest pause of this side 594 ms) [17:56:48.651]
+link-test: 10.99.54.2:44812: alight (10.99.54.2:44812): 10.99.54.1:7092 -> 10.99.54.2:44812 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:44818): stream up (0-3.1/trashcan /dev/tbstream0), epoch 8a6e3502, 38.6 ms after the link started [17:56:48.721]
+link-test: 10.99.54.2:44818: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44830): stream up (0-3.1/trashcan /dev/tbstream0), epoch df0be6d7, 48.4 ms after the link started [17:56:49.100]
+link-test: 10.99.54.2:44830: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025809.303 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44842): stream up (0-3.1/trashcan /dev/tbstream0), epoch 89377c1f, 75.7 ms after the link started [17:56:49.525]
+link-test: 10.99.54.2:44842: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44850): stream up (0-3.1/trashcan /dev/tbstream0), epoch 8e162693, 15.8 ms after the link started [17:56:49.828]
+link-test: 10.99.54.2:44850: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44850): TCP path 10.99.54.1:7092 -> 10.99.54.2:44850 failed (closed); continuing without it [17:56:49.906]
+link alight (10.99.54.2:44850): stream down (the other side closed its stream); continuing over TCP (92 ms into the epoch: device open at 11 ms, first record at 13 ms, 1 probes and 1570 frames sent, 1588 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 6 ms) [17:56:49.907]
+link-test: 10.99.54.2:44850: alight (10.99.54.2:44850): every path failed
+link alight (10.99.54.2:44854): stream up (0-3.1/trashcan /dev/tbstream0), epoch dc64951b, 49.3 ms after the link started [17:56:49.965]
+link-test: 10.99.54.2:44854: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44860): stream up (0-3.1/trashcan /dev/tbstream0), epoch 9a94b4ce, 31.7 ms after the link started [17:56:50.622]
+link-test: 10.99.54.2:44860: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025810.837 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44882): stream up (0-3.1/trashcan /dev/tbstream0), epoch 9b9fe477, 58.6 ms after the link started [17:56:51.055]
+link-test: 10.99.54.2:44882: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44896): stream up (0-3.1/trashcan /dev/tbstream0), epoch cdf24f3f, 43.7 ms after the link started [17:56:51.453]
+link-test: 10.99.54.2:44896: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44896): stream down (the other side closed its stream); continuing over TCP (135 ms into the epoch: device open at 31 ms, first record at 33 ms, 1 probes and 840 frames sent, 837 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 21 ms) [17:56:51.555]
+link-test: 10.99.54.2:44896: alight (10.99.54.2:44896): 10.99.54.1:7092 -> 10.99.54.2:44896 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:44902): stream up (0-3.1/trashcan /dev/tbstream0), epoch 204eb883, 49.1 ms after the link started [17:56:51.623]
+link-test: 10.99.54.2:44902: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44902): stream down (the other side closed its stream); continuing over TCP (355 ms into the epoch: device open at 35 ms, first record at 37 ms, 1 probes and 8024 frames sent, 8072 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 10 ms) [17:56:51.947]
+link alight (10.99.54.2:44906): stream up (0-3.1/trashcan /dev/tbstream0), epoch b190ec22, 51.0 ms after the link started [17:56:52.000]
+link-test: 10.99.54.2:44906: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025812.206 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44910): stream up (0-3.1/trashcan /dev/tbstream0), epoch a720e207, 63.7 ms after the link started [17:56:52.432]
+link-test: 10.99.54.2:44910: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44918): stream up (0-3.1/trashcan /dev/tbstream0), epoch 76ecc0c5, 53.7 ms after the link started [17:56:52.858]
+link-test: 10.99.54.2:44918: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44918): stream down (the other side closed its stream); continuing over TCP (249 ms into the epoch: device open at 40 ms, first record at 41 ms, 1 probes and 4220 frames sent, 4224 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 0); longest pause of this side 21 ms) [17:56:53.066]
+link-test: 10.99.54.2:44918: alight (10.99.54.2:44918): 10.99.54.1:7092 -> 10.99.54.2:44918 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:44920): stream up (0-3.1/trashcan /dev/tbstream0), epoch a099454e, 57.2 ms after the link started [17:56:53.155]
+link-test: 10.99.54.2:44920: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44924): stream up (0-3.1/trashcan /dev/tbstream0), epoch 635a20ee, 27.7 ms after the link started [17:56:53.667]
+link-test: 10.99.54.2:44924: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025813.869 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44934): stream up (0-3.1/trashcan /dev/tbstream0), epoch 67618fb5, 46.2 ms after the link started [17:56:54.045]
+link-test: 10.99.54.2:44934: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: {"i":0,"ms":20.230491999999998,"path":"stream","slow":"pingpong","t":0.02,"unix":1792025814.075574}
+link alight (10.99.54.2:44940): stream up (0-3.1/trashcan /dev/tbstream0), epoch 61066890, 73.5 ms after the link started [17:56:54.452]
+link-test: 10.99.54.2:44940: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44940): stream down (the other side closed its stream); continuing over TCP (136 ms into the epoch: device open at 53 ms, first record at 53 ms, 1 probes and 1076 frames sent, 1068 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 8 ms) [17:56:54.535]
+link-test: 10.99.54.2:44940: alight (10.99.54.2:44940): 10.99.54.1:7092 -> 10.99.54.2:44940 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:44946): stream up (0-3.1/trashcan /dev/tbstream0), epoch 0417fdc9, 51.5 ms after the link started [17:56:54.620]
+link-test: 10.99.54.2:44946: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:44948): stream up (0-3.1/trashcan /dev/tbstream0), epoch 7ede0969, 108.7 ms after the link started (100 ms into the epoch: device open at 95 ms, first record at 100 ms, 1 probes and 4 frames sent, 1 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 11 ms) [17:56:55.350]
+link-test: 10.99.54.2:44948: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025815.573 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:44964): stream up (0-3.1/trashcan /dev/tbstream0), epoch 28aeb075, 12.4 ms after the link started [17:56:55.736]
+link-test: 10.99.54.2:44964: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:41132): stream up (0-3.1/trashcan /dev/tbstream0), epoch cfb99b22, 42.1 ms after the link started [17:56:56.067]
+link-test: 10.99.54.2:41132: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:41132): stream down (the other side closed its stream); continuing over TCP (143 ms into the epoch: device open at 27 ms, first record at 28 ms, 1 probes and 1272 frames sent, 1264 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 6 ms) [17:56:56.182]
+link-test: 10.99.54.2:41132: alight (10.99.54.2:41132): 10.99.54.1:7092 -> 10.99.54.2:41132 (read: Connection reset by peer (os error 104))
+link alight (10.99.54.2:41140): stream up (0-3.1/trashcan /dev/tbstream0), epoch a538aa99, 20.3 ms after the link started [17:56:56.224]
+link-test: 10.99.54.2:41140: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:41154): stream up (0-3.1/trashcan /dev/tbstream0), epoch b69278ac, 100.8 ms after the link started [17:56:56.832]
+link-test: 10.99.54.2:41154: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025817.037 (fault injection)
+link-test: serving on 0.0.0.0:7092
+link alight (10.99.54.2:41164): stream up (0-3.1/trashcan /dev/tbstream0), epoch 3b65bfda, 45.6 ms after the link started [17:56:57.242]
+link-test: 10.99.54.2:41164: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:41168): stream up (0-3.1/trashcan /dev/tbstream0), epoch 77441709, 60.9 ms after the link started [17:56:57.534]
+link-test: 10.99.54.2:41168: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link alight (10.99.54.2:41168): stream down (the other side closed its stream); continuing over TCP (122 ms into the epoch: device open at 45 ms, first record at 48 ms, 1 probes and 1172 frames sent, 1168 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 8 ms) [17:56:57.608]
+link-test: 10.99.54.2:41168: alight (10.99.54.2:41168): 10.99.54.1:7092 -> 10.99.54.2:41168 (read: Connection reset by peer (os error 104))

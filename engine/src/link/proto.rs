@@ -108,10 +108,10 @@ const EVIDENCE: u32 = 3;
 /// read and written over TCP this often.
 const REPORT_EVERY: Duration = Duration::from_millis(10);
 
-/// A link message, written to stderr by a thread of its own: a write to a log file can block for hundreds of
-/// milliseconds on the Mac Pros (an ext4 journal commit waits for the SSD's cache flush), and a link that waited for
-/// one while it holds its state answers nothing meanwhile (the main suite's one-way epoch at 17:12: the accepting
-/// side's "stream up" line, then 0.3-0.5 s of silence). A write that took over 50 ms says so in the next message.
+/// A link message, written to stderr by a thread of its own: on the node Mac Pros a write to the log directory stalls
+/// for 0.3-1.3 s several times a minute (results/kernel/usb4stream-busypoll-20261014/logcheck), and a link that waited
+/// for one while it held its state answered nothing meanwhile (the main suite's one-way epoch at 17:12: the accepting
+/// side's "stream up" line, then about 0.6 s of silence). A write that took over 50 ms says so in the next message.
 pub fn say(msg: String) {
     static LOG: std::sync::OnceLock<std::sync::mpsc::Sender<String>> = std::sync::OnceLock::new();
     let tx = LOG.get_or_init(|| {

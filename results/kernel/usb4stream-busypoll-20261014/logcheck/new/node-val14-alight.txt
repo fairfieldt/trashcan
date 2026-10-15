@@ -1,0 +1,2 @@
+link inflight (10.99.86.17:39136): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1071028d, 5.9 ms after the link started [18:18:17.697]
+link indite (indite.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream0), epoch 60a4b1bc, 3.8 ms after the link started [18:18:17.702]

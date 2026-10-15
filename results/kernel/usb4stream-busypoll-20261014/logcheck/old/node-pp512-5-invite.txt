@@ -1,0 +1,2 @@
+link indite (10.99.35.18:38178): stream up (1-3.1/trashcan /dev/tbstream1), epoch 52e4d839, 5.5 ms after the link started [18:18:07.145]
+link enlight (enlight.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream0), epoch 07729cfb, 6.0 ms after the link started [18:18:07.153]

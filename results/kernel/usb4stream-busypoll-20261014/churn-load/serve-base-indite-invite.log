@@ -1,0 +1,162 @@
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:33818): stream up (1-3.1/trashcan /dev/tbstream1), epoch eb6d82d1, 3.7 ms after the link started [17:56:20.266]
+link-test: 10.99.35.18:33818: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33822): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2bf36078, 10.4 ms after the link started [17:56:20.354]
+link-test: 10.99.35.18:33822: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33822): stream down (the other side closed its stream); continuing over TCP (220 ms into the epoch: device open at 9 ms, first record at 9 ms, 1 probes and 22292 frames sent, 22292 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 4, written to us 4); longest pause of this side 1 ms) [17:56:20.565]
+link-test: 10.99.35.18:33822: indite (10.99.35.18:33822): 10.99.35.17:7093 -> 10.99.35.18:33822 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:33832): stream up (1-3.1/trashcan /dev/tbstream1), epoch 7151d8b5, 15.9 ms after the link started [17:56:20.589]
+link-test: 10.99.35.18:33832: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33832): stream down (the other side closed its stream); continuing over TCP (82 ms into the epoch: device open at 11 ms, first record at 11 ms, 1 probes and 8020 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:20.659]
+link indite (10.99.35.18:33838): stream up (1-3.1/trashcan /dev/tbstream1), epoch a9d448df, 34.0 ms after the link started [17:56:20.698]
+link-test: 10.99.35.18:33838: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025780.899 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:33854): stream up (1-3.1/trashcan /dev/tbstream1), epoch f8c02f14, 14.8 ms after the link started [17:56:21.026]
+link-test: 10.99.35.18:33854: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33866): stream up (1-3.1/trashcan /dev/tbstream1), epoch c7180b04, 28.9 ms after the link started [17:56:21.126]
+link-test: 10.99.35.18:33866: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33866): stream down (the other side closed its stream); continuing over TCP (188 ms into the epoch: device open at 27 ms, first record at 27 ms, 1 probes and 12808 frames sent, 12806 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:21.287]
+link-test: 10.99.35.18:33866: indite (10.99.35.18:33866): 10.99.35.17:7093 -> 10.99.35.18:33866 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:33878): stream up (1-3.1/trashcan /dev/tbstream1), epoch adf433ab, 27.8 ms after the link started [17:56:21.319]
+link-test: 10.99.35.18:33878: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33878): stream down (the other side closed its stream); continuing over TCP (118 ms into the epoch: device open at 27 ms, first record at 27 ms, 1 probes and 8020 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:21.410]
+link indite (10.99.35.18:33880): stream up (1-3.1/trashcan /dev/tbstream1), epoch ce324843, 7.2 ms after the link started [17:56:21.423]
+link-test: 10.99.35.18:33880: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025781.624 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:33896): stream up (1-3.1/trashcan /dev/tbstream1), epoch b3f5fda4, 5.2 ms after the link started [17:56:21.736]
+link-test: 10.99.35.18:33896: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33912): stream up (1-3.1/trashcan /dev/tbstream1), epoch a12f53db, 5.7 ms after the link started [17:56:21.823]
+link-test: 10.99.35.18:33912: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33912): stream down (the other side closed its stream); continuing over TCP (145 ms into the epoch: device open at 4 ms, first record at 5 ms, 1 probes and 13040 frames sent, 13040 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:21.964]
+link-test: 10.99.35.18:33912: indite (10.99.35.18:33912): 10.99.35.17:7093 -> 10.99.35.18:33912 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:33914): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5bd7b367, 32.0 ms after the link started [17:56:22.002]
+link-test: 10.99.35.18:33914: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33928): stream up (1-3.1/trashcan /dev/tbstream1), epoch abbc1dd1, 11.5 ms after the link started [17:56:22.097]
+link-test: 10.99.35.18:33928: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025782.298 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:33954): stream up (1-3.1/trashcan /dev/tbstream1), epoch eb3341b5, 12.7 ms after the link started [17:56:22.419]
+link-test: 10.99.35.18:33954: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33954): stream down (the other side closed its stream); continuing over TCP (89 ms into the epoch: device open at 10 ms, first record at 11 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:22.498]
+link indite (10.99.35.18:33956): stream up (1-3.1/trashcan /dev/tbstream1), epoch 3fdc85b2, 3.5 ms after the link started [17:56:22.506]
+link-test: 10.99.35.18:33956: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33956): stream down (the other side closed its stream); continuing over TCP (192 ms into the epoch: device open at 2 ms, first record at 2 ms, 1 probes and 21180 frames sent, 21180 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:22.695]
+link-test: 10.99.35.18:33956: indite (10.99.35.18:33956): 10.99.35.17:7093 -> 10.99.35.18:33956 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:33970): stream up (1-3.1/trashcan /dev/tbstream1), epoch 3dfc6604, 5.0 ms after the link started [17:56:22.705]
+link-test: 10.99.35.18:33970: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33974): stream up (1-3.1/trashcan /dev/tbstream1), epoch a4ae5cb4, 20.4 ms after the link started [17:56:22.801]
+link-test: 10.99.35.18:33974: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025783.002 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:33992): stream up (1-3.1/trashcan /dev/tbstream1), epoch ddc29687, 29.4 ms after the link started [17:56:23.141]
+link-test: 10.99.35.18:33992: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33992): stream down (the other side closed its stream); continuing over TCP (102 ms into the epoch: device open at 27 ms, first record at 28 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:23.215]
+link indite (10.99.35.18:33996): stream up (1-3.1/trashcan /dev/tbstream1), epoch 90bc1849, 5.7 ms after the link started [17:56:23.226]
+link-test: 10.99.35.18:33996: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:33996): stream down (the other side closed its stream); continuing over TCP (103 ms into the epoch: device open at 1 ms, first record at 4 ms, 2 probes and 10360 frames sent, 10352 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:23.324]
+link-test: 10.99.35.18:33996: indite (10.99.35.18:33996): 10.99.35.17:7093 -> 10.99.35.18:33996 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34010): stream up (1-3.1/trashcan /dev/tbstream1), epoch a5378fe9, 21.7 ms after the link started [17:56:23.352]
+link-test: 10.99.35.18:34010: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34010): stream down (the other side closed its stream); continuing over TCP (83 ms into the epoch: device open at 19 ms, first record at 19 ms, 1 probes and 8020 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:23.416]
+link indite (10.99.35.18:34018): stream up (1-3.1/trashcan /dev/tbstream1), epoch b5b67f93, 9.4 ms after the link started [17:56:23.431]
+link-test: 10.99.35.18:34018: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025783.633 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34042): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2ae11fbe, 32.1 ms after the link started [17:56:23.773]
+link-test: 10.99.35.18:34042: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34052): stream up (1-3.1/trashcan /dev/tbstream1), epoch bb46066a, 41.7 ms after the link started [17:56:23.909]
+link-test: 10.99.35.18:34052: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34052): stream down (the other side closed its stream); continuing over TCP (224 ms into the epoch: device open at 39 ms, first record at 41 ms, 1 probes and 24920 frames sent, 24916 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 4, written to us 4); longest pause of this side 2 ms) [17:56:24.092]
+link-test: 10.99.35.18:34052: indite (10.99.35.18:34052): 10.99.35.17:7093 -> 10.99.35.18:34052 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34062): stream up (1-3.1/trashcan /dev/tbstream1), epoch 83ccdc56, 12.9 ms after the link started [17:56:24.109]
+link-test: 10.99.35.18:34062: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34062): stream down (the other side closed its stream); continuing over TCP (78 ms into the epoch: device open at 11 ms, first record at 11 ms, 1 probes and 8020 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:24.177]
+link indite (10.99.35.18:34068): stream up (1-3.1/trashcan /dev/tbstream1), epoch ca97d3df, 3.5 ms after the link started [17:56:24.184]
+link-test: 10.99.35.18:34068: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025784.385 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34090): stream up (1-3.1/trashcan /dev/tbstream1), epoch 9956d67d, 10.5 ms after the link started [17:56:24.503]
+link-test: 10.99.35.18:34090: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34090): stream down (the other side closed its stream); continuing over TCP (91 ms into the epoch: device open at 8 ms, first record at 9 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:24.586]
+link indite (10.99.35.18:34100): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2b8292e8, 37.5 ms after the link started [17:56:24.628]
+link-test: 10.99.35.18:34100: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34100): stream down (the other side closed its stream); continuing over TCP (107 ms into the epoch: device open at 36 ms, first record at 36 ms, 1 probes and 7024 frames sent, 7024 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:24.698]
+link-test: 10.99.35.18:34100: indite (10.99.35.18:34100): 10.99.35.17:7093 -> 10.99.35.18:34100 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34116): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1c109850, 16.7 ms after the link started [17:56:24.721]
+link-test: 10.99.35.18:34116: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34116): stream down (the other side closed its stream); continuing over TCP (117 ms into the epoch: device open at 14 ms, first record at 14 ms, 1 probes and 8020 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:24.824]
+link indite (10.99.35.18:34130): stream up (1-3.1/trashcan /dev/tbstream1), epoch db345874, 7.8 ms after the link started [17:56:24.835]
+link-test: 10.99.35.18:34130: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025785.037 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34146): stream up (1-3.1/trashcan /dev/tbstream1), epoch 7f4778c3, 29.3 ms after the link started [17:56:25.174]
+link-test: 10.99.35.18:34146: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34152): stream up (1-3.1/trashcan /dev/tbstream1), epoch 6ffd16e2, 34.1 ms after the link started [17:56:25.276]
+link-test: 10.99.35.18:34152: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34152): stream down (the other side closed its stream); continuing over TCP (230 ms into the epoch: device open at 33 ms, first record at 33 ms, 1 probes and 24200 frames sent, 24196 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:25.473]
+link-test: 10.99.35.18:34152: indite (10.99.35.18:34152): 10.99.35.17:7093 -> 10.99.35.18:34152 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34156): stream up (1-3.1/trashcan /dev/tbstream1), epoch e425a536, 10.4 ms after the link started [17:56:25.488]
+link-test: 10.99.35.18:34156: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34160): stream up (1-3.1/trashcan /dev/tbstream1), epoch 39012f66, 8.5 ms after the link started [17:56:25.570]
+link-test: 10.99.35.18:34160: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025785.772 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34164): stream up (1-3.1/trashcan /dev/tbstream1), epoch 734d46c2, 4.9 ms after the link started [17:56:25.884]
+link-test: 10.99.35.18:34164: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34164): stream down (the other side closed its stream); continuing over TCP (93 ms into the epoch: device open at 2 ms, first record at 3 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:25.975]
+link indite (10.99.35.18:34180): stream up (1-3.1/trashcan /dev/tbstream1), epoch 14abcc6a, 5.6 ms after the link started [17:56:25.988]
+link-test: 10.99.35.18:34180: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34180): stream down (the other side closed its stream); continuing over TCP (200 ms into the epoch: device open at 4 ms, first record at 4 ms, 1 probes and 24396 frames sent, 24396 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:26.184]
+link-test: 10.99.35.18:34180: indite (10.99.35.18:34180): 10.99.35.17:7093 -> 10.99.35.18:34180 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34186): stream up (1-3.1/trashcan /dev/tbstream1), epoch 884a231b, 8.3 ms after the link started [17:56:26.197]
+link-test: 10.99.35.18:34186: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34188): stream up (1-3.1/trashcan /dev/tbstream1), epoch 472b0982, 2.4 ms after the link started [17:56:26.290]
+link-test: 10.99.35.18:34188: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025786.491 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34198): stream up (1-3.1/trashcan /dev/tbstream1), epoch c16dbe7c, 3.7 ms after the link started [17:56:26.603]
+link-test: 10.99.35.18:34198: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34206): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2f257931, 13.6 ms after the link started [17:56:26.689]
+link-test: 10.99.35.18:34206: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34206): stream down (the other side closed its stream); continuing over TCP (158 ms into the epoch: device open at 12 ms, first record at 13 ms, 1 probes and 17416 frames sent, 17415 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:26.835]
+link-test: 10.99.35.18:34206: indite (10.99.35.18:34206): 10.99.35.17:7093 -> 10.99.35.18:34206 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34208): stream up (1-3.1/trashcan /dev/tbstream1), epoch 8244cfb5, 10.2 ms after the link started [17:56:26.851]
+link-test: 10.99.35.18:34208: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34214): stream up (1-3.1/trashcan /dev/tbstream1), epoch 2b10b8d7, 3.4 ms after the link started [17:56:26.932]
+link-test: 10.99.35.18:34214: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025787.133 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34240): stream up (1-3.1/trashcan /dev/tbstream1), epoch 634ac68d, 22.6 ms after the link started [17:56:27.264]
+link-test: 10.99.35.18:34240: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34254): stream up (1-3.1/trashcan /dev/tbstream1), epoch ef9132fd, 9.4 ms after the link started [17:56:27.359]
+link-test: 10.99.35.18:34254: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34254): stream down (the other side closed its stream); continuing over TCP (107 ms into the epoch: device open at 8 ms, first record at 8 ms, 1 probes and 14864 frames sent, 14864 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:27.458]
+link-test: 10.99.35.18:34254: indite (10.99.35.18:34254): 10.99.35.17:7093 -> 10.99.35.18:34254 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34268): stream up (1-3.1/trashcan /dev/tbstream1), epoch a150cf9c, 6.7 ms after the link started [17:56:27.469]
+link-test: 10.99.35.18:34268: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34268): stream down (the other side closed its stream); continuing over TCP (101 ms into the epoch: device open at 4 ms, first record at 4 ms, 1 probes and 8020 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:27.566]
+link indite (10.99.35.18:34270): stream up (1-3.1/trashcan /dev/tbstream1), epoch 0164a536, 25.5 ms after the link started [17:56:27.596]
+link-test: 10.99.35.18:34270: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025787.797 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:34286): stream up (1-3.1/trashcan /dev/tbstream1), epoch 5c3a917a, 3.8 ms after the link started [17:56:27.910]
+link-test: 10.99.35.18:34286: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34286): stream down (the other side closed its stream); continuing over TCP (98 ms into the epoch: device open at 1 ms, first record at 2 ms, 1 probes and 8016 frames sent, 8016 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [17:56:28.006]
+link indite (10.99.35.18:34290): stream up (1-3.1/trashcan /dev/tbstream1), epoch e49dc129, 10.8 ms after the link started [17:56:28.022]
+link-test: 10.99.35.18:34290: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34290): stream down (the other side closed its stream); continuing over TCP (244 ms into the epoch: device open at 10 ms, first record at 10 ms, 1 probes and 30968 frames sent, 30968 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:28.257]
+link-test: 10.99.35.18:34290: indite (10.99.35.18:34290): 10.99.35.17:7093 -> 10.99.35.18:34290 (read: Connection reset by peer (os error 104))
+link indite (10.99.35.18:34296): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1fdfdb4b, 23.9 ms after the link started [17:56:28.286]
+link-test: 10.99.35.18:34296: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:34298): stream up (1-3.1/trashcan /dev/tbstream1), epoch 1859ac55, 3.3 ms after the link started [17:56:28.377]
+link-test: 10.99.35.18:34298: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1792025788.578 (fault injection)
+link-test: serving on 0.0.0.0:7093
+link indite (10.99.35.18:39826): stream up (1-3.1/trashcan /dev/tbstream1), epoch d4066459, 23.8 ms after the link started [17:56:28.712]
+link-test: 10.99.35.18:39826: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:39838): stream up (1-3.1/trashcan /dev/tbstream1), epoch 9638169c, 24.3 ms after the link started [17:56:28.833]
+link-test: 10.99.35.18:39838: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link indite (10.99.35.18:39838): stream down (the other side closed its stream); continuing over TCP (191 ms into the epoch: device open at 22 ms, first record at 23 ms, 1 probes and 22724 frames sent, 22724 records and 0 ends of file read, ours read by the other side; 0 of its records or reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:56:29.001]
+link-test: 10.99.35.18:39838: indite (10.99.35.18:39838): 10.99.35.17:7093 -> 10.99.35.18:39838 (read: Connection reset by peer (os error 104))

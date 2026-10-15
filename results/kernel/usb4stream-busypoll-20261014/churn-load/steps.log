@@ -1,0 +1,24 @@
+[17:56:13] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/churnall-20261014-175613; build ~/trashcan-exp/flashnext/trashcan-41da714; modes base:50:100: load:50:100:--load-ms_1000_--load-mb_256 freeze:30:1000:--freeze-ms_300
+[17:56:17]   kernels and build: incite 7.3.0-rc7-p2p-s2 e644f89b9472; inflight 7.3.0-rc7-p2p-s2 e644f89b9472; alight 7.3.0-rc7-p2p-s2 e644f89b9472; indite 7.3.0-rc7-p2p-s2 e644f89b9472; invite 7.3.0-rc7-p2p-s2 e644f89b9472; enlight 7.3.0-rc7-p2p-s2 e644f89b9472; 
+[17:56:17] base: 50 sessions per link, within 100 ms; server options: none
+[17:56:34]   incite -> inflight: pass: 50/50 passed, up p50/p99/max 7/53/53 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:56:34]   inflight -> alight: pass: 50/50 passed, up p50/p99/max 14/57/57 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:56:34]   alight -> indite: pass: 50/50 passed, up p50/p99/max 10/56/56 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:56:34]   indite -> invite: pass: 50/50 passed, up p50/p99/max 11/42/42 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:56:34]   invite -> enlight: pass: 50/50 passed, up p50/p99/max 11/53/53 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:56:34]   enlight -> incite: pass: 50/50 passed, up p50/p99/max 9/55/55 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:56:34] load: 50 sessions per link, within 100 ms; server options: --load-ms 1000 --load-mb 256
+[17:57:05]   incite -> inflight: FAIL: 42/50 passed, up p50/p99/max 52/247/247 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:05]   inflight -> alight: FAIL: 41/50 passed, up p50/p99/max 57/349/349 ms, 1 failed epochs, 0 one-way; server: 1 failed epochs
+[17:57:05]   alight -> indite: FAIL: 47/50 passed, up p50/p99/max 49/626/626 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:05]   indite -> invite: FAIL: 41/50 passed, up p50/p99/max 51/179/179 ms, 1 failed epochs, 0 one-way; server: 1 failed epochs
+[17:57:05]   invite -> enlight: FAIL: 37/50 passed, up p50/p99/max 71/1267/1267 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:05]   enlight -> incite: FAIL: 36/50 passed, up p50/p99/max 79/252/252 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:05] freeze: 30 sessions per link, within 1000 ms; server options: --freeze-ms 300
+[17:57:25]   incite -> inflight: pass: 30/30 passed, up p50/p99/max 13/328/328 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:25]   inflight -> alight: pass: 30/30 passed, up p50/p99/max 14/324/324 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:25]   alight -> indite: pass: 30/30 passed, up p50/p99/max 12/320/320 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:25]   indite -> invite: pass: 30/30 passed, up p50/p99/max 17/324/324 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:25]   invite -> enlight: pass: 30/30 passed, up p50/p99/max 12/325/325 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:25]   enlight -> incite: pass: 30/30 passed, up p50/p99/max 10/327/327 ms, 0 failed epochs, 0 one-way; server: 0 failed epochs
+[17:57:25] done: 6 link rounds did not pass

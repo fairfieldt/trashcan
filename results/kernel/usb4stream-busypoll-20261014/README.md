@@ -12,7 +12,12 @@ millisecond instead of 500 ms. Rolled out as `7.3.0-rc7-p2p-s2` (0006 + 0007) wi
 churned at once: 300 of 300 sessions reached their streams within 100 ms (at most 53 ms), with no failed or one-way
 epoch. The lone-frame hold is a property of a cable direction that survives Thunderbolt
 resets and reboots; the path tables are the same on every cable, a CLOSE held by it is what reaches the next
-session, and no cable with an end on the diagnostic build `-p2p-s3` (0008 at its defaults) holds.
+session, and no cable with an end on the diagnostic build `-p2p-s3` (0008 at its defaults) holds. With all six on
+-p2p-s2, no direction held more than one frame. The main suite's one-way epoch at 17:12 was not a dead direction. The
+accepting node's link went silent for 0.6 s because it wrote its log line while holding its state, and on the node
+Macs a write to the log directory stalls for 0.3-1.3 s several times a minute. Since 4f36bf07, link messages are
+written by a thread of their own (every link up in 4-6 ms in 5 of 5 bench runs). Since 41da7143, an epoch is given
+up as one-way only on the other side's reports, never because it is silent.
 
 ## Busy polling does not release lone frames
 
@@ -162,7 +167,8 @@ closed, or still opening, leave that direction dead. Neither did:
 So the order of opens is not the cause. The link now holds its writes until it hears the other side anyway (nothing
 is sent toward an end that may not be open), gives a one-way epoch up 50 ms after it first hears the other side (a
 working direction shows within about 5 ms: probes go every 2 ms with pushes), and tries the first failed epoch again at
-once, so that with a fast close a one-way epoch costs about 0.1 s instead of 3 s or the session.
+once, so that with a fast close a one-way epoch costs about 0.1 s instead of 3 s or the session. (Since 41da7143 the
+epoch is given up only on the other side's reports, never on its silence; see below.)
 
 ## thunderbolt_net does not hold where the stream does (`hold/`)
 
@@ -306,6 +312,139 @@ boot, as on stock 7.3) and then `link-test churn` on all six links at once, 50 s
 
 Every link passed, so the window made `7.3.0-rc7-p2p-s2` GRUB's default on all six (17:10).
 
+## The main suite's one-way epoch at 17:12 (`churn-load/suite-ms-1687af5-*`)
+
+The coordinator's main suite with trashcan-1687af5 stopped at 17:12 (pp512-1). incite -> inflight reached its stream
+only on its second epoch, 614 ms after the link started. incite gave up the first epoch after 54 ms as one-way ("the
+other side reads none of our frames"): inflight's first 4 records arrived by 4 ms, and nothing after. inflight's log
+has the same epoch up 5.7 ms after its link started, then nothing until incite's CLOSE. The second epoch's first record
+from inflight came 559 ms into it, so inflight's link answered nothing for about 0.6 s right after its stream came up.
+inflight was otherwise idle.
+
+The link's reading, acknowledging and probing run on threads of their own, never on the engine's main thread: a
+service thread every millisecond, the request reader, and the open and close threads. All of them work under the
+link's state lock, though, and the link wrote its messages to stderr while it held that lock. The nodes' stderr is a
+file in `~/trashcan-exp/flashnext/results`.
+
+## A stalled log write stops the link (`bench-41da714/`, `logcheck/`)
+
+`tools/wlat.py` writes a 200-byte line every 5 ms to a file in that directory and lists every write over 20 ms. It ran
+on all six Macs during ten bench runs (18:17:27-18:19:00, `logcheck/wlat-*.json`). The five node Macs had 32 writes
+over 300 ms between them, 4-10 each and up to 1.27 s; inflight spent about 10 of the 93 s in such writes. On incite no
+write took over 2.2 ms. The nodes log to ext4 on their internal Apple SSD (SM1024F, SATA); incite's home is on an Intel
+NVMe SSD. Why the writes stall is not known.
+
+Since the rollout, all four slow first epochs were on incite -> inflight. In each, inflight went quiet right after
+writing its "stream up" line for incite. In the other runs its next link, to alight, starts 2-3 ms after that line.
+
+| run | build | incite -> inflight up in | inflight |
+|---|---|---|---|
+| main suite pp512-1, 17:12 | 1687af5 | 614 ms (first epoch given up at 54 ms) | up at 5.7 ms, then nothing for about 0.6 s |
+| bench check val14, 18:08:51 | 41da714 | 301 ms | its link to alight started 300 ms after the line |
+| bench check pp512-3, 18:09:08 | 41da714 | 306 ms | the same, 303 ms after |
+| logcheck pp512-3, 18:17:48 | 41da714 | 633 ms | line at 48.369, inside an 886 ms write stall that ended at 48.996; next message at 49.003 |
+
+In the 633 ms epoch, incite read inflight's first record at 4 ms and nothing more until 633 ms, while incite itself
+ran every millisecond ("longest pause of this side 1 ms"). 1687af5's rule would have given that epoch up after 50 ms,
+as at 17:12; 41da714's waited. A stall does not always show. In logcheck pp512-4, inflight's line also fell inside a
+stall (1142 ms), but incite's side was already up (6 ms).
+
+4f36bf07 writes link messages from a thread of their own (`proto::say`), so a slow write delays only the message, and
+a write that took over 50 ms is noted in the next message. A link that is not turned for over 100 ms while an epoch
+opens or has just come up says so, and every link message carries the time of day. `tools/logcheck-session.sh`
+(chain6, 18:17-18:19) ran the write probe on all six while `tools/benchcheck-session.sh` did val14 and four pp512 runs
+through the main suite's path, five with each build:
+
+| build | runs with every link on its stream at first try | incite -> inflight up in (val14, pp512-2 to 5) | other links | node writes over 300 ms meanwhile |
+|---|---|---|---|---|
+| 41da714 (messages written under the lock) | 5/5 | 4, 4, 633, 6, 5 ms | 4-6 ms | 19 |
+| 4f36bf0 (logger thread) | 5/5 | 4, 6, 6, 6, 4 ms | 4-6 ms | 13 |
+
+With 4f36bf0, inflight's "stream up" for incite in pp512-4 (18:18:43.704) also fell inside a stall (962 ms). Its logger
+reported "the previous link message took 797ms to write", and the link was up in 6 ms. inflight's link to alight still
+started 0.8 s late in that run, when the stall ended. Something else in the node's start also waits for the stall (not
+traced; the node logs kept here have only link lines). So a stall can still delay a stage's start, though not a link
+that is already running.
+
+## One-way only on the other side's reports (41da7143, 4f36bf07)
+
+The rule that gave up the 17:12 epoch took the other side's silence after its first records to mean "reads none of
+our frames". Since 41da7143, an epoch is given up as one-way only on the other side's own reports. While an epoch opens,
+and once it is up while the other side still probes, each side sends over TCP every 10 ms how many of the epoch's
+frames it has read and written. An epoch is given up in two cases:
+
+- 3 reports sent 50 ms or more after our first frame all show none of ours read ("the other side reads none of our
+  frames");
+- for 50 ms and 3 reports, the other side has written more frames than have arrived here, beyond the 3 a receiver may
+  hold and 1 in flight ("the other side's frames do not arrive").
+
+Stream records are not evidence (since 4f36bf07), because a held record can arrive late. Silence is not evidence either: a peer that
+says nothing waits for the probe timeout (3 s). An epoch that is really one-way is given up within about 0.1 s and
+tried again at once. Two tests cover the rule:
+
+- `a_busy_peer_does_not_fail_its_epoch` holds the accepting side's state lock for 300 ms right after its first probe.
+  No epoch fails, and the stream comes up after the stall.
+- `an_epoch_whose_other_side_is_not_heard_is_given_up_on_its_reports` mutes one direction for an epoch. The epoch is
+  given up on the reports, and the retry is up within 50-300 ms.
+
+Messages about slow and failed epochs now give these counts and the longest pause of their own side. cargo test: 101
+pass. `link-test serve` takes `--load-ms` and `--load-mb`: from the start of each session, a thread per CPU (12-24)
+writes a buffer of that size over and over, like a node loading its stage. It also takes `--freeze-ms`: the whole
+process is stopped for that long, starting a random 0-20 ms into the session.
+
+## A loaded or stopped acceptor (`churn-load/`, `churn-old-client/`)
+
+`tools/churnall-session.sh` churned all six links at once (17:56 and 18:07). Each link's client ran on its first Mac
+in ring order and its server on the second, restarted after each crash, with 41da714 servers throughout.
+`churn-old-client/` used 1687af5 clients (the old rule) against them.
+
+| mode | client | sessions | first epoch on the stream | failed epochs | given up as one-way | time to stream p50 / p90 / max |
+|---|---|---|---|---|---|---|
+| base | 41da714 | 300 | 300 | 0 | 0 | 10 / 29 / 57 ms |
+| load (1 s, 256 MiB per thread) | 41da714 | 300 | 298 | 2 | 0 | 58 / 120 / 1267 ms |
+| load | 1687af5 | 300 | 297 | 4 | 1 | 60 / 135 / 455 ms |
+| freeze (300 ms) | 41da714 | 180 | 180 | 0 | 0 | 14 / 317 / 328 ms |
+| freeze | 1687af5 | 180 | 177 | 3 | 3 | 12 / 319 / 598 ms |
+
+Under load, the failed epochs that were not one-way came after a server crash: the restarted server found the device
+still held by the old process, which took longer to exit while loaded (`... is in use by another process`). With
+freeze, 74 and 75 sessions had the server stopped before their stream was up, and they came up after it resumed
+(310-330 ms). The 1687af5 clients gave 3 of those epochs up 56-64 ms in, after reading the server's first 4 records,
+and came up on the retry. The 41da714 clients gave none up.
+
+## The hold on -p2p-s2, and the pushes (`pathmap-s2/`)
+
+`tools/s2check-session.sh` (chain6, 18:04-18:10) ran the path map again with all six on -p2p-s2 (`pos` and `pp`, 4 opens
+per direction), then the old-client churns and the first bench check. The path tables match the earlier maps on every
+end. In all 48 `pos` opens, every lone frame arrived with no filler, and in 47 of 48 `pp` opens no round trip needed
+one. In the remaining open (`pp`, enlight as client against incite, 18:05:31), every round trip needed 1 filler: a
+hold of 1 frame into enlight, in that open only. Its last round waited 200 ms (10 fillers) because incite closes
+0.2 s after its last answer. No direction held more than 1 frame and no open was lost. So the three cables that held
+1-2 frames on stock 7.3 no longer hold.
+
+Every frame the link writes on the stream is followed by PUSH = 3 more. That covers each probe (while the other ring
+has room) and, in an epoch that is up, every turn that wrote anything: data, acknowledgements, NAKs, answers to probes.
+The 10 ms reports go over TCP. There are three exceptions:
+
+- a NAK while the epoch still probes: the next probe, 2 ms later, carries pushes;
+- no pushes while the other side's ring is within 4 frames of full: its reading brings its acknowledgements, and our
+  pushes follow those;
+- the CLOSE the driver writes on close, which the link ignores while an epoch opens.
+
+So is a hold above 3, or a record without pushes, the cause of the one-way epochs? The evidence is not consistent with
+it:
+
+- no direction holds more than 1 frame on -p2p-s2;
+- every record type is pushed, and none of the exceptions leaves a frame unpushed for longer than one probe interval;
+- the one-way epochs of churns 2 and 3 had hundreds of frames written in the dead direction and none read, and a hold
+  of a few frames cannot do that;
+- the epoch at 17:12 was a silent peer, not a dead direction.
+
+No one-way epoch has been seen on -p2p-s2: none in the rollout churn (300 sessions), none in the base, load and freeze
+churns with 41da714 (780), and none in 15 bench runs. The four that 1687af5 clients gave up were against a stopped or
+loaded server. The one-way epochs of churns 2 and 3 (on -p2p-s, on cables that held) still have no cause. Since
+41da7143, one costs about 0.1 s.
+
 ## Patch 0007
 
 `kernel/patches-7.3/0007-thunderbolt-stream-no-rx-flush-on-close.patch`: `tbstream_dev_stop()` flushed the RX ring
@@ -372,4 +511,10 @@ output; the old script now hangs in the simulation, which reports and stops it. 
   `pathmap/`, `pathmap2/` (each with `map.md`; the path dumps are gzipped).
 - `tools/rollout-session.sh`: the six-Mac rollout of -p2p-s2; `rollout/` (with each Mac's `check.sh` output in
   `rollout/checks/`).
+- `churn-load/suite-ms-1687af5-pp512-1-*`: incite's and inflight's logs of the main suite's run at 17:12.
+- `tools/churnall-session.sh`: churn on all six links at once, with a loaded or stopped server; `churn-load/`.
+- `tools/s2check-session.sh`: the -p2p-s2 hold map, the churns with 1687af5 clients and the first bench check;
+  `pathmap-s2/`, `churn-old-client/`, `bench-41da714/`.
+- `tools/benchcheck-session.sh`: bench runs through the main suite's path, with each run's `links:` line and the nodes'
+  link lines. `tools/logcheck-session.sh`, `tools/wlat.py`: the log-write A/B; `logcheck/`.
 - `tools/simtest.sh`, `tools/sim/`: the window simulation.

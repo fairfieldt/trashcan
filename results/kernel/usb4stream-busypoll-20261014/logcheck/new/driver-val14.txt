@@ -1,0 +1,2 @@
+link inflight (inflight.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream0), epoch 56a09613, 4.3 ms after the link started [18:18:17.703]
+links: incite->inflight stream (up in 4 ms), inflight->alight stream (up in 6 ms), alight->indite stream (up in 4 ms), indite->invite stream (up in 6 ms), invite->enlight stream (up in 6 ms)

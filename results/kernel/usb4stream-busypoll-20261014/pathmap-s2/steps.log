@@ -1,0 +1,30 @@
+[18:04:03] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/s2check-20261014-180403/pathmap; (a) path tables closed, open and closed again; (b) pos and pp, 4 opens per direction on each cable, clients in the order abba
+[18:04:06]   incite 7.3.0-rc7-p2p-s2
+[18:04:06]   inflight 7.3.0-rc7-p2p-s2
+[18:04:06]   alight 7.3.0-rc7-p2p-s2
+[18:04:06]   indite 7.3.0-rc7-p2p-s2
+[18:04:06]   invite 7.3.0-rc7-p2p-s2
+[18:04:06]   enlight 7.3.0-rc7-p2p-s2
+[18:04:06]   tools 5ce28d9118fc 86c5450bfa69 60fed8bdab38 
+[18:04:06] (a) path tables with the stream devices closed
+[18:04:10]   closed: incite 4215 lines; inflight 4215 lines; alight 4215 lines; indite 4215 lines; invite 4215 lines; enlight 4215 lines; 
+[18:04:10] (a) path tables with every stream device held open
+[18:04:17]   open: incite 4215 lines; inflight 4215 lines; alight 4215 lines; indite 4215 lines; invite 4215 lines; enlight 4215 lines; 
+[18:04:27]   held open: incite: tbstream0 ok, tbstream1 ok; inflight: tbstream0 ok eofs 1, tbstream1 ok; alight: tbstream0 ok eofs 1, tbstream1 ok eofs 1; indite: tbstream0 ok, tbstream1 ok; invite: tbstream0 ok, tbstream1 ok eofs 1; enlight: tbstream0 ok eofs 1, tbstream1 ok eofs 1
+[18:04:27] (b) the hold on each cable
+[18:04:27] incite-inflight: incite /dev/tbstream0 <-> inflight /dev/tbstream0
+[18:05:00]   incite-inflight: pos incite->inflight [0 0 0 0]; pos inflight->incite [0 0 0 0]; pp client incite [0 0 0 0]; pp client inflight [0 0 0 0] 
+[18:05:00] incite-enlight: incite /dev/tbstream1 <-> enlight /dev/tbstream1
+[18:05:35]   incite-enlight: pos incite->enlight [0 0 0 0]; pos enlight->incite [0 0 0 0]; pp client incite [0 0 0 0]; pp client enlight [0 0 0 1-10] 
+[18:05:35] inflight-alight: inflight /dev/tbstream1 <-> alight /dev/tbstream1
+[18:06:07]   inflight-alight: pos inflight->alight [0 0 0 0]; pos alight->inflight [0 0 0 0]; pp client inflight [0 0 0 0]; pp client alight [0 0 0 0] 
+[18:06:07] alight-indite: alight /dev/tbstream0 <-> indite /dev/tbstream0
+[18:06:39]   alight-indite: pos alight->indite [0 0 0 0]; pos indite->alight [0 0 0 0]; pp client alight [0 0 0 0]; pp client indite [0 0 0 0] 
+[18:06:39] indite-invite: indite /dev/tbstream1 <-> invite /dev/tbstream1
+[18:07:12]   indite-invite: pos indite->invite [0 0 0 0]; pos invite->indite [0 0 0 0]; pp client indite [0 0 0 0]; pp client invite [0 0 0 0] 
+[18:07:12] invite-enlight: invite /dev/tbstream0 <-> enlight /dev/tbstream0
+[18:07:45]   invite-enlight: pos invite->enlight [0 0 0 0]; pos enlight->invite [0 0 0 0]; pp client invite [0 0 0 0]; pp client enlight [0 0 0 0] 
+[18:07:45] (a) path tables with the stream devices closed again
+[18:07:49]   after: incite 4215 lines; inflight 4215 lines; alight 4215 lines; indite 4215 lines; invite 4215 lines; enlight 4215 lines; 
+[18:07:49] map: /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/s2check-20261014-180403/pathmap/map.md (     155 lines; errors:        0 lines)
+[18:07:49] done

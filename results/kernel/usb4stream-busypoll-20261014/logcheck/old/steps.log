@@ -1,0 +1,13 @@
+[18:17:27] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/logcheck-20261014-181726/old; trashcan-41da714, 5 runs, chain inflight,alight,indite,invite,enlight
+[18:17:35] lc-41da714-val14 rc 0 8 s: all on the stream at first try; links: incite->inflight stream (up in 4 ms), inflight->alight stream (up in 6 ms), alight->indite stream (up in 6 ms), indite->invite stream (up in 6 ms), invite->enlight stream (up in 6 ms)
+[18:17:46] lc-41da714-pp512-2 rc 0 11 s: all on the stream at first try; links: incite->inflight stream (up in 4 ms), inflight->alight stream (up in 6 ms), alight->indite stream (up in 4 ms), indite->invite stream (up in 5 ms), invite->enlight stream (up in 6 ms)
+    alight: link inflight (10.99.86.17:59042): stream down (the other side closed its stream); continuing over TCP [18:17:42.563]
+    alight: link indite (indite.tb0:7071): stream down (the other side closed its stream); continuing over TCP [18:17:42.803]
+[18:17:56] lc-41da714-pp512-3 rc 0 10 s: all on the stream at first try; links: incite->inflight stream (up in 633 ms), inflight->alight stream (up in 4 ms), alight->indite stream (up in 6 ms), indite->invite stream (up in 6 ms), invite->enlight stream (up in 4 ms)
+    alight: link inflight (10.99.86.17:43140): stream down (the other side closed its stream); continuing over TCP [18:17:54.232]
+[18:18:05] lc-41da714-pp512-4 rc 0 9 s: all on the stream at first try; links: incite->inflight stream (up in 6 ms), inflight->alight stream (up in 6 ms), alight->indite stream (up in 6 ms), indite->invite stream (up in 6 ms), invite->enlight stream (up in 4 ms)
+    alight: link inflight (10.99.86.17:45934): stream down (the other side closed its stream); continuing over TCP [18:18:03.591]
+    alight: link indite (indite.tb0:7071): stream down (the other side closed its stream); continuing over TCP [18:18:03.827]
+[18:18:14] lc-41da714-pp512-5 rc 0 9 s: all on the stream at first try; links: incite->inflight stream (up in 5 ms), inflight->alight stream (up in 6 ms), alight->indite stream (up in 4 ms), indite->invite stream (up in 6 ms), invite->enlight stream (up in 6 ms)
+    alight: link inflight (10.99.86.17:33862): stream down (the other side closed its stream); continuing over TCP [18:18:12.521]
+[18:18:14] done: 0 of 5 runs had a link off its stream at first try
