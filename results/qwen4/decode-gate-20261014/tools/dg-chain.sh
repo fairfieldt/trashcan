@@ -1,9 +1,9 @@
 #!/bin/bash
-# Decode gate, six-Mac A/B (under chain6.sh, TICKETS set): the candidate (CAND, default trashcan-dg9) against main's
-# binary (BASE, default trashcan-1687af5), driven like results/qwen4/main-suite-20261013/tools/main-suite.sh (q4run.py,
+# Decode gate, six-Mac A/B (under chain6.sh, TICKETS set): the candidate (CAND, default trashcan-dg10) against main's
+# binary (BASE, default trashcan-4f36bf0), driven like results/qwen4/main-suite-20261013/tools/main-suite.sh (q4run.py,
 # the chain order from the live Thunderbolt links). Each run once:
 # - validation of the candidate on the 14-token reference prompt and on p100 (--greedy 10, as the main suite), bit for
-#   bit against the main suite's runs of BASE (REF, default ms-1687af5);
+#   bit against the main suite's runs of BASE (REF, default ms-4f36bf0);
 # - decode after a 512-token prompt (256 steps; its decode window also gives the SMC power) and MTP on the three chat
 #   prompts, one alternated pair each, and a second pair where the first differs by less than 3% (tools/dg-pair.py).
 # After every run the session stops on: a failed run (a GPU that hangs is not retried); a new kernel-log line on any of
@@ -11,10 +11,10 @@
 # the processes' logs, transport.py), reported as a link failure with its log lines, no retry; in the candidate's runs,
 # a gate that gave up or gates that went off. DRY=1 prints the runs.
 cd /Users/fairfieldt/dev/trashcan/.claude/worktrees/agent-aec14e120304a2724/results/qwen4/chain-20261012 || exit 1
-CAND=${CAND:-trashcan-dg9}
-BASE=${BASE:-trashcan-1687af5}
-REF=${REF:-ms-1687af5}
-TAG=${TAG:-dg9c}
+CAND=${CAND:-trashcan-dg10}
+BASE=${BASE:-trashcan-4f36bf0}
+REF=${REF:-ms-4f36bf0}
+TAG=${TAG:-dg10c}
 G=/Users/fairfieldt/dev/claude-work/flashnext-20261012/gate2
 L=$G/chain/$TAG
 T=../decode-gate-20261014/tools
