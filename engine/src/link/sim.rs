@@ -28,6 +28,9 @@ pub struct Faults {
     /// This side's first open reads nothing of what the other side writes (one direction of an epoch dead, as seen
     /// on the Mac Pros); its next open works.
     pub deaf_once: Option<usize>,
+    /// (side, n): in this side's first open, its frames after the first n are lost (its direction of the epoch goes
+    /// dead after a few frames, as the main suite saw); its next open works.
+    pub mute_once: Option<(usize, u64)>,
 }
 
 enum Frame {
@@ -59,6 +62,9 @@ pub struct Wire {
     pub counts: Counts,
     /// Opens of the `deaf_once` side so far.
     deaf_opens: u32,
+    /// Opens of the `mute_once` side so far, and frames each side has written since it opened.
+    mute_opens: u32,
+    wrote: [u64; 2],
 }
 
 /// The cable; `end(side)` opens one end.
@@ -73,6 +79,8 @@ impl Pair {
             faults: Faults::default(),
             counts: Counts::default(),
             deaf_opens: 0,
+            mute_opens: 0,
+            wrote: [0; 2],
         })))
     }
 
@@ -103,6 +111,13 @@ impl Pair {
                 w.faults.deaf_once = None;
             }
         }
+        if w.faults.mute_once.is_some_and(|(s, _)| s == side) {
+            w.mute_opens += 1;
+            if w.mute_opens > 1 {
+                w.faults.mute_once = None;
+            }
+        }
+        w.wrote[side] = 0;
         w.open[side] = true;
         let ring = w.ring;
         let d = &mut w.dirs[side];
@@ -188,7 +203,9 @@ impl Frames for End {
             w.counts.frames += 1;
             let k = d.count;
             let f = w.faults;
-            if f.dead || f.deaf_once == Some(peer) || (f.drop_every > 0 && k.is_multiple_of(f.drop_every)) {
+            w.wrote[self.side] += 1;
+            let muted = f.mute_once.is_some_and(|(s, n)| s == self.side && w.wrote[self.side] > n);
+            if f.dead || muted || f.deaf_once == Some(peer) || (f.drop_every > 0 && k.is_multiple_of(f.drop_every)) {
                 w.counts.dropped += 1;
                 taken += chunk.len();
                 continue;

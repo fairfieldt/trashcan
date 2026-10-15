@@ -23,6 +23,12 @@ fn opts(streams: Arc<dyn Streams>, tune: Tuning) -> Options {
 
 /// A connected pair over localhost; with `pair`, a simulated stream with a ring of `ring` frames.
 fn link_pair(pair: Option<&Arc<Pair>>, ring: u32, tune: Tuning) -> (Link, Link) {
+    link_pair_with(pair, ring, tune, |_| {})
+}
+
+/// `link_pair`, calling `accepted` with the accepting side's link as soon as it exists (while the connecting side
+/// still opens its first epoch).
+fn link_pair_with(pair: Option<&Arc<Pair>>, ring: u32, tune: Tuning, accepted: impl FnOnce(&Link) + Send + 'static) -> (Link, Link) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap().to_string();
     let (sa, sb): (Arc<dyn Streams>, Arc<dyn Streams>) = match pair {
@@ -30,18 +36,19 @@ fn link_pair(pair: Option<&Arc<Pair>>, ring: u32, tune: Tuning) -> (Link, Link) 
         None => (Arc::new(Sysfs), Arc::new(Sysfs)),
     };
     let ob = opts(sb, tune.clone());
-    let accepted = thread::spawn(move || {
+    let accepting = thread::spawn(move || {
         let (s, _) = listener.accept().unwrap();
         match Link::accept_with(s, &ob).unwrap() {
             Accepted::Link(l, tag) => {
                 assert_eq!(tag, "test");
+                accepted(&l);
                 l
             }
             Accepted::Joined(_) => panic!("join"),
         }
     });
     let a = Link::connect_with(&addr, "test", &opts(sa, tune)).unwrap();
-    let b = accepted.join().unwrap();
+    let b = accepting.join().unwrap();
     (a, b)
 }
 
@@ -479,6 +486,63 @@ fn an_epoch_that_carries_one_way_is_given_up_at_once() {
     let s = a.stats();
     assert_eq!(s.failed_epochs, 1, "{s:?}");
     assert!(s.first_up_ms.is_some_and(|ms| (50. ..250.).contains(&ms)), "{s:?}");
+}
+
+#[test]
+fn a_busy_peer_does_not_fail_its_epoch() {
+    // The accepting side stops turning for 300 ms (its link's lock held, as on a machine too busy to run it) right
+    // after its first probe, before it has read the connecting side's: silence is no evidence of a dead direction, so
+    // the epoch waits and comes up once the accepting side runs again, with no failed epoch. (Before, the connecting
+    // side gave it up 50 ms after first hearing the other side.)
+    let mut frozen = 0;
+    for _ in 0..8 {
+        let p = Pair::new(256);
+        p.set_faults(Faults { hold: 3, ..Default::default() });
+        let caught = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let c = caught.clone();
+        let (a, b) = link_pair_with(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() }, move |l| {
+            let l = l.clone();
+            thread::spawn(move || {
+                let start = Instant::now();
+                while start.elapsed() < Duration::from_secs(2) {
+                    if let Ok(st) = l.inner.st.try_lock() {
+                        let (probes, heard) = st.stream.progress();
+                        if st.stream.phase == Phase::Probing && probes >= 1 {
+                            if !heard {
+                                c.store(true, std::sync::atomic::Ordering::SeqCst);
+                                thread::sleep(Duration::from_millis(300));
+                            }
+                            return;
+                        }
+                    }
+                    std::hint::spin_loop();
+                }
+            });
+        });
+        wait_for("both on the stream", Duration::from_secs(3), || a.path() == "stream" && b.path() == "stream");
+        if !caught.load(std::sync::atomic::Ordering::SeqCst) {
+            continue;
+        }
+        frozen += 1;
+        let s = a.stats();
+        assert_eq!(s.failed_epochs + b.stats().failed_epochs, 0, "{s:?}");
+        assert!(s.first_up_ms.is_some_and(|ms| ms > 290.), "{s:?}");
+    }
+    assert!(frozen >= 2, "the accepting side was caught between its first probe and the other side's only {frozen} times");
+}
+
+#[test]
+fn an_epoch_whose_other_side_is_not_heard_is_given_up_on_its_reports() {
+    // The accepting side's frames stop arriving after its first probe and pushes (as in the main suite at 17:12),
+    // while it reads the connecting side's and goes on: its reports over TCP show frames written that do not arrive,
+    // so the connecting side gives the epoch up after ONE_WAY and the next one comes up.
+    let p = Pair::new(256);
+    p.set_faults(Faults { mute_once: Some((1, 4)), hold: 3, ..Default::default() });
+    let (a, b) = link_pair(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() });
+    wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
+    let s = a.stats();
+    assert_eq!(s.failed_epochs, 1, "{s:?}");
+    assert!(s.first_up_ms.is_some_and(|ms| (50. ..300.).contains(&ms)), "{s:?}");
 }
 
 #[test]

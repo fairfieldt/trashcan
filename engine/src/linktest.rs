@@ -17,7 +17,8 @@
 //!
 //! `link-test churn` runs sessions back to back, each a client process of its own, with normal exits, killed
 //! clients and server crashes mixed (`--server-exits`; run the server in a loop that restarts it): every session's
-//! stream must come up within `--within-ms` of its link's start, with no failed epoch.
+//! stream must come up within `--within-ms` of its link's start, with no failed epoch. A server started with
+//! `--load-ms` (or `--freeze-ms`) is busy (or stopped) from each session's start, as a node loading its stage is.
 use crate::link::{self, Accepted, Found, Frames, Lanes, Link, Options, Streams, Sysfs, Tuning, Wait};
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
@@ -38,6 +39,8 @@ pub enum Cmd {
     Serve {
         #[arg(long, default_value = "0.0.0.0:7075")]
         listen: String,
+        #[command(flatten)]
+        load: Load,
     },
     /// Run a test against `link-test serve` and print one JSON line (soak: one every 10 s and a summary), after a
     /// line with `up_ms` as soon as the stream is up.
@@ -52,6 +55,55 @@ pub enum Cmd {
         #[arg(long, default_value_t = 20000)]
         iters: usize,
     },
+}
+
+/// A busy server (`link-test serve`), from the start of each session, while its links come up: as a node loading its
+/// stage (GPU uploads of several GiB) while the driver's link starts.
+#[derive(clap::Args, Clone, Copy)]
+pub struct Load {
+    /// Load this machine for this many milliseconds: threads that write `--load-mb` MiB each over and over (CPU and
+    /// memory).
+    #[arg(long, default_value_t = 0)]
+    load_ms: u64,
+    /// Load threads (0: one per CPU).
+    #[arg(long, default_value_t = 0)]
+    load_threads: usize,
+    #[arg(long, default_value_t = 256)]
+    load_mb: usize,
+    /// Stop this whole process (its links' threads too) for this many milliseconds, from a random 0-20 ms after the
+    /// session's start: the worst case of a busy machine, saying nothing at all.
+    #[arg(long, default_value_t = 0)]
+    freeze_ms: u64,
+}
+
+impl Load {
+    fn start(&self, seed: u64) {
+        if self.load_ms > 0 {
+            let until = Instant::now() + Duration::from_millis(self.load_ms);
+            let n = if self.load_threads > 0 { self.load_threads } else { std::thread::available_parallelism().map_or(4, |n| n.get()) };
+            for t in 0..n {
+                let mb = self.load_mb;
+                std::thread::spawn(move || {
+                    let mut buf = vec![0u8; mb << 20];
+                    let mut k = t as u8;
+                    while Instant::now() < until {
+                        buf.fill(k);
+                        k = k.wrapping_add(1);
+                        std::hint::black_box(&buf);
+                    }
+                });
+            }
+        }
+        if self.freeze_ms > 0 {
+            let pid = std::process::id();
+            let delay = (splitmix(seed) % 21) as f64 / 1e3;
+            let secs = self.freeze_ms as f64 / 1e3;
+            let _ = std::process::Command::new("sh")
+                .arg("-c")
+                .arg(format!("sleep {delay:.3}; kill -STOP {pid}; sleep {secs:.3}; kill -CONT {pid}"))
+                .spawn();
+        }
+    }
 }
 
 #[derive(clap::Args)]
@@ -503,14 +555,19 @@ fn run_test(lanes: &mut Lanes, t: &Test, dir: u64, events: Option<&Arc<Events>>,
     Ok(out)
 }
 
-fn serve(listen: &str) -> Result<()> {
+fn serve(listen: &str, load: Load) -> Result<()> {
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     eprintln!("link-test: serving on {listen}");
+    let mut seed = unix_now().to_bits();
     loop {
         let (sock, peer) = listener.accept()?;
         // Lanes of one session come in a burst; take them here, run the session on a thread of its own.
         let first = match Link::accept_with(sock, &Options::default()) {
-            Ok(Accepted::Link(l, tag)) => (l, tag),
+            Ok(Accepted::Link(l, tag)) => {
+                seed = splitmix(seed);
+                load.start(seed);
+                (l, tag)
+            }
             Ok(Accepted::Joined(_)) => continue,
             Err(e) => {
                 eprintln!("link-test: {peer}: {e:#}");
@@ -751,7 +808,7 @@ fn crc_speed(size: usize, iters: usize) {
 
 pub fn main(cmd: &Cmd) -> Result<()> {
     match cmd {
-        Cmd::Serve { listen } => serve(listen),
+        Cmd::Serve { listen, load } => serve(listen, *load),
         Cmd::Run(r) => run(r),
         Cmd::Churn(c) => churn(c),
         Cmd::Crc { size, iters } => {

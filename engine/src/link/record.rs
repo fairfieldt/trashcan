@@ -37,6 +37,9 @@ pub mod kind {
 
 /// Flag: answer with an ACK at once (keepalive).
 pub const PING: u8 = 1;
+/// Flag of an ACK over TCP while a stream epoch opens: `epoch`, and the sender's frames of the epoch read (`rx`) and
+/// written (`tx`), so that the other side can tell a direction that carries nothing from a peer that is only slow.
+pub const REPORT: u8 = 2;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Header {

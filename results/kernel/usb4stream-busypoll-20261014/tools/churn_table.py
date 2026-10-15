@@ -7,6 +7,9 @@ usage: churn_table.py CHURN.jsonl [SERVE.log]
 """
 import json, sys
 
+# The link's reasons for giving up an epoch that carried one way only (either direction).
+ONE_WAY = ('reads none of our frames', 'frames do not arrive')
+
 
 def line(path):
     rows, summary = [], None
@@ -18,7 +21,7 @@ def line(path):
             elif 'churn' in v:
                 summary = v
     ups = sorted(x['up_ms'] for x in rows if x['up_ms'] is not None)
-    oneway = sum(any('reads none of our frames' in s for s in x.get('stream_lines', [])) for x in rows)
+    oneway = sum(any(w in s for s in x.get('stream_lines', []) for w in ONE_WAY) for x in rows)
     f = lambda x: '-' if x is None else f'{x:.0f}'
     return (f"{'pass' if summary and summary.get('pass') else 'FAIL'}: {sum(x['pass'] for x in rows)}/{len(rows)} passed"
             f"{'' if summary else ' (no summary)'}, up p50/p99/max {f(pct(ups, .5))}/{f(pct(ups, .99))}/"

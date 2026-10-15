@@ -149,9 +149,15 @@ impl Inner {
                     let t = Instant::now();
                     let r = self.streams.open(&found).map(|d| (d, found));
                     let waited = t.elapsed();
-                    if waited > Duration::from_millis(100) {
-                        // The driver holds an open back while an earlier close of the device runs (0.5 s or more).
-                        eprintln!("link {}: opening the stream device took {waited:.0?}", self.lock().label);
+                    let asked = job.at.elapsed();
+                    if waited > Duration::from_millis(100) || asked > Duration::from_millis(100) {
+                        // The driver holds an open back while an earlier close of the device runs (0.5 s or more);
+                        // a busy machine can be slow to start the open.
+                        eprintln!(
+                            "link {}: opening the stream device took {waited:.0?}, {asked:.0?} after the epoch asked for it [{}]",
+                            self.lock().label,
+                            proto::clock()
+                        );
                     }
                     r
                 }
