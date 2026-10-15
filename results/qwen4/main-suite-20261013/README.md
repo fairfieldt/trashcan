@@ -99,3 +99,19 @@ Peak temperatures were 54-61 °C, except invite's GPU 0 at 74 °C.
 
 Against e9f34e6: decode 20.6 -> 21.1 (host path), MTP on chat 26.2/29.9/25.7 -> 28.9/31.6/29.3 (host path and MTP rounds),
 prefill unchanged.
+
+## 4f36bf0 (all of 2026-10-14's merges, links fixed), 18:20, on 7.3.0-rc7-p2p-s2: partial
+
+Today's main: the USB4STREAM transport, decode kernels round 2, the per-GPU clock fix, and the link fixes. All six Macs
+run 7.3.0-rc7-p2p-s2 (0006 + 0007). Each run's `links:` line showed every link on its stream, up in 4-6 ms.
+
+| item | result |
+|---|---|
+| validate, 14-token reference prompt | greedy tokens the CPU reference's (10/10); logits rel 2.79e-4, top-10 10/10 |
+| validate, p100 | greedy tokens the CPU reference's (10/10); logits rel 3.48e-2, top-10 10/10 |
+| decode, 128 tokens after a 512-token prompt | **22.52, 22.54 tok/s** (15e5457 on 7.2.9 this morning: 21.09, 21.20) |
+| prefill 512 tokens | 522.3, 521.4 tok/s |
+
+invite went down as a whole at 18:25:10, during pp2048: no kernel message, both neighbours logged its cable
+disconnecting, and it dropped off the tailnet. The suite was stopped. pp2048, pp8192, pp30000, MTP and the server test
+did not run.
