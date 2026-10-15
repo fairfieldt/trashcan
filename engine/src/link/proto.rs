@@ -96,16 +96,51 @@ const SLOW_EPOCH: Duration = Duration::from_millis(100);
 
 /// An epoch that carries one way only is given up on evidence that the other side is going on without us, so that
 /// the next epoch can open (the one-cable churn and the main suite saw epochs where one side's frames stopped
-/// arriving): either `EVIDENCE` of its records or reports, received `ONE_WAY` or more after our first frame, all
-/// show none of our frames read; or its reports show frames written to us that have not arrived, for `ONE_WAY` and
-/// over `EVIDENCE` reports. Silence is no evidence: a peer that is busy or stalled says nothing, and its epoch waits
-/// for `probe_timeout`. Probes go every 2 ms with pushes and reports every `REPORT_EVERY`, so a working direction
-/// shows within a few milliseconds.
+/// arriving), from its reports over TCP: either `EVIDENCE` of them, received `ONE_WAY` or more after our first
+/// frame, all show none of our frames read; or they show frames written to us that have not arrived, for `ONE_WAY`
+/// and over `EVIDENCE` reports. Its stream records are no such evidence (a receiver may hold records back until more
+/// follow, so an old one can arrive late), and silence is none: a peer that is busy or stalled says nothing, and its
+/// epoch waits for `probe_timeout`. Probes go every 2 ms with pushes and reports every `REPORT_EVERY`, so a working
+/// direction shows within a few milliseconds.
 const ONE_WAY: Duration = Duration::from_millis(50);
 const EVIDENCE: u32 = 3;
 /// While an epoch opens (and, once up, while the other side still probes), each side reports its frames of the epoch
 /// read and written over TCP this often.
 const REPORT_EVERY: Duration = Duration::from_millis(10);
+
+/// A link message, written to stderr by a thread of its own: a write to a log file can block for hundreds of
+/// milliseconds on the Mac Pros (an ext4 journal commit waits for the SSD's cache flush), and a link that waited for
+/// one while it holds its state answers nothing meanwhile (the main suite's one-way epoch at 17:12: the accepting
+/// side's "stream up" line, then 0.3-0.5 s of silence). A write that took over 50 ms says so in the next message.
+pub fn say(msg: String) {
+    static LOG: std::sync::OnceLock<std::sync::mpsc::Sender<String>> = std::sync::OnceLock::new();
+    let tx = LOG.get_or_init(|| {
+        let (tx, rx) = std::sync::mpsc::channel::<String>();
+        let spawned = std::thread::Builder::new().name("link-log".into()).spawn(move || {
+            let mut slow = None;
+            for m in rx {
+                let t = Instant::now();
+                match slow.take() {
+                    Some(d) => eprintln!("{m} (the previous link message took {d:.0?} to write)"),
+                    None => eprintln!("{m}"),
+                }
+                let took = t.elapsed();
+                if took > Duration::from_millis(50) {
+                    slow = Some(took);
+                }
+            }
+        });
+        if spawned.is_err() {
+            // No thread to write from: the message goes out here, as before.
+            let (tx, _) = std::sync::mpsc::channel();
+            return tx;
+        }
+        tx
+    });
+    if let Err(e) = tx.send(msg) {
+        eprintln!("{}", e.0);
+    }
+}
 
 /// The time of day, for link messages (to line them up across machines).
 pub fn clock() -> String {
@@ -336,7 +371,7 @@ pub struct StreamPath {
     /// Epochs failed since the stream was last up.
     failed_since_up: u32,
     /// Evidence about the epoch's directions (see `ONE_WAY`): when our first frame of it went; the other side's
-    /// records and reports since `ONE_WAY` after that which showed none of our frames read; its last report (our
+    /// reports since `ONE_WAY` after that which showed none of our frames read; its last report (our
     /// frames read, its frames written), how many came, and since when (and over how many reports) its frames
     /// written to us have not arrived.
     first_tx_at: Option<Instant>,
@@ -451,9 +486,9 @@ impl StreamPath {
         let at = |t: Option<Instant>| t.map_or("never".to_owned(), |t| format!("{:.0} ms", (t - self.opened_at).as_secs_f64() * 1e3));
         format!(
             "{:.0} ms into the epoch: device open at {}, first record at {}, {} probes and {} frames sent, {} records \
-             and {} ends of file read, ours {}read by the other side; {} of its records or reports since {} ms after \
-             our first frame showed none of ours read; {} reports from it (of ours read {}, written to us {}); longest \
-             pause of this side {:.0} ms",
+             and {} ends of file read, ours {}read by the other side; {} of its reports since {} ms after our first \
+             frame showed none of ours read; {} reports from it (of ours read {}, written to us {}); longest pause of \
+             this side {:.0} ms",
             (now - self.opened_at).as_secs_f64() * 1e3,
             at(self.dev_at),
             at(self.heard_at),
@@ -599,13 +634,13 @@ impl State {
         if self.closed.is_none() {
             let now = Instant::now();
             if matches!(self.stream.phase, Phase::Opening | Phase::Probing) && now - self.stream.opened_at > SLOW_EPOCH {
-                eprintln!(
+                say(format!(
                     "link {}: closed with stream epoch {:08x} still opening ({}) [{}]",
                     self.label,
                     self.stream.epoch,
                     self.stream.detail(now),
                     clock()
-                );
+                ));
             }
             self.closed = Some((kind, msg));
             if let Some(d) = self.stream.dev.take() {
@@ -646,6 +681,18 @@ impl State {
         let gap = now.saturating_duration_since(self.last_pump);
         if gap > self.stream.max_gap {
             self.stream.max_gap = gap;
+            // A long pause while an epoch opens (or just after it came up) is when the other side hears nothing.
+            let s = &self.stream;
+            let opening = matches!(s.phase, Phase::Opening | Phase::Probing);
+            if gap > Duration::from_millis(100) && (opening || (s.phase == Phase::Up && now - s.up_since < Duration::from_secs(2))) {
+                say(format!(
+                    "link {}: no turn for {gap:.0?} while stream epoch {:08x} {} [{}]",
+                    self.label,
+                    s.epoch,
+                    if opening { "was opening" } else { "had just come up" },
+                    clock()
+                ));
+            }
         }
         self.last_pump = self.last_pump.max(now);
         // While the stream carries the data, TCP brings only rare control records: a read every 100 µs keeps them
@@ -998,10 +1045,10 @@ impl State {
             s.peer_rx = h.rx.min(s.tx);
         }
         s.heard = true;
+        // (A record here showing none of ours read is no evidence: it may have been written long before and held
+        // in the receiver until more followed; the other side's reports over TCP are counted instead.)
         if h.rx > 0 {
             s.peer_heard = true;
-        } else if s.first_tx_at.is_some_and(|t| now - t >= ONE_WAY) {
-            s.zero_late += 1;
         }
         if h.kind == kind::PROBE && s.phase == Phase::Up {
             s.probe_seen = true;
@@ -1062,7 +1109,7 @@ impl State {
         s.probe_reply = true;
         self.stats.ups += 1;
         let label = s.found.as_ref().map_or(String::new(), |f| format!(" ({})", f.label));
-        eprintln!("link {}: stream up{label}, epoch {:08x}{after} [{}]", self.label, s.epoch, clock());
+        say(format!("link {}: stream up{label}, epoch {:08x}{after} [{}]", self.label, s.epoch, clock()));
     }
 
     /// Give the current stream epoch up: close the device off this thread, tell the other side (unless it gave up
@@ -1110,11 +1157,11 @@ impl State {
             self.stats.fallbacks += 1;
             self.tcp_since = now;
             let more = if brief { format!(" ({detail})") } else { String::new() };
-            eprintln!("link {}: stream down ({why}); continuing over TCP{more} [{}]", self.label, clock());
+            say(format!("link {}: stream down ({why}); continuing over TCP{more} [{}]", self.label, clock()));
         } else {
             self.stats.failed_epochs += 1;
             if !why.is_empty() {
-                eprintln!("link {}: stream epoch {epoch:08x} not opened ({why}; {detail}) [{}]", self.label, clock());
+                say(format!("link {}: stream epoch {epoch:08x} not opened ({why}; {detail}) [{}]", self.label, clock()));
             }
         }
         // Whatever the stream had not delivered goes again over TCP (`send_tcp_data` starts at `acked`).
@@ -1176,7 +1223,7 @@ impl State {
             return;
         }
         if !why.is_empty() && self.stream.why != why {
-            eprintln!("link {}: no stream ({why}) [{}]", self.label, clock());
+            say(format!("link {}: no stream ({why}) [{}]", self.label, clock()));
             self.stream.why = why.to_owned();
         }
         let s = &mut self.stream;
@@ -1227,12 +1274,12 @@ impl State {
             self.tcp_warned = true;
             self.stats.tcp_warnings += 1;
             let last = if self.last_fail.is_empty() { String::new() } else { format!(" (last attempt: {})", self.last_fail) };
-            eprintln!(
+            say(format!(
                 "link {}: on TCP for {:.0?} with a stream at both ends{last} [{}]",
                 self.label,
                 now - self.tcp_since,
                 clock()
-            );
+            ));
         }
         let waiting = self.full || self.peer_full;
         match self.stream.phase {
@@ -1315,7 +1362,7 @@ impl State {
         let others = self.tcp.iter().any(|p| p.alive);
         if others || self.stream.phase == Phase::Up {
             self.stats.tcp_failovers += 1;
-            eprintln!("link {}: TCP path {} failed ({why}); continuing without it [{}]", self.label, self.tcp[i].name, clock());
+            say(format!("link {}: TCP path {} failed ({why}); continuing without it [{}]", self.label, self.tcp[i].name, clock()));
             // Its unsent and unacknowledged bytes go again over the next path.
             self.tcp_next = self.acked;
             self.tcp[i].wbuf.clear();

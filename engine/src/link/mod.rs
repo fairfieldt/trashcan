@@ -153,11 +153,11 @@ impl Inner {
                     if waited > Duration::from_millis(100) || asked > Duration::from_millis(100) {
                         // The driver holds an open back while an earlier close of the device runs (0.5 s or more);
                         // a busy machine can be slow to start the open.
-                        eprintln!(
-                            "link {}: opening the stream device took {waited:.0?}, {asked:.0?} after the epoch asked for it [{}]",
-                            self.lock().label,
+                        let label = self.lock().label.clone();
+                        proto::say(format!(
+                            "link {label}: opening the stream device took {waited:.0?}, {asked:.0?} after the epoch asked for it [{}]",
                             proto::clock()
-                        );
+                        ));
                     }
                     r
                 }
