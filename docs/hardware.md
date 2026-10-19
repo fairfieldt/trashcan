@@ -145,8 +145,8 @@ the full system provisioner also restarts unrelated services.
 
 ## Port lights
 
-The SMC lights the 20 LEDs behind the I/O panel for 15 s when the accelerometer reports motion. Patch 0009
-(`docs/kernel.md`) makes them LED class devices (`/sys/class/leds/smc::*`) with `port_lights` (`auto`/`manual`),
+The SMC lights the 20 LEDs behind the I/O panel for 15 s when the accelerometer reports motion. Patches 0009
+and 0010 (`docs/kernel.md`) makes them LED class devices (`/sys/class/leds/smc::*`) with `port_lights` (`auto`/`manual`),
 `port_lights_motion`, `port_lights_hold_ms`, `port_lights_show`, `port_lights_levels` and `power_light` (off, on,
 breathe, bright) in `/sys/devices/platform/applesmc.768/`. The SMC
 keys, the LED map and how they were found are in `results/kernel/port-lights-20261018/`.

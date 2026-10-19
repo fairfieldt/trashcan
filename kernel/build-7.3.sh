@@ -8,6 +8,7 @@
 #   0006  USB4STREAM: a CLOSE that has been read no longer fails every later read and write (7.2's behaviour)
 #   0007  USB4STREAM: a close no longer waits 500 ms for the RX ring, which never empties
 #   0009  applesmc: the Mac Pro 6,1's port lights as LED class devices (0008 is in patches-7.3-diag)
+#   0010  applesmc: port_lights_levels, all port lights in one write
 # 7.2's 0002 (SI GPIO DC only on mobile parts) is upstream in 7.3 (cd883d0a3937), so the numbers skip it.
 # DIAG=1 also applies patches-7.3-diag/ (0008: experiment switches for the lone-frame hold; its poll_mode switch is
 # known to be faulty). Diagnostic only: never rolled out, merged or sent upstream, so a DIAG build needs its own

@@ -1,9 +1,9 @@
-applesmc: Mac Pro 6,1 port lights as LED class devices.
+applesmc: Mac Pro 6,1 port lights as LED class devices, and their SMC animations and power light.
 The SMC drives the 20 LEDs behind the I/O panel ("Lightshow") and lights them for 15 s on motion. Keys from the
 SMC firmware 2.20f18 (results/kernel/port-lights-20261018): LIT! manual mode, LInD per-LED level, LIEN motion
 lighting, LIHD hold time, LIGO light up and animation (Hello, You Again), LSSB power light mode. Adds smc::<port>
-LEDs and port_lights, port_lights_levels (all LEDs in one write), port_lights_motion, port_lights_hold_ms,
-port_lights_show and power_light on the applesmc device.
+LEDs and port_lights, port_lights_motion, port_lights_hold_ms, port_lights_show and power_light on the applesmc
+device, documented in Documentation/ABI. 0010 adds port_lights_levels.
 
 --- a/drivers/hwmon/applesmc.c
 +++ b/drivers/hwmon/applesmc.c
@@ -18,18 +18,11 @@ port_lights_show and power_light on the applesmc device.
   *
   * Copyright (C) 2007 Nicolas Boichat <nicolas@boichat.ch>
   * Copyright (C) 2010 Henrik Rydberg <rydberg@euromail.se>
-@@ -32,6 +32,7 @@
- #include <linux/hwmon.h>
- #include <linux/workqueue.h>
- #include <linux/err.h>
-+#include <linux/ctype.h>
- #include <linux/bits.h>
- #include <asm/barrier.h>
- 
-@@ -70,6 +71,19 @@
+@@ -69,6 +69,19 @@
+ #define MOTION_SENSOR_Y_KEY	"MO_Y" /* r-o sp78 (2 bytes) */
  #define MOTION_SENSOR_Z_KEY	"MO_Z" /* r-o sp78 (2 bytes) */
  #define MOTION_SENSOR_KEY	"MOCN" /* r/w ui16 */
- 
++
 +/*
 + * Port lights (Mac Pro 6,1): the SMC drives the LEDs behind the I/O panel and
 + * lights them for a while when the accelerometer reports motion ("Lightshow").
@@ -42,11 +35,10 @@ port_lights_show and power_light on the applesmc device.
 +#define PORT_LIGHT_HOLD_KEY	"LIHD" /* r/w ui16: time lit, in 10 ms */
 +#define PORT_LIGHT_MAX		32
 +#define POWER_LIGHT_MODE_KEY	"LSSB" /* w-o: ui8 mode (power_light_modes), ui8 0 */
-+
+ 
  #define FANS_COUNT		"FNum" /* r-o ui8 */
  #define FANS_MANUAL		"FS! " /* r-w ui16 */
- #define FAN_ID_FMT		"F%dID" /* r-o char[16] */
-@@ -131,6 +145,7 @@
+@@ -131,6 +144,7 @@
  	int num_light_sensors;		/* number of light sensors */
  	bool has_accelerometer;		/* has motion sensor */
  	bool has_key_backlight;		/* has keyboard backlight */
@@ -54,7 +46,7 @@ port_lights_show and power_light on the applesmc device.
  	bool init_complete;		/* true when fully initialized */
  	struct applesmc_entry *cache;	/* cached key entries */
  	const char **index;		/* temperature key index */
-@@ -570,6 +585,7 @@
+@@ -570,6 +584,7 @@
  {
  	struct applesmc_registers *s = &smcreg;
  	bool left_light_sensor = false, right_light_sensor = false;
@@ -62,7 +54,7 @@ port_lights_show and power_light on the applesmc device.
  	unsigned int count, i;
  	u8 tmp[1];
  	int ret;
-@@ -633,17 +649,25 @@
+@@ -633,17 +648,25 @@
  	if (ret)
  		return ret;
  	ret = applesmc_has_key(BACKLIGHT_KEY, &s->has_key_backlight);
@@ -90,7 +82,7 @@ port_lights_show and power_light on the applesmc device.
  
  	return 0;
  }
-@@ -964,8 +988,356 @@
+@@ -964,7 +987,309 @@
  	.name			= "smc::kbd_backlight",
  	.default_trigger	= "nand-disk",
  	.brightness_set		= applesmc_brightness_set,
@@ -104,7 +96,7 @@ port_lights_show and power_light on the applesmc device.
 +	struct led_classdev cdev;
 +	u8 index;
  };
- 
++
 +static struct applesmc_port_light *port_lights;
 +static u16 port_light_levels[PORT_LIGHT_MAX];
 +static DEFINE_MUTEX(port_lights_lock);
@@ -239,58 +231,6 @@ port_lights_show and power_light on the applesmc device.
 +	return ret ? ret : count;
 +}
 +
-+/* Every LED's brightness (0-255), in SMC order, separated by spaces. */
-+static ssize_t applesmc_port_lights_levels_show(struct device *dev,
-+						struct device_attribute *attr,
-+						char *buf)
-+{
-+	unsigned int i;
-+	int len = 0;
-+
-+	for (i = 0; i < smcreg.port_light_count; i++)
-+		len += sysfs_emit_at(buf, len, "%u%c", port_lights[i].cdev.brightness,
-+				     i + 1 < smcreg.port_light_count ? ' ' : '\n');
-+	return len;
-+}
-+
-+/* Set every LED at once; only the changed ones go to the SMC. */
-+static ssize_t applesmc_port_lights_levels_store(struct device *dev,
-+						 struct device_attribute *attr,
-+						 const char *buf, size_t count)
-+{
-+	u8 values[PORT_LIGHT_MAX];
-+	bool changed[PORT_LIGHT_MAX];
-+	unsigned int i, value;
-+	const char *p = buf;
-+	int n, ret;
-+
-+	for (i = 0; i < smcreg.port_light_count; i++) {
-+		if (sscanf(p, " %u%n", &value, &n) != 1 || value > LED_FULL)
-+			return -EINVAL;
-+		values[i] = value;
-+		p += n;
-+	}
-+	while (isspace(*p))
-+		p++;
-+	if (*p)
-+		return -EINVAL;
-+
-+	mutex_lock(&port_lights_lock);
-+	for (i = 0; i < smcreg.port_light_count; i++) {
-+		u16 level = values[i] * 0xffff / LED_FULL;
-+
-+		changed[i] = level != port_light_levels[i];
-+		port_light_levels[i] = level;
-+		port_lights[i].cdev.brightness = values[i];
-+	}
-+	ret = applesmc_port_lights_ensure_manual();
-+	for (i = 0; !ret && i < smcreg.port_light_count; i++)
-+		if (changed[i])
-+			ret = applesmc_port_light_send(i);
-+	mutex_unlock(&port_lights_lock);
-+	return ret < 0 ? ret : count;
-+}
-+
 +static ssize_t applesmc_port_lights_motion_show(struct device *dev,
 +						struct device_attribute *attr,
 +						char *buf)
@@ -316,7 +256,10 @@ port_lights_show and power_light on the applesmc device.
 +	if (ret)
 +		return ret;
 +	value = enable;
++	/* not during the Hello switch, which restores the setting it found */
++	mutex_lock(&port_lights_lock);
 +	ret = applesmc_write_key(PORT_LIGHT_MOTION_KEY, &value, 1);
++	mutex_unlock(&port_lights_lock);
 +	return ret ? ret : count;
 +}
 +
@@ -348,7 +291,9 @@ port_lights_show and power_light on the applesmc device.
 +		return -EINVAL;
 +	buffer[0] = (ms / 10) >> 8;
 +	buffer[1] = (ms / 10) & 0xff;
++	mutex_lock(&port_lights_lock);
 +	ret = applesmc_write_key(PORT_LIGHT_HOLD_KEY, buffer, 2);
++	mutex_unlock(&port_lights_lock);
 +	return ret ? ret : count;
 +}
 +
@@ -437,24 +382,22 @@ port_lights_show and power_light on the applesmc device.
 +
 +	if (mode < 0)
 +		return mode;
++	mutex_lock(&port_lights_lock);
 +	ret = applesmc_write_key(POWER_LIGHT_MODE_KEY, buffer, 2);
-+	if (ret)
-+		return ret;
-+	power_light_mode = mode;
-+	return count;
++	if (!ret)
++		power_light_mode = mode;
++	mutex_unlock(&port_lights_lock);
++	return ret ? ret : count;
 +}
-+
+ 
  static struct applesmc_node_group info_group[] = {
  	{ "name", applesmc_name_show },
- 	{ "key_count", applesmc_key_count_show },
-@@ -988,8 +1360,21 @@
+@@ -988,8 +1313,19 @@
  	{ }
  };
  
 +static struct applesmc_node_group port_lights_group[] = {
 +	{ "port_lights", applesmc_port_lights_show, applesmc_port_lights_store },
-+	{ "port_lights_levels", applesmc_port_lights_levels_show,
-+	  applesmc_port_lights_levels_store },
 +	{ "port_lights_motion", applesmc_port_lights_motion_show,
 +	  applesmc_port_lights_motion_store },
 +	{ "port_lights_hold_ms", applesmc_port_lights_hold_ms_show,
@@ -469,7 +412,7 @@ port_lights_show and power_light on the applesmc device.
  /* Module stuff */
  
  /*
-@@ -1035,7 +1420,7 @@
+@@ -1035,7 +1371,7 @@
  			attr = &node->sda.dev_attr.attr;
  			sysfs_attr_init(attr);
  			attr->name = node->name;
@@ -478,10 +421,12 @@ port_lights_show and power_light on the applesmc device.
  			ret = sysfs_create_file(&pdev->dev.kobj, attr);
  			if (ret) {
  				attr->name = NULL;
-@@ -1149,6 +1534,81 @@
+@@ -1147,6 +1483,81 @@
+ 		return;
+ 	led_classdev_unregister(&applesmc_backlight);
  	destroy_workqueue(applesmc_led_wq);
- }
- 
++}
++
 +static void applesmc_release_port_lights(void)
 +{
 +	unsigned int i;
@@ -555,12 +500,10 @@ port_lights_show and power_light on the applesmc device.
 +out:
 +	applesmc_release_port_lights();
 +	return ret;
-+}
-+
+ }
+ 
  static int applesmc_dmi_match(const struct dmi_system_id *id)
- {
- 	return 1;
-@@ -1555,16 +2015,22 @@
+@@ -1555,16 +1966,22 @@
  	ret = applesmc_create_key_backlight();
  	if (ret)
  		goto out_light_sysfs;
@@ -584,7 +527,7 @@ port_lights_show and power_light on the applesmc device.
  out_light_ledclass:
  	applesmc_release_key_backlight();
  out_light_sysfs:
-@@ -1590,6 +2056,7 @@
+@@ -1590,6 +2007,7 @@
  static void __exit applesmc_exit(void)
  {
  	hwmon_device_unregister(hwmon_dev);
@@ -592,3 +535,68 @@ port_lights_show and power_light on the applesmc device.
  	applesmc_release_key_backlight();
  	applesmc_release_light_sensor();
  	applesmc_release_accelerometer();
+--- /dev/null
++++ b/Documentation/ABI/testing/sysfs-devices-platform-applesmc
+@@ -0,0 +1,62 @@
++What:		/sys/devices/platform/applesmc.768/port_lights
++Date:		October 2026
++KernelVersion:	7.3
++Contact:	linux-hwmon@vger.kernel.org
++Description:
++		(RW) Who drives the port lights, the LEDs behind the I/O panel
++		of a Mac Pro 6,1: "auto" (the SMC lights them on motion, see
++		port_lights_motion) or "manual" (each LED shows the brightness
++		of its LED class device, smc::<port>). Setting an LED's
++		brightness switches to "manual"; writing "auto" hands the
++		lights back to the SMC, "manual" takes them again with the
++		brightness last set. The LEDs are, in SMC order: line-out,
++		headphone, usb, thunderbolt, ethernet, hdmi, usb-box-right,
++		usb-box-left, thunderbolt-box-right, thunderbolt-box-left,
++		ethernet-box-right, ethernet-box-left, usb-box-top,
++		usb-box-bottom, thunderbolt-box-top, thunderbolt-box-bottom,
++		ethernet-box-top, ethernet-box-bottom, power, power-2 (left
++		and right as seen from behind). Other SMCs with these keys get
++		smc::port-light-<n> instead. Present only if the SMC has them.
++
++What:		/sys/devices/platform/applesmc.768/port_lights_motion
++Date:		October 2026
++KernelVersion:	7.3
++Contact:	linux-hwmon@vger.kernel.org
++Description:
++		(RW) 1 if the SMC lights the port lights when the accelerometer
++		reports motion (and for port_lights_show), 0 if not. Applies in
++		automatic mode.
++
++What:		/sys/devices/platform/applesmc.768/port_lights_hold_ms
++Date:		October 2026
++KernelVersion:	7.3
++Contact:	linux-hwmon@vger.kernel.org
++Description:
++		(RW) How long the port lights stay lit after motion, in
++		milliseconds, in steps of 10 (up to 655350). The SMC's default
++		is 15000.
++
++What:		/sys/devices/platform/applesmc.768/port_lights_show
++Date:		October 2026
++KernelVersion:	7.3
++Contact:	linux-hwmon@vger.kernel.org
++Description:
++		(WO) Lights the port lights as motion does, once; in automatic
++		mode and with port_lights_motion 1 only. "1" or "hello" uses
++		the SMC's Hello animation (on from the bottom up, off from the
++		top down), the one motion shows; "you-again" uses You Again
++		(all at once). The SMC keeps the animation last chosen, so after
++		"you-again" the driver chooses Hello again once the lights have
++		faded (the hold time and 3 s), without lighting them.
++
++What:		/sys/devices/platform/applesmc.768/power_light
++Date:		October 2026
++KernelVersion:	7.3
++Contact:	linux-hwmon@vger.kernel.org
++Description:
++		(RW) The power light's mode while the port lights are in
++		automatic mode: "off", "on" (the SMC's usual level), "breathe"
++		(a slow pulse, as on a sleeping Mac) or "bright" (full). In
++		manual mode the power light is the LEDs smc::power and
++		smc::power-2 instead. Reads give the mode last written ("on"
++		until then); unloading the driver sets "on" again.

@@ -2,7 +2,9 @@
 
 The LEDs behind the I/O panel that light up when the Mac is moved are driven by the SMC ("Lightshow", three
 controllers on the SMC's own I2C bus at 0x90/0x92/0x94, not visible to the host). Mainline applesmc has no support.
-`kernel/patches-7.3/0009-applesmc-mac-pro-port-lights.patch` adds it.
+`kernel/patches-7.3/0009-applesmc-mac-pro-port-lights.patch` adds it, with ABI documentation
+(`Documentation/ABI/testing/sysfs-devices-platform-applesmc`); `0010-applesmc-port-lights-levels.patch` adds
+`port_lights_levels` on top.
 
 ## Using it
 
@@ -97,6 +99,25 @@ back zeros, and a reboot didn't help. Shutting down and unplugging the Mac for 1
   bypasses the driver). `list`, `info`, `read`, `write`, `watch` (print key changes), `probe` (write, then watch `LsbR`).
 - `indite-L-keys.txt`: every `L*` key with its flags (0x80 read, 0x40 write, 0x10 function) and value (serial redacted).
 - `indite-nudge-watch.txt`: the keys that changed when Tom nudged indite (accelerometer readings removed).
+
+## Review (2026-10-19)
+
+A review on hardline (codex-review-fd40, "applesmc Mac Pro 6,1 port lights: correctness review and bulk-write API
+assessment") found three races, fixed:
+
+- A failed bulk write couldn't be retried: the levels were recorded before they were sent. Each LED now has an
+  "unsent" bit, cleared only when its SMC write succeeds; a repeated write sends what didn't get through. Not tested on
+  hardware (no way to make an SMC write fail).
+- A single-LED change still queued in the LED core could land after a later bulk write. The bulk write now flushes
+  each LED's pending work first. On indite, 30 rounds of `brightness=255` then a bulk write of 64 ended at 64 every
+  time (`LsbR`, which reads LED 12, `usb-box-top`).
+- `port_lights_motion` (and the other setting writes) didn't take the lock, so the Hello switch-back, which turns
+  motion off for 200 ms and restores what it found, could undo a write made meanwhile. On indite a write 50 ms into the
+  switch waited 195 ms and stuck.
+
+As it suggested, the bulk interface is a patch of its own (0010) with a stated contract (ABI file): equivalent to
+writing each LED in order, LEDs with a trigger keep it, reads give the LED class brightness, a failed write can be
+repeated. All new files are documented.
 
 ## Tested on indite (7.3.0-rc7-p2p-s2)
 
