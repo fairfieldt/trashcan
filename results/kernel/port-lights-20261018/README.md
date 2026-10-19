@@ -14,7 +14,13 @@ echo auto > $D/port_lights                   # back to the SMC (lights on motion
 echo 0 > $D/port_lights_motion               # no lighting on motion
 echo 3000 > $D/port_lights_hold_ms           # time lit after motion (default 15000)
 echo 1 > $D/port_lights_show                 # light up as on motion (automatic mode only)
+echo 0 0 255 0 ... > $D/port_lights_levels   # all 20 at once (0-255, SMC order); only changed LEDs go to the SMC
 ```
+
+Each changed LED costs one SMC transaction, about 0.4 ms: a frame where all 20 change takes 8.1 ms (123 fps at
+most), one where 5 change 2.2 ms, and an unchanged frame nothing. The driver rechecks that the SMC is still in manual
+mode at most once a second (reading `LIT!` costs another transaction). `portlights` in the homelab repo drives the
+lights from audio and GPU activity.
 
 In manual mode every LED shows its last set level (0 if never set). Unloading the module hands the lights back to the
 SMC. The settings live in SMC RAM; a power loss restores the defaults.
@@ -78,11 +84,9 @@ boot (`ports=20`), registers the 20 LEDs, and `fancurve` works with it. Checked:
 panel for 3 s; `port_lights_motion` 0/1; bad input gives `EINVAL`; heartbeat and timer triggers on `smc::power` and
 `smc::hdmi` (Tom watched); `rmmod` leaves `LIT!` 0 and `LsHS` 03.
 
-The headers packages' host tools are mixed (objtool arm64, fixdep x86-64), so modules don't build on the Macs. To
-build the override module in the kbuild VM: extract `linux-headers-7.3.0-rc7-p2p-s2_*.deb`, replace each ELF in its
-`scripts/` and `tools/` with the arm64 one from `~/kernel/7.3/linux-7.3-rc7`, then
-`make -C HEADERS M=DIR ARCH=x86_64 CROSS_COMPILE=x86_64-linux-gnu- modules` with the patched `applesmc.c` and
-`obj-m := applesmc.o` in `DIR`.
+The headers packages' host tools are mixed (objtool arm64, fixdep x86-64), so modules don't build on the Macs.
+`kernel/applesmc-override.sh HOST...` builds the override in the kbuild VM against the host's installed headers
+(with the VM tree's arm64 host tools swapped in), installs it and reloads applesmc.
 
 Once (during a test loop) `LIT!` was found 0 without anything writing it. The Lightshow init (0x172fa, from the
 controller enumeration at 0x18b28) clears it; a 60 s hold test kept it. The driver reapplies manual mode on the next
