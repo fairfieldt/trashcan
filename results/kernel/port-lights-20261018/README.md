@@ -14,6 +14,8 @@ echo auto > $D/port_lights                   # back to the SMC (lights on motion
 echo 0 > $D/port_lights_motion               # no lighting on motion
 echo 3000 > $D/port_lights_hold_ms           # time lit after motion (default 15000)
 echo 1 > $D/port_lights_show                 # light up as on motion (automatic mode only)
+echo you-again > $D/port_lights_show         # the other animation (hello: the motion one)
+echo breathe > $D/power_light                # off, on, breathe, bright (while automatic)
 echo 0 0 255 0 ... > $D/port_lights_levels   # all 20 at once (0-255, SMC order); only changed LEDs go to the SMC
 ```
 
@@ -27,8 +29,8 @@ SMC. The settings live in SMC RAM; a power loss restores the defaults.
 
 | LED | Position | LED | Position |
 |---|---|---|---|
-| `audio-left` | left audio jack | `ethernet-box-left` | Ethernet outline, left |
-| `audio-right` | right audio jack | `usb-box-top` | USB outline, top |
+| `line-out` | audio line out (left jack) | `ethernet-box-left` | Ethernet outline, left |
+| `headphone` | headphone jack (right) | `usb-box-top` | USB outline, top |
 | `usb` | USB, center | `usb-box-bottom` | USB outline, bottom |
 | `thunderbolt` | Thunderbolt, center | `thunderbolt-box-top` | Thunderbolt outline, top |
 | `ethernet` | Ethernet, center | `thunderbolt-box-bottom` | Thunderbolt outline, bottom |
@@ -39,7 +41,27 @@ SMC. The settings live in SMC RAM; a power loss restores the defaults.
 | `thunderbolt-box-left` | Thunderbolt outline, left | | |
 | `ethernet-box-right` | Ethernet outline, right | | |
 
-The order is the SMC's LED index 0-19 (Tom watched each one light in turn).
+The order is the SMC's LED index 0-19 (Tom watched each one light in turn). The names are ours: the firmware only
+numbers the LEDs, and Apple's documentation names the ports (audio line out, headphone, enclosure latch, USB 3,
+Thunderbolt 2, Gigabit Ethernet, HDMI) but not the lights. The enclosure latch, left of the line out jack, has no
+light.
+
+## Animations and the power light
+
+The firmware has two animations, named in its debug output (`LIGO=10` prints both per LED: up delay, up rate, down
+delay, down rate, brightness):
+
+- **Hello** (`LIGO=8`): the lights sweep on from the bottom up and off from the top down. Motion shows this one.
+- **You Again** (`LIGO=9`): all at once.
+
+Selecting one lights the panel too, and the choice stays: nothing in the SMC switches back, so motion would show
+You Again from then on. After `you-again` the driver switches back to Hello once the lights have faded (the hold
+time and 3 s), with `LIEN` off for 200 ms so the SMC drops the light-up that comes with it.
+
+`LSSB` (2 bytes: mode, 0) sets the power light's mode, with the firmware's names `LmsOff`, `LmsOn`, `LmsBreathe` and
+`LmsBrightNoScale`: 0 off, 1 on at `LSLN` (0xaaaa), 2 breathing (the sleeping Mac's slow pulse), 3 full (0xffff
+whatever `LSLN` says). It applies while the port lights are automatic (the firmware copies the power light into LEDs
+18 and 19). `LSSS` takes the same arguments and also stores the mode.
 
 ## SMC keys
 
@@ -60,6 +82,7 @@ with capstone and names key variables. The Lightshow code is at 0x17000-0x19700,
 | `LITC` | flag | Per-LED calibration scaling (1) |
 | `LInS`..`LInW` | be16, index, profile | Per-LED animation profile parameters |
 | `LIFU`/`LIFD`/`LIFA`/`LIFC`/`LIYA` | ui16 | Fade parameters |
+| `LSSB` | mode, 0 | Power light: off, on, breathe, bright |
 | `LsbR` | 3 bytes | Readback of one channel: 0, then little-endian inverted PWM (`ff ff` off, `02 00` full) |
 | `LSLN` | {pwm | Power light level in automatic mode; the firmware mirrors it to LEDs 18 and 19 |
 | `Lsb*`, `Lsm*`, `LsEB`, `LsEF` | | Controller firmware update and factory data. Don't write |
