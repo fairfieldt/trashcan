@@ -20,6 +20,7 @@ Flash-Next's stage times, P2P bandwidth and the six-Mac main suite match 7.2.9's
 | 0005 `thunderbolt-stream-no-tx-e2e` | USB4STREAM Tx ring without E2E flow control (Rx keeps it) | With Tx-side E2E the Falcon Ridge NHI wedges and stops answering config reads | `kernel/upstream/usb4stream-falcon-ridge/` 0001 rebased onto 7.3's `stream.c`, not sent; same failure upstream fixed in `thunderbolt_net` with revert 1881f2efbf7f |
 | 0006 `thunderbolt-stream-io-after-close` | A CLOSE that has been read no longer fails every later read (end of file) and write (`ENXIO`) until the device is closed, as in 7.2 | On 7.3 a CLOSE left from the previous session kept links off their streams: 9 of 25 chain links needed retries, 2 never got there | Candidate (`Fixes: e120d14d03b3`), not sent |
 | 0007 `thunderbolt-stream-no-rx-flush-on-close` | A close stops the RX ring without waiting for it to drain | The RX ring never drains (its buffers stay posted), so every close took 500 ms and a reopen waited for it | Candidate (`Fixes: 6db21d817b43`), not sent |
+| 0009 `applesmc-mac-pro-port-lights` | The I/O panel's 20 port lights as LED class devices (`smc::usb`, `smc::power`, ...) plus `port_lights`, `port_lights_motion`, `port_lights_hold_ms` and `port_lights_show` on the applesmc device | Control of the port lights (`results/kernel/port-lights-20261018/`). Not in `-p2p-s2` yet; on indite as a module override in `updates/` | Local, not sent |
 
 `kernel/patches-7.3-diag/` holds diagnostic patches (now 0008, experiment switches for the stream's lone-frame
 hold). `kernel/build-7.3.sh` applies them only with `DIAG=1`, and only under a release name of its own (`KLOCAL`).
@@ -58,7 +59,8 @@ It copies `kernel/build-7.3.sh`, `kernel/patches-7.3/` and `kernel/configs/` int
 about 5 minutes on an idle Mac; when the Mac is busy, set `JOBS=12` or so, since 30 VM threads competing with other
 work slow it tenfold. Bump `REV` for every rebuild so `dpkg -i` upgrades in place. For 7.3 final (or a later 7.3.N),
 add the tarball's sha256 from kernel.org's signed `sha256sums.asc` to the table in `kernel/build-7.3.sh` and set
-`VER=7.3`. The headers package contains x86-64 host tools, so out-of-tree modules build on the Macs.
+`VER=7.3`. The headers package's host tools are mixed (objtool arm64, fixdep x86-64), so out-of-tree modules don't
+build on the Macs; build them in the kbuild VM (`results/kernel/port-lights-20261018/`).
 
 ## Installing and booting
 

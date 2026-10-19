@@ -143,6 +143,13 @@ Malformed limits, control/target read errors, or failed readback also return con
 node system provisioner. Deploy only the fan script/unit and restart this service when changing fan policy;
 the full system provisioner also restarts unrelated services.
 
+## Port lights
+
+The SMC lights the 20 LEDs behind the I/O panel for 15 s when the accelerometer reports motion. Patch 0009
+(`docs/kernel.md`) makes them LED class devices (`/sys/class/leds/smc::*`) with `port_lights` (`auto`/`manual`),
+`port_lights_motion`, `port_lights_hold_ms` and `port_lights_show` in `/sys/devices/platform/applesmc.768/`. The SMC
+keys, the LED map and how they were found are in `results/kernel/port-lights-20261018/`.
+
 ## Suspend is disabled
 
 incite does not resume from suspend; it drops off the network and needs a power cycle. Since FreedomBox was removed
