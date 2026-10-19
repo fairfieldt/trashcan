@@ -123,7 +123,7 @@ repeated. All new files are documented.
 
 Built as a module against the s2 headers in the kbuild VM and installed as
 `/lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko` (overrides the stock module; taints the kernel O and E). It loads at
-boot (`ports=20`), registers the 20 LEDs, and `fancurve` works with it. Checked: setting one LED switches to manual and
+boot ("20 port lights"), registers the 20 LEDs, and `fancurve` works with it. Checked: setting one LED switches to manual and
 `port_lights` reads `manual`; `auto` returns to the SMC; `port_lights_hold_ms` 3000 and `port_lights_show` light the
 panel for 3 s; `port_lights_motion` 0/1; bad input gives `EINVAL`; heartbeat and timer triggers on `smc::power` and
 `smc::hdmi` (Tom watched); `rmmod` leaves `LIT!` 0 and `LsHS` 03.

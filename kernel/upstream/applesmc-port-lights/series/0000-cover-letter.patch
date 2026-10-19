@@ -1,0 +1,69 @@
+From f55258761019334b30c34c0d5e22c2f8201bdd5b Mon Sep 17 00:00:00 2001
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Mon, 19 Oct 2026 11:11:46 -0700
+Subject: [PATCH 0/2] hwmon: (applesmc) Mac Pro 6,1 port lights
+
+The Mac Pro 6,1 lights the ports on its I/O panel for a few seconds when
+it's moved: 20 white LEDs, driven by the SMC through three LED
+controllers on its own I2C bus. Linux can't control them today. This
+series registers them as LED class devices and exposes what the SMC
+firmware does with them by itself.
+
+Patch 1 adds the LED devices and the firmware's own behaviour: automatic
+or manual mode, lighting on motion, the hold time, the two animations
+(Hello and You Again) and the power light's modes, documented in
+Documentation/ABI/testing/sysfs-devices-platform-applesmc.
+
+Patch 2 adds port_lights_levels, which sets every LED in one write and
+sends only the ones that changed. It's separate because it duplicates
+the LED class path; it's for userspace that animates the panel many
+times a second, such as the music visualizer at 40 frames a second I
+wrote it for. If you'd rather not have it, patch 1 stands alone.
+
+Nothing documents these keys. I took the SMC firmware image from Apple's
+Mac Pro SMC Firmware Update 2.0 (2.20f18), found the key table (16-byte
+entries: name, flags, length, type, and a pointer to a RAM variable or a
+handler), disassembled the handlers that touch the LED controller state,
+and checked each key on the hardware with a userspace SMC tool before
+writing the driver. Two notes for anyone poking at the same SMC:
+
+- The Lsb*, Lsm*, LsEB and LsEF keys belong to the LED controllers'
+  firmware update and factory data. Writing LsEB=1 while probing switched
+  the SMC's LED handler into its update mode (LsHS 4, controllers
+  unreadable) until the machine was unplugged; the firmware was intact
+  afterwards. The driver writes none of these.
+- Selecting an animation with LIGO 8 or 9 also lights the panel, and
+  nothing in the SMC switches back from You Again, which is why patch 1
+  reselects Hello afterwards with LIEN briefly cleared.
+
+How this was made: an AI coding assistant (Claude, claude-opus-5-5, in
+Claude Code) did the firmware analysis and wrote the code, the
+documentation and these messages over one long session at my direction.
+I identified each LED by eye, watched the animations and the power light
+modes, and tested on my Mac Pro. A second AI reviewer (Codex) reviewed an
+earlier version and found three races, all fixed here: a failed bulk
+write couldn't be retried, a queued single-LED update could land after a
+later bulk write, and a port_lights_motion write could be undone by the
+Hello switch-back.
+
+Tested on a Mac Pro 6,1 (SMC 2.20f18, LED controller firmware 1.4.a.0.6)
+running v7.3-rc7 with unrelated local patches, with the driver built as a
+module and reloaded while a fan control service used its hwmon
+attributes. Both patches build with W=1
+and pass checkpatch --strict. drivers/hwmon/applesmc.c is the same in
+v7.3 and hwmon-next.
+
+Tom Fairfield (2):
+  hwmon: (applesmc) Add support for the Mac Pro 6,1 port lights
+  hwmon: (applesmc) Add port_lights_levels to set all port lights at
+    once
+
+ .../testing/sysfs-devices-platform-applesmc   |  80 +++
+ MAINTAINERS                                   |   1 +
+ drivers/hwmon/applesmc.c                      | 513 +++++++++++++++++-
+ 3 files changed, 590 insertions(+), 4 deletions(-)
+ create mode 100644 Documentation/ABI/testing/sysfs-devices-platform-applesmc
+
+-- 
+2.47.3
+
