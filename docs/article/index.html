@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How we deploy 180B-parameter frontier models on six Mac Pros</title>
+<meta name="robots" content="noindex">
+<link rel="stylesheet" href="style.css?v=2">
+</head>
+<body>
+<header class="masthead">
+  <div class="kicker">Engineering · trashcan</div>
+  <h1>How we deploy 180B-parameter frontier models on six Mac Pros</h1>
+  <div class="byline">The trashcan project · October 2026 ·
+    a parody of Cerebras’s <a href="https://www.cerebras.ai/blog/how-we-deploy-trillion-parameter-frontier-models-on-cerebras">How we deploy trillion-parameter frontier models on Cerebras</a></div>
+</header>
+
+<main>
+<p>One of the most frequently asked questions we get is how we deploy large models on six nearly 13-year-old Mac Pros connected over Thunderbolt. A single 2013 Mac Pro has 12 GB of GPU memory: 6 GB of GDDR5 on each of its two AMD FirePro D700s, which do not share it. A 180B-parameter frontier model needs over a hundred gigabytes for its weights alone.<sup><a href="notes.html#n1">1</a></sup></p>
+
+<p>So the model has to be split across machines. This post walks through how we do it and how fast it goes. Every number below is from our own measurements unless it is marked as a calculation or a model.</p>
+
+<p>The question is asked mostly by us.</p>
+
+<h2>Breaking it down with Qwen3.8-Flash-Next</h2>
+
+<p>Our example is Qwen3.8-Flash-Next, a 177-billion-parameter sparse mixture-of-experts model, which we round to 180B for headline purposes.<sup><a href="notes.html#n2">2</a></sup> It has 48 layers: 36 Gated DeltaNet layers, which keep a fixed-size recurrent state, and 12 sparse-attention layers, one in every four. Each layer has 512 experts, of which a token uses 10, so only about 6B parameters are active per token. Another 51B parameters are a hashed n-gram embedding table that the model reads at exactly one layer.</p>
+
+<p>We assume a 32K-token context and our six-Mac quantization recipe: experts at about 4 bits, dense matrices at 8 bits, the output head at 6.</p>
+
+<p>“Frontier” is doing some work in the headline. We have run one benchmark, and it measures agreement with itself: against the 8-bit release, our 4-bit recipe picks the same next token 95.1% of the time, with a mean KL divergence of 0.039 over 39K tokens.<sup><a href="notes.html#n3">3</a></sup></p>
+
+<h2><span class="step">#1</span>How big is each layer?</h2>
+
+<p>Start with the file on disk, then remove the part that never needs a GPU. The n-gram table is read once per token, 16 rows of 160 values, so it stays on the first Mac’s SSD and is read through the page cache in 0.4 ms. Nothing else gets to stay on an SSD.</p>
+
+<div class="calc" role="group" aria-label="Weight arithmetic">
+<div>  <span class="n">116</span> GiB   weights, six-Mac recipe</div>
+<div>− <span class="n">51</span> GiB   n-gram table, left on the SSD</div>
+<div>= <span class="n">65</span> GiB   that must live in GPU memory</div>
+<div> </div>
+<div><span class="n">65</span> GiB ÷ <span class="n">48</span> layers ≈ <span class="n">1.4</span> GiB per layer   <span class="c">// calculated average</span></div>
+</div>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">The weights are bigger than all twelve GPUs</p>
+    <p class="fsub">GiB. The bottom bar is twelve separate 6 GiB pools, not one.</p>
+    <div class="legend"><span style="--sw:var(--s1)">In GPU memory</span><span style="--sw:var(--s2)">N-gram table, on an SSD</span><span style="--sw:var(--s1-soft)">Total GPU memory</span></div>
+    <div data-chart="weights" data-label="Bar chart. Model weights 116 GiB: 65 GiB in GPU memory and 51 GiB n-gram table on an SSD. GPU memory across 12 D700s: 72 GiB."></div>
+    <details class="data"><summary>Data</summary>
+      <table><tr><th>Item</th><th class="num">GiB</th><th>Source</th></tr>
+      <tr><td>Weights, G-iq4 recipe</td><td class="num">116</td><td>Measured file size</td></tr>
+      <tr><td>N-gram table</td><td class="num">51</td><td>Measured file size</td></tr>
+      <tr><td>Weights in GPU memory</td><td class="num">65</td><td>Calculated: 116 − 51</td></tr>
+      <tr><td>GPU memory, 12 × 6 GiB</td><td class="num">72</td><td>Hardware specification</td></tr></table>
+    </details>
+  </div>
+  <figcaption><span class="tag">Measured + calculated</span>Sizes from the recipe’s files; the 65 GiB is a subtraction.<sup><a href="notes.html#n4">4</a></sup></figcaption>
+</figure>
+
+<h2><span class="step">#2</span>How many Macs?</h2>
+
+<div class="calc" role="group" aria-label="Mac count arithmetic">
+<div><span class="n">12</span> D700 × <span class="n">6</span> GiB   = <span class="n">72</span> GiB of GPU memory</div>
+<div><span class="n">65</span> GiB ÷ <span class="n">72</span> GiB   = <span class="n">90</span>%, before caches, scratch and the output head</div>
+<div><span class="n">48</span> layers ÷ <span class="n">12</span> GPUs = <span class="n">4</span> layers per GPU</div>
+</div>
+
+<p>Four layers per GPU is three DeltaNet layers and one sparse-attention layer, which is the model’s own repeating pattern. We would like to say this was planned.</p>
+
+<p>Fewer Macs don’t work. Five don’t fit at 4 bits. Four fit only with 2-bit experts, which cost as much quality as quantizing every dense matrix to 4 bits.<sup><a href="notes.html#n6">6</a></sup> Six it is, which is also how many we have.</p>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Memory on the busiest GPU</p>
+    <p class="fsub">MiB on one 6 GiB D700. The first GPU also holds the n-gram module and a twelfth of the output head.</p>
+    <div class="legend"><span style="--sw:var(--s1)">Allocated</span><span class="dash">Driver budget</span></div>
+    <div data-chart="vram" data-label="Bar chart. incite GPU 0 allocates 5,830 MiB of a 6,144 MiB card; the driver budget is 5,869 MiB."></div>
+    <details class="data"><summary>Data</summary>
+      <table><tr><th>Item</th><th class="num">MiB</th><th>Source</th></tr>
+      <tr><td>Allocated by the stage</td><td class="num">5,830</td><td>Measured</td></tr>
+      <tr><td>Driver budget for device memory</td><td class="num">5,869</td><td>Reported by the driver</td></tr>
+      <tr><td>Device-local heap</td><td class="num">5,888</td><td>Reported by the driver</td></tr>
+      <tr><td>Card</td><td class="num">6,144</td><td>Hardware specification</td></tr></table>
+    </details>
+  </div>
+  <figcaption><span class="tag">Measured</span>32K context, 128-token prefill chunks.<sup><a href="notes.html#n5">5</a></sup></figcaption>
+</figure>
+
+<p>That leaves 39 MiB. If a stage goes over, the driver quietly moves the excess into system memory. The one time we allowed that, the output head ran 18 times slower, so now the engine refuses to start.</p>
+
+<h2><span class="step">#3</span>Connecting the Macs together</h2>
+
+<p>The six Macs form a ring of Thunderbolt 2 cables. Each GPU keeps its layers resident, so weights never move. Between stages we send only the residual stream: four streams of 2,560 values.</p>
+
+<div class="calc" role="group" aria-label="Link arithmetic">
+<div><span class="n">4</span> × <span class="n">2,560</span> × <span class="n">4</span> bytes        = <span class="n">40</span> KiB per token per hop</div>
+<div><span class="n">40</span> KiB × <span class="n">8</span> ÷ <span class="n">9.6</span> Gb/s     ≈ <span class="n">34</span> µs on the wire   <span class="c">// calculated</span></div>
+<div>small-message round trip    = <span class="n">25</span> µs              <span class="c">// measured</span></div>
+</div>
+
+<p>The 25 µs round trip uses USB4STREAM, a raw Thunderbolt stream device in Linux, which we had to patch for these controllers and give our own retransmission. Thunderbolt networking took 40 µs.<sup><a href="notes.html#n7">7</a></sup> Before any of this, we had to patch the kernel so the GPUs would leave their battery power state. A Mac Pro has no battery.<sup><a href="notes.html#n8">8</a></sup></p>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Where the 48 layers live</p>
+    <p class="fsub">In ring order. The last Mac’s cable goes back to the first.</p>
+    <div class="legend"><span style="--sw:var(--s1)">DeltaNet layer</span><span style="--sw:var(--s2)">Sparse-attention layer</span></div>
+    <div class="ring" id="ring" aria-label="Six Macs in ring order: incite, inflight, alight, indite, invite, enlight. Each Mac has two GPUs; each GPU runs four consecutive layers, three DeltaNet and one sparse attention, plus a twelfth of the output head."></div>
+  </div>
+  <figcaption><span class="tag">Configuration</span>Layer numbers count from 0. Each GPU also scores a twelfth of the output head. incite also holds the token embedding and reads the n-gram table.</figcaption>
+</figure>
+
+<h2><span class="step">#4</span>How we serve one request</h2>
+
+<p>The first Mac embeds the token and reads its n-gram rows. Its first GPU runs layers 0–3 and its second GPU runs 4–7, and the result goes down the cable to the next Mac. After layer 47, the final hidden state travels back around the ring, every Mac scores its share of the 248,320-token vocabulary at the same time, and the best candidates are merged.</p>
+
+<p>Generation runs at <strong>22.5 tokens per second</strong> after a 512-token prompt. With speculative decoding, using the model’s own draft layer, chat replies reach 31.3 tokens per second with output identical to plain decoding.<sup><a href="notes.html#n12">12</a></sup> On the first day it ran at 8.1.</p>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Generation speed, three days of work</p>
+    <p class="fsub">Tokens per second generated after a 512-token prompt, six Macs. Dashed lines are modeled limits, not measurements.</p>
+    <div class="legend"><span style="--sw:var(--s1)">Measured</span><span class="dash">Modeled limit: ≈31 practical, 47 bandwidth</span></div>
+    <div data-chart="decode" data-label="Bar chart of generation speed by date, from 8.1 tokens per second on October 12 to 22.5 on October 14. Modeled limits: practical ceiling about 31, bandwidth ceiling 47."></div>
+    <details class="data"><summary>Data</summary>
+      <table><tr><th>Date</th><th>Change</th><th class="num">tok/s</th></tr>
+      <tr><td>Oct 12</td><td>First run, automatic GPU clocks</td><td class="num">8.1</td></tr>
+      <tr><td>Oct 12</td><td>GPUs held at high clock</td><td class="num">13.5</td></tr>
+      <tr><td>Oct 12</td><td>Every Mac scores its head slice at once</td><td class="num">14.7</td></tr>
+      <tr><td>Oct 12</td><td>Decode kernels, round 1</td><td class="num">17.9</td></tr>
+      <tr><td>Oct 13</td><td>Small-batch expert kernels</td><td class="num">19.0</td></tr>
+      <tr><td>Oct 13</td><td>1–4-token kernels, long-context round</td><td class="num">20.6</td></tr>
+      <tr><td>Oct 14</td><td>Host path between Macs</td><td class="num">21.1</td></tr>
+      <tr><td>Oct 14</td><td>Linux 7.3, USB4STREAM, decode kernels round 2</td><td class="num">22.5</td></tr>
+      <tr><td>—</td><td>Practical ceiling (modeled)</td><td class="num">≈31</td></tr>
+      <tr><td>—</td><td>Bandwidth ceiling (modeled)</td><td class="num">47</td></tr></table>
+    </details>
+  </div>
+  <figcaption><span class="tag">Measured</span>Each bar is a separate run on that day’s code; the dashed lines are calculations.<sup><a href="notes.html#n9">9</a>,<a href="notes.html#n10">10</a></sup></figcaption>
+</figure>
+
+<p>During generation, one GPU works at a time while the other eleven wait for it. Reading every active weight once at the D700’s rated 263 GB/s would allow 47 tokens per second. At the 205 GB/s a D700 actually sustains, plus the time the CPUs spend passing data along, the realistic limit is about 31.</p>
+
+<p>Reading a prompt is more parallel, because each GPU can work on a different chunk of it. A 30,000-token prompt is read at 1,249 tokens per second, in about 24 seconds.</p>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Prompt reading speed</p>
+    <p class="fsub">Tokens per second, by prompt length, six Macs.</p>
+    <div data-chart="prefill" data-label="Bar chart of prompt reading speed: 523 tokens per second at 512 tokens, 890 at 2,048, 1,118 at 8,192, 1,249 at 30,000."></div>
+    <details class="data"><summary>Data</summary>
+      <table><tr><th>Prompt</th><th class="num">tok/s</th><th class="num">Time</th></tr>
+      <tr><td>512 tokens</td><td class="num">523</td><td class="num">1.0 s</td></tr>
+      <tr><td>2,048 tokens</td><td class="num">890</td><td class="num">2.3 s</td></tr>
+      <tr><td>8,192 tokens</td><td class="num">1,118</td><td class="num">7.3 s</td></tr>
+      <tr><td>30,000 tokens</td><td class="num">1,249</td><td class="num">24 s</td></tr></table>
+    </details>
+  </div>
+  <figcaption><span class="tag">Measured</span>One benchmark suite, 2026-10-14; times are prompt length ÷ rate.<sup><a href="notes.html#n11">11</a></sup></figcaption>
+</figure>
+
+<h2><span class="step">#5</span>How we serve many requests</h2>
+
+<p>A common misconception about pipelines is that they serve one request at a time. Ours does.</p>
+
+<figure>
+  <div class="frame stat">
+    <div class="big">1</div>
+    <div class="unit">Concurrent requests. The server keeps one sequence resident and handles requests in order.<sup><a href="notes.html#n13">13</a></sup></div>
+  </div>
+</figure>
+
+<p>Micro-batching would let the waiting GPUs work on other people’s requests. We have not built it. There are not, at present, other people.</p>
+
+<h2><span class="step">#6</span>Tokens per second per megawatt</h2>
+
+<p>Cerebras points out that the meaningful efficiency metric is tokens per second per megawatt. We agree, and we have measured it.</p>
+
+<div class="calc" role="group" aria-label="Power arithmetic">
+<div><span class="n">20.61</span> tok/s ÷ <span class="n">1,360</span> W = <span class="n">15,150</span> tok/s per megawatt   <span class="c">// calculated</span></div>
+</div>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Where the power goes</p>
+    <p class="fsub">Watts at the wall, sum of six Macs, from each Mac’s power sensors.</p>
+    <div class="legend"><span style="--sw:var(--s1)">12 GPUs</span><span style="--sw:var(--s2)">6 CPU packages</span><span style="--sw:var(--s3)">Everything else</span></div>
+    <div data-chart="power" data-label="Stacked bar chart. While generating at 20.61 tokens per second, six Macs draw 1,357 to 1,364 W: GPUs 730 to 735 W, CPUs 340 to 343 W, everything else about 287 W. Waiting for a request with the engine running: 320 to 350 W."></div>
+    <details class="data"><summary>Data</summary>
+      <table><tr><th>Item</th><th class="num">W</th><th>Source</th></tr>
+      <tr><td>Six Macs, generating at 20.61 tok/s</td><td class="num">1,357–1,364</td><td>Measured</td></tr>
+      <tr><td>— 12 GPUs</td><td class="num">730–735</td><td>Measured</td></tr>
+      <tr><td>— 6 CPU packages</td><td class="num">340–343</td><td>Measured</td></tr>
+      <tr><td>— everything else</td><td class="num">≈287</td><td>Calculated from midpoints</td></tr>
+      <tr><td>Six Macs, waiting for a request</td><td class="num">320–350</td><td>Measured</td></tr></table>
+    </details>
+  </div>
+  <figcaption><span class="tag">Measured + calculated</span>Bars use range midpoints. This run predates the last day’s speedups, so its rate is 20.61, not 22.5.<sup><a href="notes.html#n14">14</a></sup></figcaption>
+</figure>
+
+<p>We came to the megawatt part through experience. On October 9, four Macs drawing about 1.65 kW from one power strip tripped it. On October 14, after the Macs had been moved onto separate circuits, all six lost power about 30 seconds after reaching 1.5 kW, along with the workstation recording the measurement. The cause has not been confirmed.<sup><a href="notes.html#n15">15</a></sup></p>
+
+<h2>How this scales</h2>
+
+<p>Mostly downward. Four Macs could work if each kept its experts in system memory and cached the popular ones on the GPUs; we estimate 10.8 tokens per second and have not built it. Upward, splitting every layer across all twelve GPUs at once would read each token’s weights in about 2 ms, but it would need about 96 exchanges across the ring per token at 100 µs or more each. We estimate 50–80 tokens per second, at a large cost in engineering.<sup><a href="notes.html#n16">16</a></sup></p>
+
+<p>The method itself is the same at any size: work out how much memory the weights and the request state need, divide the layers across the hardware, and connect the pieces into a pipeline. In our case, the remaining step is to keep the fan at 2,350 RPM.</p>
+
+<p>If you have a question about deploying large models on Mac Pros, you can send it to us. We’ll answer it whenever it arrives.</p>
+</main>
+
+<footer>
+  <hr>
+  <p>A parody of <a href="https://www.cerebras.ai/blog/how-we-deploy-trillion-parameter-frontier-models-on-cerebras">How we deploy trillion-parameter frontier models on Cerebras</a> (Cerebras, October 2026). Not affiliated with Cerebras.</p>
+  <p><a href="notes.html">Source notes</a>: where each number comes from and how each calculation is done.</p>
+</footer>
+
+<script>
+(() => {
+  const macs = ["incite", "inflight", "alight", "indite", "invite", "enlight"];
+  const ring = document.getElementById("ring");
+  macs.forEach((name, m) => {
+    const card = document.createElement("div");
+    card.className = "mac";
+    const next = macs[(m + 1) % macs.length];
+    card.innerHTML = `<h4>${name}<small>→ ${next}</small></h4>`;
+    for (let g = 0; g < 2; g++) {
+      const first = (m * 2 + g) * 4;
+      const gpu = document.createElement("div");
+      gpu.className = "gpu";
+      let chips = "";
+      for (let l = first; l < first + 4; l++) {
+        const qsa = l % 4 === 3;
+        chips += `<div class="chip ${qsa ? "qsa" : "dn"}" title="Layer ${l}: ${qsa ? "sparse attention" : "DeltaNet"}">${l}</div>`;
+      }
+      gpu.innerHTML = `<div class="gl">GPU ${g} · layers ${first}–${first + 3}</div><div class="chips">${chips}</div>`;
+      card.appendChild(gpu);
+    }
+    ring.appendChild(card);
+  });
+})();
+</script>
+<script src="charts.js?v=2"></script>
+</body>
+</html>
