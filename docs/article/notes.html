@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Source notes · How we deploy 180B-parameter frontier models on six Mac Pros</title>
+<title>Source notes · How we deploy 180B-parameter frontier models on Mac Pros</title>
 <meta name="robots" content="noindex">
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <header class="masthead">
@@ -15,48 +15,83 @@
 </header>
 <main>
 <p>Paths are in the trashcan repository. Unless a note says otherwise, measurements are from the six-Mac chain with the G-iq4 recipe and
-<code>--head-split 12 --context 32768 --batch 128 --ngram disk</code>, with every GPU at 850 MHz core / 1370 MHz memory while computing.
-“Calculated” means arithmetic on measured or specified values; “modeled” means a projection from a cost model; neither is a benchmark.</p>
-
-<table class="plain">
-<tr><th>Label</th><th>Meaning</th></tr>
-<tr><td>Measured</td><td>Read from a recorded run under <code>results/</code></td></tr>
-<tr><td>Calculated</td><td>Arithmetic shown in the note</td></tr>
-<tr><td>Modeled</td><td>Projection in <code>docs/qwen4.md</code>; not a run</td></tr>
-</table>
+<code>--head-split 12 --context 32768 --batch 128 --ngram disk</code>, every GPU at 850 MHz core / 1370 MHz memory while computing.
+“Calculated” means arithmetic on measured or specified values; “modeled” means a projection from a cost model. No new runs were made for this page.</p>
 
 <ol class="notes">
-<li id="n1"><strong>Hardware.</strong> Mac Pro 6,1 (late 2013, so 12 years 10 months old at publication; “nearly 13”). Two AMD FirePro D700 per Mac, each 6 GiB GDDR5 on a 384-bit bus, Apple-rated 264 GB/s and 3.5 TFLOP/s; clock-derived peaks 263.04 GB/s and 3.48 TFLOP/s FP32. The two cards’ memories are separate; GPU-to-GPU traffic goes through the CPU root complex, and only 256 MB of each card is CPU- or peer-visible. Interconnect: Thunderbolt 2. <code>docs/hardware.md</code>, <code>docs/engine-spec.md</code>.</li>
-<li id="n2"><strong>Model.</strong> Qwen3.8-Flash-Next (<code>qwen4exp</code>): 177B parameters, of which 121B routed experts (~6B used per token), a 51B hashed n-gram embedding read at layer 1, and 4.6B dense. 48 layers: 36 Gated DeltaNet, 12 Qwen Sparse Attention (every fourth, layers 3, 7, …, 47). 512 experts, top 10. Vocabulary 248,320. “180B” is 177B rounded. <code>docs/qwen4.md</code>.</li>
-<li id="n3"><strong>Quality.</strong> G-iq4 (experts IQ4_XS gate/up, IQ4_NL down; dense matrices Q8_0; head Q6_K) against the Q8_0 release: mean KL divergence 0.0391, same top token 95.1%, perplexity ratio 1.002, over 39K tokens of mixed text (19 chunks of 2,048), llama.cpp on CPU. This is fidelity to the 8-bit model, not a capability benchmark. <code>results/qwen4/quant-20261006</code>.</li>
-<li id="n4"><strong>Weights.</strong> G-iq4: 116 GiB, 51 GiB of it the n-gram table (Q8_0), which stays on the driver’s SSD and is read through the page cache (0.40 ms p50 per token, 16 readers). 65 GiB = 116 − 51 (calculated). 1.4 GiB per layer = 65 ÷ 48 (calculated average; the 65 GiB also includes the embedding and output head, and attention layers differ from DeltaNet layers). A Mac’s two stages load 11.8 GB. <code>docs/qwen4.md</code> (N-gram table placement, Quantization, Recommendation), <code>results/qwen4/ngram-20261006</code>.</li>
-<li id="n5"><strong>GPU memory.</strong> incite GPU 0, layers 0–3 plus the first twelfth of the head (rows 0–21,503), 32K context, 128-token chunks: 5,830 MiB allocated of a 5,888 MiB device-local heap, driver budget 5,869 MiB (measured). 39 MiB = 5,869 − 5,830 (calculated). A 6,480 MiB stage spilled to system memory and ran its head 18× slower. <code>docs/qwen4.md</code> (VRAM).</li>
-<li id="n6"><strong>Fewer Macs.</strong> From <code>tools/qwen4_budget.py</code>, which matches 15 measured stages within 0.2 MiB (modeled): five Macs put 5 layers on most GPUs, 106 MiB over even with 3-bit experts; four Macs fit with IQ2_XXS/MXFP4 experts (KLD ≥ 0.21, against 0.196 for every dense matrix at Q4_0). <code>docs/qwen4.md</code> (Quantization, VRAM).</li>
-<li id="n7"><strong>Links.</strong> Residual payload 4 × 2,560 f32 = 40,960 B per token. 34 µs = 40,960 × 8 ÷ 9.6 Gb/s, line rate only, no protocol overhead (calculated). Measured on a loopback cable: 25 µs round trip for 64 B over USB4STREAM, 9.6–9.7 Gb/s one way per cable; <code>thunderbolt_net</code> with <code>throttling=32000</code>: 40 µs. Ring order incite, inflight, alight, indite, invite, enlight (2026-10-14). <code>docs/kernel.md</code>, <code>results/kernel/tb-loopback-20261006</code>, <code>results/qwen4/main-suite-20261013</code>.</li>
-<li id="n8"><strong>Battery power state.</strong> Stock amdgpu left both D700s at 300 MHz core / 150 MHz memory under load (about 9× less memory bandwidth): the second GPU got the wrong VBIOS and the cards stayed in the battery power state. Fixed by an exact-match VFCT VBIOS fix and a backported SI power-source patch. <code>docs/hardware.md</code> (Clock bug).</li>
-<li id="n9"><strong>Generation speed by date.</strong> Each value is plain greedy decoding of 128 tokens after a 512-token prompt on six Macs, from its own results page; runs differ in code, kernel and transport, as the labels say.
-  <table class="plain">
-  <tr><th>Value</th><th>Source</th></tr>
-  <tr><td>8.1 (8.0–8.2), automatic clocks; 13.5, clocks held</td><td><code>results/qwen4/chain-20261012</code></td></tr>
-  <tr><td>14.7 (from 13.53)</td><td><code>results/qwen4/head-parallel-20261012</code></td></tr>
-  <tr><td>17.9 (17.92)</td><td><code>results/qwen4/decode-kernels-20261012</code></td></tr>
-  <tr><td>19.0 (19.04)</td><td><code>results/qwen4/decode-experts-20261013</code></td></tr>
-  <tr><td>20.6 (20.67, 20.51), main e9f34e6</td><td><code>results/qwen4/main-suite-20261013</code></td></tr>
-  <tr><td>21.1 (21.09, 21.20), main 15e5457, Linux 7.2.9</td><td><code>results/qwen4/main-suite-20261013</code></td></tr>
-  <tr><td>22.5 (22.52, 22.54), main 4f36bf0, Linux 7.3, USB4STREAM</td><td><code>results/qwen4/main-suite-20261013</code>, <code>results/qwen4/decode-kernels-20261014</code></td></tr>
-  </table></li>
-<li id="n10"><strong>Ceilings (modeled).</strong> A decode token reads about 6.0 GB. Bandwidth ceiling: all bytes at 263 GB/s, one GPU at a time = 21.2 ms, 47 tok/s at 512 tokens of context. Practical: about 205 GB/s measured streaming rate per D700 plus ~4.5 ms of host work, “near 31 tok/s”. <code>docs/qwen4.md</code> (Projected chain speed), <code>results/qwen4/decode-kernels-20261014</code>.</li>
-<li id="n11"><strong>Prompt reading.</strong> Main suite on 15e5457, 2026-10-14 11:17: 522.9 / 523.3 tok/s at 512, 889.8 at 2,048, 1,118.0 at 8,192, 1,249.3 at 30,000. Times = length ÷ rate (calculated). The first chain on 2026-10-12 read a 512-token prompt at 126–132 tok/s. <code>results/qwen4/main-suite-20261013</code>, <code>results/qwen4/chain-20261012</code>.</li>
-<li id="n12"><strong>Speculative decoding.</strong> MTP drafting on the driver’s CPU, verification on the chain: chat replies 30.05 → 31.28 tok/s with the same tokens as plain decoding, 2026-10-14. <code>results/qwen4/decode-kernels-20261014</code>, <code>docs/qwen4.md</code>.</li>
-<li id="n13"><strong>Serving.</strong> <code>trashcan serve</code>: “requests run serially through one resident engine”, one resident sequence with prefix reuse. <code>docs/server.md</code>, <code>docs/qwen4.md</code> (Serving).</li>
-<li id="n14"><strong>Power.</strong> Session 3 on main 4307169, 2026-10-13, SMC sensors over the decode windows (variant without the CPU performance-governor hold): 20.61 tok/s, six Macs’ PSTR 1,357–1,364 W, CPU packages 340–343 W, GPUs 730–735 W. “Everything else” = 1,360.5 − 341.5 − 732.5 = 286.5 W (calculated from midpoints). 15,150 tok/s per MW = 20.61 ÷ 1,360.5 W × 10<sup>6</sup> (calculated, same run). Waiting with the engine running (idle cores busy-polling): 320–350 W for six Macs. <code>results/qwen4/decode-host-20261013</code>, <code>docs/qwen4.md</code> (Serving).</li>
-<li id="n15"><strong>Power events.</strong> 2026-10-09: the strip feeding four Macs tripped during a long prefill at ~1.65 kW sustained (<code>results/qwen/tp8-mesh-20261009</code>). 2026-10-14 11:04:53: all six Macs and the workstation lost power about 30 s after the six reached ~1.45–1.5 kW; cause not confirmed (<code>results/qwen4/main-suite-20261013</code>, <code>power-loss-20261014-pstr.csv</code>).</li>
-<li id="n16"><strong>Scaling (modeled).</strong> Four Macs with experts in host RAM and ~63% of each layer’s experts cached in VRAM: ~10.8 tok/s decode (not built). Tensor or expert parallelism over all 12 GPUs: ~2 ms of bytes per token, ~96 cross-Mac all-reduces per token at ≥100 µs, bounding it near 50–80 tok/s. Fan: <code>fancurve.service</code> holds 2,350 RPM or the SMC maximum. <code>docs/qwen4.md</code>, <code>docs/hardware.md</code>.</li>
+<li id="n1"><strong>Hardware.</strong> Mac Pro 6,1, released December 2013 (12 years 10 months old at publication). Two AMD FirePro D700 per Mac, each 6 GiB GDDR5 on a 384-bit bus (Apple: 264 GB/s, 3.5 TFLOP/s); the two cards’ memories are separate, not one 12 GB pool. Interconnect: Thunderbolt 2. The G-iq4 weights are 116 GiB. <code>docs/hardware.md</code>, <code>docs/engine-spec.md</code>.</li>
+<li id="n2"><strong>Model.</strong> Qwen3.8-Flash-Next (<code>qwen4exp</code>): 177B parameters (121B routed experts, ~6B used per token; a 51B hashed n-gram embedding read at layer 1; 4.6B dense). “180B” in the title is 177B rounded. 48 layers: 36 Gated DeltaNet, 12 Qwen Sparse Attention (layers 3, 7, …, 47). <code>docs/qwen4.md</code>.</li>
+<li id="n3"><strong>Quality.</strong> KL divergence of each candidate’s next-token distribution from the Q8_0 release over 39K tokens (19 chunks of 2,048), llama.cpp on CPU; the share of positions where both pick the same top token. Fidelity to the 8-bit model, not a capability benchmark. <code>results/qwen4/quant-20261006</code>.</li>
+<li id="n4"><strong>Weights and GPU count.</strong> 116 GiB total, 51 GiB of it the n-gram table at Q8_0, read through the page cache from the driver’s SSD (0.40 ms p50 per token). 65 GiB = 116 − 51 and 1.4 GiB = 65 ÷ 48 are calculated averages; the 65 GiB also includes the embedding and output head. The per-GPU split is four consecutive layers, which is three DeltaNet and one sparse-attention layer because attention is every fourth layer. Five Macs do not fit 4-bit experts, four only 2-bit ones (modeled with <code>tools/qwen4_budget.py</code>). <code>docs/qwen4.md</code> (N-gram table placement, VRAM).</li>
+<li id="n5"><strong>Links.</strong> Residual payload 4 streams × 2,560 f32 = 40 KiB per token. 25 µs round trip for 64 B over USB4STREAM, measured on a loopback cable; 9.6–9.7 Gb/s one way per cable. Ring order incite, inflight, alight, indite, invite, enlight (2026-10-14). <code>docs/kernel.md</code>, <code>results/kernel/tb-loopback-20261006</code>.</li>
+<li id="n6"><strong>Serving.</strong> <code>trashcan serve</code> runs requests serially through one resident engine and sequence. <code>docs/server.md</code>, <code>docs/qwen4.md</code> (Serving).</li>
+<li id="n7"><strong>Speed.</strong> Generation 22.52 / 22.54 tok/s, 128 tokens after a 512-token prompt (main 4f36bf0, 2026-10-14, Linux 7.3, USB4STREAM; that suite stopped early when invite went down). Prompt reading 1,249.3 tok/s at 30,000 tokens (main 15e5457, 2026-10-14). <code>results/qwen4/main-suite-20261013</code>, <code>results/qwen4/decode-kernels-20261014</code>.</li>
+<li id="n8"><strong>Memory and power.</strong> incite GPU 0 (layers 0–3, the n-gram module, the first twelfth of the head, 32K context, 128-token chunks): 5,830 MiB allocated, driver budget 5,869 MiB (measured); 39 MiB is the difference. K/V per position of one sparse-attention layer at f16: 2 KV heads × 256 × (K + V) × 2 bytes = 2,048 bytes (calculated; 400 MiB at 204,800 positions in <code>docs/qwen4.md</code>). The DeltaNet state and indexer keys would add a few MiB more per request. Power: 20.61 tok/s with six Macs at 1,357–1,364 W, from the SMC sensors over the same decode windows (2026-10-13, main 4307169); 15,150 = 20.61 ÷ 1,360.5 W × 10<sup>6</sup> (calculated). <code>docs/qwen4.md</code> (VRAM), <code>results/qwen4/decode-host-20261013</code>.</li>
 </ol>
 
-<h2>About the parody</h2>
-<p>The structure and premise follow Cerebras’s <a href="https://www.cerebras.ai/blog/how-we-deploy-trillion-parameter-frontier-models-on-cerebras">How we deploy trillion-parameter frontier models on Cerebras</a>: split a model too large for one device across a pipeline of devices, then size it. The text and figures here are original; nothing from the original post is reproduced. No new benchmarks were run for this page.</p>
+<h2>Supporting charts</h2>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">The weights against all twelve GPUs</p>
+    <p class="fsub">GiB. The bottom bar is twelve separate 6 GiB pools, not one.</p>
+    <div class="legend"><span style="--sw:var(--s1)">In GPU memory</span><span style="--sw:var(--s2)">N-gram table, on an SSD</span><span style="--sw:var(--s1-soft)">Total GPU memory</span></div>
+    <div data-chart="weights" data-label="Bar chart. Model weights 116 GiB: 65 GiB in GPU memory and 51 GiB n-gram table on an SSD. GPU memory across 12 D700s: 72 GiB."></div>
+  </div>
+  <figcaption><span class="tag">Measured + calculated</span>Note 4.</figcaption>
+</figure>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Memory on the busiest GPU</p>
+    <p class="fsub">MiB on one 6 GiB D700.</p>
+    <div class="legend"><span style="--sw:var(--s1)">Allocated</span><span class="dash">Driver budget</span></div>
+    <div data-chart="vram" data-label="Bar chart. incite GPU 0 allocates 5,830 MiB of a 6,144 MiB card; the driver budget is 5,869 MiB."></div>
+  </div>
+  <figcaption><span class="tag">Measured</span>Note 8.</figcaption>
+</figure>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Generation speed, October 12–14</p>
+    <p class="fsub">Tokens per second after a 512-token prompt, six Macs. Each bar is a separate run on that day’s code.</p>
+    <div class="legend"><span style="--sw:var(--s1)">Measured</span><span class="dash">Modeled limit: ≈31 practical, 47 bandwidth</span></div>
+    <div data-chart="decode" data-label="Bar chart of generation speed by date, from 8.1 tokens per second on October 12 to 22.5 on October 14. Modeled limits: about 31 and 47."></div>
+    <details class="data"><summary>Sources</summary>
+      <table><tr><th>Value</th><th>Source</th></tr>
+      <tr><td>8.1, 13.5</td><td><code>results/qwen4/chain-20261012</code></td></tr>
+      <tr><td>14.7</td><td><code>results/qwen4/head-parallel-20261012</code></td></tr>
+      <tr><td>17.9</td><td><code>results/qwen4/decode-kernels-20261012</code></td></tr>
+      <tr><td>19.0</td><td><code>results/qwen4/decode-experts-20261013</code></td></tr>
+      <tr><td>20.6, 21.1, 22.5</td><td><code>results/qwen4/main-suite-20261013</code> (e9f34e6, 15e5457, 4f36bf0)</td></tr>
+      <tr><td>31, 47 (modeled)</td><td><code>docs/qwen4.md</code>: 6.0 GB read per token at 205 GB/s plus host work; at 263 GB/s</td></tr></table>
+    </details>
+  </div>
+</figure>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Prompt reading speed</p>
+    <p class="fsub">Tokens per second, by prompt length, six Macs, main 15e5457.</p>
+    <div data-chart="prefill" data-label="Bar chart of prompt reading speed: 523 tokens per second at 512 tokens, 890 at 2,048, 1,118 at 8,192, 1,249 at 30,000."></div>
+  </div>
+  <figcaption><span class="tag">Measured</span>Note 7.</figcaption>
+</figure>
+
+<figure>
+  <div class="frame">
+    <p class="ftitle">Where the power goes</p>
+    <p class="fsub">Watts at the wall, sum of six Macs, from each Mac’s SMC sensors.</p>
+    <div class="legend"><span style="--sw:var(--s1)">12 GPUs</span><span style="--sw:var(--s2)">6 CPU packages</span><span style="--sw:var(--s3)">Everything else</span></div>
+    <div data-chart="power" data-label="Stacked bar chart. While generating at 20.61 tokens per second, six Macs draw 1,357 to 1,364 W: GPUs 730 to 735 W, CPUs 340 to 343 W, everything else about 287 W. Waiting for a request with the engine running: 320 to 350 W."></div>
+  </div>
+  <figcaption><span class="tag">Measured + calculated</span>Range midpoints; “everything else” is the total minus GPUs and CPUs. Note 8.</figcaption>
+</figure>
+
+<h2>About the original</h2>
+<p>The section order, headings and calculations follow Cerebras’s <a href="https://www.cerebras.ai/blog/how-we-deploy-trillion-parameter-frontier-models-on-cerebras">How we deploy trillion-parameter frontier models on Cerebras</a>, with the trashcan project’s hardware and numbers in place of theirs. Text and figures here are our own; nothing is copied from the original post.</p>
 </main>
 <footer><hr><p><a href="index.html">Back to the article</a></p></footer>
+<script src="charts.js?v=3"></script>
 </body>
 </html>

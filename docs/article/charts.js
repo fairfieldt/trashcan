@@ -5,6 +5,16 @@
 const NS = "http://www.w3.org/2000/svg";
 
 const CHARTS = {
+  quality: {
+    unit: "%", max: 100, ticks: [0, 20, 40, 60, 80, 100],
+    rows: [
+      { label: "Six-Mac recipe (IQ4 experts, Q6_K head)", segs: [{ v: 95.1, cls: "b1", tip: "95.1% same top token; mean KLD 0.0391" }], total: "95.1%" },
+      { label: "Q4_0 experts", segs: [{ v: 94.9, cls: "bsoft", tip: "94.9%; mean KLD 0.0402" }], total: "94.9%" },
+      { label: "MXFP4 experts", segs: [{ v: 93.7, cls: "bsoft", tip: "93.7%; mean KLD 0.0656" }], total: "93.7%" },
+      { label: "IQ3_XXS experts", segs: [{ v: 92.6, cls: "bsoft", tip: "92.6%; mean KLD 0.0876" }], total: "92.6%" },
+      { label: "IQ2_XXS experts", segs: [{ v: 88.6, cls: "bsoft", tip: "88.6%; mean KLD 0.2134" }], total: "88.6%" },
+    ],
+  },
   weights: {
     unit: "GiB", max: 120, ticks: [0, 20, 40, 60, 80, 100, 120],
     rows: [
