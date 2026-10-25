@@ -1,3 +1,0 @@
-pingpong bytes=64 iters=20000 rtt_us min=26.3 p50=32.0 p99=32.6 max=398.4 avg=32.0
-pingpong bytes=1024 iters=20000 rtt_us min=27.7 p50=32.0 p99=32.8 max=443.9 avg=32.1
-pingpong bytes=4096 iters=20000 rtt_us min=32.6 p50=36.3 p99=38.4 max=106.3 avg=35.8

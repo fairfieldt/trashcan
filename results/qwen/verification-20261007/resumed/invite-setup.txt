@@ -1,6 +1,0 @@
-b52ecdeb0403a3678ea7863b5157a813cdc546c1584c0444d0093d85d0554ddb  verify-capture
-Linux invite 7.2.9-p2p #2p2p SMP PREEMPT_DYNAMIC Tue Oct  6 15:52:10 PDT 2026 x86_64 GNU/Linux
-xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
-0-3	incite	0	0	2	up	thunderbolt0	10.99.18.2	10.99.18.1
-1-3	incite	1	1	1	up	thunderbolt1	10.99.18.18	10.99.18.17
-2-1	incite	2	2	2	up	thunderbolt2	10.99.18.34	10.99.18.33

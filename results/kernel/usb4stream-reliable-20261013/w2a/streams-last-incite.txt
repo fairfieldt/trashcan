@@ -1,2 +1,0 @@
-inflight	up	/dev/tbstream0
-enlight	up	/dev/tbstream1

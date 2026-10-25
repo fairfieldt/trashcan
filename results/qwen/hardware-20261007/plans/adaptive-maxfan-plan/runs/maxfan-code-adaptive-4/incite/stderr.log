@@ -1,4 +1,0 @@
-tp: 4 ranks, 2 on this machine, the rest on the other
-GPU0: rank 0 of 4 + MTP, 4485.9 MiB allocated
-GPU1: rank 1 of 4 + MTP, 4485.9 MiB allocated
-[clocks] 108 samples card0 (02:00.0) sclk/mclk: 850/1370 x54 650/1370 x1 450/1370 x3 300/150 x49 450/150 x1  max 63C card1 (06:00.0) sclk/mclk: 850/1370 x41 650/1370 x1 450/1370 x4 300/150 x61 450/150 x1  max 62C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/maxfan-code-adaptive-4/clocks.txt

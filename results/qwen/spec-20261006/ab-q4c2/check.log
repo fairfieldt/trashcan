@@ -1,5 +1,0 @@
-plan: [[(0, 21), (21, 32)]]
-GPU0: layers 0..21
-GPU0: 3114.9 MiB allocated
-GPU1: layers 21..32 + head + MTP
-GPU1: 3133.8 MiB allocated

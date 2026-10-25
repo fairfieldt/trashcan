@@ -1,8 +1,0 @@
-{
-  "source_revision": "63290a5b862a8f879e70b3d7739abde685c04b35",
-  "source_manifest": "final-source.sha256",
-  "binary_manifest": "final-binary.sha256",
-  "scope": "Unsigned Q4, adaptive attention, resident prefix cache, and per-request assistant top-k; before later shared-head and default-batch experiments.",
-  "ordinary_http_source_manifest": "pre-assistant-topk/final-source.sha256",
-  "long_check_source_manifest": "pre-assistant-topk/final-source.sha256"
-}

@@ -1,2 +1,0 @@
-xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
-0-3	alight	0	0	2	no_carrier	thunderbolt0	10.99.86.1	10.99.86.2

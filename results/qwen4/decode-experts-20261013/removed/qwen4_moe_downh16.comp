@@ -1,3 +1,0 @@
-#version 460
-#define R 16
-#include "qwen4_moe_downh_body.glsl"

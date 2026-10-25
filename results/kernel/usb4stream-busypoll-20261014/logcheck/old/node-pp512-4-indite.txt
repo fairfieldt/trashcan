@@ -1,2 +1,0 @@
-link alight (10.99.54.2:40520): stream up (0-3.1/trashcan /dev/tbstream0), epoch 09da04eb, 6.1 ms after the link started [18:17:57.835]
-link invite (invite.tb1:7071): stream up (1-3.1/trashcan /dev/tbstream1), epoch ab9e8539, 5.7 ms after the link started [18:17:57.843]

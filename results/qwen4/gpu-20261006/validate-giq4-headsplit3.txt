@@ -1,8 +1,0 @@
-# G-iq4, --head-split 3: GPU0 layers 0-2 + head rows 0..82944, GPU1 layers 3-5 + rows 82944..165888 (incite),
-# Mac CPU node layers 6-47 + rows 165888..248320; logits assembled from the three slices, vs the CPU reference.
-# Against the unsplit run (val-giq4-gpu6, whole head on the CPU node): result_norm rel 0, logits rel 3.4e-7.
-result_norm                      rel  1.46e-05  cos 1.000000
-logits: rel 1.66e-05 cos 1.000000; top-1 9419 vs 9419; top-10 overlap 10/10
-greedy: first 10 of 10 tokens identical
-two CPU processes, head split 2: logits: rel 0.00e+00 cos 1.000000; top-1 9419 vs 9419; top-10 overlap 10/10
-two CPU processes, head split 2: greedy: first 10 of 10 tokens identical

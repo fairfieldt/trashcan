@@ -1,10 +1,10 @@
 # Engine implementation spec
 
-This is the companion to `engine-plan.md`, the reference an implementer works from. Every number here was read from
-the GGUF (`trashcan info` / `tensor` / `vocab`), from llama.cpp's source at 99b95488c (the `llama.cpp/` checkout), or
-measured on incite. llama.cpp names are given so results can be compared against its activations.
+This is the reference an implementer works from. Every number here was read from
+the GGUF (`trashcan info` / `tensor` / `vocab`), from llama.cpp's source at 99b95488c, or
+measured on a Mac Pro 6,1 with two D700s. llama.cpp names are given so results can be compared against its activations.
 
-Model file on incite: `~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf` (6.50 GiB, GGUF v3, 667 tensors,
+Model file: `~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf` (6.50 GiB, GGUF v3, 667 tensors,
 from HF `google/gemma-4-12B-it-qat-q4_0-gguf` rev 29d0977).
 
 ## 1. Model constants
@@ -222,12 +222,12 @@ code, digits, specials, empty) with llama.cpp's ids, pieces and detokenized text
 | 255999, 256000, 258880-258884 | image/audio/video markers | multimodal (unused) |
 
 **Stop tokens:** `<eos>` 1 and `<turn|>` 106 (HF `generation_config` `eos_token_id: [1, 106]`); llama.cpp also stops on
-`<|tool_response>` 50. The full list is in `results/gemma4-12b-special-tokens.txt`.
+`<|tool_response>` 50.
 
 ### 5.3 Chat format
 
 The GGUF embeds Google's Jinja template (`tokenizer.chat_template`, 18.7 KB). Rendering it with `minijinja` is the exact
-path. These are llama.cpp's renderings (`results/gemma4-chat-template-examples.txt`); BOS isn't part of the string:
+path. These are llama.cpp's renderings (also in `tests/fixtures/chat-fixture.json`); BOS isn't part of the string:
 
 ```
 thinking on (default):  "<|turn>system\n<|think|>\n<turn|>\n<|turn>user\nHello there<turn|>\n<|turn>model\n"
@@ -249,10 +249,10 @@ The assistant's logits are not softcapped (`final_logit_softcapping: null` in it
 
 ## 6. Validation assets
 
-**Reference activations:** `results/reference-cpu/` and `results/reference-vulkan/`.
+**Reference activations:** `tests/reference-vulkan/` (llama.cpp's Vulkan backend). A CPU-backend reference was
+dumped the same way for the comparison below but is not kept in the repo.
 
-- Written by `tools/dump-activations/dump.cpp`, built against the pristine upstream llama.cpp build in `~/llama.cpp`
-  on incite.
+- Written by `tools/dump-activations/dump.cpp`, built against an unmodified upstream llama.cpp build (99b9548).
 - The prompt is the 15 token ids of the thinking-off chat prompt for "Hello there":
   `2 105 2364 107 9259 993 106 107 105 4368 107 100 45518 107 101`.
 - For each tensor, `<name>.f32` holds **the last token's slice** as raw little-endian f32. `index.tsv` lists name,
@@ -276,10 +276,10 @@ by:
 - identical greedy tokens through `<turn|>`
 
 An engine run is correct if it matches `reference-vulkan` at least that well. Compare with
-`python3 tools/compare_activations.py MY_DUMP_DIR results/reference-vulkan [--all]`; no numpy needed. The engine
+`python3 tools/compare_activations.py MY_DUMP_DIR tests/reference-vulkan [--all]`; no numpy needed. The engine
 should write dumps in the same format: same names, last-token slice, `index.tsv`.
 
-To regenerate (e.g. another prompt): `tools/dump-activations/build.sh` on incite, then
+To regenerate (e.g. another prompt): `tools/dump-activations/build.sh` (`LLAMA` points at the llama.cpp checkout), then
 `./dump MODEL OUT_DIR cpu|vulkan N_GREEDY TOKEN_IDS...`.
 
 ## 7. GPU facts (both D700s, RADV, Mesa 25.0.7)
@@ -312,7 +312,7 @@ From `trashcan devices` (identical cards):
 
 ### 7.1 Cross-GPU mechanics
 
-`bench/xgpu/xgpu.cpp` is working reference code for all of this. Results are in `results/xgpu/`.
+`bench/xgpu/xgpu.cpp` is working reference code for all of this.
 
 **P2P buffer:**
 
@@ -323,8 +323,7 @@ From `trashcan devices` (identical cards):
    type 2), and import with `VkImportMemoryFdInfoKHR` plus a dedicated allocation.
 
 On the P2P kernel the buffer stays in the owner's VRAM: the owner's own copies run at 100 GB/s. **Writes** from the
-peer into it run at 7.9 GB/s and **reads** across at 3.7 GB/s (1-64 MiB, timed submit-to-fence: `xgpu p2p-wall`,
-`results/kernel/p2pdma-20261005/`). The 15.6-15.9 GB/s recorded earlier for 256 KiB-1 MiB writes came from GPU
+peer into it run at 7.9 GB/s and **reads** across at 3.7 GB/s (1-64 MiB, timed submit-to-fence: `xgpu p2p-wall`). The 15.6-15.9 GB/s recorded earlier for 256 KiB-1 MiB writes came from GPU
 timestamps, which land before Tahiti's 768 KiB L2 writes back, and exceeds what the 128-byte-payload link can carry.
 So data always moves by the producer *pushing* into the consumer's VRAM.
 
@@ -381,25 +380,14 @@ own push-constant structs; read the `vk_*_push_constants` structs next to each p
 
 ## 9. Working conventions
 
-- **Code** lives in this repo; `scripts/sync.sh push` copies `Cargo.*`, `engine/`, `scripts/`, `bench/`, `tools/`, `tests/`, `docs/` to
-  `incite:~/trashcan/`. Build there with `cargo build --release` (Rust is in `~/.cargo/bin`, so
-  `export PATH=$HOME/.cargo/bin:$PATH`).
-- **On the Mac,** `cargo check` works because `ash` loads libvulkan at runtime. A `build.rs` that runs `glslc` must
-  skip with a warning when `glslc` is missing (it is on the Mac), so checking still works there.
-- **Results** go under `incite:~/trashcan/results/`; `scripts/sync.sh pull` brings them into `results/`.
-- **Never write to `/tmp`**, `/var/folders`, `$TMPDIR` or `/dev/shm`, on the Mac or on incite. Use the repo or
-  `~/trashcan`.
+- **Build** on the Mac Pro with `cargo build --release` ([implementation.md](implementation.md#build-and-run)).
+- **Elsewhere** (e.g. macOS), `cargo check` works because `ash` loads libvulkan at runtime, and `build.rs` skips
+  shader compilation with a warning when `glslc` is missing.
 - **Benchmarks:** check clocks with `scripts/clockmon.sh` (850/1370 MHz under load). llama.cpp baselines (upstream
   99b9548): layer split tg128 12.27 tok/s (9.44 with FA), pp512 36 tok/s; tensor split (with #25051 and fixes) tg
   about 9 tok/s, pp512 118 tok/s.
-- **incite** runs the custom kernel `6.12.111-p2p` by default (`kernel/`); without it P2P falls back to system memory.
-  incite isn't managed by gpuq.
-- **llama.cpp checkouts:**
-  - local `llama.cpp/` (upstream plus our branches `tp-vulkan` / `tp-debug`)
-  - incite `~/llama.cpp` (pristine upstream build, used for references)
-  - incite `~/trashcan/llama.cpp` (the `tp-debug` branch)
-  - our llama.cpp patches are also saved in `reference/llama.cpp-patches/`.
-  - `llama.cpp/AGENTS.md` forbids AI-written PRs, issues and comments upstream. Never post there.
+- **Kernel:** the Mac Pro needs the patched kernel in `kernel/` ([kernel.md](kernel.md)); without it P2P falls back
+  to system memory.
 
 ## 10. Implemented runtime conventions
 

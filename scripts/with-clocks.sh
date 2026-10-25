@@ -1,7 +1,7 @@
 #!/bin/bash
 # Run a command while sampling both D700s' clocks, then print the clock summary, so benchmark records carry
-# sustained clocks (AGENTS.md). Run it under a gpuq lease, from a workspace holding scripts/:
-#   ssh incite 'cd ~/trashcan-exp/NAME && gpuq run ID -- scripts/with-clocks.sh results/clocks/RUN.txt CMD ARGS'
+# sustained clocks. For example, on a node:
+#   scripts/with-clocks.sh target/clocks/run.txt target/release/trashcan bench MODEL.gguf
 # usage: scripts/with-clocks.sh CLOCKLOG CMD [ARGS...]
 set -uo pipefail
 log=$1; shift

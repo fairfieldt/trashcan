@@ -1,4 +1,0 @@
-#version 460
-#define HEADS_PER_GROUP 8
-#define SHARED_FLOATS 1024
-#include "attention_shared_body.glsl"

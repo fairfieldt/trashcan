@@ -1,6 +1,8 @@
 #!/bin/bash
-# Builds the dump tool on incite against the pristine upstream llama.cpp build in ~/llama.cpp (99b9548).
-# LLAMA and BUILD select another checkout and build directory (e.g. a Metal build on a Mac).
+# Builds the dump tool against an unpatched upstream llama.cpp checkout and build at commit 99b9548.
+# LLAMA is the checkout (default ~/llama.cpp) and BUILD its build directory holding the libraries (default
+# $LLAMA/build/bin), e.g. a Vulkan build on a Mac Pro or a Metal build on a Mac.
+# usage: LLAMA=PATH [BUILD=PATH] tools/dump-activations/build.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 L=${LLAMA:-$HOME/llama.cpp}

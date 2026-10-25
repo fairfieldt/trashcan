@@ -108,7 +108,7 @@ impl Load {
 
 #[derive(clap::Args)]
 pub struct Run {
-    /// One address per cable to the other machine, e.g. indite.tb0:7075.
+    /// One address per cable to the other machine, e.g. mac1.tb0:7075.
     #[arg(long, value_delimiter = ',', required = true)]
     connect: Vec<String>,
     #[command(flatten)]
@@ -129,7 +129,7 @@ pub struct Run {
 
 #[derive(clap::Args)]
 pub struct Churn {
-    /// The server's address on the cable, e.g. enlight.tb0:7075.
+    /// The server's address on the cable, e.g. mac0.tb0:7075.
     #[arg(long, required = true)]
     connect: String,
     #[arg(long, default_value_t = 200)]

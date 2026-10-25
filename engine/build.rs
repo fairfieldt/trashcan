@@ -4,7 +4,7 @@ fn main() {
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let available = Command::new("glslc").arg("--version").output().is_ok();
     if !available {
-        println!("cargo:warning=glslc missing; GPU execution needs a build on incite");
+        println!("cargo:warning=glslc missing; shaders not compiled, GPU commands will fail");
     }
     for name in [
         "matvec",

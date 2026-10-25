@@ -1,8 +1,0 @@
-l_last-0                         rel  1.10e-05  cos 1.000000
-l_last-10                        rel  6.33e-03  cos 0.999980
-l_last-30                        rel  1.89e-02  cos 0.999822
-l_last-40                        rel  3.06e-02  cos 0.999541
-l_last-47                        rel  4.41e-02  cos 0.999034
-result_norm                      rel  4.50e-02  cos 0.998987
-logits: rel 5.64e-02 cos 0.998411; top-1 1919 vs 1919; top-10 overlap 9/10
-greedy: first 10 of 10 tokens identical

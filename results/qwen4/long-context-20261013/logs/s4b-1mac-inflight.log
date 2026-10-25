@@ -1,9 +1,0 @@
-inflight: ticket 65 queued 14:57:44
-inflight: granted 14:59:28: ./long-sb.sh trashcan-long-r20 s4t20 128 1024 8320 30080; ./long-sb.sh trashcan-long-r19 s4t19 128 8320
-long-sb-s4t20-128 rc=0 [clocks] 70 samples card0 (02:00.0) sclk/mclk: 850/1370 x55 450/1370 x1 300/150 x14  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x37 300/150 x33  max 61C  log=results/clocks/long-sb-s4t20-128.txt
-long-sb-s4t20-1024 rc=0 [clocks] 73 samples card0 (02:00.0) sclk/mclk: 850/1370 x56 650/1370 x1 300/150 x16  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x57 300/150 x16  max 61C  log=results/clocks/long-sb-s4t20-1024.txt
-long-sb-s4t20-8320 rc=0 [clocks] 117 samples card0 (02:00.0) sclk/mclk: 850/1370 x101 300/150 x16  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x100 650/1370 x1 450/1370 x1 300/150 x15  max 63C  log=results/clocks/long-sb-s4t20-8320.txt
-long-sb-s4t20-30080 rc=0 [clocks] 256 samples card0 (02:00.0) sclk/mclk: 850/1370 x238 300/150 x18  max 66C card1 (06:00.0) sclk/mclk: 850/1370 x240 300/150 x16  max 67C  log=results/clocks/long-sb-s4t20-30080.txt
-long-sb-s4t19-128 rc=0 [clocks] 67 samples card0 (02:00.0) sclk/mclk: 850/1370 x51 300/150 x16  max 65C card1 (06:00.0) sclk/mclk: 850/1370 x55 300/150 x12  max 66C  log=results/clocks/long-sb-s4t19-128.txt
-long-sb-s4t19-8320 rc=0 [clocks] 124 samples card0 (02:00.0) sclk/mclk: 850/1370 x103 300/150 x21  max 65C card1 (06:00.0) sclk/mclk: 850/1370 x110 450/1370 x1 300/150 x13  max 66C  log=results/clocks/long-sb-s4t19-8320.txt
-inflight: released 15:02:36 rc=0

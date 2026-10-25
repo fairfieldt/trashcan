@@ -1,8 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
-qwen4 node: session from 10.99.38.18:46052
-GPU0: layers 32..36 + head rows 172032..193536
-GPU0: 5768.2 MiB allocated; device-local heap 5768 of 5888 MiB used, budget 5868
-GPU1: layers 36..40 + head rows 193536..215040
-GPU1: 5768.2 MiB allocated; device-local heap 5768 of 5888 MiB used, budget 5868
-[clocks] 424 samples card0 (02:00.0) sclk/mclk: 850/1370 x82 450/1370 x1 300/150 x341  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x84 450/1370 x1 300/150 x339  max 57C  log=results/clocks/node-dec-r4-pp2048-trashcan-dec-2-invite.txt

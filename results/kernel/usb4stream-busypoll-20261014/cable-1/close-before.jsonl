@@ -1,4 +1,0 @@
-{"step": "plant", "dev": "/dev/tbstream0", "close_ms": [512.3, 511.8, 511.2, 511.2, 511.3, 511.2, 511.3, 511.0], "host": "invite"}
-{"step": "check", "dev": "/dev/tbstream0", "bytes": 0, "eofs": 0, "write": "ok", "bytes_after": 0, "eofs_after": 0, "sticky": false, "close_ms": 525.4, "host": "enlight"}
-{"step": "plant", "dev": "/dev/tbstream0", "close_ms": [517.2, 511.6, 511.3, 511.3, 511.3, 510.9, 511.3, 511.1], "host": "enlight"}
-{"step": "check", "dev": "/dev/tbstream0", "bytes": 0, "eofs": 0, "write": "ok", "bytes_after": 0, "eofs_after": 0, "sticky": false, "close_ms": 518.7, "host": "invite"}

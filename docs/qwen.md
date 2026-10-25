@@ -1,4 +1,4 @@
-# Qwen models: Qwen3.8-27B (and Qwen3.5-9B), toward Qwen3.8-Flash-Next
+# Qwen models: Qwen3.8-27B and Qwen3.5-9B
 
 The engine runs `qwen35` GGUFs: Qwen3.8-27B and the same-architecture Qwen3.5-9B, which fits on one Mac
 and is the single-machine test model. The forward pass is a pipeline of **stages**, each owning a
@@ -63,7 +63,7 @@ uses the same recipe without an importance matrix, from `unsloth/Qwen3.5-9B-GGUF
 
 One command buffer per batch shape, replayed with a new position. Q4_0 projections reuse the Gemma kernels
 (`gemm2` above 8 columns, `multivec4` for 5-8, `matvecq4*` for decode; tensor-parallel ranks take `matvecq4_r2`
-and `matvecq4_r2u2`, two rows per wave with the same bits per row, see [the round-2 results](../results/qwen/tp8-round2-20261009/README.md));
+and `matvecq4_r2u2`, two rows per wave with the same bits per row);
 verification widths 2-4 use `qwen_q4c2/3/4`. The head uses `headvec` (or the multi-column kernels for verification), `topk` and
 `merge` over 243 vocabulary chunks. New kernels:
 
@@ -72,7 +72,7 @@ verification widths 2-4 use `qwen_q4c2/3/4`. The head uses `headvec` (or the mul
 | `qwen_add_norm` | residual add and RMS norm, one workgroup per token |
 | `qwen_matf32` | f32 alpha/beta projection, one wave per row and eight tokens |
 | `qwen_conv` | width-4 causal convolution + SiLU, one thread per channel walking the batch |
-| `qwen_gdn` | DeltaNet recurrence: each wave keeps one state row in registers across the batch (four rows per wave until round 2 of the TP8 optimization; one row runs four times the waves and the same arithmetic per row) |
+| `qwen_gdn` | DeltaNet recurrence: each wave keeps one state row in registers across the batch |
 | `qwen_gated_norm` | per-head RMS norm times `silu(z)` |
 | `qwen_qk` | per-head RMS norm, partial NeoX rotation, scale, f16 cache store |
 | `qwen_gate` | `sigmoid(gate)` on the attention output |
@@ -84,9 +84,8 @@ for other batches by default; Qwen's one-column steps take `attention_partial_p2
 and head dimensions up to 256 the 256-thread, fully unrolled `attention_merge_u`, both with the reference kernels'
 bits (`TRASHCAN_QWEN_ATTN_KERNELS=old` restores the pair). `TRASHCAN_QWEN_ATTN=tiled` selects bounded 64-query tiled prefill at 64 or more
 columns, including the 27B's six-to-one GQA ratio. Cached graphs include a visible-key bucket. Paired prefill
-measurements improve 4K by 8.6% and 8K by 22.1%, with matching generated IDs. Subsequent sustained validation
-completed without GPU resets, and an independent 8K comparison improved 110.34 to 134.43 tok/s. See
-[the resumed validation](../results/qwen/verification-20261007/resumed/README.md).
+measurements improve 4K by 8.6% and 8K by 22.1%, with matching generated IDs; sustained validation ran without GPU
+resets, and an independent 8K comparison improved 110.34 to 134.43 tok/s.
 
 ## Recurrent state: rollback and checkpoints
 
@@ -131,9 +130,9 @@ Machines only connect to their neighbours, which matches a Thunderbolt daisy cha
 # every machine after the first (the GGUF must be at the same path or given explicitly)
 trashcan qwen-node ~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --listen 0.0.0.0:7070
 # the driver
-trashcan qwen-chat ~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --nodes 10.0.0.2:7070 "Hello"
-trashcan qwen-bench MODEL --nodes 10.0.0.2:7070 --pp 512 --tg 128
-trashcan qwen-validate MODEL OUT --nodes 10.0.0.2:7070   # then tools/compare_activations.py OUT REFERENCE
+trashcan qwen-chat ~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --nodes mac1:7070 "Hello"
+trashcan qwen-bench MODEL --nodes mac1:7070 --pp 512 --tg 128
+trashcan qwen-validate MODEL OUT --nodes mac1:7070   # then tools/compare_activations.py OUT REFERENCE
 ```
 
 `--cpu` runs a machine's layers on the CPU reference path, so the protocol can be exercised without GPUs.
@@ -153,7 +152,7 @@ value head h reads key head h % k_heads, so taking each group of k_heads value h
 mapping locally. Each mixer and FFN ends a segment with its partial output projection in host memory; the host
 adds the ranks' partials and all-reduces the sum with the other machines (`link/`, a lane per cable, each on the
 cable's USB4STREAM when both machines have it and over TCP otherwise: TP4 on two Macs decodes 10.7% faster on the
-stream than over TCP, results/kernel/usb4stream-reliable-20261013; `Mesh` in
+stream than over TCP; `Mesh` in
 `tp.rs`): two all-reduces per layer, 2 × layers + 1 segments per forward. A group is 2, 4 or 8 machines. With four,
 the all-reduce takes two rounds of recursive doubling over a ring of cables (machines 0-1, 0-2, 1-3, 2-3), each round
 sending half the vector to each of a machine's two partners; every machine adds each element in the same pairs, so
@@ -161,7 +160,7 @@ the residuals stay bitwise identical. When every machine reports a cable to each
 driver takes full-mesh all-reduces instead: a single row (decode and draft steps) in one step, every machine sending
 its whole vector to the three others, and a batch (verification, prefill) by a direct reduce-scatter and all-gather,
 two steps of a quarter of the vector per cable each way. They add every element in the ring's pairs, so in f32 their
-totals are the ring's bit for bit ([results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)).
+totals are the ring's bit for bit.
 All-reduces below prefill size (decode, verification and draft steps) carry f16
 values with a power-of-two shift per 256 values (`wire.rs`), which every machine rounds the same way;
 `TRASHCAN_TP_WIRE=f32` on the driver keeps exact f32 sums, for comparing layouts bit for bit and for validation. The
@@ -189,59 +188,51 @@ A forward runs one of three ways:
 
 ```sh
 trashcan qwen-bench MODEL --tp --pp 512 --tg 128                       # this machine's GPUs
-trashcan qwen-tp-node MODEL --mtp MTP.gguf                             # the other machine (lanes on 0.0.0.0:7072)
-trashcan qwen-chat MODEL --mtp MTP.gguf --tp-connect invite.tb0:7072,invite.tb1:7072,invite.tb2:7072 "Hello"   # a lane per cable
+trashcan qwen-tp-node MODEL --mtp MTP.gguf                             # the other machine, mac1 (lanes on 0.0.0.0:7072)
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-connect mac1.tb0:7072,mac1.tb1:7072,mac1.tb2:7072 "Hello"   # mac0, a lane per cable
 # four machines (TP8): start the nodes, then the driver (machine 0). --peer M=ADDRESS,... names a higher machine this
-# one is cabled to (one address per cable), --peer M a lower one (it connects here). The cables of
-# results/qwen/tp8-mesh-20261009 (all six; without incite-indite and invite-enlight, the ring):
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 0 --peer 1 --peer 2                                   # indite
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0 --peer 1 --peer 3=indite.tb2:7072                  # enlight
-trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0 --peer 2=enlight.tb0:7072 --peer 3=indite.tb2:7072 # invite
-trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=invite.tb1:7072 --tp-peer 2=enlight.tb2:7072 --tp-peer 3=indite.tb0:7072 "Hello"   # incite
+# one is cabled to (one address per cable), --peer M a lower one (it connects here). Host macN is machine N; all six
+# cables (without mac0-mac3 and mac1-mac2, the ring):
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 3 --peer 0 --peer 1 --peer 2                                # mac3
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 2 --peer 0 --peer 1 --peer 3=mac3.tb2:7072                 # mac2
+trashcan qwen-tp-node MODEL --mtp MTP.gguf --machine 1 --peer 0 --peer 2=mac2.tb0:7072 --peer 3=mac3.tb2:7072   # mac1
+trashcan qwen-chat MODEL --mtp MTP.gguf --tp-peer 1=mac1.tb1:7072 --tp-peer 2=mac2.tb2:7072 --tp-peer 3=mac3.tb0:7072 "Hello"   # mac0
 ```
 
-Qwen3.8-27B as TP8 on incite, invite, enlight and indite ([results/qwen/tp8-20261007](../results/qwen/tp8-20261007/)):
-204 tok/s prefill (512-token prompts; 197 at 2048), 35.0 tok/s decode and 46.0 with MTP, against TP4's 149 / 28.3 /
-38.6 measured the same day over the one incite-invite cable now left (three cables gave 150 / 28.4 / 39.5). It
+`macN.tbB` names the peer on Thunderbolt bus B, as `tblink` assigns them.
+
+Qwen3.8-27B as TP8 on four Mac Pros: 204 tok/s prefill (512-token prompts; 197 at 2048), 35.0 tok/s decode and
+46.0 with MTP, against TP4's 149 / 28.3 / 38.6 on two Macs over one cable (150 / 28.4 / 39.5 over three). It
 matches the CPU reference to 4.0e-4 with the same greedy tokens, and `qwen-check` (with and without drafting) and
 `scripts/test-server.py` pass. Each GPU allocates 2.3 GiB. A decode step spends about 19-20 ms on the GPUs and
-7.5 ms in exchanges. With the f16 payload it decodes at 36.2 tok/s and 47.0 with MTP, 6.6 ms in exchanges
-([results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)). With all six cables (full mesh,
-[results/qwen/tp8-mesh-20261009](../results/qwen/tp8-mesh-20261009/README.md)) it decodes at 37.2 tok/s and 50.1 with
-MTP, 6.0 ms in exchanges, and prefills at 211 tok/s (204 at 2048). Round 2 of the kernel work
-([results/qwen/tp8-round2-20261009](../results/qwen/tp8-round2-20261009/README.md): two rows per wave in the decode
-projections, one state row per wave in the DeltaNet recurrence, a two-key attention partial and an unrolled merge,
-all bit for bit the old kernels) takes decode to 40.7 tok/s (17.3 ms on the GPUs) and MTP to 52.0; without rounding
-the decode totals (`TRASHCAN_TP_ROUND=0`, so a decode row and the same column of a verification batch no longer agree
-bit for bit) decode reaches 42.2. Prefill-sized all-reduces use
-reduce-scatter and all-gather (3/4 of the bytes per cable) and are limited by the cables' bandwidth, about 0.5 GB/s
-each way when a cable carries both directions.
+7.5 ms in exchanges. With the f16 payload it decodes at 36.2 tok/s and 47.0 with MTP, 6.6 ms in exchanges. With all
+six cables (full mesh) it decodes at 37.2 tok/s and 50.1 with MTP, 6.0 ms in exchanges, and prefills at 211 tok/s
+(204 at 2048). The second round of kernel work (two rows per wave in the decode projections, one state row per wave
+in the DeltaNet recurrence, a two-key attention partial and an unrolled merge, all bit for bit the old kernels) takes
+decode to 40.7 tok/s (17.3 ms on the GPUs) and MTP to 52.0; without rounding the decode totals
+(`TRASHCAN_TP_ROUND=0`, so a decode row and the same column of a verification batch no longer agree bit for bit)
+decode reaches 42.2. Prefill-sized all-reduces use reduce-scatter and all-gather (3/4 of the bytes per cable) and are
+limited by the cables' bandwidth, about 0.5 GB/s each way when a cable carries both directions.
 
-Qwen3.8-27B on incite and invite (four D700s; [results/qwen/tp-merged-20261006](../results/qwen/tp-merged-20261006/),
-which builds on [tp-20261006](../results/qwen/tp-20261006/), [tp-decode-20261006](../results/qwen/tp-decode-20261006/)
-and [tp-prefill-20261006](../results/qwen/tp-prefill-20261006/)): TP4 matches the CPU reference to 4.1e-4 with the
-same greedy tokens, and runs at 150 tok/s prefill (512-token prompts; 134 at 2048) and 28.4 tok/s decode over
-USB4STREAM, against 38 / 9.6 for the four-stage pipeline. The 9B gets 269 / 46 with TP2 on one Mac against 127 / 23.
-A 27B decode token takes 35 ms: 29-30 ms on the GPUs (invite's run streaming kernels 5-7% slower than incite's at the
-same clocks, so they pace the exchanges) and 4-5.5 ms in the 128 cross-Mac exchanges. With MTP drafting (the block
-split like a trunk layer, each rank holding an equal share of the draft vocabulary's head rows) the 27B decodes at
-39.5 tok/s on the two Macs and the 9B at 66 on one, 71-72% of drafts accepted; `qwen-check` passes on TP with and
-without drafting. Over the one incite-invite cable left since the TP8 cabling, the f16 payload (the default) decodes
-at 28.5 tok/s and 39.2 with MTP, against 28.2 and 38.4 with `TRASHCAN_TP_WIRE=f32` (+1.1% and +2.1%, 0.4-0.6 ms less
-exchange per token, prefill unchanged), with the reference's greedy tokens and `qwen-check` passing
-([results/qwen/tp4-wire-20261009](../results/qwen/tp4-wire-20261009/README.md)). The 27B prefill is paced by the
-slower Mac's host work and varies from one session to the next (142-151 tok/s; run back to back, the prefill
-branch's binary gives the same or 1-2% less). `trashcan serve` takes
-the same `--tp` options and passes `scripts/test-server.py` that way; `qwen-tp-node` waits for the next request
-without a deadline and ends a session only when the driver says goodbye or closes the lanes.
+Qwen3.8-27B on two Mac Pros (four D700s): TP4 matches the CPU reference to 4.1e-4 with the same greedy tokens, and
+runs at 150 tok/s prefill (512-token prompts; 134 at 2048) and 28.4 tok/s decode over USB4STREAM, against 38 / 9.6
+for the four-stage pipeline. The 9B gets 269 / 46 with TP2 on one Mac against 127 / 23. A 27B decode token takes
+35 ms: 29-30 ms on the GPUs (one Mac's GPUs ran streaming kernels 5-7% slower than the other's at the same clocks, so
+they pace the exchanges) and 4-5.5 ms in the 128 cross-Mac exchanges. With MTP drafting (the block split like a trunk
+layer, each rank holding an equal share of the draft vocabulary's head rows) the 27B decodes at 39.5 tok/s on the two
+Macs and the 9B at 66 on one, 71-72% of drafts accepted; `qwen-check` passes on TP with and without drafting. Over
+one cable, the f16 payload (the default) decodes at 28.5 tok/s and 39.2 with MTP, against 28.2 and 38.4 with
+`TRASHCAN_TP_WIRE=f32` (+1.1% and +2.1%, 0.4-0.6 ms less exchange per token, prefill unchanged), with the reference's
+greedy tokens and `qwen-check` passing. The 27B prefill is paced by the slower Mac's host work and varies from run
+to run (142-151 tok/s). `trashcan serve` takes the same `--tp` options and passes
+`scripts/test-server.py` that way; `qwen-tp-node` waits for the next request without a deadline and ends a session
+only when the driver says goodbye or closes the lanes.
 
-Benchmarks hold the performance governor and a 0 µs CPU latency request (`scripts/latency-run.py`) on both Macs,
-the node included. Without the request on the node, a decode token's cross-Mac exchanges take about 7.4 ms instead
-of 4.1 (27B decode 26.0 instead of 28.4 tok/s); the first TP4 record (16.6 tok/s, 26 with MTP) was measured that
-way, and the same binary gives 18.7 / 28.6 with the request (note in [tp-20261006](../results/qwen/tp-20261006/)).
-MTP runs back to back heat invite's first D700 past 90 °C, where it throttles and the exchanges stretch (TP4 with MTP
-fell from 39 to 31.5 tok/s over six runs); cooling every card to 55 °C before each run keeps it below 80 °C
-([results/qwen/tp4-wire-20261009](../results/qwen/tp4-wire-20261009/README.md)).
+Benchmarks hold the performance governor and a 0 µs CPU latency request (`scripts/latency-run.py`) on every Mac,
+the nodes included. Without the request on the node, a decode token's cross-Mac exchanges take about 7.4 ms instead
+of 4.1 (27B decode 26.0 instead of 28.4 tok/s). Back-to-back MTP runs can heat a D700 past 90 °C, where it throttles
+and the exchanges stretch (TP4 with MTP fell from 39 to 31.5 tok/s over six runs); cooling every card to 55 °C before
+each run keeps it below 80 °C.
 
 Measurement switches (per process: give the node the same ones; the thread count travels with each forward).
 Prefill uses two micro-batches for batches of at least 128 tokens and one otherwise:
@@ -258,18 +249,17 @@ Prefill uses two micro-batches for batches of at least 128 tokens and one otherw
   micro-batch's rows for prefill), `tools/tp_timeline.py` one decode step. `qwen-bench` then also reports the
   prefill's GPU time per kernel and local rank (`pp_profile`, from the dispatch stamps).
 
-The TP8 optimization round of 2026-10-08 ([tp8-optimization.md](tp8-optimization.md), measured in
-[results/qwen/tp8-opt-20261008](../results/qwen/tp8-opt-20261008/README.md)) left the f16 payload: decode 3.6% and
-MTP 2.1% faster; in prefill-sized all-reduces it was 5% slower, so those stay f32. Its kernels (decode attention for
-all query heads of a KV head per wave, wave-local top-k barriers, fused FFN and DeltaNet convolution, more rows per
-wave for short rows) gave the bits they claimed on the D700s but ran slower than the kernels they replaced, and the
-fused host pass was slower too; all were removed. Round 2 (2026-10-09) went the other way on the projections: fewer
-rows per wave, so a shard's dispatch spreads over the CUs (`qwen-matvec-bench` measures such geometries on a D700);
+The f16 payload makes TP8 decode 3.6% and MTP 2.1% faster; in prefill-sized all-reduces it was 5% slower, so those
+stay f32. Kernels tried for TP8 and dropped (decode attention for all query heads of a KV head per wave, wave-local
+top-k barriers, fused FFN and DeltaNet convolution, more rows per wave for short rows) gave the same bits on the D700s
+but ran slower than the kernels they would have replaced, and so did a fused host pass. What helped on the
+projections was the opposite: fewer rows per wave, so a shard's dispatch spreads over the CUs (`qwen-matvec-bench`
+measures such geometries on a D700);
 its exchange instrumentation (`tg_tp_ms`: `encode`, `decode`, `wire`, `sent`, `first`) shows a decode all-reduce
 spending 10 µs issuing its three sends, 18 µs until the first byte and 34 µs on the wire, where the wait is for the
 slowest machine's segment rather than for syscalls (a worker thread per cable did not help). Verification batches
 are bound by the three-column kernels' 64 VGPRs (4 waves per SIMD, so a 2176-row shard needs a second round of
-waves): the next lever for MTP.
+waves), which limits MTP.
 
 `TRASHCAN_QWEN_ADAPTIVE_MTP=1` on the driver compares completed-round
 costs and periodically probes serial versus fixed-depth MTP. It resets per generation and can change seeded
@@ -277,8 +267,6 @@ sampled output when timings change. It remains optional: the Chinese fixture imp
 the code fixture showed no consistent gain. Speculative decoding caps drafts near
 the output limit, leaving the final sampled token unprocessed; this can also change sampled RNG sequences.
 The short-output checks used 22% fewer target columns and 33% fewer drafts with identical greedy outputs.
-See the [hardware measurements](../results/qwen/hardware-20261007/README.md) and
-[retired experiments](../results/qwen/cleanup-20261007/README.md).
 
 Prefill projections use `gemm2`, `gemm` with conflict-free weight-tile reads and the next block loaded ahead: 3-6%
 faster, identical results. `qwen_matf32` (the DeltaNet alpha/beta projection) has two variants with the same sums:
@@ -286,8 +274,7 @@ faster, identical results. `qwen_matf32` (the DeltaNet alpha/beta projection) ha
 in, 80 more values per lane in registers, a 9B prefill was 4% slower). `trashcan qwen-gemm-bench --shapes ROWSxK,...`
 times Q4_0 GEMM kernels and checks variants against `gemm` bit for bit.
 
-The decision to use TP across Macs came from `trashcan allreduce-bench`
-([results/qwen/tp4-viability-20261006](../results/qwen/tp4-viability-20261006/)): a cross-Mac all-reduce costs
+`trashcan allreduce-bench` measures the exchange that TP across Macs depends on: a cross-Mac all-reduce costs
 about 104 µs over USB4STREAM and 138 µs over TCP. A prefill all-reduce (10 MiB per 512-token chunk) costs about
 21.6 ms there; prefill now runs it beside the GPU work (above).
 
@@ -335,7 +322,7 @@ trashcan qwen-node MODEL --listen 0.0.0.0:7070 --mtp MTP.gguf
 The cost model is `tok/s = (1 + a1 + a1 a2 + ...) / (T_verify(k + 1) + k T_draft)` with `a_i` the
 acceptance rate of draft i given the previous ones. On the D700s the multi-column Q4_0 kernels make
 verification grow quickly with width (see Measured), so two drafts win: three cost more than the third
-draft's acceptance returns. `results/qwen/spec-20261006/` holds the sweeps.
+draft's acceptance returns (`scripts/qwen-spec-sweep.sh` runs the sweep).
 
 ## Prefix reuse
 
@@ -371,10 +358,9 @@ values of string-typed parameters stay text, others are parsed as JSON. Tool res
 messages. `reasoning.effort` selects Qwen3.8's template `reasoning_effort` (low; medium; xhigh for high and
 above). `scripts/test-server.py` passes against Qwen3.5-9B on the GPUs with MTP drafting.
 
-## Measured (incite, 2026-10-06)
+## Measured (pipeline stages, 2026-10-06)
 
-Kernel 7.2.9-p2p, schedutil with turbo, sustained 850/1370 MHz on both cards, `scripts/latency-run.py`.
-Reports and clocks: [results/qwen/bringup-20261006](../results/qwen/bringup-20261006/).
+One Mac Pro 6,1 (2x D700), schedutil with turbo, sustained 850/1370 MHz on both cards, `scripts/latency-run.py`.
 
 | run | result |
 |---|---|
@@ -383,18 +369,18 @@ Reports and clocks: [results/qwen/bringup-20261006](../results/qwen/bringup-2026
 | Qwen3.5-9B pp2048 / tg32 | 120.8 / 21.9 tok/s |
 | Qwen3.8-27B, CPU layers 0-30 -> GPU node 30-48, 48-64 + head over TCP | matches llama.cpp CPU (logits rel 3.3e-2, same 10 greedy tokens) |
 
-The 27B run is a correctness check: incite alone lacks the VRAM, so its first 30 layers ran on the CPU
+The 27B run is a correctness check: one Mac alone lacks the VRAM, so its first 30 layers ran on the CPU
 reference path. With a second Mac, the same command uses that Mac's GPUs instead
-(`--nodes MAC2:7070`, no `--cpu`). Per-GPU allocation was 4.2 GiB (18 layers) and 5.1 GiB (16 layers +
+(`--nodes mac1:7070`, no `--cpu`). Per-GPU allocation was 4.2 GiB (18 layers) and 5.1 GiB (16 layers +
 head), so two Macs fit the 27B at 16 layers per GPU with room for context.
 
-Decode at 48% of the bandwidth ceiling is the starting point, not a tuned result. The obvious costs:
-the host relay between stages, one fence wait per stage, unfused norms and the scalar attention kernels.
+Decode at 48% of the bandwidth ceiling is an untuned pipeline; the main costs are the host relay between stages,
+one fence wait per stage, unfused norms and the scalar attention kernels. Tensor parallelism (above) is the faster
+layout.
 
-### Rollback, MTP and prefix reuse (incite, 2026-10-06)
+### Rollback, MTP and prefix reuse (2026-10-06)
 
-Same machine and clocks (850/1370 MHz sustained). Reports, outputs and clock logs:
-[results/qwen/spec-20261006](../results/qwen/spec-20261006/).
+Same machine and clocks (850/1370 MHz sustained).
 
 | check | result |
 |---|---|
@@ -441,29 +427,20 @@ text is identical to the run without reuse. A 5866-token prompt edited near its 
 interval checkpoint and prefills 1770 tokens. Qwen3.8-27B with thinking on (CPU path, two short turns)
 reuses the whole first turn, reasoning included: 100 of 118 tokens.
 
-## Building
+## Qwen3.8-Flash-Next (`qwen4exp`)
 
-`scripts/cross-build.sh [DEST]` builds in the `kbuild` lima VM (aarch64 Debian 13 with an x86_64 cross
-toolchain and the same glibc as incite) in about 10 s and copies the binary to incite, keeping compile
-load off the benchmark machine. GPU runs on incite go through gpuq leases (`ssh incite 'gpuq run ID -- CMD'`, see AGENTS.md),
-which holds `~/trashcan-exp/.lock` and records clocks.
-
-## Next: Qwen3.8-Flash-Next (`qwen4exp`)
-
-This was the plan; the implementation (`engine/src/qwen4/`), measurements and recipes are in
-[qwen4.md](qwen4.md).
-
-Shared with what exists: tokenizer, Gated DeltaNet (with a sigmoid output gate instead of SiLU and 48
-value heads), the gated attention projections, partial RoPE, the Q6 head and the machine chain. New:
+The implementation (`engine/src/qwen4/`), measurements and recipes are in [qwen4.md](qwen4.md). It shares the
+tokenizer, Gated DeltaNet (with a sigmoid output gate instead of SiLU and 48 value heads), the gated attention
+projections, partial RoPE, the Q6 head and the machine chain with the models above. New:
 
 - **Gated residual (4 streams, rank 320)** replaces every norm. Before each sublayer, a mixer RMS-norms
   each stream, computes an element-wise read gate through a 10240 -> 320 -> 10240 bottleneck and a
   per-stream write gate; after it, each stream adds `gate_s * output`. The stage boundary payload becomes
   the 4 x 2560 residual (40 KiB per token). There are 97 mixers per token, about 10% of active weights,
-  each two dependent GEMVs, so fusing is worth it.
+  each two dependent GEMVs, so they are fused.
 - **N-gram embedding at `blk.1`**: two hashes of the previous one and two tokens select 16 rows of 160
   from a 320M-row table (51B parameters; about 29 GB at Q4_0 or 54 GB at Q8_0, 32-element blocks
-  because 160 is not a multiple of 256). It belongs on the driver's CPU next to the token embedding:
+  because 160 is not a multiple of 256). It lives on the driver's CPU next to the token embedding:
   hash, gather, upload 10 KiB. A key/value gate and a dilated width-4 convolution (9 x 10240 f32 of
   history) then run on the GPU.
 - **MoE**: softmax router over 512 experts, top 10 renormalized, plus a sigmoid-gated shared expert,
@@ -472,17 +449,9 @@ value heads), the gated attention projections, partial RoPE, the Q6 head and the
 - **Qwen Sparse Attention**: 24 Q / 2 KV heads with a 4-head, 128-wide indexer over 4-token pooled keys.
   Up to 2051 visible tokens every block is selected, so attention is exactly dense there (still caching
   raw and pooled indexer keys); beyond that, top 512 blocks plus the tail.
-- **MTP** layer: a full QSA layer with its own experts; it needs rollback snapshots of every recurrent
-  state, as speculative decoding does here generally.
+- **MTP** layer: a full QSA layer with its own experts.
 
-Placement keeps every layer's experts on the stage that owns the layer, so routing never crosses a
-machine. 48 layers divide into 8 per Mac on six Macs and 12 on four. VRAM is the binding constraint:
-about 72 GB on six Macs against roughly 68 GB of Q4_0 experts plus 2.5 GB of resident weights, KV and
-state. Six Macs therefore need experts near 4 bits per weight with little slack, and four Macs need about
-2.5-3 bits, or experts left in host RAM with a GPU cache of hot experts. The M3 Ultra (512 GB) holds
-the whole model in llama.cpp, so the first step is the same as for Qwen3.8-27B: a CPU reference checked
-against llama.cpp, then GPU stages checked layer by layer against it.
-
-Measured since: the dense matrices need Q8_0 (all of them at Q4_0 cost KLD 0.20 against 0.04 for Q4_0 experts),
-IQ4_XS/IQ4_NL experts fit six Macs once the head is spread over the GPUs, and 2-bit experts cost KLD 0.21, so four
-Macs are better served by experts in host RAM with a VRAM cache.
+Placement keeps every layer's experts on the stage that owns the layer, so routing never crosses a machine. VRAM is
+the binding constraint: the dense matrices need Q8_0 (all of them at Q4_0 cost KLD 0.20 against 0.04 for Q4_0
+experts), IQ4_XS/IQ4_NL experts fit six Macs once the head is spread over the GPUs, and 2-bit experts cost KLD 0.21,
+so four Macs would be better served by experts in host RAM with a VRAM cache.

@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""GPU cancellation regression on one leased Mac Pro, with a model that fits TP2.
+"""GPU cancellation regression on one Mac Pro, with a model that fits TP2 (Qwen3.5-9B).
 
-Run through gpuq run, with with-clocks.sh and latency-run.py around this script.
+Compares a candidate binary with a baseline. Make sure nothing else is using the GPUs; run with with-clocks.sh and
+latency-run.py around this script. Needs passwordless sudo to set the CPU governor.
 Tests signals, active event/timeline gates, failed peer I/O, and normal output.
 """
 import argparse
@@ -20,9 +21,9 @@ import urllib.request
 p = argparse.ArgumentParser(description=__doc__)
 p.add_argument('--candidate', default='./candidate')
 p.add_argument('--baseline', default='./baseline')
-p.add_argument('--model', default='/home/fairfieldt/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf')
-p.add_argument('--mtp', default='/home/fairfieldt/models/qwen3.5-9b/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf')
-p.add_argument('--out', default='results')
+p.add_argument('--model', default=str(Path.home() / 'models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf'))
+p.add_argument('--mtp', default=str(Path.home() / 'models/qwen3.5-9b/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf'))
+p.add_argument('--out', default='qwen-shutdown-results')
 a = p.parse_args()
 out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
 candidate, baseline = str(Path(a.candidate).resolve()), str(Path(a.baseline).resolve())

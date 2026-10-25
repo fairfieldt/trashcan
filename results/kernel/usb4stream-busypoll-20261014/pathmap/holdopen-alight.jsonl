@@ -1,1 +1,0 @@
-{"step": "holdopen", "host": "alight", "secs": 15.6, "devs": [{"dev": "/dev/tbstream0", "opened": true, "open_ms": 0.6, "bytes": 0, "eofs": 0, "errors": {}, "close_ms": 504.2}, {"dev": "/dev/tbstream1", "opened": true, "open_ms": 0.6, "bytes": 0, "eofs": 0, "errors": {}, "close_ms": 527.8}]}

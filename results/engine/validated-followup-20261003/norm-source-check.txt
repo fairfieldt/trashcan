@@ -1,1 +1,0 @@
-PASS: all 38 norm-only source hashes reproduced; 5 changed files relative to 82e559f saved under tested-source/norm/.

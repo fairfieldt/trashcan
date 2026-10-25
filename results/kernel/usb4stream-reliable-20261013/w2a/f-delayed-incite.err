@@ -1,7 +1,0 @@
-link: waiting for inflight.tb0:7075 (Connection refused (os error 111))
-link inflight (inflight.tb0:7075): stream epoch 3d744d22 not opened (no answer on the stream)
-link inflight (inflight.tb0:7075): stream up (0-3.1/trashcan /dev/tbstream0), epoch 3d744d23
-link-test: {"path":"stream","t":2.517,"unix":1792004000.976871,"was":"tcp"}
-link-test: {"i":0,"ms":3613.460607,"path":"stream","slow":"chain","t":3.628,"unix":1792004002.10219}
-link inflight (inflight.tb0:7075): stream down (the other side gave the stream up); continuing over TCP
-link-test: {"path":"tcp","t":3.642,"unix":1792004002.1026819,"was":"stream"}

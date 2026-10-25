@@ -1,5 +1,0 @@
-Remember the word orchid. Reply only with that word.
-What word did I ask you to remember? Reply only with that word.
-/reset
-Say hello in English.
-/quit

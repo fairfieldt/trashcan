@@ -362,7 +362,7 @@ enum Cmd {
         #[arg(long, default_value_t = 1)]
         machine: usize,
         /// MACHINE=HOST:PORT[,HOST:PORT...] for each higher machine this one is cabled to (one address per cable,
-        /// e.g. 3=indite.tb0:7072), MACHINE for each lower one. Four machines need the cables 0-1, 2-3, 0-2 and 1-3.
+        /// e.g. 3=mac3.tb0:7072), MACHINE for each lower one. Four machines need the cables 0-1, 2-3, 0-2 and 1-3.
         #[arg(long)]
         peer: Vec<String>,
         #[arg(long, value_delimiter = ',')]
@@ -439,11 +439,11 @@ struct QwenRun {
     #[arg(long)]
     tp: bool,
     /// The other machine of the tensor-parallel group (`trashcan qwen-tp-node`): one address per cable, e.g.
-    /// invite.tb0:7072,invite.tb1:7072. Each lane moves to its cable's USB4STREAM when both machines have it.
+    /// mac1.tb0:7072,mac1.tb1:7072. Each lane moves to its cable's USB4STREAM when both machines have it.
     #[arg(long, value_delimiter = ',')]
     tp_connect: Vec<String>,
     /// A group of 2, 4 or 8 machines: MACHINE=HOST:PORT[,HOST:PORT...] for each machine this one (machine 0) is
-    /// cabled to, e.g. --tp-peer 1=invite.tb1:7072 --tp-peer 2=enlight.tb0:7072 (see `qwen-tp-node --peer`).
+    /// cabled to, e.g. --tp-peer 1=mac1.tb1:7072 --tp-peer 2=mac2.tb0:7072 (see `qwen-tp-node --peer`).
     #[arg(long)]
     tp_peer: Vec<String>,
 }

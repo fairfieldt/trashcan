@@ -1,3 +1,0 @@
-plan: [[(0, 64)]]
-prefill: 65 tokens (0 reused), 1.23 tok/s; decode: 35 tokens, 0.37 tok/s
-prefill: 118 tokens (100 reused), 1.09 tok/s; decode: 45 tokens, 0.37 tok/s

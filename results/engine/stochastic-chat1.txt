@@ -1,9 +1,0 @@
-To understand how a Transformer generates text (like ChatGPT), it helps to imagine the AI not as a "writer" who understands feelings, but as a **hyper-advanced autocomplete engine** that is incredibly good at predicting the next "piece" of a puzzle.
-
-Here is the step-by-step journey of how a Transformer turns a prompt into a response.
-
----
-
-### Step 1: Turning Words into Numbers (Tokenization & Embedding)
-Computers cannot read letters; they can only process numbers. 
-*   **Tokenization:** First, the model breaks your sentence into small chunks called "tokens." These can

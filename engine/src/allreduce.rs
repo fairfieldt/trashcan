@@ -86,7 +86,7 @@ pub struct Options {
     /// Local GPUs.
     #[arg(long, value_delimiter = ',', default_value = "0,1")]
     pub gpus: Vec<usize>,
-    /// Start a session with the other machine: one address per cable, e.g. invite.tb0:7071,invite.tb1:7071. Each
+    /// Start a session with the other machine: one address per cable, e.g. mac1.tb0:7071,mac1.tb1:7071. Each
     /// lane moves to the cable's USB4STREAM when both machines have it (link/).
     #[arg(long, value_delimiter = ',')]
     pub connect: Vec<String>,

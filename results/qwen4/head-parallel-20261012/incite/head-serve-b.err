@@ -1,3 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-server up after 98 s
-[clocks] 527 samples card0 (02:00.0) sclk/mclk: 850/1370 x207 300/150 x320  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x193 300/150 x334  max 48C  log=results/clocks/head-serve-b.txt

@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
-qwen4 node: session from 10.99.38.18:41820
-qwen4 node: session ended: connecting to enlight.tb0:7071: Connection refused (os error 111)
-[clocks] 28 samples card0 (02:00.0) sclk/mclk: 300/150 x28  max 56C card1 (06:00.0) sclk/mclk: 300/150 x28  max 55C  log=results/clocks/node-ac-pp8192-chk-invite.txt

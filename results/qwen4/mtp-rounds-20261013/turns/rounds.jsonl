@@ -1,6 +1,0 @@
-{"depth": 3, "rounds": 52, "tokens": 128, "tokens_per_round": 2.4615384615384617, "vocab": 65536, "window": 2}
-{"depth": 3, "rounds": 48, "tokens": 128, "tokens_per_round": 2.6666666666666665, "vocab": 65536, "window": 8}
-{"depth": 3, "rounds": 49, "tokens": 128, "tokens_per_round": 2.6122448979591835, "vocab": 65536, "window": 16}
-{"depth": 3, "rounds": 50, "tokens": 128, "tokens_per_round": 2.56, "vocab": 65536, "window": 32}
-{"depth": 3, "rounds": 50, "tokens": 128, "tokens_per_round": 2.56, "vocab": 65536, "window": 64}
-{"depth": 3, "rounds": 48, "tokens": 128, "tokens_per_round": 2.6666666666666665, "vocab": 65536, "window": 128}

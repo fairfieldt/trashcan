@@ -1,6 +1,0 @@
-[15:39:15] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/probe-20261014-153915; enlight connects, incite accepts; 10 opens per direction and 0 churn sessions per setting
-[15:39:16]   enlight 7.3.0-rc7-p2p-s3 /dev/tbstream1 <-> incite 7.3.0-rc7-p2p /dev/tbstream1; build d12fae10d15c
-[15:39:16] s1. as-it-is
-[15:40:05]   pos: client enlight: fillers into the other end, per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; client incite: fillers into the other end, per open [[0], [0], [0], [0], [0], [0], [0], [0], [0], [0]]; 
-[15:40:54]   pp: client enlight: fillers per round trip, per open [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; client incite: fillers per round trip, per open [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]; 
-[15:40:54] done

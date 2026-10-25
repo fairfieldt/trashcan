@@ -1,2 +1,0 @@
-t sclk0 mclk0 temp0 sclk1 mclk1 temp1
-1791933740.704 850 1370 48 850 1370 47

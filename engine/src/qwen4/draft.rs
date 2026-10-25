@@ -1,5 +1,5 @@
 //! The MTP block on the driver's CPU, drafting tokens for speculative decoding (docs/qwen4.md, MTP). The GPUs have
-//! no room for it, so it runs on the driver's CPU (incite: 12-core Xeon E5-2697 v2, AVX without FMA) beside the
+//! no room for it, so it runs on the driver's CPU (a Mac Pro 6,1: 12-core Xeon E5-2697 v2, AVX without FMA) beside the
 //! chain. The math is `mtp::CpuMtp`'s; for speed the matrices are repacked at load into int8 or 4-bit codes with an
 //! f32 scale per 32 weights (Q8_0 stays Q8_0, IQ4_XS and IQ4_NL become IQ4_NL codes with per-32 scales), the
 //! activations are quantized to Q8_0 per 32 (as ggml's CPU backend does) and multiplied in int8 with SSSE3, and

@@ -1,3 +1,0 @@
-GPU0: layers 4..8
-GPU0: 5702.5 MiB allocated in 6.87 s; device-local heap 5703 of 5888 MiB used, budget 5868
-[clocks] 37 samples card0 (02:00.0) sclk/mclk: 850/1370 x29 650/1370 x2 450/1370 x1 300/150 x5  max 50C card1 (06:00.0) sclk/mclk: 850/1370 x30 300/150 x7  max 51C  log=results/dk2/s1/main-np.clk

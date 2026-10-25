@@ -1,6 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-allreduce: configuration done, token_ms {"max":37.91,"mean":37.49,"p50":37.46,"p90":37.68,"p99":37.91}
-allreduce: configuration done, token_ms {"max":48.45,"mean":37.34,"p50":36.64,"p90":37.14,"p99":48.45}
-allreduce: configuration done, token_ms {"max":42.97,"mean":39.19,"p50":38.94,"p90":39.3,"p99":42.97}
-allreduce: configuration done, token_ms {"max":15.63,"mean":14.15,"p50":14.12,"p90":14.24,"p99":15.63}
-[clocks] 80 samples card0 (02:00.0) sclk/mclk: 850/1370 x37 300/150 x43  max 63C card1 (06:00.0) sclk/mclk: 850/1370 x36 650/1370 x1 300/150 x43  max 68C  log=/home/fairfieldt/trashcan-exp/xmac/results/clocks/20261006T201457-137854.txt

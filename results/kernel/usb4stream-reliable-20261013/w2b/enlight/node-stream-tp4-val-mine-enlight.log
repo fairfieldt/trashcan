@@ -1,8 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 1, peers [], GPUs [0, 1]
-tp-node: session as machine 1, lanes to machines [(0, 1, "tcp")]
-link incite (10.99.20.17:41896): stream up (1-3.1/trashcan /dev/tbstream1), epoch 6aef9269
-GPU0: rank 2 of 4, 4341.7 MiB allocated
-GPU1: rank 3 of 4, 4341.7 MiB allocated
-tp-node: session ended: exchange with incite (10.99.20.17:41896): incite (10.99.20.17:41896) closed the link
-[clocks] 119 samples card0 (02:00.0) sclk/mclk: 850/1370 x119  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x119  max 59C  log=results/clocks/node-stream-tp4-val-mine-enlight.txt

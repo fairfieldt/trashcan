@@ -1,2 +1,0 @@
-link incite (10.99.21.1:47402): stream up (0-3.1/trashcan /dev/tbstream0), epoch 2da20d2a, 4.2 ms after the link started [18:17:36.975]
-link alight (alight.tb1:7071): stream up (1-3.1/trashcan /dev/tbstream1), epoch 3edc59d1, 5.9 ms after the link started [18:17:36.983]

@@ -1,5 +1,0 @@
-warmup: 0.429597s, first_delta=None, input=16 cached=0 output=1 response=resp_18daffe8bb47f38e28
-stochastic_first: 5.129418s, first_delta=None, input=47 cached=0 output=32 response=resp_18daffe8d44a2efb2a
-stochastic_repeat: 5.330942s, first_delta=0.4520313650027674, input=47 cached=0 output=32 response=resp_18daffea0665a5c52c
-greedy_first: 1.706765s, first_delta=None, input=47 cached=0 output=32 response=resp_18daffeb44a3da3e2e
-greedy_repeat: 1.714381s, first_delta=0.45922679100112873, input=47 cached=0 output=32 response=resp_18daffebab70c77d30

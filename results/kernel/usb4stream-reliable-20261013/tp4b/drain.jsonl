@@ -1,6 +1,0 @@
-{"step": "drain", "dev": "/dev/tbstream1", "bytes": 0, "eofs": 0, "close_ms": 517.2269209997467, "host": "enlight"}
-{"step": "drain", "dev": "/dev/tbstream1", "bytes": 0, "eofs": 1, "close_ms": 506.9021649997012, "host": "incite"}
-{"step": "drain", "dev": "/dev/tbstream1", "bytes": 0, "eofs": 1, "close_ms": 500.808469999356, "host": "incite"}
-{"step": "drain", "dev": "/dev/tbstream1", "bytes": 0, "eofs": 0, "close_ms": 531.4178230000834, "host": "enlight"}
-{"step": "drain", "dev": "/dev/tbstream1", "bytes": 0, "eofs": 0, "close_ms": 521.2418930004787, "host": "incite"}
-{"step": "drain", "dev": "/dev/tbstream1", "bytes": 48, "eofs": 0, "close_ms": 505.93078099973354, "host": "enlight"}

@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-server up after 3 s
-window serve-idle start 16:41:17
-window serve-idle end 16:41:30
-[clocks] 181 samples card0 (02:00.0) sclk/mclk: 850/1370 x151 300/150 x30  max 59C card1 (06:00.0) sclk/mclk: 850/1370 x151 300/150 x30  max 58C  log=results/clocks/host-serve-g2.txt

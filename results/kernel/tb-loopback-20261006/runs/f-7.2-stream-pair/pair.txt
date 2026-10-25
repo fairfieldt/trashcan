@@ -1,8 +1,0 @@
-== single
-stream chunk=1048576 seconds=10.00 sent=9.548 Gb/s received=9.547 Gb/s
-== two, same direction
-stream chunk=1048576 seconds=10.00 sent=4.786 Gb/s received=4.786 Gb/s
-stream chunk=1048576 seconds=10.00 sent=4.787 Gb/s received=4.787 Gb/s
-== two, opposite directions
-stream chunk=1048576 seconds=10.00 sent=8.229 Gb/s received=8.229 Gb/s
-stream chunk=1048576 seconds=10.00 sent=8.234 Gb/s received=8.234 Gb/s

@@ -1,6 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 4 ranks, 2 on this machine, the rest on the other
-GPU0: rank 0 of 4 + MTP, 4565.9 MiB allocated
-GPU1: rank 1 of 4 + MTP, 4565.9 MiB allocated
-Error: No such device or address (os error 6)
-[clocks] 242 samples card0 (02:00.0) sclk/mclk: 850/1370 x162 450/1370 x8 300/150 x67 450/150 x5  max 74C card1 (06:00.0) sclk/mclk: 850/1370 x148 450/1370 x9 300/150 x85  max 72C  log=results/clocks/final-corpus-mtp.txt

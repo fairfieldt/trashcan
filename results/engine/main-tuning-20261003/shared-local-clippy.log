@@ -1,3 +1,0 @@
-warning: trashcan@0.1.0: glslc missing; GPU execution needs a build on incite
-    Checking trashcan v0.1.0 (/Users/fairfieldt/dev/trashcan/engine)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.60s

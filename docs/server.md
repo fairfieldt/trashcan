@@ -144,16 +144,15 @@ JSON/SSE output, token limits, reasoning, request validation and a real tool-res
 Add `--sdk` when the OpenAI Python SDK is installed to validate every response and event against
 its schemas as well.
 
-Run `python3 scripts/bench-prefix-cache.py --url http://127.0.0.1:8000 --batch 128 --output results/prefix.json`
+Run `python3 scripts/bench-prefix-cache.py --url http://127.0.0.1:8000 --batch 128 --output prefix.json`
 against a server started with `--batch 128` for repeated prompts, cache-retention boundaries,
 sampler changes, long histories and tool continuations. Add `--cold` when the server uses
 `--no-prefix-cache`, or `--draft` when it uses an assistant. The report includes request bodies,
 latency, output, cache usage and correctness assertions for reproduction. Run the cold server
-first, then pass `--compare-cold results/prefix-cold.json` to the cached run to compare every
+first, then pass `--compare-cold prefix-cold.json` to the cached run to compare every
 corresponding response and latency. The report marks any output differences explicitly, including
 possible rounding changes when the drafter replays its final hidden row; `passed` records the
 protocol and cache-boundary checks, while `repeat_output_exact` and `cold_comparison_exact`
 record exact output equivalence separately.
 
-The protocol follows [OpenAI's Responses streaming events](https://developers.openai.com/api/docs/guides/streaming-responses),
-with `../ds4` as the local reference for serving and stateless tool replay.
+The protocol follows [OpenAI's Responses streaming events](https://developers.openai.com/api/docs/guides/streaming-responses).

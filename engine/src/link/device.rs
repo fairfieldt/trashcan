@@ -1,7 +1,7 @@
 //! USB4STREAM devices: finding the stream of the cable that carries a TCP connection, opening it for one link at a
 //! time, and closing it off the caller's thread.
 //!
-//! What the driver (drivers/thunderbolt/stream.c, 7.2.9 with kernel/patches-7.2/0005) does and the link relies on:
+//! What the driver (drivers/thunderbolt/stream.c with kernel/patches-7.3/0005) does and the link relies on:
 //! - a write is cut into frames of up to 4 KiB; every frame takes one slot of the other side's receive ring (256 by
 //!   default), and with no Tx flow control (0005) a frame that finds the ring full is lost or arrives damaged;
 //! - frames flagged with a CRC error or a buffer overrun are passed to the reader like good ones;

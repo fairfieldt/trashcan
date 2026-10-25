@@ -1,4 +1,0 @@
-tp: 4 ranks, 2 on this machine, the rest on the other
-GPU0: rank 0 of 4, 4289.7 MiB allocated
-GPU1: rank 1 of 4, 4289.7 MiB allocated
-[clocks] 113 samples card0 (02:00.0) sclk/mclk: 850/1370 x66 300/1370 x2 450/1370 x3 300/150 x41 450/150 x1  max 64C card1 (06:00.0) sclk/mclk: 850/1370 x46 450/1370 x17 300/150 x50  max 63C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/maxfan-chinese-plain-6/clocks.txt

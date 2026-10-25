@@ -1,6 +1,0 @@
-[lock acquired after 0s]
-governor schedutil no_turbo 0
-{"local_device_mib":[3001.365249633789,2866.874526977539],"plans":[[[0,21],[21,32]]],"pp":512,"pp_seconds":4.034022379,"pp_tok_s":126.92046595113845,"tg":128,"tg_seconds":5.620578673,"tg_tok_s":22.77345580356046}
-{"local_device_mib":[3001.365249633789,2866.874526977539],"plans":[[[0,21],[21,32]]],"pp":512,"pp_seconds":4.026495632,"pp_tok_s":127.1577189680657,"tg":128,"tg_seconds":5.616603394,"tg_tok_s":22.78957423569153}
-{"local_device_mib":[3001.365249633789,2866.874526977539],"plans":[[[0,21],[21,32]]],"pp":2048,"pp_seconds":16.947400496,"pp_tok_s":120.84449178405727,"tg":32,"tg_seconds":1.463942796,"tg_tok_s":21.858777602127017}
-[clocks] 335 samples card0 (02:00.0) sclk/mclk: 850/1370 x171 450/1370 x7 300/150 x157  max 57C card1 (06:00.0) sclk/mclk: 850/1370 x163 300/1370 x1 650/1370 x1 450/1370 x7 300/150 x160 450/150 x3  max 55C  log=/home/fairfieldt/trashcan-exp/qwen/results/clocks/20261006T135447-108036.txt

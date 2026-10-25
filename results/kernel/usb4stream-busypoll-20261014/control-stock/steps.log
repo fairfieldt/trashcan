@@ -1,6 +1,0 @@
-[15:30:29] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/probe-20261014-153029; incite connects, inflight accepts; 10 opens per direction and 0 churn sessions per setting
-[15:30:30]   incite 7.3.0-rc7-p2p /dev/tbstream0 <-> inflight 7.3.0-rc7-p2p /dev/tbstream0; build a1bffdbe3ef1
-[15:30:30] s1. as-it-is
-[15:31:24]   pp: client inflight: fillers per round trip, per open [2, 2, 2, 2, 2, 2, 2, 2, 2, 2]; 
-[15:37:27]   pos: client incite: fillers into the other end, per open [['none'], [2], [2], [2], [2], [2], [2], [2], [2], [2]]; 
-[15:37:27] done

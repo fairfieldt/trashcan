@@ -1,5 +1,0 @@
-[lock acquired after 0s]
-GPU1: layers 46..48 + head
-GPU1: 3698.7 MiB allocated; device-local heap 3699 of 5888 MiB used, budget 5760
-[clocks] 42 samples card0 (02:00.0) sclk/mclk: 300/150 x42  max 47C card1 (06:00.0) sclk/mclk: 850/1370 x27 450/1370 x2 300/150 x13  max 49C  log=/home/fairfieldt/trashcan-exp/qwen-flash/results/clocks/20261006T174057-568650.txt
-exit 0

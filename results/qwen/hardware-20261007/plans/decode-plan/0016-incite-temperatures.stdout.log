@@ -1,1 +1,0 @@
-{"unix": 1791407789.643037, "gpus": [{"card": "card0", "pci_device": "/sys/devices/pci0000:00/0000:00:02.0/0000:02:00.0", "sensor": "/sys/class/drm/card0/device/hwmon/hwmon1/temp1_input", "celsius": 61.0}, {"card": "card1", "pci_device": "/sys/devices/pci0000:00/0000:00:03.0/0000:06:00.0", "sensor": "/sys/class/drm/card1/device/hwmon/hwmon2/temp1_input", "celsius": 60.0}]}

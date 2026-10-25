@@ -1,2 +1,0 @@
-== moe-s4-dump-new-c3 vs moe-s4-dump-base-c3: 98 of 98 tensors identical
-   differing router/top-k tensors: 0 

@@ -13,14 +13,19 @@ import tempfile
 import unittest
 
 TBLINK = Path(__file__).resolve().parent.parent / 'nodes/macpro/root/usr/local/sbin/tblink'
-NODES = Path(__file__).resolve().parent.parent / 'nodes/macpro/tblink/nodes.tsv'
+# The fixture's nodes.tsv: mac0 is node 1 and mac2 node 3; the UUIDs are made up.
+MAC2_BUS0 = '00000000-0000-0008-0000-000000000300'
+NODES = ('# index, hostname, controller UUIDs by Apple bus\n'
+         '1\tmac0\t00000000-0000-0008-0000-000000000100\t00000000-0000-0008-0000-000000000101\t'
+         '00000000-0000-0008-0000-000000000102\n'
+         f'3\tmac2\t{MAC2_BUS0}\t00000000-0000-0008-0000-000000000301\t00000000-0000-0008-0000-000000000302\n')
 
 MOCKS = {
     'ip': '#!/bin/sh\n'
           'if [ "$1" = -4 ]; then cat "$MOCK_ROOT/ip-$6" 2>/dev/null; exit 0; fi\n'
           'echo "ip $*" >> "$MOCK_ROOT/calls"\n',
     'modprobe': '#!/bin/sh\necho "modprobe $*" >> "$MOCK_ROOT/calls"\nmkdir -p "$MOCK_ROOT/sys/module/thunderbolt_stream"\n',
-    'hostname': '#!/bin/sh\necho incite\n',
+    'hostname': '#!/bin/sh\necho mac0\n',
     'flock': '#!/bin/sh\nexit 0\n',
     # One pass of `tblink run`: the first sleep ends it.
     'sleep': '#!/bin/sh\nkill -TERM $PPID\n',
@@ -55,14 +60,14 @@ class Tblink(unittest.TestCase):
             (mock / name).write_text(text)
             (mock / name).chmod(0o755)
         (r / 'etc/tblink').mkdir(parents=True)
-        (r / 'etc/tblink/nodes.tsv').write_text(NODES.read_text())
+        (r / 'etc/tblink/nodes.tsv').write_text(NODES)
         (r / 'etc/hosts').write_text('127.0.0.1 localhost\n')
         (r / 'run').mkdir()
         (r / 'sys/module/thunderbolt').mkdir(parents=True)
         (r / 'sys/kernel/config/thunderbolt/stream').mkdir(parents=True)
         self.devs = r / 'sys/bus/thunderbolt/devices'
         self.devs.mkdir(parents=True)
-        # incite's bus 0 controller, domain 0 (NHI 16:00.0), and its own router 0-0.
+        # mac0's bus 0 controller, domain 0 (NHI 16:00.0), and its own router 0-0.
         nhi = r / 'sys/devices/pci/0000:16:00.0/domain0'
         nhi.mkdir(parents=True)
         (self.devs / 'domain0').symlink_to(nhi)
@@ -76,8 +81,8 @@ class Tblink(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def link(self, xd='0-3', peer_uuid='00000000-0000-0008-80ae-d3035011c250', stream_index=1, maxhopid=15, carrier=1):
-        """An XDomain link to indite's bus 0 controller, its network service and (with stream_index) the peer's
+    def link(self, xd='0-3', peer_uuid=MAC2_BUS0, stream_index=1, maxhopid=15, carrier=1):
+        """An XDomain link to mac2's bus 0 controller, its network service and (with stream_index) the peer's
         stream service."""
         d = self.devs / xd
         d.mkdir(exist_ok=True)
@@ -102,7 +107,7 @@ class Tblink(unittest.TestCase):
         net_dir = self.root / 'sys/class/net/thunderbolt0'
         net_dir.mkdir(parents=True, exist_ok=True)
         (net_dir / 'carrier').write_text(f'{carrier}\n')
-        # incite is node 1, indite node 3, both on bus 0: 10.99.19.1/30.
+        # mac0 is node 1, mac2 node 3, both on bus 0: 10.99.19.1/30.
         (self.root / 'ip-thunderbolt0').write_text('5: thunderbolt0    inet 10.99.19.1/30 scope global thunderbolt0\n')
 
     def run_pass(self):
@@ -127,7 +132,7 @@ class Tblink(unittest.TestCase):
         self.assertEqual((d / 'out_hopid').read_text().strip(), '15')
         self.assertIn('stream 0-3.1/trashcan, /dev/tbstream0', log)
         [row] = self.links()
-        self.assertEqual((row['peer'], row['state'], row['stream']), ('indite', 'up', '/dev/tbstream0'))
+        self.assertEqual((row['peer'], row['state'], row['stream']), ('mac2', 'up', '/dev/tbstream0'))
         # A second pass changes nothing.
         log = self.run_pass()
         self.assertNotIn('stream 0-3', log)
@@ -168,6 +173,15 @@ class Tblink(unittest.TestCase):
         self.assertEqual(self.cfg(), ['0-3.1', '0-3.1/trashcan'], log)
         self.assertNotIn('cannot set', log)
         self.assertEqual(self.links()[0]['stream'], '/dev/tbstream0')
+
+    def test_empty_table(self):
+        (self.root / 'etc/tblink/nodes.tsv').write_text('# index, hostname, controller UUIDs by Apple bus\n')
+        self.link()
+        log = self.run_pass()
+        self.assertEqual(self.cfg(), [], log)
+        self.assertNotIn('ip addr add', (self.root / 'calls').read_text() if (self.root / 'calls').exists() else '')
+        [row] = self.links()
+        self.assertEqual((row['peer'], row['state']), ('?', 'unknown'))
 
     def test_peer_without_hopid_15(self):
         self.link(maxhopid=12)

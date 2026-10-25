@@ -1,4 +1,0 @@
-tp: 4 ranks, 2 on this machine, the rest on the other
-GPU0: rank 0 of 4, 4441.7 MiB allocated
-GPU1: rank 1 of 4, 4441.7 MiB allocated
-[clocks] 151 samples card0 (02:00.0) sclk/mclk: 850/1370 x103 450/1370 x2 300/150 x46  max 74C card1 (06:00.0) sclk/mclk: 850/1370 x85 450/1370 x6 300/150 x60  max 72C  log=/home/fairfieldt/trashcan-exp/tp4-offline-20261007/results/hardware-20261007/base3-pp2048-h/clocks.txt

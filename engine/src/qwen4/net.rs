@@ -196,7 +196,7 @@ fn links_down(down: Option<&mut Conn>) -> Result<Vec<Value>> {
     Ok(all)
 }
 
-/// The links' transports by name (`{"incite->inflight": "stream", ...}`), also written to stderr in one line.
+/// The links' transports by name (`{"mac0->mac1": "stream", ...}`), also written to stderr in one line.
 pub fn link_summary(links: &[Value]) -> Value {
     let mut map = serde_json::Map::new();
     let mut line = Vec::new();

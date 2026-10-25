@@ -1,9 +1,0 @@
-    Finished `release` profile [optimized + debuginfo] target(s) in 0.14s
-     Running unittests src/main.rs (target/release/deps/trashcan-9ec54b64f59fe4fe)
-
-running 2 tests
-test qwen::gdn::tests::preparation_owns_every_element_once_and_preserves_values ... ok
-test qwen::gdn::tests::preparation_matches_f32_recurrence_and_microbatch_continuation ... ok
-
-test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 53 filtered out; finished in 0.02s
-

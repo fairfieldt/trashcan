@@ -1,6 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-Error: opening /dev/tbstream0
-
-Caused by:
-    Permission denied (os error 13)
-[clocks] 1 samples card0 (02:00.0) sclk/mclk: 300/150 x1  max 45C card1 (06:00.0) sclk/mclk: 300/150 x1  max 45C  log=results/clocks/slab-64-a.txt

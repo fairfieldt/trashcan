@@ -1,4 +1,0 @@
-{"release": "signal", "notify": "wait", "work_mib": 32}
-{"release": "signal", "notify": "poll", "work_mib": 32}
-{"release": "submit", "notify": "poll", "work_mib": 32}
-{"host_only": true, "tokens": 41, "width": 5120}

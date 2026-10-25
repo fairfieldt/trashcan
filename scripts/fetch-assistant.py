@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fetch the pinned assistant to the model directory; never use temporary directories."""
+"""Fetch the pinned Gemma 4 12B assistant to ~/models/gemma-4-12b-assistant and check its sizes and hashes."""
 import hashlib, json, pathlib, urllib.request
 REVISION = "18934064dd4c5c6cc3621f6381e7d377fc8cb7bd"
 EXPECTED = {

@@ -1,1 +1,0 @@
-[clocks] 34 samples card0 (02:00.0) sclk/mclk: 850/1370 x32 450/1370 x1 300/150 x1  max 48C card1 (06:00.0) sclk/mclk: 850/1370 x31 300/150 x3  max 48C  log=results/micro-clocks.txt

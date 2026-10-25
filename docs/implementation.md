@@ -1,15 +1,15 @@
 # Rust/Vulkan implementation
 
-The engine runs the target GGUF directly on incite's two D700s. It implements the full text forward pass,
+The engine runs the target GGUF directly on a Mac Pro's two D700s. It implements the full text forward pass,
 tensor-parallel decode, chunked prefill, independent tokenizer, embedded Jinja chat rendering, sampling,
 and the matched four-layer BF16 assistant. It has no runtime llama.cpp dependency.
 
 M1, M2 and M4 pass their acceptance checks. Decode bandwidth/speed (M3) and the required typical-chat
-speculative gain (M5) remain performance work; their original targets are retained in `engine-plan.md`.
+speculative gain (M5) remain performance work.
 
 ## Recorded acceptance
 
-The [norm/merge follow-up](../results/engine/validated-followup-20261003/README.md) at binary
+The norm/merge follow-up at binary
 `2682f29e` raises repeated tg256 from a fresh **23.32 to 28.72 tok/s (+23.16%)**, with pp512
 unchanged at about 161 tok/s. A single paired pp4096/tg128 run raises decode from 21.15 to
 26.39 tok/s (+24.78%), with prefill unchanged near 117 tok/s. Scalar load-hoisted fused norm
@@ -19,7 +19,7 @@ tests, tokenizer/chat fixtures, 10,000 P2P rounds, the 250-token partition bound
 1700-token ring-wrap/verification/rollback checks pass on that same final binary. This evidence
 is separate from the preceding server and prefix-cache measurements below.
 
-The preceding main-branch measurements are in `results/engine/main-tuning-20261003/`. Fixed-dimension
+In the preceding main-branch measurements, fixed-dimension
 shared-KV attention raises repeated tg256 from 22.78 to **23.42 tok/s (+2.8%)** against a freshly rerun
 shared-KV baseline; decode after 4096 input tokens rises from 20.55 to **21.36 tok/s (+3.9%)**.
 Its three ordinary chats improve 1.3–4.0%, with all twelve ordinary/MTP outputs matching exactly.
@@ -36,16 +36,15 @@ bounded execution-graph storage prevents the measured visible-VRAM allocation cl
 also passes 36 default-batch ordinary/MTP requests and both protocol suites, with peak observed
 visible VRAM below 256 MiB. M3 and M5 remain open.
 
-The preceding performance branch (`results/engine/performance-20261003/`) raised tg128 from 21.33
+The preceding performance branch raised tg128 from 21.33
 to 22.14 tok/s and reduced one-column top-64 selection from about 2.20 to 0.51 ms per GPU. The
 acceptance table below preserves the original implementation measurements.
 The final small-batch selector also improves eight-column Q4 verification to about 0.546 ms versus
 the original 0.945 ms in the FFN microbenchmark. Its seven-draft chat comparison and focused validation
 are recorded separately from the main benchmark table; the default remains three drafts.
 
-Incite, two D700s, kernel `6.12.111-p2p`, Mesa 25.0.7. Timed commands used the user-authorized temporary
-CPU latency request of 0. Raw outputs, clocks, source/binary hashes and JSON timings are under
-`results/engine/delivered-benchmark/`; `results/engine/summary.json` collects the measurements.
+Measured on one Mac Pro 6,1 (two D700s), Linux 6.12 with the D700 patches, Mesa 25.0.7. Timed commands used a
+temporary CPU latency request of 0 (`scripts/latency-run.py`).
 
 | measurement | result | acceptance |
 |---|---|---|
@@ -60,32 +59,32 @@ CPU latency request of 0. Raw outputs, clocks, source/binary hashes and JSON tim
 The paired chat runs use temperature 0 and three draft tokens. The combined gain divides total ordinary
 decode time by total speculative decode time. Rates are rounded in the CLI logs. Recorded clocks include
 850/1370 MHz during load, with maximum temperatures 84/82 C. Decode's median semaphore gaps are
-27.9/27.3 us on the recorded final schedule. The earlier direct PM QoS comparison is retained in
-`results/engine/latency-comparison.json` (123/133 us without the request versus 41/42 us with it).
+27.9/27.3 us on the recorded final schedule. In a direct PM QoS comparison they were 123/133 us without the
+latency request versus 41/42 us with it.
 
 The five reference paths pass all 132 tensors, logits and ten greedy tokens; worst relative activation
 error is 0.000982, below the 0.04 tolerance target. The streamed-P2P long check passes at 1700 tokens /
 batch 512: top-64 overlap 63, relative logit error 0.001761, identical 64-token serial/chunked greedy
 continuation, all verification columns, and speculative acceptance/rollback. Interactive history and
 `/reset` pass. The comparator rejects a nonfinite activation, and stochastic MTP is seeded/reproducible.
-CPU tests and local Clippy pass; incite's toolchain does not have the Clippy component installed.
+CPU tests and Clippy pass.
 
 The last selector adjustment uses the existing four-row kernel for two-token verification as well as
 three/four tokens: its two-token FFN microbenchmark is 41–49% faster than the one-row variant. The paired
-three-chat table above predates that adjustment; its dedicated reference/continuation results are stored
-separately. Ordinary pp512/tg128 use unchanged kernels. The original table's hashes are preserved.
+three-chat table above predates that adjustment; its reference/continuation checks were run
+separately. Ordinary pp512/tg128 use unchanged kernels.
 The two-token reference passes all 132 tensors, logits and ten greedy tokens. A one-draft photosynthesis
 run also produces the same 128-token continuation, at 22.89 tok/s; reducing draft length did not improve
 that workload, so the default remains three proposals.
 
 ## Build and run
 
-From this workspace, `scripts/sync.sh push` deploys source, tools, fixtures and docs to `incite:~/trashcan`.
-On incite:
+On the Mac Pro, running Debian 13 with the kernel from [kernel.md](kernel.md). The build needs Rust (stable),
+`glslc` and the Vulkan headers; without `glslc` it succeeds but GPU commands fail.
 
 ```sh
-cd ~/trashcan
-export PATH=$HOME/.cargo/bin:$PATH
+sudo apt install build-essential pkg-config mesa-vulkan-drivers vulkan-tools libvulkan-dev glslc
+curl -fsSL https://sh.rustup.rs | sh
 cargo build --release
 model=$HOME/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf
 assistant=$HOME/models/gemma-4-12b-assistant/model.safetensors
@@ -130,8 +129,8 @@ use a relative norm because accumulation order and f16 cache rounding differ bet
 For a focused check:
 
 ```sh
-target/release/trashcan validate "$model" results/engine/check --batch 15
-python3 tools/compare_activations.py results/engine/check results/reference-vulkan --check
+target/release/trashcan validate "$model" target/validation/check --batch 15
+python3 tools/compare_activations.py target/validation/check tests/reference-vulkan --check
 ```
 
 ## Measure
@@ -143,7 +142,7 @@ target/release/trashcan matvec-bench "$model" --tensor blk.0.attn_q.weight --ker
 target/release/trashcan attention-bench --tokens 768 --iterations 100
 target/release/trashcan attention-bench --tokens 8192 --partitions 64 --iterations 100
 target/release/trashcan topk-bench --batch 8
-target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --profile results/engine/bench.tsv
+target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --profile bench.tsv
 target/release/trashcan bench "$model" --pp 512 --tg 128 --batch 512 --draft "$assistant"
 ```
 
@@ -151,15 +150,15 @@ Bench emits JSON timings and assistant acceptance counts. The synthetic prefill 
 and decode intentionally continues through stop tokens. This measures kernels rather than typical-chat
 acceptance. Profile TSVs contain GPU durations and semaphore gaps for all 97 segments; the prefill
 profile uses a `.prefill.tsv` suffix. The JSON also separates CPU submission, fence wait and result reads.
-Use `scripts/clockmon.sh` alongside sustained runs. The user authorized a temporary CPU latency request
-of 0 for benchmarks. To measure it, prefix the engine command with
+Use `scripts/clockmon.sh` alongside sustained runs. Benchmarks use a temporary CPU latency request
+of 0. To measure with it, prefix the engine command with
 `sudo -n python3 scripts/latency-run.py`; the wrapper holds the request, runs the engine as the invoking
 user, and closes the request when it exits. Display-manager settings remain as configured.
 
 `scripts/bench-engine.sh` runs the microbenchmark, pp512/tg128, and three fixed 128-token greedy chats
 (technical explanation, educational explanation and Python CSV code) with and without MTP, checks that
 each chat output is identical, and records clocks, hardware and source hashes.
-It uses the authorized temporary latency request by default; set `TRASHCAN_CPU_LATENCY=0` to measure
+It uses the temporary latency request by default; set `TRASHCAN_CPU_LATENCY=0` to measure
 without it. The third argument selects the result directory.
 
 `matvec-bench` warms each GPU for 500 ms before measuring, so an idle D700 has time to ramp its clocks.
@@ -208,8 +207,7 @@ pass. This uses 195 MiB of P2P buffers at batch 512. `--cpu-reduce` instead uses
 staging: after each pair of fences, the CPU copies each partial to the peer's staging, then the next
 pre-recorded segment uploads and sums it.
 
-The current target measures **4556.1 MiB per GPU** at context 8192 / batch 512 in
-`results/engine/main-tuning-20261003/fixed-dim/decode-fixed-{1,2}.json`. The earlier fixed-32-partition build measured
+The current target measures **4556.1 MiB per GPU** at context 8192 / batch 512. The earlier fixed-32-partition build measured
 4552 MiB; increasing scratch capacity to 64 partitions adds 4.02 MiB. The assistant adds about 415 MiB,
 giving a calculated combined total of about 4971 MiB at that configuration.
 At context 32768 the calculated combined total is about 5355 MiB. Imports alias the peer allocations

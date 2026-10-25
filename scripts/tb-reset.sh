@@ -1,12 +1,12 @@
 #!/bin/bash
 # Reset the Thunderbolt controllers of several Macs together, so every link between them renegotiates at once (run from
-# this Mac). On every Mac: stop tblink, remove the stream groups, unload the Thunderbolt modules and reset the three
+# your workstation, with SSH and passwordless sudo on every Mac). On every Mac: stop tblink, remove the stream groups, unload the Thunderbolt modules and reset the three
 # NHIs; once all are done, load the modules on all of them within a second and start tblink again, which addresses the
 # links and creates their streams; then list each Mac's links. Resetting one Mac after another leaves its neighbours'
 # ends stale or on one lane; together they came back on two lanes, five links of six after one round and the last
-# after a second (results/qwen/tp8-mesh-20261009). A link still missing after two rounds needs its cable replugged.
+# after a second (four Macs, six cables). A link still missing after two rounds needs its cable replugged.
 # A process with a stream device open keeps thunderbolt_stream loaded, and the reset then fails on that Mac.
-# usage: tb-reset.sh HOST...      (e.g. tb-reset.sh incite invite enlight indite)
+# usage: tb-reset.sh HOST...      (e.g. tb-reset.sh mac0 mac1 mac2 mac3)
 set -uo pipefail
 [ "$#" -ge 1 ] || { echo 'usage: tb-reset.sh HOST...' >&2; exit 1; }
 unload='sudo systemctl stop tblink.service 2>/dev/null

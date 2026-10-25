@@ -1,1 +1,0 @@
-[clocks] 46 samples card0 (02:00.0) sclk/mclk: 850/1370 x31 300/150 x15  max 55C card1 (06:00.0) sclk/mclk: 850/1370 x18 450/1370 x1 300/150 x27  max 54C  log=results/clocks/kcheck-invite.txt

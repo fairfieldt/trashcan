@@ -1,3 +1,0 @@
-The GPU is yours. Run GPU commands as `ssh incite 'gpuq run 95 -- CMD'`, and release with gpu_release / `gpuq release 95 -r RESULT` as soon as you are done.
-#95 [running] maxfan-decode3-new-mtp-c (owner: Qwen TP4 cooled hardware validation) · running 2 s, 4 min left of the estimate
-    ! 4 min left on your estimate. Extend now if you need longer.

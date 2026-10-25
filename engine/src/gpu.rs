@@ -305,7 +305,7 @@ pub fn report() -> Result<()> {
 mod tests {
     #[test]
     fn pci_addresses_read_as_sysfs_names_them() {
-        // alight's two GPUs, and a Thunderbolt bridge.
+        // A Mac Pro 6,1's two GPUs, and a Thunderbolt bridge.
         assert_eq!(super::pci_address(0, 2, 0, 0), "0000:02:00.0");
         assert_eq!(super::pci_address(0, 6, 0, 0), "0000:06:00.0");
         assert_eq!(super::pci_address(0, 0x5c, 3, 0), "0000:5c:03.0");

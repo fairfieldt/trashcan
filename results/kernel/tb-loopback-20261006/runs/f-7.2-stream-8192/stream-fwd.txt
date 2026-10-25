@@ -1,3 +1,0 @@
-stream chunk=4096 seconds=10.00 sent=9.676 Gb/s received=9.676 Gb/s
-stream chunk=65536 seconds=10.00 sent=9.660 Gb/s received=9.660 Gb/s
-stream chunk=1048576 seconds=10.00 sent=9.652 Gb/s received=9.652 Gb/s

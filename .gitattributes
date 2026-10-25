@@ -1,2 +1,0 @@
-# Preserve captured CLI and model output verbatim, including trailing spaces.
-results/engine/**/*.txt whitespace=-blank-at-eol

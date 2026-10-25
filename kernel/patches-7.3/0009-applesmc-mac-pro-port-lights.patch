@@ -1,6 +1,6 @@
 applesmc: Mac Pro 6,1 port lights as LED class devices, and their SMC animations and power light.
 The SMC drives the 20 LEDs behind the I/O panel ("Lightshow") and lights them for 15 s on motion. Keys from the
-SMC firmware 2.20f18 (results/kernel/port-lights-20261018): LIT! manual mode, LInD per-LED level, LIEN motion
+SMC firmware 2.20f18: LIT! manual mode, LInD per-LED level, LIEN motion
 lighting, LIHD hold time, LIGO light up and animation (Hello, You Again), LSSB power light mode. Adds smc::<port>
 LEDs and port_lights, port_lights_motion, port_lights_hold_ms, port_lights_show and power_light on the applesmc
 device, documented in Documentation/ABI. 0010 adds port_lights_levels.

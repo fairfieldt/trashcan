@@ -1,7 +1,0 @@
-   Compiling log v0.4.34
-   Compiling httpdate v1.0.3
-   Compiling chunked_transfer v1.5.0
-   Compiling ascii v1.1.0
-   Compiling tiny_http v0.12.0
-   Compiling trashcan v0.1.0 (/home/fairfieldt/trashcan/engine)
-    Finished `release` profile [optimized + debuginfo] target(s) in 13.33s

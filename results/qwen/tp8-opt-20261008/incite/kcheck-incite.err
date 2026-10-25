@@ -1,1 +1,0 @@
-[clocks] 40 samples card0 (02:00.0) sclk/mclk: 850/1370 x30 300/150 x10  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x18 300/150 x22  max 47C  log=results/clocks/kcheck-incite.txt

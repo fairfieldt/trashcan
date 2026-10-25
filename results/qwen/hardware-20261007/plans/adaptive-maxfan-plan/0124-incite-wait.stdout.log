@@ -1,3 +1,0 @@
-The GPU is yours. Run GPU commands as `ssh incite 'gpuq run 110 -- CMD'`, and release with gpu_release / `gpuq release 110 -r RESULT` as soon as you are done.
-#110 [running] maxfan-chinese-adaptive-4 (owner: Qwen TP4 cooled hardware validation) · running 1 s, 4 min left of the estimate
-    ! 4 min left on your estimate. Extend now if you need longer.

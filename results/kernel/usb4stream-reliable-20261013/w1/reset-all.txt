@@ -1,3 +1,0 @@
-Read from remote host inflight.tdf.sh: Operation timed out
-client_loop: send disconnect: Broken pipe
-loading the modules failed on a Mac

@@ -1,5 +1,0 @@
-7.3.0-rc7-p2p-s2
-e644f89b9472 d13714e20bd7
-xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address	stream
-0-3	indite	0	0	2	up	thunderbolt0	10.99.54.2	10.99.54.1	/dev/tbstream0
-1-3	inflight	1	1	2	up	thunderbolt1	10.99.86.18	10.99.86.17	/dev/tbstream1

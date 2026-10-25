@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 2 ranks, 2 on this machine
-GPU0: rank 0 of 2, 3006.6 MiB allocated
-GPU1: rank 1 of 2, 3006.6 MiB allocated
-[clocks] 68 samples card0 (02:00.0) sclk/mclk: 850/1370 x35 650/1370 x1 450/1370 x8 300/150 x24  max 57C card1 (06:00.0) sclk/mclk: 850/1370 x14 450/1370 x5 300/150 x48 450/150 x1  max 63C  log=results/tp-prefill/clocks/warm-9b-tp2-invite-a.txt

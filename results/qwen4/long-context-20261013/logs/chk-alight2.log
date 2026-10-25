@@ -1,7 +1,0 @@
-alight: ticket 77 queued 16:05:25
-alight: granted 16:11:21: ./long-chk3061.sh c2
-long-chk-c2-a rc=0 [clocks] 116 samples card0 (02:00.0) sclk/mclk: 850/1370 x80 650/1370 x1 450/1370 x1 300/150 x34  max 52C card1 (06:00.0
-long-chk-c2-a2 rc=0 stage_dump: 3061 tokens in chunks of 64, one at a time [clocks] 102 samples card0 (02:00.0) sclk/mclk: 850/1370 x68 300/150 x34  max 52C card1 (06:00.0) sclk/mclk: 850/1370 x7
-long-chk-c2-b rc=0 stage_dump: 3061 tokens in chunks of 64, queued [clocks] 90 samples card0 (02:00.0) sclk/mclk: 850/1370 x57 300/150 x33  max 53C card1 (06:00.0) sclk/mclk: 850/1370 x67
-long-chk-c2-main rc=0 [clocks] 101 samples card0 (02:00.0) sclk/mclk: 850/1370 x72 300/150 x29  max 53C card1 (06:00.0) sclk/mclk: 850/1370 x8
-alight: released 16:13:10 rc=0

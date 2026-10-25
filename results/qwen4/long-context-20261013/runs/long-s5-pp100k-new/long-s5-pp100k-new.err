@@ -1,8 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-plan: [[(0, 4), (4, 8)], [(8, 12), (12, 16)], [(16, 20), (20, 24)], [(24, 28), (28, 32)], [(32, 36), (36, 40)], [(40, 44), (44, 48)]]
-head rows: [[Some((0, 21504)), Some((21504, 43008))], [Some((43008, 64512)), Some((64512, 86016))], [Some((86016, 107520)), Some((107520, 129024))], [Some((129024, 150528)), Some((150528, 172032))], [Some((172032, 193536)), Some((193536, 215040))], [Some((215040, 236544)), Some((236544, 248320))]]
-GPU0: layers 0..4 + head rows 0..21504
-GPU0: 5877.8 MiB allocated in 0.91 s; device-local heap 5878 of 5888 MiB used, budget 5878
-GPU1: layers 4..8 + head rows 21504..43008
-GPU1: 5844.0 MiB allocated in 0.89 s; device-local heap 5844 of 5888 MiB used, budget 5844
-[clocks] 497 samples card0 (02:00.0) sclk/mclk: 850/1370 x497  max 75C card1 (06:00.0) sclk/mclk: 850/1370 x497  max 74C  log=results/clocks/long-s5-pp100k-new.txt

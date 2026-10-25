@@ -1,4 +1,0 @@
-[    0.401712] iommu: Default domain type: Passthrough (set via kernel command line)
-[    0.435048] DMAR: Intel(R) Virtualization Technology for Directed I/O
-02:00.0 iommu_group 51
-06:00.0 iommu_group 52

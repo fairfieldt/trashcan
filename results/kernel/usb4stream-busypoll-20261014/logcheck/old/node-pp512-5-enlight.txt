@@ -1,1 +1,0 @@
-link invite (10.99.36.1:48298): stream up (0-3.1/trashcan /dev/tbstream0), epoch 07729cfb, 5.8 ms after the link started [18:18:07.160]

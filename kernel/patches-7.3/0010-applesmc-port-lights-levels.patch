@@ -1,6 +1,6 @@
 applesmc: port_lights_levels, every Mac Pro port light in one write (on top of 0009).
-For programs that set all 20 LEDs many times a second (portlights in the homelab repo): one write sends only the
-LEDs whose level changed, about 0.4 ms each (8.1 ms for all 20, 2.2 ms for 5 on indite), where 20 LED class
+For programs that set all 20 LEDs many times a second: one write sends only the
+LEDs whose level changed, about 0.4 ms each (8.1 ms for all 20, 2.2 ms for 5 on a Mac Pro 6,1), where 20 LED class
 writes queue 20 separate updates. Pending single-LED updates are applied first, triggered LEDs are left to their
 triggers, and a failed write can be repeated to send what didn't get through.
 --- a/drivers/hwmon/applesmc.c

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Test a lost peer on two local ranks of a TP4-sized model, under a GPU lease."""
+"""Test a lost peer on two local ranks of a TP4-sized model (Qwen3.8-27B) on one Mac Pro."""
 import argparse, json, pathlib, signal, socket, struct, subprocess, time
 
 p=argparse.ArgumentParser(description=__doc__)
-p.add_argument('--binary',default='./drain-worker')
-p.add_argument('--model',default='/home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf')
+p.add_argument('--binary',default=str(pathlib.Path(__file__).resolve().parent.parent/'target/release/trashcan'))
+p.add_argument('--model',default=str(pathlib.Path.home()/'models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf'))
 p.add_argument('--out',default='drain-results')
 a=p.parse_args();out=pathlib.Path(a.out);out.mkdir(parents=True,exist_ok=True)
 with socket.socket() as listener:

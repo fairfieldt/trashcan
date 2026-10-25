@@ -1,2 +1,0 @@
-== moe-s5-dump-tk3-c3 vs moe-s5-dump-base-c3: 98 of 98 tensors identical
-   differing router/top-k tensors: 0 

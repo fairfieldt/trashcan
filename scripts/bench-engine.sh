@@ -1,10 +1,12 @@
 #!/bin/bash
-# Reproducible engine measurements on incite; PM QoS is scoped to each command.
+# Reproducible engine measurements on one Mac Pro; PM QoS is scoped to each command (scripts/latency-run.py, through
+# sudo -n; TRASHCAN_CPU_LATENCY=0 runs without it).
+# usage: scripts/bench-engine.sh [MODEL.gguf [ASSISTANT.safetensors [OUTDIR]]]   (OUTDIR: target/bench)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 model=${1:-$HOME/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf}
 assistant=${2:-$HOME/models/gemma-4-12b-assistant/model.safetensors}
-out=${3:-results/engine/benchmark}
+out=${3:-target/bench}
 mkdir -p "$out"
 bin=target/release/trashcan
 run() {

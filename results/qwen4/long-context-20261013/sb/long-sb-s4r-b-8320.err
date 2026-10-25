@@ -1,6 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-GPU0: layers 0..4
-GPU0: 5736.3 MiB allocated; device-local heap 5736 of 5888 MiB used, budget 5867
-GPU1: layers 4..8
-GPU1: 5702.5 MiB allocated; device-local heap 5703 of 5888 MiB used, budget 5867
-[clocks] 105 samples card0 (02:00.0) sclk/mclk: 850/1370 x103 300/150 x2  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x100 300/150 x5  max 63C  log=results/clocks/long-sb-s4r-b-8320.txt

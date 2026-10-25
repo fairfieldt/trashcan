@@ -1,4 +1,0 @@
-link inflight (inflight.tb0:7075): stream up (0-3.1/trashcan /dev/tbstream0), epoch 6bf4e328
-link inflight (inflight.tb0:7075): stream down (nothing acknowledged for 100ms); continuing over TCP
-link-test: {"path":"tcp","t":3.123,"unix":1792003763.6773531,"was":"stream"}
-Error: inflight (inflight.tb0:7075): 10.99.21.1:43774 -> 10.99.21.2:7075 (read: Connection reset by peer (os error 104))

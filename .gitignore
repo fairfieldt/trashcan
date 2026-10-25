@@ -1,7 +1,7 @@
-# upstream checkout (and later our fork) lives here as its own git repo
+# a llama.cpp checkout used as the reference implementation
 /llama.cpp/
 
-# models stay out of git; bench results under results/ are tracked
+# models stay out of git
 *.gguf
 .DS_Store
 

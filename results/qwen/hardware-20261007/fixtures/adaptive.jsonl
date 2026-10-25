@@ -1,2 +1,0 @@
-{"name": "code", "messages": [{"role": "user", "content": "Write a Python function that parses CSV text with quoted commas, preserves empty fields, and rejects inconsistent row lengths. Include tests."}], "max_tokens": 512}
-{"name": "chinese", "messages": [{"role": "user", "content": "用中文解释数据库事务的隔离级别，并举例说明幻读。"}], "max_tokens": 512}

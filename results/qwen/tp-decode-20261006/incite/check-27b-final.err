@@ -1,4 +1,0 @@
-tp: 4 ranks, 2 on this machine, the rest on the other
-GPU0: rank 0 of 4, 4354.5 MiB allocated
-GPU1: rank 1 of 4, 4354.5 MiB allocated
-[clocks] 151 samples card0 (02:00.0) sclk/mclk: 850/1370 x124 450/1370 x1 300/150 x26  max 71C card1 (06:00.0) sclk/mclk: 850/1370 x123 300/1370 x1 650/1370 x1 450/1370 x10 300/150 x16  max 70C  log=results/clocks/check-27b-final.txt

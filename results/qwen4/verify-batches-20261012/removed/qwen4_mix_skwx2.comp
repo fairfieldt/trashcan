@@ -1,3 +1,0 @@
-#version 460
-#define ROWS 2
-#include "qwen4_mix_skwx_body.glsl"

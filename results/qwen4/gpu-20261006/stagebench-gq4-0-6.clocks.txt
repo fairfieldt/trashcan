@@ -1,1 +1,0 @@
-[clocks] 77 samples card0 (02:00.0) sclk/mclk: 850/1370 x56 650/1370 x1 300/150 x20  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x35 450/1370 x1 300/150 x41  max 58C  log=/home/fairfieldt/trashcan-exp/qwen-flash/results/clocks/20261006T163402-181274.txt

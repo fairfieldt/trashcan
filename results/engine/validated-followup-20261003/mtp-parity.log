@@ -1,6 +1,0 @@
-PASS: transformer baseline MTP output matches ordinary; 29.34 tok/s
-PASS: transformer merge MTP output matches ordinary; 31.75 tok/s
-PASS: photosynthesis baseline MTP output matches ordinary; 24.70 tok/s
-PASS: photosynthesis merge MTP output matches ordinary; 26.44 tok/s
-PASS: csv baseline MTP output matches ordinary; 37.15 tok/s
-PASS: csv merge MTP output matches ordinary; 39.09 tok/s

@@ -1,7 +1,0 @@
-inflight 1791939494.717388491
-thunderbolt_stream 0
-thunderbolt_net 0
-thunderbolt 2
-xdomain	peer	local_bus	peer_bus	lanes	state	iface	address	peer_address
-857 /usr/local/bin/gpuq agent --hub https://gpuq.tdf.sh --name inflight --gpu 2x FirePro D700 --probe amd --lock /home/fairfieldt/trashcan-exp/.lock --ignore Xorg,Xwayland,gnome-shell --ignore-cgroup /session.slice/
-2500482 /bin/bash /home/fairfieldt/trashcan-exp/flashnext/stream-ops.sh state

@@ -1,12 +1,12 @@
 # xgpu: cross-GPU sync and copy microbenchmark
 
-This measures what a Vulkan tensor-parallel allreduce would pay on incite (2x D700, RADV) for each way of
+This measures what a Vulkan tensor-parallel allreduce would pay on a Mac Pro 6,1 (2x D700, RADV) for each way of
 moving a small partial result between the two GPUs and telling the other GPU it's ready. Decode allreduces are
 about 15 KB (3840 fp32), so latency dominates. Prefill allreduces at 512 tokens are about 7.5 MB, where bandwidth
 matters.
 
 ```
-make                       # on incite: needs libvulkan-dev and glslc
+make                       # needs libvulkan-dev and glslc
 ./xgpu                     # all tests
 ./xgpu xsem spin           # a subset
 ```

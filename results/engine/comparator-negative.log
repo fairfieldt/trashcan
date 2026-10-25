@@ -1,2 +1,0 @@
-PASS: --check rejects a nonfinite activation with exit 1
-FAILED: tolerance result_norm: rel inf, cos nan

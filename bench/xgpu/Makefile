@@ -1,4 +1,4 @@
-# Build on incite: make
+# Build on the target machine: make (needs libvulkan-dev and glslc)
 SPV = spin0.spv spin1.spv spin2.spv spin3.spv store0.spv store1.spv
 
 xgpu: xgpu.cpp $(SPV)

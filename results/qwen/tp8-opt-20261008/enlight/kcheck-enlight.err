@@ -1,1 +1,0 @@
-[clocks] 55 samples card0 (02:00.0) sclk/mclk: 850/1370 x31 300/150 x24  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x30 300/150 x25  max 48C  log=results/clocks/kcheck-enlight.txt

@@ -1,9 +1,0 @@
-To understand a Transformer, it helps to think of it as a **highly advanced pattern-recognition machine**. Unlike older AI models (like RNNs) that read sentences word-by-word from left to right, a Transformer looks at the **entire sentence all at once.**
-
-Here is the step-by-step journey of how a Transformer processes information.
-
----
-
-### 1. Input Embedding (Turning words into numbers)
-Computers cannot understand letters; they only understand numbers.
-*   **Tokenization:** The sentence is broken into "tokens" (words or sub-words). For example: *"The cat sat

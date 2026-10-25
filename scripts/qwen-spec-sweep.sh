@@ -1,12 +1,13 @@
 #!/bin/bash
-# Speculative-decoding depth sweep on incite: the three Gemma MTP benchmark prompts, 128 tokens each,
-# thinking off, one process per depth (0 = no MTP). TEMP sets the temperature (default 0, greedy).
-# Run under a gpuq lease (`gpuq run ID -- ...`) from a workspace holding bin/trashcan.
+# Speculative-decoding depth sweep on one Mac Pro: the three Gemma MTP benchmark prompts, 128 tokens each,
+# thinking off, one process per depth (0 = no MTP). TEMP sets the temperature (default 0, greedy); BIN overrides the
+# binary (default target/release/trashcan). Needs passwordless sudo for scripts/latency-run.py.
 # Output: OUT/d{depth}.out (text) and OUT/d{depth}.log (rates and MTP stats).
 # usage: scripts/qwen-spec-sweep.sh MODEL MTP OUT [DEPTH ...] [-- EXTRA ARGS]
 set -euo pipefail
 model=$1 mtp=$2 out=$3
 shift 3
+here=$(cd "$(dirname "$0")" && pwd)
 depths=()
 while [ $# -gt 0 ] && [ "$1" != -- ]; do depths+=("$1"); shift; done
 [ "${1:-}" = -- ] && shift
@@ -20,7 +21,7 @@ Write a Python function that reads a CSV file and returns rows where the age col
 for d in "${depths[@]}"; do
     args=(qwen-chat "$model" --temperature "${TEMP:-0}" --max-tokens 128 --checkpoints 0 "$@")
     [ "$d" -gt 0 ] && args+=(--mtp "$mtp" --draft-tokens "$d")
-    printf '%s\n' "$prompts" | sudo -n python3 "$HOME/trashcan/scripts/latency-run.py" "${BIN:-bin/trashcan}" "${args[@]}" \
+    printf '%s\n' "$prompts" | sudo -n python3 "$here/latency-run.py" "${BIN:-$here/../target/release/trashcan}" "${args[@]}" \
         > "$out/d$d.out" 2> "$out/d$d.log"
     grep -E "decode|MTP" "$out/d$d.log" | sed "s/^/d$d /"
 done

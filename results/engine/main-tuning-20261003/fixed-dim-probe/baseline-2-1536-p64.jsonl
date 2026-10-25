@@ -1,4 +1,0 @@
-{"dim":256,"gpu":0,"heads_per_group":1,"iterations":100,"kernel":"selected","kv_heads":4,"milliseconds":0.2971244433110046,"partial_shader":"attention_partial64","partitions":64,"pass":true,"tokens":1536}
-{"dim":512,"gpu":0,"heads_per_group":8,"iterations":100,"kernel":"selected","kv_heads":1,"milliseconds":0.41101777620986935,"partial_shader":"attention_partial_heads8_64","partitions":64,"pass":true,"tokens":1536}
-{"dim":256,"gpu":1,"heads_per_group":1,"iterations":100,"kernel":"selected","kv_heads":4,"milliseconds":0.29706222108901975,"partial_shader":"attention_partial64","partitions":64,"pass":true,"tokens":1536}
-{"dim":512,"gpu":1,"heads_per_group":8,"iterations":100,"kernel":"selected","kv_heads":1,"milliseconds":0.4113303688012695,"partial_shader":"attention_partial_heads8_64","partitions":64,"pass":true,"tokens":1536}

@@ -1,7 +1,0 @@
-incite: ticket 203 queued 14:21:21
-incite: granted 14:45:02: ./long-sb.sh trashcan-long-r19 s4n-a 8320 30080; ./long-sb.sh trashcan-4307169 s4b-a 8320 30080
-long-sb-s4n-a-8320 rc=0 [clocks] 188 samples card0 (02:00.0) sclk/mclk: 850/1370 x168 300/150 x20  max 59C card1 (06:00.0) sclk/mclk: 850/1370 x174 450/1370 x1 300/150 x13  max 58C  log=results/clocks/long-sb-s4n-a-8320.txt
-long-sb-s4n-a-30080 rc=0 [clocks] 426 samples card0 (02:00.0) sclk/mclk: 850/1370 x409 300/150 x17  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x414 300/150 x12  max 59C  log=results/clocks/long-sb-s4n-a-30080.txt
-long-sb-s4b-a-8320 rc=0 [clocks] 138 samples card0 (02:00.0) sclk/mclk: 850/1370 x115 300/150 x23  max 61C card1 (06:00.0) sclk/mclk: 850/1370 x120 300/150 x18  max 59C  log=results/clocks/long-sb-s4b-a-8320.txt
-long-sb-s4b-a-30080 rc=0 [clocks] 318 samples card0 (02:00.0) sclk/mclk: 850/1370 x298 650/1370 x1 300/150 x19  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x298 450/1370 x1 300/150 x19  max 61C  log=results/clocks/long-sb-s4b-a-30080.txt
-incite: released 14:49:52 rc=0

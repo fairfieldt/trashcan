@@ -1,36 +1,20 @@
-# Project workflow
+# Development guidelines
 
-Work directly on `main` in this project. Do not create a feature branch or worktree unless the user
-explicitly requests one. Commit measured, validated improvements on `main`.
-
-Performance work targets `incite` (the dual-D700 Mac Pro). Record the tested source, commands,
-correctness checks, sustained GPU clocks, and before/after results. Distinguish hardware upper bounds
+Performance work targets a Mac Pro 6,1 with two D700s. Record the tested source, commands, correctness checks,
+sustained GPU clocks (`scripts/with-clocks.sh`), and before/after results. Distinguish hardware upper bounds
 from measured throughput and practical targets; retain only improvements supported by measurements.
 
 Only add or retain an option when evidence shows a clear benefit for a supported use case. Experiments
 are welcome, but remove failed or inconclusive candidate code and its switches after evaluation.
 Keeping an experiment "off by default" is not a substitute for demonstrating a benefit. Performance
 options need a repeatable improvement in the relevant end-to-end workload; an isolated kernel or
-microbenchmark win is insufficient. Preserve measurements and reproduction snapshots under `results/`,
-outside the active runtime.
+microbenchmark win is insufficient.
 
-# Shared GPU on inf
+Code comments cite measurements as `results/...`; those archives are kept outside this branch.
 
-The RTX PRO 6000 on inf (192.168.0.118, tailnet `inf`) is shared through gpuq. Before using CUDA or loading
-a model there, read `gpuq rules`, request and wait for a lease, and run GPU commands through
-`ssh inf.tdf.sh 'gpuq run ID -- CMD'`. Release the lease promptly. Extend it if needed and honor
-YIELD REQUESTED by finishing the current command and running `gpuq yield ID`.
-Never stop or start `ds4-qwen.service` yourself; gpuq manages it.
+# GPU job length
 
-# Shared GPUs on the Mac Pros
-
-The Mac Pros' D700s (incite, invite, indite, enlight, inflight, alight) are shared by several sessions through one gpuq queue per machine
-(dashboards https://gpuq.tdf.sh/m/NAME/, e.g. https://gpuq.tdf.sh/m/incite/). Before any GPU run, request a lease with
-`gpuq --on MACHINE request LABEL --est MIN`, wait with `gpuq --on MACHINE wait ID`, run GPU commands as
-`ssh MACHINE 'gpuq run ID -- CMD'`, and release promptly. For benchmarks, wrap the command in
-`scripts/with-clocks.sh CLOCKLOG CMD` to record sustained clocks. Never write into `~/trashcan` on incite (another
-checkout); use a `~/trashcan-exp/NAME` workspace. Build with `scripts/cross-build.sh` in the kbuild VM, not on
-the Macs. amdgpu resets the GPU when one job runs or waits longer than 2 s (`lockup_timeout` default on 7.3 and 7.2.9), so
+amdgpu resets the GPU when one job runs or waits longer than 2 s (the `lockup_timeout` default on 7.3), so
 keep each queue submission well under that, and never leave GPU work waiting on a host event without a bound.
 
 # Light barriers in Flash-Next decode
@@ -38,5 +22,5 @@ keep each queue submission well under that, and never leave GPU work waiting on 
 Flash-Next graphs of up to 8 tokens end their dispatches with shader-write -> none barriers (`Device::compute_barrier`
 mode 3). They rely on RADV (Mesa 25.0.7 on GFX6) doing an L2 write-back plus an L1 invalidation for a `SHADER_WRITE`
 source, and on the kernels in `SCALAR_SAFE` (engine/src/vulkan.rs) never reading through scalar loads what an earlier
-dispatch wrote. After any Mesa upgrade, or a change to one of those shaders, rerun the ISA audit and the stress check
-of results/qwen4/decode-kernels-20261014 before measuring.
+dispatch wrote. After any Mesa upgrade, or a change to one of those shaders, audit the compiled ISA for scalar loads
+of buffers written earlier in the graph, and stress-test decode output against full barriers, before measuring.

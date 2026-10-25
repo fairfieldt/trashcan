@@ -1,4 +1,4 @@
 # USB4STREAM devices (/dev/tbstreamN, one per link to another node, created by tblink) for the engine, which runs as
-# a member of render (nodes/macpro/provision.sh adds fairfieldt). The engine opens each one for one process at a time
+# a member of render (nodes/macpro/provision.sh adds the login user). The engine opens each one for one process at a time
 # (flock) and falls back to TCP without it (engine/src/link).
 KERNEL=="tbstream[0-9]*", GROUP="render", MODE="0660"

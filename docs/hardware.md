@@ -1,16 +1,24 @@
-# incite: Mac Pro 6,1 ("trashcan")
+# Hardware: Mac Pro 6,1 with 2x FirePro D700
 
-Probed 2026-10-02 over ssh (`ssh incite`, tailnet). Setup lives in `../homelab/hosts/incite/bootstrap.sh`;
-models are listed in `../homelab/modelstore/manifest.yaml` and copied to `~/models` on incite.
+trashcan targets the late-2013 Mac Pro ("trashcan", Mac Pro 6,1) with two FirePro D700s, running Debian 13.
+
+## Requirements
+
+- Mac Pro 6,1 with 2x FirePro D700 (6 GiB each). The numbers below come from a 12-core Xeon E5-2697 v2 with 64 GB.
+- Debian 13 (Mesa's RADV from Debian, `mesa-vulkan-drivers`).
+- The `7.3.0-rc7-p2p` kernel from `kernel/` ([kernel.md](kernel.md)), booted with
+  `radeon.si_support=0 amdgpu.si_support=1`. Without its patches the D700s stay at 300/150 MHz and P2P DMA between
+  them is refused.
+- For more than one Mac Pro: Thunderbolt 2 cables between them ([Thunderbolt](#thunderbolt)).
 
 ## Host
 
 | | |
 |---|---|
 | CPU | Xeon E5-2697 v2 (Ivy Bridge-EP), 12C/24T, 2.7 GHz, AVX and F16C (no AVX2/FMA) |
-| RAM | 64 GB DDR3 (62 GiB usable), 78 GB swap |
-| OS | Debian 13, kernel `7.3.0-rc7-p2p` (default since 2026-10-14, see [kernel.md](kernel.md)); `7.2.9-p2p` (the fallback) and stock `6.12.111+deb13-amd64` remain installed |
-| GPU driver | amdgpu with `radeon.si_support=0 amdgpu.si_support=1`; the D700 fixes are built into the `-p2p` kernels |
+| RAM | 64 GB DDR3 (62 GiB usable) |
+| OS | Debian 13, kernel `7.3.0-rc7-p2p` ([kernel.md](kernel.md)) |
+| GPU driver | amdgpu with `radeon.si_support=0 amdgpu.si_support=1`; the D700 fixes are built into the `-p2p` kernel |
 | Vulkan | RADV (Mesa 25.0.7-2+deb13u1), Vulkan 1.3.305 |
 
 ## GPUs: 2x FirePro D700 (Tahiti XT, GCN 1.0 / Southern Islands)
@@ -50,38 +58,29 @@ warp size: 64 | shared memory: 32768 | int dot: 0 | matrix cores: none
 So it has no fp16 arithmetic, no integer dot product, and no cooperative matrix. Subgroup size is 64,
 shared memory 32 KB, max workgroup 1024 invocations.
 
-## Clock bug (relevant to every benchmark)
+The `trashcan devices` report confirms the shape: 32 CUs (2 SE x 2 SA x 8), 4 SIMD16 per CU, wave64, 10 waves per
+SIMD, 256 VGPRs per SIMD, 32 KiB shared memory per workgroup, 5888 MiB VRAM heap, plus a 256 MiB CPU-visible BAR
+heap.
+
+## Clock bug
 
 Stock amdgpu leaves both D700s at **300 MHz core / 150 MHz memory** even under load, which costs about 9x
-memory bandwidth. Two fixes cure it: an exact-match VFCT VBIOS selection fix, plus a backport of Timur
-Kristóf's 2026-09-23 SI `HARDWAREDC` power-source patch. Without them the second GPU gets the wrong VBIOS
-and the cards stay in the battery power state. Both `-p2p` kernels carry them ([kernel.md](kernel.md)); the
-stock Debian kernel gets them from a patched `amdgpu.ko` in `/lib/modules/6.12.111+deb13-amd64/updates/`
-(built from `~/D700macpro` on 2026-10-02). The VFCT fix is prepared for upstream (amdgpu and radeon) in
-`kernel/upstream/vfct-exact-match/`.
+memory bandwidth. Two fixes cure it: an exact-match VFCT VBIOS selection fix (patch 0001), and Timur
+Kristóf's SI `HARDWAREDC` power-source fix, upstream in 7.3. Without them the second GPU gets the wrong VBIOS
+and the cards stay in the battery power state. The `-p2p` kernel carries both ([kernel.md](kernel.md)); with it
+each card gets its own VBIOS (02:00.0 `113-C3861XA-028`, 06:00.0 `113-C3861XB-028`).
 
 Idle reads 300/150 in `/sys/class/drm/card{0,1}/device/hwmon/hwmon*/freq{1,2}_input`. That's expected at
-idle; under load it should reach 850/1370. **Check those clocks during every benchmark.**
+idle; under load it should reach 850/1370. **Check those clocks during every benchmark** (`scripts/with-clocks.sh`
+logs them around a command).
 
-## Kernel
-
-See [kernel.md](kernel.md): which kernel incite runs, its patches and config, how to build it on the Mac, and how
-to boot, check and recover it.
-
-- GRUB's default is pinned by entry id in `/etc/default/grub` (original in `/etc/default/grub.bak-trashcan`), so
-  installing a kernel never changes what boots.
-- Under both `-p2p` kernels each card gets its own VBIOS (02:00.0 `113-C3861XA-028`, 06:00.0 `113-C3861XB-028`).
-- The `apple-gmux` WARN at boot happens on every kernel.
+The `apple-gmux` WARN at boot happens on every kernel.
 
 ## Network
 
-Two Broadcom BCM57762 ports (`tg3`). Since hard power cuts on 2026-10-06 the left one (`enp12s0`) gets no link; the
-cable is in `enp11s0` (DHCP; reach it as `incite.tdf.sh`). NetworkManager ignores `thunderbolt*`
-interfaces (`/etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf`); otherwise it runs DHCP on them and reports
-failed connections.
-
-Kernel messages stream to the Mac over netconsole, and an oops, lockup or panic reboots the machine after 10 s; see
-[kernel.md](kernel.md#when-something-goes-wrong).
+Two Broadcom BCM57762 ports (`tg3`). Have NetworkManager ignore `thunderbolt*` interfaces
+(`/etc/NetworkManager/conf.d/90-thunderbolt-unmanaged.conf` in `nodes/macpro/root/`); otherwise it runs DHCP on them
+and reports failed connections.
 
 ## Thunderbolt
 
@@ -97,106 +96,84 @@ panel (Apple KB HT5918):
 
 A cable between two ports of one controller loops that controller and gets one lane; between controllers it bonds
 two lanes (20 Gb/s per direction on the wire). Measured on 7.2: about 9.6 Gb/s per direction per cable, 25 us
-round trips over USB4STREAM and 40 us over `thunderbolt_net` with `throttling=32000`
-([results](../results/kernel/tb-loopback-20261006/README.md)).
+round trips over USB4STREAM and 40 us over `thunderbolt_net` with `throttling=32000`.
 
 With three cables looping the three controllers into a triangle, a reboot hangs in firmware before the startup chime;
 unplug them first ([kernel.md](kernel.md#installing-and-booting)).
 
-Between two Mac Pros (incite and invite, one cable per controller pair): 8.6-9.3 Gb/s per link each way, 25.9 Gb/s
-over all three at once, 0.18 ms ping; a model copy with `tar | socat` runs at 505 MB/s, limited by the receiving
-Apple SSD ([results](../results/kernel/tb-nodes-20261006/README.md)). After one Mac reboots, the other can keep a
-stale peer from its firmware; reload `thunderbolt` on both, and replug a link that comes back with one lane. After
-several Macs reboot, `scripts/tb-reset.sh HOST...` resets all their controllers together (unload and NHI reset on
-every Mac, then the modules loaded on all at once), which brought the six cables of the four TP8 Macs back on two
-lanes where resetting one Mac after another left links stale; a link still down after two rounds needs a replug
-([results](../results/qwen/tp8-mesh-20261009/README.md#cables)). Create the streams again afterwards.
+Between two Mac Pros (one cable per controller pair): 8.6-9.3 Gb/s per link each way, 25.9 Gb/s over all three at
+once, 0.18 ms ping; a model copy with `tar | socat` runs at 505 MB/s, limited by the receiving Apple SSD. After one
+Mac reboots, the other can keep a stale peer from its firmware; reload `thunderbolt` on both, and replug a link that
+comes back with one lane. After several Macs reboot, `scripts/tb-reset.sh HOST...` resets all their controllers
+together (unload and NHI reset on every Mac, then the modules loaded on all at once), which brought the six cables
+of a four-Mac mesh back on two lanes where resetting one Mac after another left links stale; a link still down after
+two rounds needs a replug. Create the streams again afterwards.
 
 ## Fan control
 
 One SMC fan (`applesmc`) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing.
-`fancurve.service` (`scripts/fancurve.sh`, installed in `/usr/local/sbin`) keeps the fan at
-**2350 RPM or the live SMC maximum, whichever is higher, at every temperature** (since 2026-10-12;
-`FAN_RPM` in the unit's environment changes the floor, `FAN_RPM=0` follows the SMC maximum alone). It reads
-`fan1_max` every two seconds and reasserts manual mode and the exact target if the SMC changes either.
+`fancurve.service` (`scripts/fancurve.service`, running `scripts/fancurve.sh` installed in `/usr/local/sbin`) keeps
+the fan at **2350 RPM or the live SMC maximum, whichever is higher, at every temperature** (`FAN_RPM` in the unit's
+environment changes the floor, `FAN_RPM=0` follows the SMC maximum alone). It reads `fan1_max` every two seconds and
+reasserts manual mode and the exact target if the SMC changes either.
 
 Linux 7.3 moved the fan files. Before 7.3 they are in `/sys/devices/platform/applesmc.768/`, with manual mode as
 `fan1_manual` (1 manual, 0 automatic) and the target as `fan1_output`. From 7.3 they are hwmon attributes in
 `/sys/devices/platform/applesmc.768/hwmon/hwmonN/`: `pwm1_enable` (1 manual, 2 automatic), `fan1_target`, and
-`fan1_input`, `fan1_min` and `fan1_max` as before. `fancurve.sh` and the telemetry (`system-crash-capture.py`) use
-whichever layout is there. Without the service, the SMC runs the fan at about 790 RPM on its own.
+`fan1_input`, `fan1_min` and `fan1_max` as before. `fancurve.sh` uses whichever layout is there. Without the
+service, the SMC runs the fan at about 790 RPM on its own.
 
-The SMC's maximum is not fixed. It reads 1900 RPM at boot; on 2026-10-09 it then rose in 50 RPM steps to
-2359 (incite) and 2382 (indite) within 40 minutes and drifted back to about 1910 over the next six hours.
-After the 2026-10-12 boots it stayed at 1900 for over an hour on both Macs, through 95 °C GPU load. The
-input that drives it is unknown. A target above it works: on indite with `fan1_max` at 1900, a manual target
-of 2350 reached 2349 RPM within 30 s. Following the maximum alone (2026-10-07 to 10-12) therefore left the
-fan anywhere between 1900 and ~2380 RPM. At 1900 RPM, a warm 80K-context prefill settles at about 96/94 °C
-on incite and 92/93 °C on indite. These are fan-speed measurements, not airflow. The 2026-10-07 probe
-evidence is under `results/qwen/hardware-20261007/fans/`.
+The SMC's maximum is not fixed. It reads 1900 RPM at boot; on two Macs it then rose in 50 RPM steps to 2359 and 2382
+within 40 minutes and drifted back to about 1910 over the next six hours. After other boots it stayed at 1900 for
+over an hour, through 95 °C GPU load. The input that drives it is unknown. A target above it works: with `fan1_max`
+at 1900, a manual target of 2350 reached 2349 RPM within 30 s. Following the maximum alone therefore leaves the fan
+anywhere between 1900 and ~2380 RPM. At 1900 RPM, a warm 80K-context prefill settles at about 92-96 °C on the GPUs.
+These are fan-speed measurements, not airflow.
 
 Two transient maximum-read failures may retain the last valid limit; the third failure returns control
 to automatic SMC and exits for systemd to retry. At startup, an unavailable/invalid limit has no fallback.
 Malformed limits, control/target read errors, or failed readback also return control to the SMC.
 `systemctl stop fancurve` returns automatic SMC control. `INTERVAL` may be set to 1–10 seconds;
-`SMC_PATH` is an optional sysfs path override used by local tests. The service is enabled by the existing
-node system provisioner. Deploy only the fan script/unit and restart this service when changing fan policy;
-the full system provisioner also restarts unrelated services.
+`SMC_PATH` is an optional sysfs path override used by local tests.
 
 ## Port lights
 
-The SMC lights the 20 LEDs behind the I/O panel for 15 s when the accelerometer reports motion. Patches 0009 and
-0010 (`docs/kernel.md`) make them LED class devices (`/sys/class/leds/smc::*`) with `port_lights` (`auto`/`manual`),
-`port_lights_motion`, `port_lights_hold_ms`, `port_lights_show`, `port_lights_levels` and `power_light` (off, on,
-breathe, bright) in `/sys/devices/platform/applesmc.768/`. The SMC keys, the LED map and how they were found are in
-`results/kernel/port-lights-20261018/`.
+The SMC lights the 20 LEDs behind the I/O panel for 15 s when the accelerometer reports motion. The optional
+patches 0009 and 0010 ([kernel.md](kernel.md)) make them LED class devices (`/sys/class/leds/smc::*`) with `port_lights`
+(`auto`/`manual`), `port_lights_motion`, `port_lights_hold_ms`, `port_lights_show`, `port_lights_levels` and
+`power_light` (off, on, breathe, bright) in `/sys/devices/platform/applesmc.768/`. The SMC keys are described in the
+patches. These patches have had little testing (as a module override on one machine) and the engine does not need
+them.
 
 ## Suspend is disabled
 
-incite does not resume from suspend; it drops off the network and needs a power cycle. Since FreedomBox was removed
-(2026-10-05), the GDM greeter's `gsd-power` suspended it after 900 s with no local activity. SSH sessions don't count
-as activity, so this hit a P2P test at 22:09 that evening. Since 2026-10-05:
+The Mac Pro 6,1 does not resume from suspend under Linux; it drops off the network and needs a power cycle. GDM's
+greeter (`gsd-power`) suspends it after 900 s with no local activity, and SSH sessions don't count as activity. So:
 
-- `sleep`, `suspend`, `hibernate`, `hybrid-sleep` and `suspend-then-hibernate` targets are masked
+- Mask the `sleep`, `suspend`, `hibernate`, `hybrid-sleep` and `suspend-then-hibernate` targets
   (`systemctl unmask ...` to undo).
-- `/etc/gdm3/greeter.dconf-defaults` sets `sleep-inactive-ac-type='nothing'` (original in
-  `greeter.dconf-defaults.bak-trashcan`, applied with `/usr/share/gdm/generate-config`). fairfieldt's own GNOME
-  setting is `nothing` too.
+- Set `sleep-inactive-ac-type='nothing'` in `/etc/gdm3/greeter.dconf-defaults` and apply it with
+  `/usr/share/gdm/generate-config`; set the same in your own GNOME session if you log in locally.
 
-The `trashcan devices` report confirms the shape: 32 CUs (2 SE x 2 SA x 8), 4 SIMD16 per CU, wave64, 10 waves per
-SIMD, 256 VGPRs per SIMD, 32 KiB shared memory per workgroup, 5888 MiB VRAM heap, plus a 256 MiB CPU-visible BAR
-heap.
+## Baseline
 
-The machine also logged a corrected ECC error on CPU0 channel 0 DIMM 0 during testing.
-
-## Baseline so far
-
-`llama-bench` on upstream 99b9548 (Vulkan, `-ngl 99`, default layer split), Gemma 4 12B QAT Q4_0:
+`llama-bench` on upstream llama.cpp 99b9548 (Vulkan, `-ngl 99`, default layer split), Gemma 4 12B QAT Q4_0, on one
+Mac Pro 6,1 (2x D700):
 
 | test | t/s |
 |---|---|
 | tg256 | 8.59 |
 
 The GGUF's matrix payload is 6,956,974,080 bytes: this corresponds to **59.76 GB/s** of original-weight
-payload at 8.59 tok/s, rather than 56 GB/s (which mixed binary file size with decimal bandwidth).
-The layer-split weight-only bound is **37.81 tok/s** at 263.04 GB/s, before attention and all other work.
-The complete file is 6,975,879,296 bytes, including metadata and non-matrix tensors.
+payload at 8.59 tok/s. The layer-split weight-only bound is **37.81 tok/s** at 263.04 GB/s, before attention and
+all other work. The complete file is 6,975,879,296 bytes, including metadata and non-matrix tensors.
 
-The later warmed engine measurements in
-[`performance-20261003`](../results/engine/performance-20261003/README.md) reach **22.14 tok/s** for
-tg128 after pp512 and **160.87 tok/s** for pp512. Its implemented repacks stream a minimum of
-4,040,294,400 matrix bytes per GPU per decode token; the equivalent effective rate is 89.47 GB/s
-per GPU over the complete forward, not a measured DRAM counter. The FFN microbenchmarks reach
-153.00–160.41 GB/s of original Q4 payload, or **170.00–178.23 GB/s of the actual repacked payload**.
-Do not compare original Q4 byte rates directly with the physical bus limit: the repack expands
+trashcan's engine on the same hardware (2026-10-03, warmed) reaches **22.14 tok/s** for tg128 after pp512 and
+**160.87 tok/s** for pp512. Its implemented repacks stream a minimum of 4,040,294,400 matrix bytes per GPU per decode
+token; the equivalent effective rate is 89.47 GB/s per GPU over the complete forward, not a measured DRAM counter.
+The FFN microbenchmarks reach 153.00–160.41 GB/s of original Q4 payload, or **170.00–178.23 GB/s of the actual
+repacked payload**. Do not compare original Q4 byte rates directly with the physical bus limit: the repack expands
 18-byte blocks to 20 bytes. Clocks in those runs reach 850/1370 under sustained load.
 
-The subsequent [main-branch iterations](../results/engine/main-tuning-20261003/README.md) reach
-**23.42 tok/s** for pooled tg256 after pp512 and **21.36 tok/s** after a 4096-token prefill.
-Those are different workloads and experiment phases; their fresh paired comparisons and exact
-build hashes are preserved in that report. Fixed pp512 remains about 160 tok/s.
-
-[`engine-plan.md`](engine-plan.md#cost-model) and the reproducible
-[`ceiling audit`](../results/engine/ceiling-audit-20261003/README.md) separate exact tensor costs,
-ideal rooflines, recorded throughput, and unvalidated optimization targets. The audit checked all
-667 tensor names, dimensions and types directly from incite's GGUF header without executing a model.
+Later iterations reach **23.42 tok/s** for pooled tg256 after pp512 and **21.36 tok/s** after a 4096-token
+prefill. Those are different workloads; fixed pp512 remains about 160 tok/s.

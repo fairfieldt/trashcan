@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hold a CPU PM QoS latency request only for a command's lifetime (user authorized)."""
+"""Hold a CPU PM QoS latency request only for a command's lifetime, then drop it."""
 import os
 import pwd
 import struct

@@ -2,7 +2,7 @@
 name = "trashcan"
 version = "0.1.0"
 edition = "2021"
-description = "Gemma 4 12B inference on two FirePro D700s: Vulkan, tensor parallel"
+description = "LLM inference on Mac Pro 6,1 FirePro D700s over Vulkan, across GPUs and machines"
 publish = false
 
 [dependencies]

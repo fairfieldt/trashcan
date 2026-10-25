@@ -573,7 +573,7 @@ impl Device {
         ] {
             ensure!(
                 !bytes.is_empty(),
-                "shaders missing: build with glslc on incite"
+                "shaders missing: install glslc and rebuild"
             );
             let words = ash::util::read_spv(&mut std::io::Cursor::new(bytes))?;
             let module = unsafe {

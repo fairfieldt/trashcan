@@ -1,3 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-server up after 11 s
-[clocks] 112 samples card0 (02:00.0) sclk/mclk: 850/1370 x94 300/150 x18  max 58C card1 (06:00.0) sclk/mclk: 850/1370 x94 300/150 x18  max 57C  log=results/clocks/ms-e9f34e6-serve.txt

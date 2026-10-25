@@ -1,4 +1,0 @@
-tp: 2 ranks, 2 on this machine
-GPU0: rank 0 of 2 + MTP, 3102.5 MiB allocated
-GPU1: rank 1 of 2 + MTP, 3102.5 MiB allocated
-[clocks] 150 samples card0 (02:00.0) sclk/mclk: 850/1370 x131 450/1370 x1 300/150 x18  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x134 300/1370 x1 450/1370 x4 300/150 x11  max 59C  log=results/clocks/check-9b-gated-mtp.txt

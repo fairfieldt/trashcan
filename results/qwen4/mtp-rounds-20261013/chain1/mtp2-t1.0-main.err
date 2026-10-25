@@ -1,6 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-Error: connecting to indite.tb0:7071
-
-Caused by:
-    Connection refused (os error 111)
-[clocks] 2 samples card0 (02:00.0) sclk/mclk: 300/150 x2  max 54C card1 (06:00.0) sclk/mclk: 300/150 x2  max 53C  log=results/clocks/mtp2-t1.0-main.txt

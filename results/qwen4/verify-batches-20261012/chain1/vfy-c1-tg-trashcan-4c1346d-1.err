@@ -1,3 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-Error: remote: remote: remote: remote: connecting to enlight.tb0:7071: Connection refused (os error 111)
-[clocks] 2 samples card0 (02:00.0) sclk/mclk: 300/150 x2  max 44C card1 (06:00.0) sclk/mclk: 300/150 x2  max 43C  log=results/clocks/vfy-c1-tg-trashcan-4c1346d-1.txt

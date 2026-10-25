@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 8 ranks over 4 machine(s), GPUs per machine [2, 2, 2, 2], f32 all-reduce payload
-GPU0: rank 0 of 8, 2307.3 MiB allocated
-GPU1: rank 1 of 8, 2307.3 MiB allocated
-[clocks] 74 samples card0 (02:00.0) sclk/mclk: 850/1370 x40 450/1370 x4 300/150 x30  max 58C card1 (06:00.0) sclk/mclk: 850/1370 x40 650/1370 x1 300/150 x33  max 57C  log=results/clocks/e-check-v3-eval.txt

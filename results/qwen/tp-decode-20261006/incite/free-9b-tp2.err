@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 2 ranks, 2 on this machine
-GPU0: rank 0 of 2, 2928.5 MiB allocated
-GPU1: rank 1 of 2, 2928.5 MiB allocated
-[clocks] 78 samples card0 (02:00.0) sclk/mclk: 850/1370 x45 300/1370 x1 450/1370 x5 300/150 x27  max 64C card1 (06:00.0) sclk/mclk: 850/1370 x24 300/1370 x3 450/1370 x4 300/150 x47  max 62C  log=results/clocks/free-9b-tp2.txt

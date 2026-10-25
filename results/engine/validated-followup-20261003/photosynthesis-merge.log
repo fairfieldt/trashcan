@@ -1,6 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-GPU0: uploading sharded weights
-GPU1: uploading sharded weights
-GPU0: target allocations 4556.1 MiB
-GPU1: target allocations 4556.1 MiB
-prefill: 27 tokens, 58.31 tok/s; decode: 128 tokens, 30.28 tok/s

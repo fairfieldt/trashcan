@@ -1,4 +1,4 @@
-//! Compact all-reduce payloads (docs/tp8-optimization.md W1; the default below prefill sizes): f16 values with one
+//! Compact all-reduce payloads (the default below prefill sizes): f16 values with one
 //! exponent shift per block of `BLOCK` values, so a block whose largest magnitude reaches 2^15 is scaled down by a
 //! power of two (exactly) before rounding and Qwen's massive activations cannot overflow f16. A range of `m`
 //! values travels as `[m f16 values, little endian][one shift byte per block][zero padding to 4 bytes]`, its

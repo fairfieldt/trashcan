@@ -1,3 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-server up after 3 s
-[clocks] 39 samples card0 (02:00.0) sclk/mclk: 850/1370 x39  max 51C card1 (06:00.0) sclk/mclk: 850/1370 x39  max 51C  log=results/clocks/load-serve-new-2.txt

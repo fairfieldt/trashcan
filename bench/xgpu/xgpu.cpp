@@ -1,5 +1,5 @@
 // xgpu: cross-GPU sync latency and copy bandwidth on two Vulkan devices.
-// Written for incite (2x FirePro D700 on RADV) to decide how a Vulkan tensor-parallel allreduce should
+// Written for a Mac Pro 6,1 (2x FirePro D700 on RADV) to decide how a Vulkan tensor-parallel allreduce should
 // synchronize and move data. See README.md for what each test models.
 //
 // usage: xgpu [test ...]   tests: fence relay proxy xsem spin copy p2p p2p-verify p2p-wall host-write   (default: all)

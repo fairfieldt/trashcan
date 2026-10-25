@@ -1,4 +1,0 @@
-tp: 2 ranks, 2 on this machine
-GPU0: rank 0 of 2, 2771.6 MiB allocated
-GPU1: rank 1 of 2, 2771.6 MiB allocated
-Responses server listening on http://127.0.0.1:18011 (model: qwen-shutdown-test)

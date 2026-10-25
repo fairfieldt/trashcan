@@ -1,2 +1,0 @@
-The GPU is yours. Run GPU commands as `ssh incite 'gpuq run 116 -- CMD'`, and release with gpu_release / `gpuq release 116 -r RESULT` as soon as you are done.
-#116 [running] serve-budget-final-plain (owner: Qwen TP4 serving budget/cache regression) · running 2 s, 6 min left of the estimate

@@ -7,7 +7,7 @@ expert included, in the routed format), the n-gram module at layer 1, the QSA K/
 with an f16 scale per 32, or k16v8 = f16 K and q8 V) and, past 2051 tokens of context or with a q8 cache, the
 indexer projections (f32), a ring of raw indexer keys and the pooled keys; per stage the batch scratch; on the head
 stages the final mixer and their share of the head (Q6_K repacked to int8 with f32 scales per 16, 10 bits per
-weight). `--check` compares the model with every stage measured on incite.
+weight). `--check` compares the model with every stage measured on a Mac Pro.
 
 `--lean` models three savings that are not implemented: prefill reuses the fused mixer matrix (no separate down
 copy), and the router and indexer projections in Q8_0. `--more` adds three more: the head kept at Q6_K size (6.56
@@ -132,7 +132,7 @@ RECIPES = {
     'IQ2_XXS gate/up + MXFP4 down': dict(gate_up=2.0625, down=4.25, dense=Q8),
 }
 
-# Stages measured on incite (`GPUn: ... MiB allocated`), results/qwen4/gpu-20261006 and context-20261006. `ring`:
+# Stages measured on a Mac Pro (`GPUn: ... MiB allocated`), 2026-10-06 GPU and context runs. `ring`:
 # the raw indexer keys in a ring (from "Add Q8 K/V caches for QSA ..."); before that they spanned the context.
 G_Q4 = dict(gate_up=4.5, down=4.5, dense=5.0)
 G_Q8D = dict(gate_up=4.5, down=4.5, dense=Q8)

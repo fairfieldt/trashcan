@@ -1,3 +1,0 @@
-#version 460
-#define PF 2
-#include "qwen4_moe_down3_body.glsl"

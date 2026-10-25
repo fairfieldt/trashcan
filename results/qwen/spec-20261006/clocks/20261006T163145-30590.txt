@@ -1,1 +1,0 @@
-t sclk0 mclk0 temp0 sclk1 mclk1 temp1

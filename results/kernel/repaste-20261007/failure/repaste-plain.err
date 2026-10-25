@@ -1,8 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 4 ranks, 2 on this machine, the rest on the other
-GPU0: rank 0 of 4, 4277.7 MiB allocated
-GPU1: rank 1 of 4, 4277.7 MiB allocated
-cat: /sys/class/drm/card0/device/hwmon/hwmon1/freq1_input: Device or resource busy
-scripts/clockmon.sh: line 10: / 1000000 : syntax error: operand expected (error token is "/ 1000000 ")
-Error: lanes stalled for 2s
-[clocks] 341 samples card0 (02:00.0) sclk/mclk: 850/1370 x241 650/1370 x1 450/1370 x21 300/150 x78  max 62C card1 (06:00.0) sclk/mclk: 850/1370 x242 450/1370 x9 300/150 x89 450/150 x1  max 60C  log=results/clocks/repaste-plain.txt

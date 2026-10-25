@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 8 ranks over 4 machine(s), GPUs per machine [2, 2, 2, 2]
-GPU0: rank 0 of 8, 2269.6 MiB allocated
-GPU1: rank 1 of 8, 2269.6 MiB allocated
-[clocks] 60 samples card0 (02:00.0) sclk/mclk: 850/1370 x26 450/1370 x3 300/150 x30 450/150 x1  max 59C card1 (06:00.0) sclk/mclk: 850/1370 x26 450/1370 x1 300/150 x32 450/150 x1  max 58C  log=results/clocks/tp8-prof.txt

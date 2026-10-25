@@ -1,2 +1,0 @@
-invite	up	/dev/tbstream0
-incite	up	/dev/tbstream1

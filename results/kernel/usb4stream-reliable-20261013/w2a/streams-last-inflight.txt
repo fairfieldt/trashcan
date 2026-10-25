@@ -1,2 +1,0 @@
-incite	up	/dev/tbstream0
-alight	up	/dev/tbstream1

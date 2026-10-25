@@ -1,2 +1,0 @@
-#version 460
-#include "qwen4_moe_down3_body.glsl"

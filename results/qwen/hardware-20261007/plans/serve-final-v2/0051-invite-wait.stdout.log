@@ -1,2 +1,0 @@
-The GPU is yours. Run GPU commands as `ssh invite 'gpuq run 108 -- CMD'`, and release with gpu_release / `gpuq release 108 -r RESULT` as soon as you are done.
-#108 [running] serve-budget-final-v2-uncached (owner: Qwen TP4 serving budget/cache regression) · running 1 s, 6 min left of the estimate

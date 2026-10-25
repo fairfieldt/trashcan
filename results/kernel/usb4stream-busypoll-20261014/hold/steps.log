@@ -1,8 +1,0 @@
-[15:06:53] output /Users/fairfieldt/dev/claude-work/flashnext-20261012/stream/hold-20261014-150653
-[15:06:55]   invite 7.3.0-rc7-p2p-s2 net e2e/throttling Y 32000  10.99.36.1 /dev/tbstream0
-[15:06:55]   enlight 7.3.0-rc7-p2p-s2 net e2e/throttling Y 32000  10.99.36.2 /dev/tbstream0
-[15:06:55] 1. UDP over the Thunderbolt IP link, single 64-byte packets
-[15:07:47]   invite -> 10.99.36.2: 2000 round trips, p50 123.6 us, p90 132.5, p99 147.1, max 425.4, 0 timed out; enlight -> 10.99.36.1: 2000 round trips, p50 94.6 us, p90 125.2, p99 143.4, max 525.6, 0 timed out; 
-[15:07:47] 2. the stream, single 112-byte frames, no follow-up frames
-[15:08:00]   invite client: 49 round trips, p50 60141 us, fillers p50 3; enlight client: 50 round trips, p50 60134 us, fillers p50 3; 
-[15:08:00] done

@@ -1,8 +1,0 @@
-Linux incite 6.12.111-p2p #1p2p SMP PREEMPT_DYNAMIC Fri Oct  2 20:04:26 PDT 2026 x86_64 GNU/Linux
-rustc 1.99.0 (b940084d7 2026-09-28)
-cargo 1.99.0 (5f94df478 2026-08-27)
-shaderc 2025.2-1
-spirv-tools 2025.1~rc1-1
-glslang 15.1.0+1.4.309.0-1
-
-Target: SPIR-V 1.0

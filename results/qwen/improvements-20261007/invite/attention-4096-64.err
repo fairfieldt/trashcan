@@ -1,2 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-[clocks] 3 samples card0 (02:00.0) sclk/mclk: 850/1370 x3  max 85C card1 (06:00.0) sclk/mclk: 850/1370 x3  max 88C  log=results/clocks/attention-4096-64.txt

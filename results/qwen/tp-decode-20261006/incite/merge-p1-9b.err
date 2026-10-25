@@ -1,5 +1,0 @@
-CPU latency request: 0 us, scoped to this command
-tp: 2 ranks, 2 on this machine
-GPU0: rank 0 of 2, 2932.6 MiB allocated
-GPU1: rank 1 of 2, 2932.6 MiB allocated
-[clocks] 77 samples card0 (02:00.0) sclk/mclk: 850/1370 x44 450/1370 x5 300/150 x27 450/150 x1  max 60C card1 (06:00.0) sclk/mclk: 850/1370 x23 300/1370 x1 450/1370 x4 300/150 x48 450/150 x1  max 58C  log=results/clocks/merge-p1-9b.txt

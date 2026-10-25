@@ -1,5 +1,0 @@
-link inflight (10.99.86.17:45934): stream up (1-3.1/trashcan /dev/tbstream1), epoch 03d41418, 5.8 ms after the link started [18:17:57.831]
-link indite (indite.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream0), epoch 09da04eb, 6.1 ms after the link started [18:17:57.840]
-link inflight (10.99.86.17:45934): stream down (the other side closed its stream); continuing over TCP [18:18:03.591]
-link indite (indite.tb0:7071): TCP path 10.99.54.2:40520 -> 10.99.54.1:7071 failed (closed); continuing without it [18:18:03.826]
-link indite (indite.tb0:7071): stream down (the other side closed its stream); continuing over TCP [18:18:03.827]

@@ -1,7 +1,0 @@
-#!/bin/bash
-# Stub of systemctl on a simulated Mac: reboot boots the kernel kernel-boot.sh picked (its .next file), at once.
-if [ "${1:-}" = reboot ]; then
-    next="$SIMHOME/$SIMHOST.next"
-    [ -f "$next" ] && mv "$next" "$SIMHOME/$SIMHOST.krel"
-fi
-exit 0

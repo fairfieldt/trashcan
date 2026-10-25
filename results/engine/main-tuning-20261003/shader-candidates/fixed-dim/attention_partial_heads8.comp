@@ -1,5 +1,0 @@
-#version 460
-#define HEADS_PER_GROUP 8
-#define DIM 512
-#define SHARED_FLOATS DIM
-#include "attention_shared_body.glsl"
