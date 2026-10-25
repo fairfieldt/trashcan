@@ -24,3 +24,9 @@ launchctl bootout gui/$(id -u)/sh.tdf.trashcan-article
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/sh.tdf.trashcan-article.plist
 tailscale serve --bg --http 8227 http://127.0.0.1:8227
 ```
+
+## Literal-swap version
+
+`cerebras-parody.sh [OUT.html]` downloads the original post and writes a copy with the trashcan hardware and numbers
+swapped in (text pairs and replacement figures in the script; `--check` only reports matches). Run it yourself; the
+output isn't kept in the repo or served.
