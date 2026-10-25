@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-10-25T07:41:26.968594+00:00",
+  "base_commit": "fc22c1fb572ff8f7cff5ffe05c2d12ad0ea5deeb",
+  "candidate_patch_sha256": "258b9b48e9b560e740b269cdcda1ac73452900fa7f51f3e43aa4fd6f35f5bbc2",
+  "status": "UNVALIDATED: source snapshot only; no GPU result or runtime merge",
+  "source_sha256": {
+    "engine/src/qwen4/gpu.rs": "66518509c05ea538abc770b88fb6c75b9032f47149fe02d28306845bb89e336d",
+    "tools/qwen4_budget.py": "349f836b77e4637605531a6224cb2b3a1a036069b0e075199adf327ac838675e"
+  }
+}
