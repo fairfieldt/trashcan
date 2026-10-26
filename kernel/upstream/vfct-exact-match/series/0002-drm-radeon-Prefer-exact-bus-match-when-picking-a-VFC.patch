@@ -1,4 +1,4 @@
-From 31868aa3ad7816fbb9a1a478da4b4cea69881287 Mon Sep 17 00:00:00 2001
+From 89817176177a3bf24ed101f3c82472acdf38107e Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Mon, 5 Oct 2026 21:16:29 -0700
 Subject: [PATCH 2/2] drm/radeon: Prefer exact bus match when picking a VFCT
@@ -26,13 +26,12 @@ the soft filter was added for working.
 
 Fixes: 4059e2f02c8a ("drm/radeon: Fix VFCT bus number matching with soft filter")
 Cc: stable@vger.kernel.org
-Assisted-by: Claude:claude-opus-5-5
 ---
  drivers/gpu/drm/radeon/radeon_bios.c | 89 +++++++++++++++-------------
  1 file changed, 47 insertions(+), 42 deletions(-)
 
 diff --git a/drivers/gpu/drm/radeon/radeon_bios.c b/drivers/gpu/drm/radeon/radeon_bios.c
-index 1da6bf1c1..ace023152 100644
+index 1da6bf1c17ff..ace0231527b8 100644
 --- a/drivers/gpu/drm/radeon/radeon_bios.c
 +++ b/drivers/gpu/drm/radeon/radeon_bios.c
 @@ -610,39 +610,28 @@ static bool radeon_read_disabled_bios(struct radeon_device *rdev)
@@ -157,5 +156,5 @@ index 1da6bf1c1..ace023152 100644
  out:
  	acpi_put_table(hdr);
 -- 
-2.52.0
+2.47.3
 

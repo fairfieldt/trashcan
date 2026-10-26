@@ -1,11 +1,12 @@
-From 8497f55a7db90ed400041477f6e3d180794282e7 Mon Sep 17 00:00:00 2001
+From 623b70d430e7e659fd8e9bbb6460281a59a46215 Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Mon, 5 Oct 2026 22:18:55 -0700
 Subject: [PATCH] PCI/P2PDMA: Add Intel Xeon E5 v2 (Ivy Bridge-EP) to allowlist
 
-The allowlist has the Sandy Bridge-EP (0x3c00) and Haswell-EP (0x2f00)
-host bridges but not Ivy Bridge-EP, the generation between them, so
-peer-to-peer DMA between devices on its root ports is refused.
+The allowlist has the Sandy Bridge-EP (0x3c00), Haswell-EP (0x2f00) and
+Broadwell-EP (0x6f00) host bridges but not Ivy Bridge-EP, the generation
+between Sandy Bridge-EP and Haswell-EP, so peer-to-peer DMA between
+devices on its root ports is refused.
 
 Add the Xeon E7 v2/Xeon E5 v2/Core i7 DMI2 host bridge (0x0e00) with
 REQ_SAME_HOST_BRIDGE, like its neighbours.
@@ -19,14 +20,26 @@ GTT.  Copying 32 MiB buffers into and out of the peer's VRAM, in full and
 at random sub-ranges, the CPU checked 15 GiB over five runs through host
 staging with no mismatches, and words outside each sub-range were left
 intact.  Peer writes ran at 7.9 GB/s and peer reads at 3.7 GB/s.
-
-Assisted-by: Claude:claude-opus-5-5
 ---
+
+Notes:
+    Testing beyond the commit message: xgpu p2p-verify (the test described
+    above) also passed 3 of 3 runs on 7.2.9 and on 7.3-rc7 kernels carrying
+    this entry, on Mac Pro 6,1s.  I have not compared the same kernel and
+    config with and without only this entry; without it,
+    pci_p2pdma_distance() refuses the pair and amdgpu falls back to
+    migrating the import to GTT.  0e01 (the DMI2 port in PCIe mode, the
+    analogue of 3c01) is left out because I have no system that presents it.
+    
+    How this was made: an AI coding assistant (Claude, in Claude Code) wrote
+    the patch and this message at my direction and ran the tests on my
+    machines.
+
  drivers/pci/p2pdma.c | 2 ++
  1 file changed, 2 insertions(+)
 
 diff --git a/drivers/pci/p2pdma.c b/drivers/pci/p2pdma.c
-index beb1fe20c9d..b80a8c804a5 100644
+index 45260423dfb0..fd109c63e0e3 100644
 --- a/drivers/pci/p2pdma.c
 +++ b/drivers/pci/p2pdma.c
 @@ -543,6 +543,8 @@ static const struct pci_p2pdma_whitelist_entry {
@@ -35,11 +48,11 @@ index beb1fe20c9d..b80a8c804a5 100644
  	{PCI_VENDOR_ID_INTEL,	0x3c01, REQ_SAME_HOST_BRIDGE},
 +	/* Intel Xeon E7 v2/Xeon E5 v2/Core i7 */
 +	{PCI_VENDOR_ID_INTEL,	0x0e00, REQ_SAME_HOST_BRIDGE},
+ 	/* Intel Xeon E7 v4/Xeon E5 v4/Xeon E3 v4/Xeon D */
+ 	{PCI_VENDOR_ID_INTEL,	0x6f00, REQ_SAME_HOST_BRIDGE},
  	/* Intel Xeon E7 v3/Xeon E5 v3/Core i7 */
- 	{PCI_VENDOR_ID_INTEL,	0x2f00, REQ_SAME_HOST_BRIDGE},
- 	{PCI_VENDOR_ID_INTEL,	0x2f01, REQ_SAME_HOST_BRIDGE},
 
-base-commit: 1ee0e2a03ac539c90fd9b8a644ae983a2216b58c
+base-commit: 17bb0e2f6c8043f70a693a5f3797471cbed354c8
 -- 
-2.52.0
+2.47.3
 

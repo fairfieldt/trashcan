@@ -1,0 +1,55 @@
+sparse v0.6.5-rc1-21-g84ec0658, x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0
+== vfct-exact-match on amd/amd-staging-drm-next = 77f548b127c6 ("drm/amdgpu: keep PRT mappings off the VM state lists again")
+applied 2 patch(es): 2bd5774b23bb 89817176177a 
+also applies to torvalds/master (d135ab453a74)
+config out-main: --module DRM --module DRM_AMDGPU --enable DRM_AMDGPU_SI --module DRM_RADEON
+  CONFIG_DRM=m
+  CONFIG_DRM_AMDGPU=m
+  CONFIG_DRM_AMDGPU_SI=y
+  CONFIG_DRM_RADEON=m
+config out-extra: --module DRM --module DRM_AMDGPU --enable DRM_AMDGPU_SI --module DRM_RADEON --disable ACPI
+  CONFIG_DRM=m
+  CONFIG_DRM_AMDGPU=m
+  CONFIG_DRM_AMDGPU_SI=y
+  CONFIG_DRM_RADEON=m
+  # CONFIG_ACPI is not set
+build main-base: ok, 4 warning/error lines
+build main-patch1: ok, 4 warning/error lines
+build main-patch2: ok, 4 warning/error lines
+new W=1/sparse warnings with the series (main): 0
+build extra-base: ok, 4 warning/error lines
+build extra-patch1: ok, 4 warning/error lines
+build extra-patch2: ok, 4 warning/error lines
+new W=1/sparse warnings with the series (extra): 0
+format-patch: 0000-cover-letter.patch 0001-drm-amdgpu-Prefer-exact-bus-match-when-picking-a-VFC.patch 0002-drm-radeon-Prefer-exact-bus-match-when-picking-a-VFC.patch 
+== checkpatch --strict
+CHECK:CAMELCASE: Avoid CamelCase: <VendorID>
+CHECK:CAMELCASE: Avoid CamelCase: <DeviceID>
+CHECK:CAMELCASE: Avoid CamelCase: <PCIDevice>
+CHECK:CAMELCASE: Avoid CamelCase: <PCIFunction>
+CHECK:CAMELCASE: Avoid CamelCase: <VbiosHeader>
+CHECK:CAMELCASE: Avoid CamelCase: <ImageLength>
+CHECK:CAMELCASE: Avoid CamelCase: <PCIBus>
+CHECK:CAMELCASE: Avoid CamelCase: <VbiosContent>
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 8 checks, 116 lines checked
+/home/fairfieldt.linux/a18/check/vfct-exact-match/series/0001-drm-amdgpu-Prefer-exact-bus-match-when-picking-a-VFC.patch has style problems, please review.
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 0 checks, 118 lines checked
+/home/fairfieldt.linux/a18/check/vfct-exact-match/series/0002-drm-radeon-Prefer-exact-bus-match-when-picking-a-VFC.patch has style problems, please review.
+== get_maintainer.pl
+Alex Deucher <alexander.deucher@amd.com> (maintainer:RADEON and AMDGPU DRM DRIVERS,commit_signer:5/7=71%,blamed_fixes:2/1=100%)
+"Christian König" <christian.koenig@amd.com> (maintainer:RADEON and AMDGPU DRM DRIVERS)
+David Airlie <airlied@gmail.com> (maintainer:DRM DRIVERS)
+Simona Vetter <simona@ffwll.ch> (maintainer:DRM DRIVERS)
+Lijo Lazar <lijo.lazar@amd.com> (commit_signer:4/7=57%,authored:2/7=29%,added_lines:11/165=7%,removed_lines:3/57=5%)
+Mario Limonciello <mario.limonciello@amd.com> (commit_signer:2/7=29%,authored:2/7=29%,added_lines:51/165=31%,removed_lines:11/57=19%,blamed_fixes:1/1=100%)
+YuBiao Wang <YuBiao.Wang@amd.com> (commit_signer:1/7=14%)
+Fangsheng Huang <Fangsheng.Huang@amd.com> (commit_signer:1/7=14%)
+Zhigang Luo <Zhigang.Luo@amd.com> (authored:1/7=14%,added_lines:55/165=33%)
+Srinivasan Shanmugam <srinivasan.shanmugam@amd.com> (authored:1/7=14%)
+Tom Fairfield <tom@fairfieldt.com> (authored:1/7=14%,added_lines:46/165=28%,removed_lines:41/57=72%)
+amd-gfx@lists.freedesktop.org (open list:RADEON and AMDGPU DRM DRIVERS)
+dri-devel@lists.freedesktop.org (open list:DRM DRIVERS)
+linux-kernel@vger.kernel.org (open list)
+base-commit 77f548b127c6de34ce271fa09ba270cb1ef9f2da

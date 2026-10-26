@@ -172,31 +172,32 @@ is unreachable. [Hardware evidence](../results/kernel/port-lights-20261018/READM
   operation. Prior bulk-write measurements (8.05 ms all 20 changed, 2.15 ms five) are not an inference overhead test.
   Defer kernel installation/module reload and rollout until separately authorized.
 
-## P1 — Refresh upstream patch preparation (new grouped To-do)
+## P1 — Refresh upstream patch preparation (A18, refreshed 2026-10-26)
 
-All draft series are on `lab`, removed from cleaned `main`. Bases/recipients below are **recorded snapshots**, not
-fresh upstream checks; recheck target trees, existing fixes, maintainer lists and submission requirements before
-sending. No patch has been sent according to the task records inspected. Keep subsystem series separate.
+Refreshed packages, the queue and the patch manifest are in [kernel/upstream/](../kernel/upstream/README.md); logs in
+[results/kernel/upstream-20261026/](../results/kernel/upstream-20261026/). Nothing has been sent. Bases were fetched
+on 2026-10-26, during the 7.4 merge window: send the two new-feature packages after v7.4-rc1 and rerun
+`kernel/upstream/check-series.sh` against the then-current tree first.
 
-| Submission unit / archive | Recorded base and evidence | Work before submission |
+| Submission unit | Base (2026-10-26) | Status and remaining limits |
 |---|---|---|
-| VFCT: amdgpu + radeon, 2-patch series; [draft](../kernel/upstream/vfct-exact-match/README.md) | `amd-staging-drm-next` 53750a937; unchanged-function replay; W=1 with/without ACPI; 6.12.111 boot checks for both drivers | Refresh base and Fixes links, rerun replay/build matrix; qualify on intended modern kernel. Radeon VBIOS source was inferred, not directly logged. Do not hot-load radeon to retest; historical attempt hung |
-| PCI P2PDMA: one 8086:0e00 entry; [draft](../kernel/upstream/p2pdma-ivy-bridge-ep/README.md) | `pci/next` 1ee0e2a03ac; 5 runs/15 GiB, 0 bad words on 6.12.111 with translated IOMMU | Fresh build/checkpatch; show config-identical allowlist on/off behavior if needed (old stock comparison also changed CONFIG_PCI_P2PDMA). Do not add untested 0e01 |
-| Thunderbolt stream: Tx E2E and HopID allocation unwind, independent fixes; [draft](../kernel/upstream/usb4stream-falcon-ridge/README.md) | `next-20261006` eea3fef32a9c; Tx fix hardware-tested on 7.2.9; HopID fix W=1 only | Rebase on thunderbolt `next`; consider separate submissions so tested Tx fix needn't wait for error-path qualification. Exercise allocation-failure/unwind with safe fault injection/test fixture; do not deliberately wedge the shared cluster |
-| Applesmc LED/sysfs support, then bulk levels, 2-patch series; [draft](../kernel/upstream/applesmc-port-lights/README.md) | v7.3; file matched hwmon-next as of Oct 19; W=1 each stage, strict checkpatch except signoff; indite visual/race/reload evidence | Refresh hwmon-next and ABI KernelVersion/Contact; justify bulk interface using measured transaction savings. Sparse not run. Failed bulk-write retry is code-reviewed but not hardware fault-injected; add a mock/fault-injection test where feasible, retain honest caveat |
+| [VFCT](../kernel/upstream/vfct-exact-match/README.md): amdgpu + radeon, 2 patches | `amd-staging-drm-next` 77f548b127c6 | Ready for maintainer review. Fixes now names db7e8108809a (v7.2-rc4). Replay passes on the rebased code; W=1/sparse with and without ACPI clean; all six Macs on 7.3-rc7 get their own VBIOS. Radeon only booted once on 6.12 (source inferred); don't hot-load radeon |
+| [PCI P2PDMA](../kernel/upstream/p2pdma-ivy-bridge-ep/README.md): 8086:0e00 | `pci/next` 17bb0e2f6c80 | Ready for maintainer review; rebased past the new 0x6f00 entry. p2p-verify passed on 6.12, 7.2.9, 7.3-rc7; no config-identical on/off A/B (needs a kernel install). No 0e01 |
+| [Thunderbolt stream Tx E2E](../kernel/upstream/thunderbolt-stream-tx-e2e/README.md) | thunderbolt `next` a93a8e320000 | Ready for maintainer review, sent alone. Hardware-tested on 7.2.9 and in use on 7.3-rc7; not run on the 7.4 `stream.c` (build-tested) |
+| [Thunderbolt stream HopID unwind](../kernel/upstream/thunderbolt-stream-hopid/README.md) | thunderbolt `next` a93a8e320000 | Ready for maintainer review. Userspace fixture runs the unchanged functions with failing allocations: 5/6 scenarios free foreign/unallocated IDs before, 0/6 after. No hardware run; one behaviour question in the notes |
+| [Applesmc port lights](../kernel/upstream/applesmc-port-lights/README.md), 2 patches | `hwmon-next` e1b3c2630d5b | Ready for maintainer review. ABI KernelVersion 7.5; bulk interface justified by the measured per-LED cost; sparse clean. Running on all six Macs. Failed bulk-write retry still not fault-injected (stated) |
 
-- [ ] Prepare an additional Thunderbolt review queue for local **0004 throttling parameter**, **0006 CLOSE behavior**
-  and **0007 RX-flush close delay**; they are not all covered by the two-patch Falcon Ridge draft. For 0006 confirm
-  the intended API semantics with the subsystem and test old-session CLOSE/new-session traffic, blocking/nonblocking
-  and busy-poll paths; for 0007 retain close latency and shutdown correctness evidence. 0004 needs the measured
-  latency rationale and an upstream API decision. Keep error-frame handling/disconnect proposals in
-  [reliable-stream results](../results/kernel/usb4stream-reliable-20261013/README.md) separate from applied fixes.
-- [ ] Exclude diagnostic 0008 (known faulty poll-mode experiment) and already-upstream SI GPIO/DC fix 0002
-  (`cd883d0a3937`, as recorded locally). Make the deployable patch manifest and submission queue agree.
-- [ ] For each refreshed series retain exact base, format-patch output, apply/build/W=1/checkpatch commands and logs,
-  hardware configuration, test limitations and current get_maintainer output. Confirm `Assisted-by` formatting;
-  only the human submitter certifies DCO/signoff, approves first-person cover-letter claims and sends the patches.
-  Do not automatically add a signoff, publish a PR or send email.
+- [x] Thunderbolt review queue for local 0004, 0006, 0007: [kernel/upstream/thunderbolt-review-queue/](../kernel/upstream/thunderbolt-review-queue/README.md).
+  0007 is superseded in mainline (20bea8ceeb6a); 0006 conflicts with mainline's CLOSE semantics (8d55710a8c43) and
+  needs the subsystem's answer on stale CLOSEs before any patch; 0004 needs an API decision (ethtool coalescing or a
+  new default). No hardware tests were run. Error-frame/disconnect proposals stay in
+  [reliable-stream results](../results/kernel/usb4stream-reliable-20261013/README.md).
+- [x] 0008 (diagnostic) and 0002 (upstream as cd883d0a3937, v7.3-rc6) are excluded; the manifest table in
+  [kernel/upstream/README.md](../kernel/upstream/README.md) maps every `patches-7.3/` patch to its package.
+- [x] Each package keeps base, format-patch output, commands, logs, hardware, limits and get_maintainer output.
+  `Assisted-by` was removed from the kernel's guidance and checkpatch in 1e035297ffda (7.4); the patches carry no such
+  trailer and describe tool use in the cover letter or notes instead. No sign-off was added.
+- [ ] Maintainer: review each package, approve the first-person paragraphs, sign off and send (commands in each README).
 
 ## P2 — Preview acceptance (new grouped To-do)
 

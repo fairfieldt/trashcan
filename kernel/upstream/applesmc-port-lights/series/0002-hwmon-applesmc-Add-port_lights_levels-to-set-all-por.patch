@@ -1,4 +1,4 @@
-From f55258761019334b30c34c0d5e22c2f8201bdd5b Mon Sep 17 00:00:00 2001
+From 8a9c8f5d1bb060d7c136fad1ba2ad8d1c3af356c Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Mon, 19 Oct 2026 11:11:46 -0700
 Subject: [PATCH 2/2] hwmon: (applesmc) Add port_lights_levels to set all port
@@ -33,15 +33,13 @@ Tested on a Mac Pro 6,1: the timings above, and 30 rounds of a
 single-LED write of 255 immediately followed by a bulk write of 64 for
 that LED, all of which ended at 64 (read back through the controller's
 status key).
-
-Assisted-by: LLM
 ---
  .../testing/sysfs-devices-platform-applesmc   | 18 ++++
  drivers/hwmon/applesmc.c                      | 84 ++++++++++++++++++-
  2 files changed, 101 insertions(+), 1 deletion(-)
 
 diff --git a/Documentation/ABI/testing/sysfs-devices-platform-applesmc b/Documentation/ABI/testing/sysfs-devices-platform-applesmc
-index 4aab4a6..47783f0 100644
+index 20d46860a6b4..413be7690076 100644
 --- a/Documentation/ABI/testing/sysfs-devices-platform-applesmc
 +++ b/Documentation/ABI/testing/sysfs-devices-platform-applesmc
 @@ -60,3 +60,21 @@ Description:
@@ -51,7 +49,7 @@ index 4aab4a6..47783f0 100644
 +
 +What:		/sys/devices/platform/applesmc.768/port_lights_levels
 +Date:		October 2026
-+KernelVersion:	7.4
++KernelVersion:	7.5
 +Contact:	Tom Fairfield <tom@fairfieldt.com>
 +Description:
 +		(RW) Every port light's brightness at once: one value 0-255
@@ -67,7 +65,7 @@ index 4aab4a6..47783f0 100644
 +		through. Reads give each LED's brightness as its LED class
 +		device reports it.
 diff --git a/drivers/hwmon/applesmc.c b/drivers/hwmon/applesmc.c
-index 14c6841..7743ca2 100644
+index 14c6841da1d2..7743ca2b6963 100644
 --- a/drivers/hwmon/applesmc.c
 +++ b/drivers/hwmon/applesmc.c
 @@ -32,6 +32,7 @@

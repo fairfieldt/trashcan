@@ -1,0 +1,14 @@
+Alex Deucher <alexander.deucher@amd.com>
+"Christian König" <christian.koenig@amd.com>
+David Airlie <airlied@gmail.com>
+Simona Vetter <simona@ffwll.ch>
+Lijo Lazar <lijo.lazar@amd.com>
+Mario Limonciello <mario.limonciello@amd.com>
+YuBiao Wang <YuBiao.Wang@amd.com>
+Fangsheng Huang <Fangsheng.Huang@amd.com>
+Zhigang Luo <Zhigang.Luo@amd.com>
+Srinivasan Shanmugam <srinivasan.shanmugam@amd.com>
+Tom Fairfield <tom@fairfieldt.com>
+amd-gfx@lists.freedesktop.org
+dri-devel@lists.freedesktop.org
+linux-kernel@vger.kernel.org

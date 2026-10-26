@@ -1,0 +1,57 @@
+------------------------------------------------------------------------------------------------------------------------
+/home/fairfieldt.linux/a18/check/vfct-exact-match/series/0001-drm-amdgpu-Prefer-exact-bus-match-when-picking-a-VFC.patch
+------------------------------------------------------------------------------------------------------------------------
+CHECK:CAMELCASE: Avoid CamelCase: <VendorID>
+#76: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:451:
++	return vhdr->VendorID == adev->pdev->vendor &&
+
+CHECK:CAMELCASE: Avoid CamelCase: <DeviceID>
+#77: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:452:
++	       vhdr->DeviceID == adev->pdev->device &&
+
+CHECK:CAMELCASE: Avoid CamelCase: <PCIDevice>
+#78: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:453:
++	       vhdr->PCIDevice == PCI_SLOT(adev->pdev->devfn) &&
+
+CHECK:CAMELCASE: Avoid CamelCase: <PCIFunction>
+#79: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:454:
++	       vhdr->PCIFunction == PCI_FUNC(adev->pdev->devfn);
+
+CHECK:CAMELCASE: Avoid CamelCase: <VbiosHeader>
+#97: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:480:
++		vhdr = &vbios->VbiosHeader;
+
+CHECK:CAMELCASE: Avoid CamelCase: <ImageLength>
+#118: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:494:
++		if (!vhdr->ImageLength || !amdgpu_acpi_vfct_match(adev, vhdr))
+
+CHECK:CAMELCASE: Avoid CamelCase: <PCIBus>
+#122: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:498:
++		if (vhdr->PCIBus == adev->pdev->bus->number) {
+
+CHECK:CAMELCASE: Avoid CamelCase: <VbiosContent>
+#145: FILE: drivers/gpu/drm/amd/amdgpu/amdgpu_bios.c:520:
++	adev->bios = kmemdup(&match->VbiosContent, vhdr->ImageLength, GFP_KERNEL);
+
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+
+total: 1 errors, 0 warnings, 8 checks, 116 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+/home/fairfieldt.linux/a18/check/vfct-exact-match/series/0001-drm-amdgpu-Prefer-exact-bus-match-when-picking-a-VFC.patch has style problems, please review.
+------------------------------------------------------------------------------------------------------------------------
+/home/fairfieldt.linux/a18/check/vfct-exact-match/series/0002-drm-radeon-Prefer-exact-bus-match-when-picking-a-VFC.patch
+------------------------------------------------------------------------------------------------------------------------
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+
+total: 1 errors, 0 warnings, 0 checks, 118 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+/home/fairfieldt.linux/a18/check/vfct-exact-match/series/0002-drm-radeon-Prefer-exact-bus-match-when-picking-a-VFC.patch has style problems, please review.
+
+NOTE: If any of the errors are false positives, please report
+      them to the maintainer, see CHECKPATCH in MAINTAINERS.

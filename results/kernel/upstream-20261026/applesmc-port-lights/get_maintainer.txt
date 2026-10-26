@@ -1,0 +1,5 @@
+Henrik Rydberg <rydberg@bitmath.org>
+Guenter Roeck <linux@roeck-us.net>
+"GitAuthor: Tom Fairfield" <tom@fairfieldt.com>
+linux-hwmon@vger.kernel.org
+linux-kernel@vger.kernel.org

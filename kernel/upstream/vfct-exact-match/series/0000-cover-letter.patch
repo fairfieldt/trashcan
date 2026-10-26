@@ -1,9 +1,10 @@
-From 31868aa3ad7816fbb9a1a478da4b4cea69881287 Mon Sep 17 00:00:00 2001
+From 89817176177a3bf24ed101f3c82472acdf38107e Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
-Date: Mon, 5 Oct 2026 21:16:29 -0700
-Subject: [PATCH 0/2] drm/amdgpu, drm/radeon: Prefer exact bus match for VFCT images
+Date: Mon, 26 Oct 2026 13:02:03 -0700
+Subject: [PATCH 0/2] drm/amdgpu, drm/radeon: Prefer exact bus match for VFCT
+ images
 
-The VFCT soft filter added in commits 11c141672045 and 4059e2f02c8a
+The VFCT soft filter added in commits db7e8108809a and 4059e2f02c8a
 takes the first VFCT image whose vendor, device, slot and function
 match, even when a later image also matches the bus number.  On
 systems with several identical GPUs every GPU then gets the first GPU's
@@ -24,22 +25,27 @@ are renumbered: they all get the first image, as they do today.  Refusing
 the VFCT image in that case would be stricter, but it could leave a GPU
 with no VBIOS at all, so these patches leave that behaviour alone.
 
-Testing, on a Mac Pro 6,1 (2x FirePro D700, Apple VFCT above):
+Testing, on Mac Pro 6,1s (2x FirePro D700, Apple VFCT above):
 
-- Replayed the machine's VFCT through the old and new
-  amdgpu_acpi_vfct_bios() and radeon_acpi_vfct_bios() compiled in
-  userspace.  With the old code the GPU at 06:00.0 gets
-  113-C3861XA-028; with the new code it gets 113-C3861XB-028.  An
-  exact-bus single-GPU table, a renumbered single-GPU table and a
-  non-matching device ID behave the same as before.
-- Booted the patches backported to 6.12.111 on the Mac Pro.  amdgpu
-  fetched 113-C3861XA-028 for 02:00.0 and 113-C3861XB-028 for 06:00.0
-  from VFCT with no bus mismatch notice, and both GPUs initialized.
-  radeon initialized both GPUs with no VFCT warnings or bus mismatch
-  notice.  radeon doesn't log which VBIOS source it used, but both
-  drivers try ATRM before VFCT and amdgpu fell through to VFCT on this
-  machine.
-- Built both files with W=1, with and without CONFIG_ACPI.
+- Replayed the machine's VFCT through amdgpu_acpi_vfct_bios() and
+  radeon_acpi_vfct_bios() compiled in userspace, before and after this
+  series on amd-staging-drm-next.  Before, the GPU at 06:00.0 gets
+  113-C3861XA-028; after, it gets 113-C3861XB-028.  An exact-bus
+  single-GPU table, a renumbered single-GPU table, a table with both
+  buses renumbered and a non-matching device ID behave as before.
+- amdgpu: the same change backported to 6.12.111, 7.2.9 and 7.3-rc7.
+  On 7.3-rc7 six Mac Pros report 113-C3861XA-028 for 02:00.0 and
+  113-C3861XB-028 for 06:00.0 in vbios_version, with no bus mismatch
+  notice.
+- radeon: only the 6.12.111 backport was booted, once, on one Mac Pro;
+  both GPUs initialized with no VFCT warning or bus mismatch notice.
+  radeon doesn't log which VBIOS source it used.
+- Both files build with W=1, with and without CONFIG_ACPI, and the
+  series adds no sparse warnings.
+
+How this was made: an AI coding assistant (Claude, in Claude Code) wrote
+the patches, the userspace replay and these messages at my direction;
+I ran the hardware tests on my machines.
 
 Tom Fairfield (2):
   drm/amdgpu: Prefer exact bus match when picking a VFCT image
@@ -49,6 +55,8 @@ Tom Fairfield (2):
  drivers/gpu/drm/radeon/radeon_bios.c     | 89 +++++++++++++-----------
  2 files changed, 93 insertions(+), 83 deletions(-)
 
---
-2.52.0
+
+base-commit: 77f548b127c6de34ce271fa09ba270cb1ef9f2da
+-- 
+2.47.3
 

@@ -1,0 +1,11 @@
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+
+total: 1 errors, 0 warnings, 0 checks, 8 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+/home/fairfieldt.linux/a18/check/p2pdma-ivy-bridge-ep/series/0001-PCI-P2PDMA-Add-Intel-Xeon-E5-v2-Ivy-Bridge-EP-to-all.patch has style problems, please review.
+
+NOTE: If any of the errors are false positives, please report
+      them to the maintainer, see CHECKPATCH in MAINTAINERS.

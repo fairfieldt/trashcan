@@ -1,0 +1,4 @@
+Bjorn Helgaas <bhelgaas@google.com> (maintainer:PCI PEER-TO-PEER DMA (P2PDMA))
+Logan Gunthorpe <logang@deltatee.com> (maintainer:PCI PEER-TO-PEER DMA (P2PDMA))
+linux-pci@vger.kernel.org (open list:PCI PEER-TO-PEER DMA (P2PDMA))
+linux-kernel@vger.kernel.org (open list)

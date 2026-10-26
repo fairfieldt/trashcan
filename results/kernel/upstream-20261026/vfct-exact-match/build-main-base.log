@@ -1,0 +1,4 @@
+/home/fairfieldt.linux/a18/check/vfct-exact-match/src/drivers/gpu/drm/radeon/radeon_bios.c:96:9: warning: dereference of noderef expression
+/home/fairfieldt.linux/a18/check/vfct-exact-match/src/drivers/gpu/drm/radeon/radeon_bios.c:97:9: warning: dereference of noderef expression
+/home/fairfieldt.linux/a18/check/vfct-exact-match/src/drivers/gpu/drm/radeon/radeon_bios.c:99:26: warning: dereference of noderef expression
+/home/fairfieldt.linux/a18/check/vfct-exact-match/src/drivers/gpu/drm/radeon/radeon_bios.c:99:42: warning: dereference of noderef expression

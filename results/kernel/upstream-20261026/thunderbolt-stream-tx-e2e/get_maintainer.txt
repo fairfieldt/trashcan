@@ -1,0 +1,6 @@
+Andreas Noever <andreas.noever@gmail.com>
+Mika Westerberg <westeri@kernel.org>
+Yehezkel Bernat <YehezkelShB@gmail.com>
+Alan Borzeszkowski <alan.borzeszkowski@linux.intel.com>
+linux-usb@vger.kernel.org
+linux-kernel@vger.kernel.org

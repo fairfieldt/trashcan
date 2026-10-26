@@ -1,8 +1,8 @@
-From a35911f1e197cecd8f70fb66e0a2da11ab11ff6b Mon Sep 17 00:00:00 2001
+From a5e898b120f7c3ba827721fdf0c9304a921c899a Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Tue, 6 Oct 2026 16:28:04 -0700
-Subject: [PATCH 1/2] thunderbolt: stream: Don't use end-to-end flow control on
- the Tx ring
+Subject: [PATCH] thunderbolt: stream: Don't use end-to-end flow control on the
+ Tx ring
 
 On a Mac Pro 6,1 (three Intel Falcon Ridge 4C controllers, two of them
 connected to each other with a Thunderbolt 2 cable), opening a stream
@@ -29,13 +29,30 @@ round trips of 25 us and 9.6 Gb/s one way per cable, also with three
 cables at once), and no config read times out.
 
 Fixes: 6db21d817b43 ("thunderbolt: Add support for USB4STREAM")
-Assisted-by: Claude:claude-opus-5-5
 ---
+
+Notes:
+    Testing: the tests in the message ran on 7.2.9 (results with and without
+    this change; without it 0 of 10 stream opens succeeded and the
+    controller had to be reset).  The same change has been in the 7.3-rc7
+    kernels of six Mac Pro 6,1s since 14 October, which use USB4STREAM
+    links between each other daily.  It has not run on this base: stream.c
+    here has the RX polling, busy polling and CLOSE changes merged for 7.4,
+    which the tested kernels don't have.  On this base it builds with W=1
+    and adds no sparse warnings.
+    
+    The patch applies to thunderbolt.git next and to mainline; it doesn't
+    apply to the current fixes branch, which predates the RX polling change.
+    
+    How this was made: an AI coding assistant (Claude, in Claude Code)
+    debugged the failure with me and wrote the patch and this message; the
+    hardware tests ran on my machines.
+
  drivers/thunderbolt/stream.c | 12 +++++++-----
  1 file changed, 7 insertions(+), 5 deletions(-)
 
 diff --git a/drivers/thunderbolt/stream.c b/drivers/thunderbolt/stream.c
-index 4f9a57b77bfa..451308ffaf2c 100644
+index fe88341c4e29..d2255d0275fd 100644
 --- a/drivers/thunderbolt/stream.c
 +++ b/drivers/thunderbolt/stream.c
 @@ -34,7 +34,9 @@
@@ -49,7 +66,7 @@ index 4f9a57b77bfa..451308ffaf2c 100644
   *
   * Data is sent to the other side as tunneled DATA packets. All the data
   * is owned by the user and passed as-is from the writer to the reader.
-@@ -627,7 +629,7 @@ static void tbstream_dev_complete_rx(struct tbstream_dev *sdev)
+@@ -629,7 +631,7 @@ static void tbstream_dev_complete_rx(struct tbstream_dev *sdev)
  static int tbstream_dev_start(struct tbstream_dev *sdev)
  {
  	struct tb_xdomain *xd = tbstream_dev_xdomain(sdev);
@@ -58,7 +75,7 @@ index 4f9a57b77bfa..451308ffaf2c 100644
  	void (*start_poll)(void *) = NULL;
  	u16 sof_mask, eof_mask;
  	struct tb_ring *ring;
-@@ -651,9 +653,9 @@ static int tbstream_dev_start(struct tbstream_dev *sdev)
+@@ -653,9 +655,9 @@ static int tbstream_dev_start(struct tbstream_dev *sdev)
  	sof_mask = BIT(TBSTREAM_FRAME_START);
  	eof_mask = BIT(TBSTREAM_DATA) | BIT(TBSTREAM_CLOSE);
  
@@ -71,6 +88,8 @@ index 4f9a57b77bfa..451308ffaf2c 100644
  	if (!ring) {
  		ret = -ENOMEM;
  		goto err_free_tx_buffers;
+
+base-commit: a93a8e3200002f0c345fec4c340390e9a60aabc7
 -- 
 2.47.3
 

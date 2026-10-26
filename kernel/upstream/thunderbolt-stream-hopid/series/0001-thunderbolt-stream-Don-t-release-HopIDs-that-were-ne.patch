@@ -1,7 +1,7 @@
-From 16faa855ebc0f380f548736571d69b4c244c5a0e Mon Sep 17 00:00:00 2001
+From 057a35610f69d6efa60ac808605809a52b2489a8 Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Tue, 6 Oct 2026 16:28:33 -0700
-Subject: [PATCH 2/2] thunderbolt: stream: Don't release HopIDs that were never
+Subject: [PATCH] thunderbolt: stream: Don't release HopIDs that were never
  allocated
 
 tbstream_dev_attach_stream() allocates the HopIDs a stream was
@@ -15,9 +15,9 @@ Similarly, tbstream_dev_alloc_in/out_hopid() release the previous HopID
 before allocating the new one, but leave it in sdev if the allocation
 fails, so it can be released a second time.
 
-We hit this on a Mac Pro 6,1 after the host router had stopped
-answering (see the previous patch) and the XDomain connection came
-back. Removing the stream's configfs directory then warned twice:
+On a Mac Pro 6,1, after its host router had stopped answering config
+requests during a stream test and the XDomain connection came back,
+removing the stream's configfs directory warned twice:
 
   WARNING: lib/idr.c:594 at ida_free+0xe3/0x140, CPU#8: rmdir/16835
   Call Trace:
@@ -26,22 +26,45 @@ back. Removing the stream's configfs directory then warned twice:
    config_item_cleanup+0x52/0xb0 [configfs]
    configfs_rmdir+0x344/0x3d0 [configfs]
 
-and the same from tbstream_dev_release+0x89.
+and the same from tbstream_dev_release+0x89. The paths above are how we
+read the code; the warning was not reproduced on purpose.
 
 Forget HopIDs that could not be allocated when the stream attaches,
 with a warning, and clear the previous HopID as soon as it is released.
 
 Fixes: 6db21d817b43 ("thunderbolt: Add support for USB4STREAM")
-Assisted-by: Claude:claude-opus-5-5
 ---
+
+Notes:
+    Testing: compile-tested on this base (W=1, no new sparse warnings).  Not
+    run on hardware: I didn't want to provoke HopID conflicts on the hosts I
+    have, as getting there involves wedging a host router.  Instead the
+    HopID functions of stream.c (tbstream_dev_release(),
+    tbstream_dev_alloc_in/out_hopid(), tbstream_dev_attach_stream() and
+    tbstream_dev_detach_stream()) were compiled unchanged in userspace
+    against a model of the XDomain HopID IDAs, and driven through attach,
+    HopID changes, detach and release with allocations that fail or find
+    the HopID taken.  Before this patch, five of six scenarios free a HopID
+    the stream doesn't hold (ida_free() of an unallocated ID, or another
+    user's ID); after it none do and nothing is left allocated.
+    
+    Open question: when an allocation fails on attach the configured HopID
+    is now forgotten (reads back as 0) rather than kept for a later attach.
+    Keeping it would need a separate "allocated" flag; I went for the
+    smaller change.
+    
+    How this was made: an AI coding assistant (Claude, in Claude Code) found
+    the cause by reading the code after the warning, and wrote the patch,
+    the userspace test and this message at my direction.
+
  drivers/thunderbolt/stream.c | 28 ++++++++++++++++++++++------
  1 file changed, 22 insertions(+), 6 deletions(-)
 
 diff --git a/drivers/thunderbolt/stream.c b/drivers/thunderbolt/stream.c
-index 451308ffaf2c..6976a1e82e82 100644
+index fe88341c4e29..868082a25728 100644
 --- a/drivers/thunderbolt/stream.c
 +++ b/drivers/thunderbolt/stream.c
-@@ -1340,8 +1340,10 @@ static int tbstream_dev_alloc_in_hopid(struct tbstream_dev *sdev, int hopid)
+@@ -1337,8 +1337,10 @@ static int tbstream_dev_alloc_in_hopid(struct tbstream_dev *sdev, int hopid)
  	struct tb_xdomain *xd = tbstream_dev_xdomain(sdev);
  	int ret;
  
@@ -53,7 +76,7 @@ index 451308ffaf2c..6976a1e82e82 100644
  	if (!hopid) {
  		sdev->in_hopid = hopid;
  		return 0;
-@@ -1366,8 +1368,10 @@ static int tbstream_dev_alloc_out_hopid(struct tbstream_dev *sdev, int hopid)
+@@ -1363,8 +1365,10 @@ static int tbstream_dev_alloc_out_hopid(struct tbstream_dev *sdev, int hopid)
  	struct tb_xdomain *xd = tbstream_dev_xdomain(sdev);
  	int ret;
  
@@ -65,7 +88,7 @@ index 451308ffaf2c..6976a1e82e82 100644
  	if (!hopid) {
  		sdev->out_hopid = hopid;
  		return 0;
-@@ -1587,10 +1591,22 @@ tbstream_dev_attach_stream(struct tbstream_dev *sdev, struct tbstream_group *sg)
+@@ -1584,10 +1588,22 @@ tbstream_dev_attach_stream(struct tbstream_dev *sdev, struct tbstream_group *sg)
  		if (sdev->in_hopid <= 0 && sdev->out_hopid <= 0)
  			service_get_hopids(stream->svc, name, &sdev->in_hopid,
  					   &sdev->out_hopid);
@@ -92,6 +115,8 @@ index 451308ffaf2c..6976a1e82e82 100644
  	}
  
  	service_update_properties(stream->svc, name, sdev->in_hopid,
+
+base-commit: a93a8e3200002f0c345fec4c340390e9a60aabc7
 -- 
 2.47.3
 

@@ -1,0 +1,25 @@
+----------------------------------------------------------------------------------------------------------------------------
+/home/fairfieldt.linux/a18/check/applesmc-port-lights/series/0001-hwmon-applesmc-Add-support-for-the-Mac-Pro-6-1-port-.patch
+----------------------------------------------------------------------------------------------------------------------------
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+
+total: 1 errors, 0 warnings, 0 checks, 574 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+/home/fairfieldt.linux/a18/check/applesmc-port-lights/series/0001-hwmon-applesmc-Add-support-for-the-Mac-Pro-6-1-port-.patch has style problems, please review.
+----------------------------------------------------------------------------------------------------------------------------
+/home/fairfieldt.linux/a18/check/applesmc-port-lights/series/0002-hwmon-applesmc-Add-port_lights_levels-to-set-all-por.patch
+----------------------------------------------------------------------------------------------------------------------------
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+
+total: 1 errors, 0 warnings, 0 checks, 141 lines checked
+
+NOTE: For some of the reported defects, checkpatch may be able to
+      mechanically convert to the typical style using --fix or --fix-inplace.
+
+/home/fairfieldt.linux/a18/check/applesmc-port-lights/series/0002-hwmon-applesmc-Add-port_lights_levels-to-set-all-por.patch has style problems, please review.
+
+NOTE: If any of the errors are false positives, please report
+      them to the maintainer, see CHECKPATCH in MAINTAINERS.

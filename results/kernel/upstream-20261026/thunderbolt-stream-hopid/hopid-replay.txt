@@ -1,0 +1,30 @@
+### stream.c at tb/next a93a8e320000 (before)
+  attach + detach, HopIDs free                                 ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+    BUG: released in HopID 8, which another user holds
+  attach with in HopID held elsewhere, detach                  ida_free of unallocated 0, other user's HopID freed 1, left allocated 0
+    WARNING: ida_free: in HopID 8 is not allocated
+  attach with failing allocation, release                      ida_free of unallocated 1, other user's HopID freed 0, left allocated 0
+    BUG: released out HopID 10, which another user holds
+  attach with peer HopIDs, one taken, detach                   ida_free of unallocated 0, other user's HopID freed 1, left allocated 0
+    in_hopid store 12: -16
+    WARNING: ida_free: in HopID 8 is not allocated
+  change in HopID to a taken one, detach                       ida_free of unallocated 1, other user's HopID freed 0, left allocated 0
+    out_hopid store 13: -12
+    WARNING: ida_free: out HopID 9 is not allocated
+  change out HopID with failing allocation, release            ida_free of unallocated 1, other user's HopID freed 0, left allocated 0
+RESULT: HopID bookkeeping errors
+exit 1
+### with the patch (after)
+  attach + detach, HopIDs free                                 ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+    pr_warn: data: in HopID 8 not available
+  attach with in HopID held elsewhere, detach                  ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+    pr_warn: data: in HopID 8 not available
+  attach with failing allocation, release                      ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+    pr_warn: data: out HopID 10 not available
+  attach with peer HopIDs, one taken, detach                   ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+    in_hopid store 12: -16
+  change in HopID to a taken one, detach                       ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+    out_hopid store 13: -12
+  change out HopID with failing allocation, release            ida_free of unallocated 0, other user's HopID freed 0, left allocated 0
+RESULT: no HopID bookkeeping errors
+exit 0

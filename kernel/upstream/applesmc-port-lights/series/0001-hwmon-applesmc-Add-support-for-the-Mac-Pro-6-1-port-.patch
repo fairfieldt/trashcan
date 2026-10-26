@@ -1,4 +1,4 @@
-From 399c29ce94a40636cd0d4ddc5800e908be2c8f80 Mon Sep 17 00:00:00 2001
+From b7a2c14b9cc6d32fb7757d1607e74466d1e2a174 Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Mon, 19 Oct 2026 11:11:46 -0700
 Subject: [PATCH 1/2] hwmon: (applesmc) Add support for the Mac Pro 6,1 port
@@ -50,8 +50,6 @@ each LED identified by eye, manual and automatic mode, both animations,
 motion, hold time and the power light modes, the heartbeat and timer
 triggers, and unloading and reloading the driver while a fan control
 service uses its hwmon attributes.
-
-Assisted-by: LLM
 ---
  .../testing/sysfs-devices-platform-applesmc   |  62 +++
  MAINTAINERS                                   |   1 +
@@ -61,13 +59,13 @@ Assisted-by: LLM
 
 diff --git a/Documentation/ABI/testing/sysfs-devices-platform-applesmc b/Documentation/ABI/testing/sysfs-devices-platform-applesmc
 new file mode 100644
-index 0000000..4aab4a6
+index 000000000000..20d46860a6b4
 --- /dev/null
 +++ b/Documentation/ABI/testing/sysfs-devices-platform-applesmc
 @@ -0,0 +1,62 @@
 +What:		/sys/devices/platform/applesmc.768/port_lights
 +Date:		October 2026
-+KernelVersion:	7.4
++KernelVersion:	7.5
 +Contact:	Tom Fairfield <tom@fairfieldt.com>
 +Description:
 +		(RW) Who drives the port lights, the LEDs behind the I/O panel
@@ -87,7 +85,7 @@ index 0000000..4aab4a6
 +
 +What:		/sys/devices/platform/applesmc.768/port_lights_motion
 +Date:		October 2026
-+KernelVersion:	7.4
++KernelVersion:	7.5
 +Contact:	Tom Fairfield <tom@fairfieldt.com>
 +Description:
 +		(RW) 1 if the SMC lights the port lights when the accelerometer
@@ -96,7 +94,7 @@ index 0000000..4aab4a6
 +
 +What:		/sys/devices/platform/applesmc.768/port_lights_hold_ms
 +Date:		October 2026
-+KernelVersion:	7.4
++KernelVersion:	7.5
 +Contact:	Tom Fairfield <tom@fairfieldt.com>
 +Description:
 +		(RW) How long the port lights stay lit after motion, in
@@ -105,7 +103,7 @@ index 0000000..4aab4a6
 +
 +What:		/sys/devices/platform/applesmc.768/port_lights_show
 +Date:		October 2026
-+KernelVersion:	7.4
++KernelVersion:	7.5
 +Contact:	Tom Fairfield <tom@fairfieldt.com>
 +Description:
 +		(WO) Lights the port lights as motion does, once; in automatic
@@ -118,7 +116,7 @@ index 0000000..4aab4a6
 +
 +What:		/sys/devices/platform/applesmc.768/power_light
 +Date:		October 2026
-+KernelVersion:	7.4
++KernelVersion:	7.5
 +Contact:	Tom Fairfield <tom@fairfieldt.com>
 +Description:
 +		(RW) The power light's mode while the port lights are in
@@ -128,7 +126,7 @@ index 0000000..4aab4a6
 +		smc::power-2 instead. Reads give the mode last written ("on"
 +		until then); unloading the driver sets "on" again.
 diff --git a/MAINTAINERS b/MAINTAINERS
-index f53047a..1ba1903 100644
+index 5ad12c57ca5f..98f0f98cccb3 100644
 --- a/MAINTAINERS
 +++ b/MAINTAINERS
 @@ -2062,6 +2062,7 @@ APPLE SMC DRIVER
@@ -140,7 +138,7 @@ index f53047a..1ba1903 100644
  
  APPLETALK NETWORK LAYER
 diff --git a/drivers/hwmon/applesmc.c b/drivers/hwmon/applesmc.c
-index d0baa10..14c6841 100644
+index d0baa10502f7..14c6841da1d2 100644
 --- a/drivers/hwmon/applesmc.c
 +++ b/drivers/hwmon/applesmc.c
 @@ -1,8 +1,8 @@
@@ -651,7 +649,7 @@ index d0baa10..14c6841 100644
  out_light_ledclass:
  	applesmc_release_key_backlight();
  out_light_sysfs:
-@@ -1590,6 +2012,7 @@ out:
+@@ -1590,6 +2012,7 @@ static int __init applesmc_init(void)
  static void __exit applesmc_exit(void)
  {
  	hwmon_device_unregister(hwmon_dev);

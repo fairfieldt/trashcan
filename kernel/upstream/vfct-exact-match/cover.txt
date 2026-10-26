@@ -1,0 +1,44 @@
+drm/amdgpu, drm/radeon: Prefer exact bus match for VFCT images
+
+The VFCT soft filter added in commits db7e8108809a and 4059e2f02c8a
+takes the first VFCT image whose vendor, device, slot and function
+match, even when a later image also matches the bus number.  On
+systems with several identical GPUs every GPU then gets the first GPU's
+image.  This came up during review of the soft filter ("how they would
+interplay with a system with multiple of the same GPU") and Alex pointed
+out that some Apple systems do exactly that.  The Mac Pro 6,1 is one:
+
+  02:00.0 1002:6798 113-C3861XA-028
+  06:00.0 1002:6798 113-C3861XB-028
+
+These patches scan the whole table and prefer the image with an exact bus
+match, falling back to the first identity match only when no bus number
+matches, so the pci=realloc case the soft filter was added for still
+works.
+
+The fallback is still ambiguous when the buses of several identical GPUs
+are renumbered: they all get the first image, as they do today.  Refusing
+the VFCT image in that case would be stricter, but it could leave a GPU
+with no VBIOS at all, so these patches leave that behaviour alone.
+
+Testing, on Mac Pro 6,1s (2x FirePro D700, Apple VFCT above):
+
+- Replayed the machine's VFCT through amdgpu_acpi_vfct_bios() and
+  radeon_acpi_vfct_bios() compiled in userspace, before and after this
+  series on amd-staging-drm-next.  Before, the GPU at 06:00.0 gets
+  113-C3861XA-028; after, it gets 113-C3861XB-028.  An exact-bus
+  single-GPU table, a renumbered single-GPU table, a table with both
+  buses renumbered and a non-matching device ID behave as before.
+- amdgpu: the same change backported to 6.12.111, 7.2.9 and 7.3-rc7.
+  On 7.3-rc7 six Mac Pros report 113-C3861XA-028 for 02:00.0 and
+  113-C3861XB-028 for 06:00.0 in vbios_version, with no bus mismatch
+  notice.
+- radeon: only the 6.12.111 backport was booted, once, on one Mac Pro;
+  both GPUs initialized with no VFCT warning or bus mismatch notice.
+  radeon doesn't log which VBIOS source it used.
+- Both files build with W=1, with and without CONFIG_ACPI, and the
+  series adds no sparse warnings.
+
+How this was made: an AI coding assistant (Claude, in Claude Code) wrote
+the patches, the userspace replay and these messages at my direction;
+I ran the hardware tests on my machines.

@@ -1,0 +1,11 @@
+Testing beyond the commit message: xgpu p2p-verify (the test described
+above) also passed 3 of 3 runs on 7.2.9 and on 7.3-rc7 kernels carrying
+this entry, on Mac Pro 6,1s.  I have not compared the same kernel and
+config with and without only this entry; without it,
+pci_p2pdma_distance() refuses the pair and amdgpu falls back to
+migrating the import to GTT.  0e01 (the DMI2 port in PCIe mode, the
+analogue of 3c01) is left out because I have no system that presents it.
+
+How this was made: an AI coding assistant (Claude, in Claude Code) wrote
+the patch and this message at my direction and ran the tests on my
+machines.

@@ -1,0 +1,12 @@
+# Read-only checks on the six Mac Pros, 2026-10-26 13:07 PDT (no GPU work, no module or kernel changes)
+# host: uname -r | smc:: LED count | md5 of /lib/modules/KREL/updates/applesmc.ko | vbios_version per GPU
+incite: 7.3.0-rc7-p2p-s2 | 20 LEDs | 506d510a641ba5a156dd50a4f6e92e24 | 0000:02:00.0 113-C3861XA-028 0000:06:00.0 113-C3861XB-028 
+invite: 7.3.0-rc7-p2p-s2 | 20 LEDs | 506d510a641ba5a156dd50a4f6e92e24 | 0000:02:00.0 113-C3861XA-028 0000:06:00.0 113-C3861XB-028 
+indite: 7.3.0-rc7-p2p-s2 | 20 LEDs | 506d510a641ba5a156dd50a4f6e92e24 | 0000:02:00.0 113-C3861XA-028 0000:06:00.0 113-C3861XB-028 
+enlight: 7.3.0-rc7-p2p-s2 | 20 LEDs | 506d510a641ba5a156dd50a4f6e92e24 | 0000:02:00.0 113-C3861XA-028 0000:06:00.0 113-C3861XB-028 
+inflight: 7.3.0-rc7-p2p-s2 | 20 LEDs | 506d510a641ba5a156dd50a4f6e92e24 | 0000:02:00.0 113-C3861XA-028 0000:06:00.0 113-C3861XB-028 
+alight: 7.3.0-rc7-p2p-s2 | 20 LEDs | 506d510a641ba5a156dd50a4f6e92e24 | 0000:02:00.0 113-C3861XA-028 0000:06:00.0 113-C3861XB-028 
+# kbuild VM staging copy of the override module and its source:
+506d510a641ba5a156dd50a4f6e92e24  ~/applesmc-override/7.3.0-rc7-p2p-s2/applesmc.ko
+370d44a245d7389d13c380ffe7df14ba  ~/applesmc-override/7.3.0-rc7-p2p-s2/applesmc.c
+370d44a245d7389d13c380ffe7df14ba  ~/a18/check/applesmc-port-lights/src/drivers/hwmon/applesmc.c

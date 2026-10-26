@@ -1,0 +1,29 @@
+sparse v0.6.5-rc1-21-g84ec0658, x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0
+== applesmc-port-lights on hwmon/hwmon-next = e1b3c2630d5b ("hwmon: (npcm750-pwm-fan) serialize PWM register updates")
+applied 2 patch(es): b7a2c14b9cc6 8a9c8f5d1bb0 
+also applies to torvalds/master (d135ab453a74)
+config out-main: --enable INPUT --enable HWMON --module SENSORS_APPLESMC
+  CONFIG_INPUT=y
+  CONFIG_HWMON=y
+  CONFIG_SENSORS_APPLESMC=m
+build main-base: ok, 0 warning/error lines
+build main-patch1: ok, 0 warning/error lines
+build main-patch2: ok, 0 warning/error lines
+new W=1/sparse warnings with the series (main): 0
+format-patch: 0000-cover-letter.patch 0001-hwmon-applesmc-Add-support-for-the-Mac-Pro-6-1-port-.patch 0002-hwmon-applesmc-Add-port_lights_levels-to-set-all-por.patch 
+== checkpatch --strict
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 0 checks, 574 lines checked
+/home/fairfieldt.linux/a18/check/applesmc-port-lights/series/0001-hwmon-applesmc-Add-support-for-the-Mac-Pro-6-1-port-.patch has style problems, please review.
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 0 checks, 141 lines checked
+/home/fairfieldt.linux/a18/check/applesmc-port-lights/series/0002-hwmon-applesmc-Add-port_lights_levels-to-set-all-por.patch has style problems, please review.
+== get_maintainer.pl
+Bad divisor in main::vcs_assign: 0
+Bad divisor in main::vcs_assign: 0
+Henrik Rydberg <rydberg@bitmath.org> (maintainer:APPLE SMC DRIVER)
+Guenter Roeck <linux@roeck-us.net> (maintainer:HARDWARE MONITORING)
+"GitAuthor: Tom Fairfield" <tom@fairfieldt.com> (authored:2/1=100%,added_lines:80/80=100%)
+linux-hwmon@vger.kernel.org (open list:APPLE SMC DRIVER)
+linux-kernel@vger.kernel.org (open list)
+base-commit e1b3c2630d5b8bc755fe4ba86d20d08c734eb504

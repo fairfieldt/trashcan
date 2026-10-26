@@ -1,0 +1,57 @@
+VFCT: incite /sys/firmware/acpi/tables/VFCT, sha256 4ff79815b4b5bb4a4c36d4aa2216e8efefe72a0ea86c98c129a152390f6f8402
+Mac Pro table: device at 02:00.0 (1002:6798), expect 113-C3861XA-028
+  amdgpu old -> 113-C3861XA-028 ok
+  amdgpu new -> 113-C3861XA-028 ok
+  radeon old -> 113-C3861XA-028 ok
+  radeon new -> 113-C3861XA-028 ok
+Mac Pro table: device at 06:00.0 (1002:6798), expect 113-C3861XB-028
+    [notice] 06:00.0: VFCT bus number mismatch: table 2 != runtime 6, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu old -> 113-C3861XA-028 wrong (old code)
+  amdgpu new -> 113-C3861XB-028 ok
+    [notice] 06:00.0: VFCT bus number mismatch: table 2 != runtime 6, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon old -> 113-C3861XA-028 wrong (old code)
+  radeon new -> 113-C3861XB-028 ok
+Mac Pro table, both buses renumbered: device at 03:00.0 (1002:6798), expect 113-C3861XA-028
+    [notice] 03:00.0: VFCT bus number mismatch: table 2 != runtime 3, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu old -> 113-C3861XA-028 ok
+    [notice] 03:00.0: VFCT bus number mismatch: table 2 != runtime 3, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu new -> 113-C3861XA-028 ok
+    [notice] 03:00.0: VFCT bus number mismatch: table 2 != runtime 3, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon old -> 113-C3861XA-028 ok
+    [notice] 03:00.0: VFCT bus number mismatch: table 2 != runtime 3, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon new -> 113-C3861XA-028 ok
+Mac Pro table, both buses renumbered: device at 07:00.0 (1002:6798), expect 113-C3861XA-028
+    [notice] 07:00.0: VFCT bus number mismatch: table 2 != runtime 7, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu old -> 113-C3861XA-028 ok
+    [notice] 07:00.0: VFCT bus number mismatch: table 2 != runtime 7, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu new -> 113-C3861XA-028 ok
+    [notice] 07:00.0: VFCT bus number mismatch: table 2 != runtime 7, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon old -> 113-C3861XA-028 ok
+    [notice] 07:00.0: VFCT bus number mismatch: table 2 != runtime 7, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon new -> 113-C3861XA-028 ok
+Mac Pro table, other device ID: device at 02:00.0 (1002:679a), expect (none)
+    [info] 02:00.0: ACPI VFCT table present but broken (too short #2),skipping
+  amdgpu old -> (none)          ok
+    [info] 02:00.0: ACPI VFCT table present but broken (too short #2),skipping
+  amdgpu new -> (none)          ok
+    [warn] 02:00.0: ACPI VFCT table present but broken (too short #2),skipping
+  radeon old -> (none)          ok
+    [warn] 02:00.0: ACPI VFCT table present but broken (too short #2),skipping
+  radeon new -> (none)          ok
+single-GPU table, exact bus: device at 02:00.0 (1002:6798), expect 113-C3861XA-028
+  amdgpu old -> 113-C3861XA-028 ok
+  amdgpu new -> 113-C3861XA-028 ok
+  radeon old -> 113-C3861XA-028 ok
+  radeon new -> 113-C3861XA-028 ok
+single-GPU table, renumbered bus: device at 05:00.0 (1002:6798), expect 113-C3861XA-028
+    [notice] 05:00.0: VFCT bus number mismatch: table 2 != runtime 5, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu old -> 113-C3861XA-028 ok
+    [notice] 05:00.0: VFCT bus number mismatch: table 2 != runtime 5, matching by device identity (vendor 0x1002 device 0x6798)
+  amdgpu new -> 113-C3861XA-028 ok
+    [notice] 05:00.0: VFCT bus number mismatch: table 2 != runtime 5, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon old -> 113-C3861XA-028 ok
+    [notice] 05:00.0: VFCT bus number mismatch: table 2 != runtime 5, matching by device identity (vendor 0x1002 device 0x6798)
+  radeon new -> 113-C3861XA-028 ok
+
+PASSED (0 failures in new code)
+exit 0

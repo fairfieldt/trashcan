@@ -1,0 +1,6 @@
+Bad divisor in main::vcs_assign: 0
+Henrik Rydberg <rydberg@bitmath.org> (maintainer:APPLE SMC DRIVER)
+Guenter Roeck <linux@roeck-us.net> (maintainer:HARDWARE MONITORING)
+"GitAuthor: Tom Fairfield" <tom@fairfieldt.com> (authored:2/1=100%,added_lines:80/80=100%)
+linux-hwmon@vger.kernel.org (open list:APPLE SMC DRIVER)
+linux-kernel@vger.kernel.org (open list)

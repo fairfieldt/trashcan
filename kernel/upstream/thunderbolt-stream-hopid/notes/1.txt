@@ -1,0 +1,20 @@
+Testing: compile-tested on this base (W=1, no new sparse warnings).  Not
+run on hardware: I didn't want to provoke HopID conflicts on the hosts I
+have, as getting there involves wedging a host router.  Instead the
+HopID functions of stream.c (tbstream_dev_release(),
+tbstream_dev_alloc_in/out_hopid(), tbstream_dev_attach_stream() and
+tbstream_dev_detach_stream()) were compiled unchanged in userspace
+against a model of the XDomain HopID IDAs, and driven through attach,
+HopID changes, detach and release with allocations that fail or find
+the HopID taken.  Before this patch, five of six scenarios free a HopID
+the stream doesn't hold (ida_free() of an unallocated ID, or another
+user's ID); after it none do and nothing is left allocated.
+
+Open question: when an allocation fails on attach the configured HopID
+is now forgotten (reads back as 0) rather than kept for a later attach.
+Keeping it would need a separate "allocated" flag; I went for the
+smaller change.
+
+How this was made: an AI coding assistant (Claude, in Claude Code) found
+the cause by reading the code after the warning, and wrote the patch,
+the userspace test and this message at my direction.

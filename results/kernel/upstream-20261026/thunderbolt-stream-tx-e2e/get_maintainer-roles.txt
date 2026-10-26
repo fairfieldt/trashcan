@@ -1,0 +1,6 @@
+Andreas Noever <andreas.noever@gmail.com> (maintainer:THUNDERBOLT DRIVER)
+Mika Westerberg <westeri@kernel.org> (maintainer:THUNDERBOLT DRIVER,blamed_fixes:1/1=100%)
+Yehezkel Bernat <YehezkelShB@gmail.com> (maintainer:THUNDERBOLT DRIVER)
+Alan Borzeszkowski <alan.borzeszkowski@linux.intel.com> (blamed_fixes:1/1=100%)
+linux-usb@vger.kernel.org (open list:THUNDERBOLT DRIVER)
+linux-kernel@vger.kernel.org (open list)
