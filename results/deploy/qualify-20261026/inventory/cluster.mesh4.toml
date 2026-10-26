@@ -1,0 +1,57 @@
+# The lab's six Mac Pros, for deploy/trashcan-cluster (A16 acceptance 2026-10-26). Engine and runs in ~/trashcan-exp/a16.
+[cluster]
+workspace = "~/trashcan-exp/a16"
+binary = "trashcan"
+models = "~/models"
+run_dir = "~/trashcan-exp/a16/runs"
+state = "state"
+manifest = "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/main/deploy/manifest.toml"
+recipes = "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/main/deploy/recipes.toml"
+
+[ports]
+serve = 8000
+tp_node = 7072
+qwen4_node = 7071
+
+[[node]]
+name = "incite"
+lan = "incite.tdf.sh"   # TCP fallback address (tailnet)
+index = 1
+[[node]]
+name = "invite"
+lan = "invite.tdf.sh"   # TCP fallback address (tailnet)
+index = 2
+[[node]]
+name = "indite"
+lan = "indite.tdf.sh"   # TCP fallback address (tailnet)
+index = 3
+[[node]]
+name = "enlight"
+lan = "enlight.tdf.sh"   # TCP fallback address (tailnet)
+index = 4
+[[node]]
+name = "inflight"
+lan = "inflight.tdf.sh"   # TCP fallback address (tailnet)
+index = 5
+[[node]]
+name = "alight"
+lan = "alight.tdf.sh"   # TCP fallback address (tailnet)
+index = 6
+
+# The ring as cabled on 2026-10-26.
+# 2026-10-26 afternoon: four-Mac full mesh (incite, invite, indite, enlight) plus inflight-alight; the six-Mac ring
+# of the morning is in cluster.ring6.toml.
+[[cable]]
+ends = ["incite:0", "indite:0"]
+[[cable]]
+ends = ["incite:1", "enlight:1"]
+[[cable]]
+ends = ["incite:2", "invite:2"]
+[[cable]]
+ends = ["invite:0", "enlight:0"]
+[[cable]]
+ends = ["invite:1", "indite:1"]
+[[cable]]
+ends = ["indite:2", "enlight:2"]
+[[cable]]
+ends = ["inflight:1", "alight:1"]

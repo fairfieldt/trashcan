@@ -1,0 +1,13 @@
+preflight 1-qwen9b on inflight (model files are hashed once per node and cached; the first time takes minutes)
+  inflight (inflight): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  driver    on inflight: trashcan serve '~/models/qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf' --port 8000 --tp
+warning: inflight: kernel 7.3.0-rc7-p2p (engine) is patches qualified; package from this tree not yet booted
+preflight 1-qwen9b: OK (0 problems, 1 warnings)
+run 20261026-134126-1-qwen9b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-134126-1-qwen9b
+start driver on inflight
+driver on inflight ready on 127.0.0.1:8000 after 19 s
+1-qwen9b ready after 19 s
+smoke: status completed, 1.07 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 3199 MiB, 0000:06:00.0 3199 MiB
+stopped driver on inflight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-134126-1-qwen9b

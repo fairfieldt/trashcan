@@ -1,0 +1,66 @@
+## before 13:42:49
+OK       incite:0 - indite:0: up, 2 lane(s), stream /dev/tbstream0
+DEGRADED incite:1 - enlight:1: up, 1 lane(s), stream /dev/tbstream1
+OK       incite:2 - invite:2: up, 2 lane(s), stream /dev/tbstream2
+DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+OK       invite:1 - indite:1: up, 2 lane(s), stream /dev/tbstream0
+OK       indite:2 - enlight:2: up, 2 lane(s), stream /dev/tbstream2
+MISSING  inflight:1 - alight:1: no link seen
+some cables are not up: see docs/deploy.md#thunderbolt-link-recovery
+## reload-all 13:42:49
+inflight: reloaded
+alight: reloaded
+invite: reloaded
+incite: reloaded
+enlight: reloaded
+indite: reloaded
+waiting 30 s for the links to come back
+OK       incite:0 - indite:0: up, 2 lane(s), stream /dev/tbstream0
+OK       incite:1 - enlight:1: up, 2 lane(s), stream /dev/tbstream1
+OK       incite:2 - invite:2: up, 2 lane(s), stream /dev/tbstream2
+OK       invite:0 - enlight:0: up, 2 lane(s), stream /dev/tbstream1
+OK       invite:1 - indite:1: up, 2 lane(s), stream /dev/tbstream2
+OK       indite:2 - enlight:2: up, 2 lane(s), stream /dev/tbstream2
+MISSING  inflight:1 - alight:1: no link seen
+some cables are not up: see docs/deploy.md#thunderbolt-link-recovery
+## rc=1
+## tb-reset inflight alight 13:43:46
+== inflight
+== alight
+## rc=0
+## tb-reset round 2 13:44:23
+== inflight
+== alight
+## rc=0
+## ring6 recabled; before 13:47:44
+MISSING  incite:0 - inflight:0: no link seen
+OK       inflight:1 - alight:1: up, 2 lane(s), stream /dev/tbstream0
+OK       alight:0 - indite:0: up, 2 lane(s), stream /dev/tbstream1
+OK       indite:1 - invite:1: up, 2 lane(s), stream /dev/tbstream1
+OK       invite:0 - enlight:0: up, 2 lane(s), stream /dev/tbstream1
+OK       enlight:1 - incite:1: up, 2 lane(s), stream /dev/tbstream1
+EXTRA    incite:2 - inflight:2: up (not in the cable map)
+some cables are not up: see docs/deploy.md#thunderbolt-link-recovery
+## reload-all 13:47:45
+inflight: reloaded
+indite: reloaded
+alight: reloaded
+enlight: reloaded
+invite: reloaded
+incite: reloaded
+waiting 30 s for the links to come back
+MISSING  incite:0 - inflight:0: no link seen
+OK       inflight:1 - alight:1: up, 2 lane(s), stream /dev/tbstream0
+OK       alight:0 - indite:0: up, 2 lane(s), stream /dev/tbstream0
+OK       indite:1 - invite:1: up, 2 lane(s), stream /dev/tbstream1
+OK       invite:0 - enlight:0: up, 2 lane(s), stream /dev/tbstream1
+OK       enlight:1 - incite:1: up, 2 lane(s), stream /dev/tbstream1
+EXTRA    incite:2 - inflight:2: up (not in the cable map)
+some cables are not up: see docs/deploy.md#thunderbolt-link-recovery
+## rc=1
+OK       incite:2 - inflight:2: up, 2 lane(s), stream /dev/tbstream1
+OK       inflight:1 - alight:1: up, 2 lane(s), stream /dev/tbstream0
+OK       alight:0 - indite:0: up, 2 lane(s), stream /dev/tbstream0
+OK       indite:1 - invite:1: up, 2 lane(s), stream /dev/tbstream1
+OK       invite:0 - enlight:0: up, 2 lane(s), stream /dev/tbstream1
+OK       enlight:1 - incite:1: up, 2 lane(s), stream /dev/tbstream1

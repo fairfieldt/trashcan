@@ -1,0 +1,27 @@
+kernel 7.3.0-rc7-p2p, package 7.3.0~rc7-1p2p+ps9c9a5449
+ok    running the built release 7.3.0-rc7-p2p
+ok    package version matches the build
+ok    /boot/config-7.3.0-rc7-p2p is the built config
+ok    patch set id 9c9a5449 (deploy/manifest.toml)
+ok    command line has radeon.si_support=0
+ok    command line has amdgpu.si_support=1
+ok    CONFIG_PCI_P2PDMA=y
+      0000:02:00.0: VBIOS 113-C3861XA-028, VRAM 6144 MiB, DPM auto
+      0000:06:00.0: VBIOS 113-C3861XB-028, VRAM 6144 MiB, DPM auto
+ok    two GPUs on amdgpu
+ok    each GPU has its own VBIOS (patch 0001)
+ok    thunderbolt_net throttling=32000 (patch 0004)
+ok    thunderbolt_stream module available
+ok    applesmc port lights present (0009/0010, in the kernel or a module override)
+      GRUB default: GRUB_DEFAULT="gnulinux-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7>gnulinux-7.3.0-rc7-p2p-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7"; next boot: 
+      fallback kernels: 6.12.107+deb13-amd64 6.12.111+deb13-amd64 7.2.9-p2p 7.3.0-rc7-p2p-s2
+verify: PASS
+linux-image-6.12.107+deb13-amd64 6.12.107-1
+linux-image-6.12.111+deb13-amd64 6.12.111-1
+linux-image-7.2.9-p2p 7.2.9-2p2p
+linux-image-7.3.0-rc7-p2p 7.3.0~rc7-1p2p+ps9c9a5449
+linux-image-7.3.0-rc7-p2p-s2 7.3.0~rc7-3p2p
+linux-image-amd64 6.12.111-1
+running: 7.3.0-rc7-p2p
+GRUB default: GRUB_DEFAULT="gnulinux-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7>gnulinux-7.3.0-rc7-p2p-advanced-c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7"
+next boot: 
