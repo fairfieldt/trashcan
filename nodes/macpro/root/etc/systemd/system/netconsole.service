@@ -2,11 +2,15 @@
 Description=Send kernel messages to the workstation (/etc/default/netconsole-target)
 Wants=network-online.target
 After=network-online.target
+# Keep retrying when the node boots without a link (cable unplugged or on the other port).
+StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/sbin/netconsole-start
+Restart=on-failure
+RestartSec=30
 ExecStop=/usr/sbin/modprobe -r netconsole
 
 [Install]

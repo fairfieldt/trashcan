@@ -176,6 +176,17 @@ install -m 0644 "$stage/system-crash-capture.service" /etc/systemd/system/system
 echo "NETCONSOLE_TARGET=$NETCONSOLE_TARGET" > /etc/default/netconsole-target
 rm -rf "$stage"
 
+# DHCP on both Ethernet ports, so whichever has the cable works. The Debian installer configures ifupdown for
+# the port cabled at install time only; NetworkManager (incite) handles both already.
+if ! systemctl -q is-active NetworkManager; then
+    for dev in enp11s0 enp12s0; do
+        grep -qs "^iface $dev " /etc/network/interfaces /etc/network/interfaces.d/* && continue
+        printf 'allow-hotplug %s\niface %s inet dhcp\niface %s inet6 auto\n' $dev $dev $dev >> /etc/network/interfaces.d/ethernet
+        # Without a cable dhcpcd times out here and keeps waiting for carrier in the background.
+        ifup --allow=hotplug $dev >/dev/null 2>&1 || true
+    done
+fi
+
 usermod -aG render,video "$USER_NAME"
 install -d -o "$USER_NAME" -g "$USER_NAME" "/home/$USER_NAME/trashcan-exp"
 touch "/home/$USER_NAME/trashcan-exp/.lock" && chown "$USER_NAME:" "/home/$USER_NAME/trashcan-exp/.lock"
