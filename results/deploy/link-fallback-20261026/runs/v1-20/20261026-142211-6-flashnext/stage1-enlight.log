@@ -1,0 +1,8 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: session from 10.99.20.17:52214
+link incite (10.99.20.17:52214): stream up (1-3.1/trashcan /dev/tbstream1), epoch 69f9457d, 7.8 ms after the link started [14:22:25.828]
+link invite (invite.tb0:7071): stream up (0-1.1/trashcan /dev/tbstream0), epoch ddd8c5d4, 6.0 ms after the link started [14:22:25.837]
+GPU0: layers 8..12 + head rows 43008..64512
+GPU0: 5740.7 MiB allocated in 0.91 s; device-local heap 5741 of 5888 MiB used, budget 5868
+GPU1: layers 12..16 + head rows 64512..86016
+GPU1: 5740.7 MiB allocated in 0.86 s; device-local heap 5741 of 5888 MiB used, budget 5868

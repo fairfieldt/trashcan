@@ -1,0 +1,15 @@
+--- main/engine/src/qwen4/pipeline.rs	2026-10-26 13:55:20
++++ diag2/pipeline.rs	2026-10-26 14:55:08
+@@ -276,6 +276,12 @@
+                 flight.push_back(f);
+             }
+             let prev = if flight.len() > usize::from(incoming) {
++                if incoming {
++                    // DIAG: a host delay between queueing the next chunk and reading this one's output.
++                    if let Some(ms) = std::env::var("DIAG_STEP_SLEEP_MS").ok().and_then(|v| v.parse::<u64>().ok()) {
++                        std::thread::sleep(std::time::Duration::from_millis(ms));
++                    }
++                }
+                 let f = flight.pop_front().unwrap();
+                 tl("wait", i, f.pos, 0., 0.);
+                 s.wait()?;

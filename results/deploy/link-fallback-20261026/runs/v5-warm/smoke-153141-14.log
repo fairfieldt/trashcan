@@ -1,0 +1,45 @@
+preflight 6-flashnext on incite, enlight, invite, indite, alight, inflight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 7fb133adfc2c
+  enlight (enlight): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 7fb133adfc2c
+  invite (invite): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 7fb133adfc2c
+  indite (indite): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 7fb133adfc2c
+  alight (alight): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 7fb133adfc2c
+  inflight (inflight): 7.3.0-rc7-p2p, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 7fb133adfc2c
+  stage5    on inflight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage4    on alight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage3    on indite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage2    on invite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage1    on enlight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  driver    on incite: trashcan serve '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --port 8000 --head-split 12 --context 32768 --batch 128 --ngram disk --nodes enlight.tb1:7071,invite.tb0:7071,indite.tb1:7071,alight.tb0:7071,inflight.tb1:7071
+warning: incite: kernel 7.3.0-rc7-p2p (engine) is qualified on one node
+warning: enlight: kernel 7.3.0-rc7-p2p (engine) is qualified on one node
+warning: invite: kernel 7.3.0-rc7-p2p (engine) is qualified on one node
+warning: indite: kernel 7.3.0-rc7-p2p (engine) is qualified on one node
+warning: alight: kernel 7.3.0-rc7-p2p (engine) is qualified on one node
+warning: inflight: kernel 7.3.0-rc7-p2p (engine) is qualified on one node
+preflight 6-flashnext: OK (0 problems, 6 warnings)
+run 20261026-153144-6-flashnext: logs on the nodes in ~/trashcan-exp/fallback/runs/20261026-153144-6-flashnext
+start stage5 on inflight
+stage5 on inflight listening on 7071 after 2 s
+start stage4 on alight
+stage4 on alight listening on 7071 after 2 s
+start stage3 on indite
+stage3 on indite listening on 7071 after 3 s
+start stage2 on invite
+stage2 on invite listening on 7071 after 3 s
+start stage1 on enlight
+stage1 on enlight listening on 7071 after 3 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 9 s
+6-flashnext ready after 22 s
+smoke: status completed, 0.46 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 5800 MiB, 0000:06:00.0 5957 MiB
+stopped driver on incite
+stopped stage5 on inflight
+stopped stage4 on alight
+stopped stage3 on indite
+stopped stage2 on invite
+stopped stage1 on enlight
+incite: /sys/class/drm/card0/device/power_dpm_force_performance_level: restored auto
+/sys/class/drm/card1/device/power_dpm_force_performance_level: restored auto
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/fallback/inv/state/logs/20261026-153144-6-flashnext

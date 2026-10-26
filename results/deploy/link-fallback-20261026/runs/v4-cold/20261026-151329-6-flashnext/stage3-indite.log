@@ -1,0 +1,8 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: session from 10.99.35.17:58946
+link invite (10.99.35.17:58946): stream up (1-3.1/trashcan /dev/tbstream0), epoch e9c5c358, 13.9 ms after the link started [15:13:42.823]
+link alight (alight.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream1), epoch 1248e854, 153.2 ms after the link started (153 ms into the epoch: device open at 2 ms, first record at 152 ms, 1 probes and 4 frames sent, 5 records and 0 ends of file read, ours read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 4); longest pause of this side 1 ms) [15:13:43.254]
+GPU0: layers 24..28 + head rows 129024..150528
+GPU0: 5740.7 MiB allocated in 5.81 s; device-local heap 5741 of 5888 MiB used, budget 5868
+GPU1: layers 28..32 + head rows 150528..172032
+GPU1: 5740.7 MiB allocated in 8.35 s; device-local heap 5741 of 5888 MiB used, budget 5868

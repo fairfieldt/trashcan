@@ -1,0 +1,9 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: session from 10.99.54.1:57692
+link indite (10.99.54.1:57692): stream up (0-3.1/trashcan /dev/tbstream0), epoch 463c093e, 46.3 ms after the link started [15:12:32.048]
+link inflight (inflight.tb1:7071): stream epoch 27922ffa not opened (no answer on the stream; 3001 ms into the epoch: device open at 1 ms, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [15:12:35.682]
+link inflight (inflight.tb1:7071): stream up (1-3.1/trashcan /dev/tbstream1), epoch 27922ffb, 4956.7 ms after the link started (1955 ms into the epoch: device open at 3 ms, first record at 1955 ms, 1 probes and 4 frames sent, 5 records and 0 ends of file read, ours read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 1 reports from it (of ours read 0, written to us 4); longest pause of this side 1 ms) [15:12:37.637]
+GPU0: layers 32..36 + head rows 172032..193536
+GPU0: 5740.7 MiB allocated in 5.65 s; device-local heap 5741 of 5888 MiB used, budget 5868
+GPU1: layers 36..40 + head rows 193536..215040
+GPU1: 5740.7 MiB allocated in 5.62 s; device-local heap 5741 of 5888 MiB used, budget 5868

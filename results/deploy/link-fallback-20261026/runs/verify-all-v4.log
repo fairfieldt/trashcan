@@ -1,0 +1,56 @@
+chain6: queued incite=289,indite=160,inflight=137,alight=154,invite=286,enlight=170
+chain6: holding incite=289,indite=160,inflight=137,alight=154,invite=286,enlight=170
+run 1 (150028-1): rc 0 answer 'Paris'
+run 2 (150100-2): rc 0 answer 'Paris'
+run 3 (150128-3): rc 0 answer 'Paris'
+run 4 (150159-4): rc 0 answer 'Paris'
+run 5 (150227-5): rc 0 answer 'Paris'
+run 6 (150257-6): rc 0 answer 'Paris'
+run 7 (150325-7): rc 0 answer 'Paris'
+run 8 (150353-8): rc 0 answer 'Paris'
+run 9 (150421-9): rc 0 answer 'Paris'
+run 10 (150449-10): rc 0 answer 'Paris'
+run 11 (150519-11): rc 0 answer 'Paris'
+run 12 (150547-12): rc 0 answer 'Paris'
+run 13 (150614-13): rc 0 answer 'Paris'
+run 14 (150643-14): rc 0 answer 'Paris'
+run 15 (150711-15): rc 0 answer 'Paris'
+run 16 (150740-16): rc 0 answer 'Paris'
+run 17 (150843-17): rc 0 answer 'Paris'
+run 18 (150910-18): rc 0 answer 'Paris'
+run 19 (150938-19): rc 0 answer 'Paris'
+run 20 (151005-20): rc 0 answer 'Paris'
+smokes: 20 pass, 0 fail of 20
+run 1 (151031-1): rc 0 answer 'Paris'
+run 2 (151143-2): rc 1 
+run 3 (151205-3): rc 0 answer 'Paris'
+    link inflight (inflight.tb1:7071): stream epoch 27922ffa not opened (no answer on the stream; 3001 ms into the epoch: device open at 1 ms, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [15:12:35.682]
+    link alight (10.99.86.18:54242): stream epoch 27922ffa not opened (the other side gave the stream up; 0 ms into the epoch: device open at never, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 0 ms) [15:12:37.616]
+run 4 (151317-4): rc 0 answer 'Paris'
+run 5 (151416-5): rc 0 answer 'Paris'
+run 6 (151519-6): rc 0 answer 'Paris'
+run 7 (151615-7): rc 1 
+    Error: remote: remote: remote: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    qwen4 node: session ended: remote: remote: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    qwen4 node: session ended: remote: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    link alight (alight.tb0:7071): stream epoch 44d22d35 not opened (no answer on the stream; 3002 ms into the epoch: device open at 2 ms, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 1 ms) [15:16:44.911]
+    link alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream); the link ends [15:16:46.908]
+    qwen4 node: session ended: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    link indite (10.99.54.1:44092): stream epoch 44d22d35 not opened (the other side gave the stream up; 0 ms into the epoch: device open at never, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 0 ms) [15:16:46.946]
+run 8 (151653-8): rc 1 
+    Error: remote: remote: remote: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    qwen4 node: session ended: remote: remote: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    qwen4 node: session ended: remote: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+    link alight (alight.tb0:7071): stream epoch 0ee5fdce not opened (no answer on the stream; 3002 ms into the epoch: device open at 2 ms, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [15:17:37.207]
+    link alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream); the link ends [15:17:39.205]
+    qwen4 node: session ended: alight (alight.tb0:7071): the stream was not up within 5s (last attempt: no answer on the stream)
+smokes: 5 pass, 3 fail of 8
+chain: incite,enlight,invite,indite,alight,inflight
+fb4-val14 rc 0 25 s
+fb4-val14-base rc 0 10 s
+fb4-val100 rc 0 8 s
+fb4-val100-base rc 0 6 s
+fb4-pp512-base rc 0 12 s
+fb4-pp512-cand rc 0 13 s
+fb-val fb4 done
+verify-all done

@@ -1,0 +1,37 @@
+chain6: queued incite=290,indite=161,inflight=138,alight=155,invite=287,enlight=171
+chain6: holding incite=290,indite=161,inflight=138,alight=155,invite=287,enlight=171
+run 1 (152435-1): rc 0 answer 'Paris'
+run 2 (152519-2): rc 0 answer 'Paris'
+run 3 (152545-3): rc 0 answer 'Paris'
+run 4 (152614-4): rc 0 answer 'Paris'
+run 5 (152643-5): rc 0 answer 'Paris'
+run 6 (152711-6): rc 0 answer 'Paris'
+run 7 (152739-7): rc 0 answer 'Paris'
+run 8 (152809-8): rc 1 
+run 9 (152918-9): rc 0 answer 'Paris'
+run 10 (152946-10): rc 0 answer 'Paris'
+run 11 (153015-11): rc 0 answer 'Paris'
+run 12 (153043-12): rc 0 answer 'Paris'
+run 13 (153113-13): rc 0 answer 'Paris'
+run 14 (153141-14): rc 0 answer 'Paris'
+run 15 (153214-15): rc 0 answer 'Paris'
+run 16 (153245-16): rc 0 answer 'Paris'
+run 17 (153314-17): rc 0 answer 'Paris'
+run 18 (153347-18): rc 0 answer 'Paris'
+run 19 (153418-19): rc 0 answer 'Paris'
+run 20 (153449-20): rc 0 answer 'Paris'
+smokes: 19 pass, 1 fail of 20
+run 1 (153521-1): rc 0 answer 'Paris'
+run 2 (153700-2): rc 0 answer 'Paris'
+run 3 (153819-3): rc 0 answer 'Paris'
+run 4 (153937-4): rc 0 answer 'Paris'
+run 5 (154048-5): rc 0 answer 'Paris'
+run 6 (154154-6): rc 0 answer 'Paris'
+run 7 (154255-7): rc 0 answer 'Paris'
+run 8 (154411-8): rc 0 answer 'Paris'
+smokes: 8 pass, 0 fail of 8
+chain: incite,enlight,invite,indite,alight,inflight
+fb5-val14 rc 0 13 s
+fb5-val100 rc 0 7 s
+fb-val fb5 done
+verify-all done

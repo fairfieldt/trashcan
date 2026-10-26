@@ -1,0 +1,3 @@
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: session from 10.99.54.1:44092
+link indite (10.99.54.1:44092): stream epoch 44d22d35 not opened (the other side gave the stream up; 0 ms into the epoch: device open at never, first record at never, 0 probes and 0 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 0 of its reports since 50 ms after our first frame showed none of ours read; 0 reports from it (of ours read 0, written to us 0); longest pause of this side 0 ms) [15:16:46.946]

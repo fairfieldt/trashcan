@@ -1,0 +1,18 @@
+== fb4-val14 vs fb4-val14-base: 690 of 690 tensors identical
+   differing router/top-k tensors: 0 
+== fb4-val100 vs fb4-val100-base: 595 of 595 tensors identical
+   differing router/top-k tensors: 0 
+== fb5-val14 vs fb4-val14-base: 690 of 690 tensors identical
+   differing router/top-k tensors: 0 
+== fb5-val100 vs fb4-val100-base: 595 of 595 tensors identical
+   differing router/top-k tensors: 0 
+fb4-val14-base: greedy: [9419, 0, 2500, 628, 353, 1438, 488, 3242, 30, 248046]
+fb4-val14: greedy: [9419, 0, 2500, 628, 353, 1438, 488, 3242, 30, 248046]
+fb4-val100-base: greedy: [248046, 198, 248045, 248045, 248046, 198, 248045, 74455, 198, 248068]
+fb4-val100: greedy: [248046, 198, 248045, 248045, 248046, 198, 248045, 74455, 198, 248068]
+fb5-val100: greedy: [248046, 198, 248045, 248045, 248046, 198, 248045, 74455, 198, 248068]
+fb5-val14: greedy: [9419, 0, 2500, 628, 353, 1438, 488, 3242, 30, 248046]
+fb4-pp512-base pp_tok_s 517.1 tg_tok_s 22.37 {'alight->inflight': 'stream', 'enlight->invite': 'stream', 'incite->enlight': 'stream', 'indite->alight': 'stream', 'invite->indite': 'stream'}
+[clocks] 39 samples card0 (02:00.0) sclk/mclk: 850/1370 x39  max 48C card1 (06:00.0) sclk/mclk: 850/1370 x39  max 46C  l
+fb4-pp512-cand pp_tok_s 517.3 tg_tok_s 22.48 {'alight->inflight': 'stream', 'enlight->invite': 'stream', 'incite->enlight': 'stream', 'indite->alight': 'stream', 'invite->indite': 'stream'}
+[clocks] 37 samples card0 (02:00.0) sclk/mclk: 850/1370 x37  max 49C card1 (06:00.0) sclk/mclk: 850/1370 x37  max 47C  l
