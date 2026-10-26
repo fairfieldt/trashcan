@@ -10,7 +10,8 @@
 //! one down matrix per layer with the shared expert appended as expert `experts`. QSA attends to every position up to
 //! `idx_budget + kpool - 1` visible tokens; with longer contexts (or a Q8 K/V cache) the indexer scores blocks, picks
 //! the best `idx_budget / kpool` per token and the grouped kernels attend to those (`qwen4_attention_grouped*`).
-//! Prefill chunks may be queued behind the running one: host inputs, fences and timestamps come in two slots.
+//! Prefill chunks may be queued behind the running one: host inputs and outputs, fences and timestamps come in two
+//! slots.
 use super::{cpu::Captures, Config};
 use crate::{
     gguf::{GgmlType, Gguf, TensorInfo},
@@ -302,7 +303,10 @@ pub struct GpuStage {
     /// written to the free slot and queued while the previous one runs.
     input: [Buffer; 2],
     ple_in: [Buffer; 2],
-    output: Buffer,
+    /// A forward's output (residual rows), per submission slot: a queued chunk must not overwrite the output of the
+    /// one before it while the host has yet to read it (a host delay of one stage time did, results/deploy/
+    /// link-fallback-20261026: a wrong first token).
+    output: [Buffer; 2],
     params: Buffer,
     params_host: [Buffer; 2],
     x: Buffer,
@@ -762,7 +766,7 @@ impl GpuStage {
             ring,
             input: [gpu.buffer(w * max_batch * 4, true, false, None)?, gpu.buffer(w * max_batch * 4, true, false, None)?],
             ple_in: [gpu.buffer(d * max_batch * 4, true, false, None)?, gpu.buffer(d * max_batch * 4, true, false, None)?],
-            output: gpu.buffer(w * max_batch * 4, true, false, None)?,
+            output: [gpu.buffer(w * max_batch * 4, true, false, None)?, gpu.buffer(w * max_batch * 4, true, false, None)?],
             params: gpu.buffer(16, false, false, None)?,
             params_host: [gpu.buffer(16, true, false, None)?, gpu.buffer(16, true, false, None)?],
             x: alloc(w)?,
@@ -2220,14 +2224,14 @@ impl GpuStage {
                 gpu.copy(current.get(), &self.u, (n - 1) * d * 4, &hd.h, 0, d * 4);
             }
             if verify {
-                gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
+                gpu.copy(current.get(), &self.x, 0, &self.output[slot], 0, n * w * 4);
             }
         } else {
             if pending {
                 combine();
             }
             capture(&mut graph, format!("l_last-{last}"), &self.x, w)?;
-            gpu.copy(current.get(), &self.x, 0, &self.output, 0, n * w * 4);
+            gpu.copy(current.get(), &self.x, 0, &self.output[slot], 0, n * w * 4);
         }
         stamp(current.get(), 2 * self.layers.len() - 1, true);
         if n <= POLLED_MAX {
@@ -2308,7 +2312,7 @@ impl GpuStage {
         let w4 = self.c.width() * 4;
         let cmd = self.gpu.begin()?;
         self.gpu.barrier(cmd);
-        self.gpu.copy(cmd, &self.x, (self.last_n - m) * w4, &self.output, 0, m * w4);
+        self.gpu.copy(cmd, &self.x, (self.last_n - m) * w4, &self.output[0], 0, m * w4);
         self.gpu.finish(cmd)?;
         unsafe {
             self.gpu.dev.reset_fences(&[self.fence[0]])?;
@@ -2318,7 +2322,7 @@ impl GpuStage {
             self.gpu.dev.wait_for_fences(&[self.fence[0]], true, 600_000_000_000)?;
             self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]);
         }
-        Ok(bytemuck::cast_slice(&self.output.read(m * w4)?).to_vec())
+        Ok(bytemuck::cast_slice(&self.output[0].read(m * w4)?).to_vec())
     }
 
     /// Keep tokens `0..keep` of the latest verification batch: restore the recurrent states after token `keep - 1`.
@@ -2397,7 +2401,8 @@ impl GpuStage {
     /// block's input.
     pub fn residual(&self, n: usize) -> Result<Vec<f32>> {
         ensure!(self.last_verify.is_some_and(|v| n <= v), "no residual rows of a verification batch");
-        Ok(bytemuck::cast_slice(&self.output.read(n * self.c.width() * 4)?).to_vec())
+        // A verification batch is never queued behind another forward: it runs in slot 0.
+        Ok(bytemuck::cast_slice(&self.output[0].read(n * self.c.width() * 4)?).to_vec())
     }
 
     /// Start `forward` without waiting for it; `collect` waits and returns the output.
@@ -2472,7 +2477,7 @@ impl GpuStage {
     }
 
     /// Wait for the oldest forward started by `submit` and read its timestamps. Its output stays readable (`output`)
-    /// until the next forward on this stage ends, which may already be queued.
+    /// until the next forward in its slot ends: the one that may already be queued uses the other slot.
     pub fn wait(&mut self) -> Result<()> {
         let (key, n) = self.pending.pop_front().context("no forward submitted")?;
         if key.0 <= POLLED_MAX {
@@ -2543,7 +2548,7 @@ impl GpuStage {
         let rows = if key.3 == Mode::Verify { n } else { 1 };
         let out = match self.head.as_ref().filter(|hd| hd.mix.is_some()) {
             Some(hd) => Output::Final(read_f32(&hd.h, rows * d)?),
-            None => Output::Hidden(read_f32(&self.output, n * w)?),
+            None => Output::Hidden(read_f32(&self.output[key.4], n * w)?),
         };
         super::trace::mark("col", self.first as u64);
         Ok(out)
@@ -2555,12 +2560,13 @@ impl GpuStage {
         ensure!(!self.ends_model(), "the stage ends the model");
         ensure!(self.pending.len() == 1, "collect_into needs exactly one forward in flight");
         self.wait()?;
-        let (_, n) = self.done.take().context("no forward waited for")?;
+        let (key, n) = self.done.take().context("no forward waited for")?;
         let len = n * self.c.width();
-        ensure!(!self.output.ptr.is_null() && len * 4 <= self.output.size, "invalid host read");
+        let out = &self.output[key.4];
+        ensure!(!out.ptr.is_null() && len * 4 <= out.size, "invalid host read");
         super::trace::mark("col", self.first as u64);
         // Nothing writes the output buffer before this stage's next forward, which is not submitted yet.
-        let x = unsafe { std::slice::from_raw_parts(self.output.ptr as *const f32, len) };
+        let x = unsafe { std::slice::from_raw_parts(out.ptr as *const f32, len) };
         next.submit_mode(x, None, pos, n, false, mode)
     }
 
