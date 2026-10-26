@@ -1,0 +1,11 @@
+CPU latency request: 0 us, scoped to this command
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: no session from 100.101.45.117:57583: handshake from 100.101.45.117:57583: failed to fill whole buffer
+qwen4 node: session from 10.99.86.17:36264
+link inflight (10.99.86.17:36264): stream up (1-3.1/trashcan /dev/tbstream1), epoch 379b55a1, 5.7 ms after the link started [12:43:44.632]
+link indite (indite.tb0:7071): stream up (0-3.1/trashcan /dev/tbstream0), epoch a987f645, 4.0 ms after the link started [12:43:44.638] (the previous link message took 268ms to write)
+GPU0: layers 16..20 + head rows 86016..107520
+GPU0: 5806.7 MiB allocated in 0.89 s; device-local heap 5807 of 5888 MiB used, budget 5868
+GPU1: layers 20..24 + head rows 107520..129024
+GPU1: 5806.7 MiB allocated in 0.88 s; device-local heap 5807 of 5888 MiB used, budget 5860
+[clocks] 45 samples card0 (02:00.0) sclk/mclk: 850/1370 x45  max 64C card1 (06:00.0) sclk/mclk: 850/1370 x45  max 66C  log=results/clocks/node-mc2-pp8192-b256-alight.txt

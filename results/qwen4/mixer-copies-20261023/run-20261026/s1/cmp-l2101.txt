@@ -1,0 +1,2 @@
+== dump-cand-l2101 vs dump-base-l2101: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 

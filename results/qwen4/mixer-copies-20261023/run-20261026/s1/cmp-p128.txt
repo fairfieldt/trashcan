@@ -1,0 +1,2 @@
+== dump-cand-p128 vs dump-base-p128: 57 of 57 tensors identical
+   differing router/top-k tensors: 0 

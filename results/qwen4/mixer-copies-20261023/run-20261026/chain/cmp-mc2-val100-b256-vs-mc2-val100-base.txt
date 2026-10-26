@@ -1,0 +1,2 @@
+== mc2-val100-b256 vs mc2-val100-base: 595 of 595 tensors identical
+   differing router/top-k tensors: 0 

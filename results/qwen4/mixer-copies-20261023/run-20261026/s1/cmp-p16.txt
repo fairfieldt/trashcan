@@ -1,0 +1,2 @@
+== dump-cand-p16 vs dump-base-p16: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 

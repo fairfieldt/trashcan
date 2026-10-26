@@ -1,0 +1,26 @@
+7.3.0-rc7-p2p-s2
+active
+2026-10-26T12:40:34-07:00
+amdgpu reset/timeout lines before: 0
+396909e9104b9adaf3ece93095eb15a92f9fdb8aedeba1a9189818b3c672e42e  trashcan-91c3b82
+cdce621f569deeaed51837bdff6c7e01d28310f3e6901622ad5f75c9990ac407  trashcan-mixc2
+alloc-91c3b82-b128 rc=0 GPU0: 5802.3 MiB allocated in 0.92 s; device-local heap 5802 of 5888 MiB used, budget 5865
+alloc-mixc2-b128 rc=0 GPU0: 5774.5 MiB allocated in 0.92 s; device-local heap 5775 of 5888 MiB used, budget 5865
+alloc-91c3b82-b256 rc=0 GPU0: 5868.3 MiB allocated in 0.95 s; device-local heap 5868 of 5888 MiB used, budget 5868
+alloc-mixc2-b256 rc=0 GPU0: 5840.5 MiB allocated in 0.96 s; device-local heap 5841 of 5888 MiB used, budget 5865
+dump-base-b1 rc=0
+dump-cand-b1 rc=0
+dump-base-b4 rc=0
+dump-cand-b4 rc=0
+dump-base-p16 rc=0
+dump-cand-p16 rc=0
+dump-base-p128 rc=0
+dump-cand-p128 rc=0
+dump-base-l2101 rc=0
+dump-cand-l2101 rc=0
+time-base rc=0 [clocks] 12 samples card0 (02:00.0) sclk/mclk: 850/1370 x12  max 49C card1 (06:00.0) sclk/mclk: 300/150 x12  max 41C  log=results/mc2/s1/tim
+time-cand rc=0 [clocks] 9 samples card0 (02:00.0) sclk/mclk: 850/1370 x9  max 50C card1 (06:00.0) sclk/mclk: 300/150 x9  max 41C  log=results/mc2/s1/time-c
+time-base2 rc=0 [clocks] 9 samples card0 (02:00.0) sclk/mclk: 850/1370 x9  max 50C card1 (06:00.0) sclk/mclk: 300/150 x9  max 41C  log=results/mc2/s1/time-b
+time-cand2 rc=0 [clocks] 9 samples card0 (02:00.0) sclk/mclk: 850/1370 x9  max 50C card1 (06:00.0) sclk/mclk: 300/150 x9  max 41C  log=results/mc2/s1/time-c
+amdgpu reset/timeout lines after: 0
+mc2-s1 done

@@ -74,20 +74,23 @@ remain separate from the engine's license.
 - [ ] Review #1361's final diff and clean-clone validation, particularly references relocated from `results/` into
   `tests/reference-vulkan/`, removed cross-build helpers and crash services, and kernel docs. Do not cherry-pick the
   dirty runtime candidate into the scrub accidentally. Public examples use node roles and configurable inventory.
-- [ ] Keep A1 as the sole mixer gate. [Snapshot manifest](../results/qwen4/mixer-copies-20261023/snapshot.json) and
+- [x] Keep A1 as the sole mixer gate. [Snapshot manifest](../results/qwen4/mixer-copies-20261023/snapshot.json) and
   [candidate.patch](../results/qwen4/mixer-copies-20261023/candidate.patch) preserve the two dirty source files against
   `fc22c1fb`; [tools](../results/qwen4/mixer-copies-20261023/tools/mc-s1.sh) preserve the prepared runs. This is a source
   snapshot outside the active runtime, not an approved or GPU-validated implementation.
-- [ ] Recover `trashcan-b7f4979` / `trashcan-mixc1` or rebuild both in the kbuild VM, recording the source, toolchain
+- [x] Recover `trashcan-b7f4979` / `trashcan-mixc1` or rebuild both in the kbuild VM, recording the source, toolchain
   and full binary hashes. The previously reported `~/dev/claude-work/mixcopies-20261023/` directory is absent on the
   inspecting machine. No newer GPU results were found in the candidate directory. Six SSH probes timed out; that
   establishes unreachability, not that machines are powered off or that their services changed.
-- [ ] Execute the existing one-Mac allocation/dump/timing plan, then `mc-chain.sh`: val14, val100, batch-256 val100,
+- [x] Execute the existing one-Mac allocation/dump/timing plan, then `mc-chain.sh`: val14, val100, batch-256 val100,
   pp512 baseline/candidate and candidate batch128/256 at pp2048/8192. Compare every dump and token sequence, inspect
   resets, clocks and device-local usage. The modeled saving is 27.9 MiB/GPU, batch256 5863 of 5869 MiB: verify it.
   `mc-s1.sh` prints individual failures and can still reach “done”; inspect all statuses. `cmpdump.py` now exits 1 on
   differing, truncated or missing tensors; it previously only printed differences. A successful script exit alone
   is not acceptance. Keep batch128 if batch256 lacks a repeatable end-to-end benefit or safe allocation margin.
+
+A1 done 2026-10-26: passed and merged to main as 371a1dbc; numbers in
+[mixer-copies-20261023](../results/qwen4/mixer-copies-20261023/README.md). Batch 128 stays.
 
 Lab run entry points (after reviewing the archived scripts' local paths and rebuilding as needed):
 

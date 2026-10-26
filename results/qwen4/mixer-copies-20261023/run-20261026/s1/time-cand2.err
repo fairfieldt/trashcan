@@ -1,0 +1,3 @@
+GPU0: layers 4..8
+GPU0: 5674.7 MiB allocated in 0.92 s; device-local heap 5675 of 5888 MiB used, budget 5865
+[clocks] 9 samples card0 (02:00.0) sclk/mclk: 850/1370 x9  max 50C card1 (06:00.0) sclk/mclk: 300/150 x9  max 41C  log=results/mc2/s1/time-cand2.clk

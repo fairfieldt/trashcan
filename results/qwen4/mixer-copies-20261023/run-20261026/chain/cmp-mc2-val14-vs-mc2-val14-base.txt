@@ -1,0 +1,2 @@
+== mc2-val14 vs mc2-val14-base: 690 of 690 tensors identical
+   differing router/top-k tensors: 0 

@@ -1,0 +1,2 @@
+== dump-cand-b4 vs dump-base-b4: 49 of 49 tensors identical
+   differing router/top-k tensors: 0 
