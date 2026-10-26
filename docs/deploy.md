@@ -139,9 +139,10 @@ links can stay down or come up on one lane. tblink reports a stuck link; it does
 Recover with nothing running on any node (`status` shows no run), in this order, checking `links` after each step:
 
 1. **Reload every node's Thunderbolt modules at the same moment:** `deploy/trashcan-cluster links-reload-all --yes`
-   (each node runs `tblink reload` at the same second, then the tool waits 30 s and prints `links`). This is
-   **untested as a recovery procedure**. It follows from the 2026-10-26 cold start of six Macs, where reloading one
-   Mac at a time took three rounds, because each reload dropped a link that was working.
+   (each node runs `tblink reload` at the same second, then the tool waits 30 s and prints `links`). On 2026-10-26
+   one round brought two one-lane links of a four-Mac mesh to two lanes, and a recabled six-Mac ring fully up.
+   Reloading one Mac at a time took three rounds after that day's cold start, because each reload dropped a link
+   that was working.
 2. **Reset every node's controllers together:** `scripts/tb-reset.sh NODE...` with all nodes (unloads the modules,
    resets the three controllers of every Mac, loads them again on all within a second). Historically: five of six
    links on two lanes after one round, the last after a second round (four Macs, six cables).

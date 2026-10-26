@@ -32,9 +32,11 @@ config_sha256_normalized = "85af39e70d0e07b2eb3c6cc86f8a48861847523432a36d7c2156
 id = "9c9a5449"
 release = "7.3.0-rc7-p2p"
 patches = ["0001", "0003", "0004", "0005", "0006", "0007"]
-# The code of these patches is what ran in every published measurement (as 7.3.0-rc7-p2p-s2, below). A package
-# built from this file has not itself been booted on the Macs yet.
-status = "patches qualified; package from this tree not yet booted"
+# The code of these patches is what ran in every published measurement (as 7.3.0-rc7-p2p-s2, below). The package
+# 7.3.0~rc7-1p2p+ps9c9a5449 booted on one Mac (2026-10-26): install-kernel.sh verify and the 1-Mac smokes passed;
+# the 6-Mac smoke passed 3 of 4 runs, the failure coinciding with a TCP fallback between two Macs on -s2. The other
+# Macs still run -s2.
+status = "qualified on one node"
 
 [kernel.patchsets.lights]
 id = "86bb27d4"
