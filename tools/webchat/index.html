@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trashcan</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="window">
+  <div class="titlebar"><span class="title" id="title">trashcan</span></div>
+  <div class="menubar">
+    <button id="new">New chat</button>
+  </div>
+  <div class="stream" id="stream"></div>
+  <form class="composer" id="composer">
+    <textarea id="input" rows="3" placeholder="Message" autofocus></textarea>
+    <div class="actions">
+      <button type="submit" id="send">Send</button>
+      <button type="button" id="stop" disabled>Stop</button>
+    </div>
+  </form>
+  <div class="statusbar" id="status"></div>
+</div>
+<script src="markdown.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

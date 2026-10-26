@@ -1,0 +1,64 @@
+/* Windows 3.1: a teal desktop, a gray window with a navy title bar, beveled controls. */
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: #008080;
+  font: 14px/1.45 "MS Sans Serif", "Microsoft Sans Serif", Arial, Helvetica, sans-serif;
+  color: #000;
+  display: flex; padding: 16px;
+}
+.window {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; max-width: 1100px; margin: 0 auto;
+  background: #c0c0c0; border: 2px solid #000; box-shadow: inset 1px 1px #fff, inset -1px -1px #808080;
+}
+.titlebar { background: #000080; color: #fff; font-weight: bold; text-align: center; padding: 3px 6px; border-bottom: 2px solid #000; }
+.menubar { padding: 4px 6px; border-bottom: 1px solid #808080; }
+button {
+  font: inherit; background: #c0c0c0; color: #000; padding: 3px 14px; cursor: pointer;
+  border: 2px solid; border-color: #fff #808080 #808080 #fff; box-shadow: 1px 1px #000;
+}
+button:active:not(:disabled) { border-color: #808080 #fff #fff #808080; }
+button:disabled { color: #808080; cursor: default; }
+.stream {
+  flex: 1; overflow-y: auto; margin: 6px; padding: 10px 14px; background: #fff;
+  border: 2px solid; border-color: #808080 #fff #fff #808080;
+}
+.user {
+  margin: 14px 0 8px auto; max-width: 75%; width: fit-content; padding: 6px 10px;
+  background: #ffffe1; border: 1px solid #000; white-space: normal;
+}
+.turn { margin-bottom: 16px; }
+details.work {
+  margin: 6px 0 10px; background: #c0c0c0; padding: 4px 8px;
+  border: 2px solid; border-color: #fff #808080 #808080 #fff;
+}
+details.work > summary { font-weight: bold; cursor: pointer; }
+details.work .items { margin-top: 4px; }
+details.think, details.tool { margin: 6px 0; background: #fff; padding: 4px 8px; border: 1px solid #808080; }
+details.think > summary, details.tool > summary { cursor: pointer; color: #000080; font-weight: bold; }
+details.think .body { color: #333; font-size: 13px; }
+details.tool .args { font-family: "Courier New", monospace; font-size: 12px; color: #444; }
+details.tool .result { font-size: 13px; margin-top: 4px; }
+details.tool ol { margin: 4px 0; padding-left: 22px; }
+.snippet { color: #444; }
+.answer { padding: 2px 2px; }
+.md h1, .md h2, .md h3, .md h4 { margin: 12px 0 6px; line-height: 1.25; }
+.md h1 { font-size: 20px; } .md h2 { font-size: 17px; } .md h3, .md h4 { font-size: 15px; }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 24px; }
+.md code { font-family: "Courier New", monospace; background: #eee; padding: 0 3px; }
+.md pre { background: #eee; border: 1px solid #808080; padding: 8px; overflow-x: auto; }
+.md pre code { background: none; padding: 0; }
+.md blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid #808080; color: #333; }
+.md table { border-collapse: collapse; margin: 8px 0; }
+.md th, .md td { border: 1px solid #808080; padding: 3px 8px; text-align: left; }
+.md th { background: #c0c0c0; }
+a { color: #000080; }
+.error { color: #a00000; margin: 6px 0; }
+.composer { display: flex; gap: 8px; padding: 0 6px 6px; }
+.composer textarea {
+  flex: 1; font: inherit; resize: vertical; padding: 4px 6px;
+  border: 2px solid; border-color: #808080 #fff #fff #808080; background: #fff;
+}
+.composer .actions { display: flex; flex-direction: column; gap: 6px; }
+.statusbar { padding: 2px 8px; border-top: 1px solid #808080; font-size: 13px; min-height: 22px; }
