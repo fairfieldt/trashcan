@@ -103,7 +103,8 @@ Decode A/B (one pair, pp512 + tg128, `--batch 128`, sustained 850/1370 MHz on ev
   earlier). The engine now tolerates it, but anything synchronous on those disks during serving will hang that long.
 - The launcher's start check treated a missing pid file as an ended process (a cold node can take seconds to write it);
   fixed in 2dd1294c.
-- `deploy/manifest.toml` still says the 6-Mac failure coincided with a TCP fallback: it was the engine's prefill race.
+- [qualify-20261026](../qualify-20261026/README.md) puts the failed smoke down to the TCP fallback; it was the engine's
+  prefill race.
 
 ## Reproduce
 
