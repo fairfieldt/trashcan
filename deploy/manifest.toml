@@ -1,0 +1,143 @@
+# Pinned artifacts for the published recipes (deploy/recipes.toml). deploy/trashcan-cluster checks every node
+# against this file before a launch: kernel, VBIOS, Mesa, engine binary and model files (size and sha256).
+
+[hardware]
+model = "Mac Pro 6,1"
+vbios = ["113-C3861XA-028", "113-C3861XB-028"]   # one D700 each; both the same means patch 0001 is missing
+vram_mib_min = 6000
+
+[kernel]
+# Linux 7.3-rc7 with kernel/patches-7.3 and kernel/configs/7.3.0-rc7-p2p.config, built by kernel/build-7.3.sh
+# (docs/kernel.md). The package version ends in +psID, the patch set's id: the first 8 hex digits of the sha256 of
+# `sha256sum` over the set's patch files, in order.
+source = "https://git.kernel.org/torvalds/t/linux-7.3-rc7.tar.gz"
+source_sha256 = "f789fc0d7b3713b6be23284f2a9c35bf41fb86785b24cfcc506c20d8ff712523"
+config = "kernel/configs/7.3.0-rc7-p2p.config"
+config_sha256 = "f32b60c742085128277e7e062910284fe04fe0ae16965f3f8853c63e9a7a3d48"
+# /boot/config-RELEASE without its CONFIG_LOCALVERSION line, as the build leaves it (olddefconfig changes nothing).
+config_sha256_normalized = "85af39e70d0e07b2eb3c6cc86f8a48861847523432a36d7c21562aac7fa6aa5e"
+
+[kernel.patches]
+"0001-amdgpu-vfct-exact-match-first.patch" = "f8a661ae983ad87f9d8af5e0baa601864bdaa9c94d6cec479b84d2515bcad82b"
+"0003-p2pdma-whitelist-ivy-bridge-ep.patch" = "1d454a2768b3f3080b22ed22f7b9bb574e24f704ceaa640e6e8b8e4cbbc193ec"
+"0004-thunderbolt-net-throttling-param.patch" = "4a067fbf2596c41eae986c569ac6dd5e016cf07f37a450aaf1116d3b6114b5b5"
+"0005-thunderbolt-stream-no-tx-e2e.patch" = "7ac929ca3fc2bf41d9e2f060802618be40844882dd88a0fc5d35bf15ff53b407"
+"0006-thunderbolt-stream-io-after-close.patch" = "6efd668122c4f65bb1c8911573f6d4258f5e24bf2d5d931df720ee09df03d33f"
+"0007-thunderbolt-stream-no-rx-flush-on-close.patch" = "53c992748a785c83b928b72b85fcb525a23fd3be633e709e4eadeaf2ee762314"
+"0009-applesmc-mac-pro-port-lights.patch" = "f807301d43b68720528855a7246c58fafa5ca44e709d2de49efdd7c4381e76aa"
+"0010-applesmc-port-lights-levels.patch" = "fdd4c0f179e6adba5ad01d0f5d65af2184e70e658f5f9bda0031c07cfe1f0342"
+
+# KSET=engine (0001, 0003-0007) builds 7.3.0-rc7-p2p; KSET=lights (all of the above) builds 7.3.0-rc7-p2p-lights.
+[kernel.patchsets.engine]
+id = "9c9a5449"
+release = "7.3.0-rc7-p2p"
+patches = ["0001", "0003", "0004", "0005", "0006", "0007"]
+# The code of these patches is what ran in every published measurement (as 7.3.0-rc7-p2p-s2, below). A package
+# built from this file has not itself been booted on the Macs yet.
+status = "patches qualified; package from this tree not yet booted"
+
+[kernel.patchsets.lights]
+id = "86bb27d4"
+release = "7.3.0-rc7-p2p-lights"
+patches = ["0001", "0003", "0004", "0005", "0006", "0007", "0009", "0010"]
+status = "not qualified as a kernel: 0009/0010 run as an applesmc module (lights/driver.sh, docs/lights.md)"
+
+# Kernels known by release name. 7.3.0-rc7-p2p-s2 is the build that ran the published measurements (rolled out to
+# six Macs 2026-10-14): the engine patch set (0004 differs only in its description line) and this config.
+[kernel.accepted."7.3.0-rc7-p2p-s2"]
+patchset = "engine"
+status = "qualified"
+image = "linux-image-7.3.0-rc7-p2p-s2_7.3.0~rc7-3p2p_amd64.deb"
+image_sha256 = "a91c727d0b5720bf4f71ed5b98e58a333c21ba18820ae626e7786b56fdf44bdb"
+headers = "linux-headers-7.3.0-rc7-p2p-s2_7.3.0~rc7-3p2p_amd64.deb"
+headers_sha256 = "bbcea1ad2c036720d585002d70f1b5abc835662b53ed09fdde880e23613cb86a"
+
+[mesa]
+package = "mesa-vulkan-drivers"
+version = "25.0.7-2+deb13u1"   # Debian 13; Flash-Next's light barriers were audited on this version
+
+[engine]
+# The engine is built from this repository on every node (or once and copied); every node must run the same
+# binary. Set binary_sha256 to pin one build.
+binary_sha256 = ""
+
+# Model files, relative to the inventory's models directory. Sizes and sha256 of the files the recipes were
+# measured with. The Qwen GGUFs are made with the quantization recipes in docs/qwen.md and docs/qwen4.md; their
+# sources are on Hugging Face under their own licenses.
+[models.gemma4-12b]
+path = "gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf"
+size = 6975879296
+sha256 = "93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b"
+source = "huggingface google/gemma-4-12B-it-qat-q4_0-gguf"
+
+[models.gemma4-12b-assistant]
+path = "gemma-4-12b-assistant/model.safetensors"
+size = 845719296
+sha256 = "67f1420cf24aa5065089aaed175223f7c245ccfda16111b6c56765afd7280db6"
+source = "scripts/fetch-assistant.py"
+
+[models.qwen35-9b]
+path = "qwen3.5-9b/Qwen3.5-9B-trashcan-Q4_0.gguf"
+size = 5843543008
+sha256 = "66716778c967ae2e37055d02f5020dab8a0f7cb56fae4919db235bfbf3b117ff"
+source = "docs/qwen.md#quantization from unsloth/Qwen3.5-9B-GGUF"
+
+[models.qwen35-9b-mtp]
+path = "qwen3.5-9b/mtp-Qwen3.5-9B-trashcan-Q4_0.gguf"
+size = 2062926816
+sha256 = "dfba046a8cfb067b72f64d94b8c86c18bc200fea7400a141c25c993db89c94c0"
+source = "docs/qwen.md (tools/fetch-mtp.py Qwen/Qwen3.5-9B)"
+
+[models.qwen38-27b]
+path = "qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf"
+size = 16193669792
+sha256 = "92349815af2ba00133f9342aaf12dcbe9c6311e6d198414f8a3ac8c90b9c7284"
+source = "docs/qwen.md#quantization from ggml-org/Qwen3.8-27B-GGUF with unsloth/Qwen3.8-27B-GGUF's imatrix"
+
+[models.qwen38-27b-mtp]
+path = "qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf"
+size = 2643753632
+sha256 = "22ba20696d734700a683640a887bf14f0cbf4e2f92fd6ee0c56ba01ef4beb210"
+source = "docs/qwen.md from ggml-org's mtp-Qwen3.8-27B-BF16.gguf"
+
+[models.flashnext-1]
+path = "qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf"
+size = 10946656
+sha256 = "d531d17a3eb1a23793a6ef328f45efd90b2d3f4b8b7081ce6c1cce537955c5d8"
+source = "docs/qwen4.md, recipe G-iq4"
+
+[models.flashnext-2]
+path = "qwen3.8-flash-next/G-iq4/G-iq4-00002-of-00006.gguf"
+size = 528476512
+sha256 = "de8328a8d88b3a4b5364e198efe62c3d697ca378bd131d02817b4a77a0eb3b04"
+source = "docs/qwen4.md, recipe G-iq4"
+
+[models.flashnext-3]
+path = "qwen3.8-flash-next/G-iq4/G-iq4-00003-of-00006.gguf"
+size = 54400261312
+sha256 = "34efd79a80a1ce540a517a5d56171924b66ce1c38b04c904f17ad6d8ef17cf20"
+source = "docs/qwen4.md, recipe G-iq4 (the Q8_0 n-gram table, the same file as the Q8_0 GGUF's shard 3)"
+
+[models.flashnext-4]
+path = "qwen3.8-flash-next/G-iq4/G-iq4-00004-of-00006.gguf"
+size = 26254316416
+sha256 = "8ef48b441412023d1576ac12606888bdaef211f5f75840eda8d00d82065deb15"
+source = "docs/qwen4.md, recipe G-iq4"
+
+[models.flashnext-5]
+path = "qwen3.8-flash-next/G-iq4/G-iq4-00005-of-00006.gguf"
+size = 26029890400
+sha256 = "ae169ebd9ed97944417dcaa25d13668e2d39ad276bec808028130e2c8bdc9b9c"
+source = "docs/qwen4.md, recipe G-iq4"
+
+[models.flashnext-6]
+path = "qwen3.8-flash-next/G-iq4/G-iq4-00006-of-00006.gguf"
+size = 17809743584
+sha256 = "916805561ec70ea6ae6e0ef9f056477f225e355c56e44fcee90e8646376f168e"
+source = "docs/qwen4.md, recipe G-iq4"
+
+[models.flashnext-mtp]
+path = "qwen3.8-flash-next/mtp/mtp-G-iq4.gguf"
+size = 2670190656
+sha256 = "799571b8310c5c5e02cfb7165267971e07baba6c4787ae9bb73578e38c7696e5"
+source = "docs/qwen4.md (MTP block)"

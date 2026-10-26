@@ -1,0 +1,1018 @@
+#!/usr/bin/env python3
+"""Set up, check, start and stop trashcan on one to six Mac Pros. See docs/deploy.md.
+
+Runs on your workstation (Python 3.11+, ssh) against the nodes in an inventory file (deploy/cluster.example.toml).
+Nothing here needs a particular build host, scheduler or network beyond SSH to every node.
+
+  trashcan-cluster [-c INVENTORY] check                   inventory, recipes and manifest are consistent
+  trashcan-cluster registry [--push [--apply]]            tblink node registry generated from the nodes
+  trashcan-cluster install [--apply|--uninstall] [--nodes] node services (nodes/macpro/install.sh), preview first
+  trashcan-cluster links                                  live Thunderbolt links against the cable map
+  trashcan-cluster links-reload-all --yes                 reload Thunderbolt on every node at once (untested)
+  trashcan-cluster preflight RECIPE [--nodes A,B,..]      read-only checks for a recipe (hashes artifacts once)
+  trashcan-cluster run RECIPE                             start, wait until ready, stop on Ctrl-C or any failure
+  trashcan-cluster smoke RECIPE                           start, send one request, check the answer, stop
+  trashcan-cluster up RECIPE / down / status              start detached, stop, show the recorded run
+  trashcan-cluster hash NODE PATH...                      sha256 of files on a node (for the manifest)
+
+Recipes are in deploy/recipes.toml, pinned artifacts in deploy/manifest.toml.
+"""
+import argparse
+import itertools
+import json
+import os
+import shlex
+import signal
+import subprocess
+import sys
+import threading
+import time
+import tomllib
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+PROBE = HERE / "node-probe.py"
+SSH_OPTS = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
+
+
+def die(msg):
+    print(f"error: {msg}", file=sys.stderr)
+    sys.exit(1)
+
+
+def say(msg):
+    print(msg, flush=True)
+
+
+# ---------------------------------------------------------------------------------------------------------- config
+
+class Node:
+    def __init__(self, d):
+        self.name = d["name"]
+        self.ssh = d.get("ssh", self.name)
+        self.index = int(d["index"])
+        self.lan = d.get("lan", self.ssh)       # address other nodes use over Ethernet (TCP fallback only)
+        self.hostname = d.get("hostname")       # filled from the node when needed
+        self.home = None                         # filled by the probe
+
+    def path(self, p):
+        """p with a leading ~ replaced by the node's home directory (paths are quoted in commands)."""
+        return self.home + p[1:] if self.home and (p == "~" or p.startswith("~/")) else p
+
+    def __repr__(self):
+        return self.name
+
+
+class Config:
+    def __init__(self, path):
+        self.path = Path(path).resolve()
+        with open(self.path, "rb") as f:
+            raw = tomllib.load(f)
+        c = raw.get("cluster", {})
+        self.workspace = c.get("workspace", "~/trashcan")
+        self.binary = c.get("binary", "target/release/trashcan")
+        self.models = c.get("models", "~/models")
+        self.run_dir = c.get("run_dir", "~/.local/state/trashcan-cluster")
+        self.state = (self.path.parent / c.get("state", "cluster-state")).resolve()
+        self.cpu_latency_us = c.get("cpu_latency_us", "none")
+        self.ports = {"qwen4_node": 7071, "tp_node": 7072, "serve": 8000, **raw.get("ports", {})}
+        self.nodes = [Node(n) for n in raw.get("node", [])]
+        self.by_name = {n.name: n for n in self.nodes}
+        self.cables = []
+        for cab in raw.get("cable", []):
+            a, b = cab["ends"]
+            self.cables.append((parse_end(a), parse_end(b)))
+        self.manifest = load_toml(self.path.parent / c["manifest"]) if "manifest" in c else load_toml(HERE / "manifest.toml")
+        self.recipes = load_toml(self.path.parent / c["recipes"]) if "recipes" in c else load_toml(HERE / "recipes.toml")
+        self.recipes = self.recipes.get("recipe", {})
+
+    def remote(self, rel):
+        """A path on the nodes: absolute, ~/..., or relative to the workspace."""
+        if rel.startswith("/") or rel.startswith("~"):
+            return rel
+        return f"{self.workspace}/{rel}"
+
+    def model_path(self, key):
+        m = self.manifest["models"][key]
+        p = m["path"]
+        return p if p.startswith("/") or p.startswith("~") else f"{self.models}/{p}"
+
+
+def parse_end(s):
+    name, bus = s.rsplit(":", 1)
+    return name, int(bus)
+
+
+def load_toml(p):
+    with open(p, "rb") as f:
+        return tomllib.load(f)
+
+
+def cmd_check(cfg, a):
+    problems = []
+    seen = set()
+    for n in cfg.nodes:
+        if n.index < 1 or n.index > 15:
+            problems.append(f"node {n.name}: index must be 1..15 (tblink addresses use 16 * index)")
+        if n.index in seen:
+            problems.append(f"node {n.name}: index {n.index} used twice")
+        seen.add(n.index)
+    for (an, ab), (bn, bb) in cfg.cables:
+        for name, bus in ((an, ab), (bn, bb)):
+            if name not in cfg.by_name:
+                problems.append(f"cable end {name}:{bus}: no such node")
+            if bus not in (0, 1, 2):
+                problems.append(f"cable end {name}:{bus}: bus must be 0, 1 or 2")
+    used = {}
+    for end in [e for c in cfg.cables for e in c]:
+        if end in used:
+            problems.append(f"cable end {end[0]}:{end[1]} used by two cables")
+        used[end] = True
+    for key, r in cfg.recipes.items():
+        for m in r.get("models", []) + r.get("mtp_models", []):
+            if m not in cfg.manifest.get("models", {}):
+                problems.append(f"recipe {key}: model {m} not in the manifest")
+        if r["macs"] > len(cfg.nodes):
+            say(f"note: recipe {key} needs {r['macs']} nodes, the inventory has {len(cfg.nodes)}")
+    for key, m in cfg.manifest.get("models", {}).items():
+        if not m.get("sha256"):
+            problems.append(f"manifest: model {key} has no sha256")
+    for p in problems:
+        print(f"problem: {p}")
+    say(f"{len(cfg.nodes)} nodes, {len(cfg.cables)} cables, {len(cfg.recipes)} recipes, "
+        f"{len(cfg.manifest.get('models', {}))} models: {'OK' if not problems else f'{len(problems)} problems'}")
+    return 1 if problems else 0
+
+
+# ------------------------------------------------------------------------------------------------------------ ssh
+
+def ssh_argv(node, command):
+    return ["ssh", *SSH_OPTS, node.ssh, command]
+
+
+def ssh(node, command, check=True, timeout=120, input=None):
+    r = subprocess.run(ssh_argv(node, command), capture_output=True, text=True, timeout=timeout, input=input)
+    if check and r.returncode != 0:
+        raise RuntimeError(f"{node.name}: `{command[:80]}` exited {r.returncode}: {r.stderr.strip()[-400:]}")
+    return r
+
+
+def parallel(nodes, fn):
+    """fn(node) on every node at once; returns {name: result or exception}."""
+    out = {}
+
+    def run(n):
+        try:
+            out[n.name] = fn(n)
+        except Exception as e:  # noqa: BLE001 - reported per node
+            out[n.name] = e
+
+    threads = [threading.Thread(target=run, args=(n,)) for n in nodes]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    return out
+
+
+def probe(cfg, node, files=(), hash_files=False, ports=(), binary=True):
+    req = {"files": list(files), "hash": hash_files, "ports": list(ports),
+           "binary": cfg.remote(cfg.binary) if binary else None, "workspace": cfg.workspace,
+           "run_dir": cfg.run_dir}
+    r = subprocess.run(["ssh", *SSH_OPTS, node.ssh, "python3", "-", shlex.quote(json.dumps(req))],
+                       input=PROBE.read_text(), capture_output=True, text=True, timeout=3600)
+    if r.returncode != 0:
+        raise RuntimeError(f"{node.name}: probe failed: {r.stderr.strip()[-600:]}")
+    info = json.loads(r.stdout)
+    node.hostname = info["hostname"]
+    node.home = info["home"]
+    return info
+
+
+# ------------------------------------------------------------------------------------------------------- registry
+
+NHIS = ["0000:16:00.0", "0000:5d:00.0", "0000:a4:00.0"]  # Apple bus 0 (bottom row), 1 (left column), 2 (right column)
+
+
+def cmd_registry(cfg, a):
+    """Read every node's Thunderbolt controller UUIDs and write the tblink registry (index, hostname, bus 0-2 UUIDs)."""
+    read = ("for n in " + " ".join(NHIS) + "; do d=$(ls -d /sys/bus/pci/devices/$n/domain* 2>/dev/null | head -1); "
+            "cat /sys/bus/thunderbolt/devices/${d##*domain}-0/unique_id 2>/dev/null || echo -; done; hostname")
+    res = parallel(cfg.nodes, lambda n: ssh(n, read).stdout.split())
+    lines = ["# trashcan nodes for tblink, generated by deploy/trashcan-cluster registry from the nodes themselves.",
+             "# index, hostname, and the UUID of each Thunderbolt controller by Apple bus (0 = NHI 16:00.0, bottom row;",
+             "# 1 = 5d:00.0, left column; 2 = a4:00.0, right column). Indexes come from the inventory and never change."]
+    bad = False
+    for n in sorted(cfg.nodes, key=lambda n: n.index):
+        v = res[n.name]
+        if isinstance(v, Exception) or len(v) != 4 or "-" in v[:3]:
+            print(f"{n.name}: cannot read three controller UUIDs: {v}", file=sys.stderr)
+            bad = True
+            continue
+        lines.append("\t".join([str(n.index), v[3], *v[:3]]))
+    if bad:
+        return 1
+    text = "\n".join(lines) + "\n"
+    cfg.state.mkdir(parents=True, exist_ok=True)
+    out = cfg.state / "nodes.tsv"
+    out.write_text(text)
+    say(f"wrote {out}")
+    if not a.push:
+        return 0
+    # Compare with every node's installed table; install only with --apply.
+    current = parallel(cfg.nodes, lambda n: ssh(n, "cat /etc/tblink/nodes.tsv 2>/dev/null", check=False).stdout)
+    changed = []
+    for n in cfg.nodes:
+        if _rows(current[n.name]) == _rows(text):
+            say(f"{n.name}: /etc/tblink/nodes.tsv already has these nodes")
+        else:
+            changed.append(n)
+            say(f"{n.name}: /etc/tblink/nodes.tsv differs:" + "".join(
+                f"\n    - {r}" for r in sorted(_rows(current[n.name]) - _rows(text))) + "".join(
+                f"\n    + {r}" for r in sorted(_rows(text) - _rows(current[n.name]))))
+    if changed and a.apply:
+        res = parallel(changed, lambda n: ssh(n, "sudo -n install -D -m 0644 /dev/stdin /etc/tblink/nodes.tsv", input=text))
+        for name, v in res.items():
+            say(f"{name}: {'installed' if not isinstance(v, Exception) else v}")
+        say("tblink picks the table up within 5 s; links are not reset")
+    elif changed:
+        say("preview only: rerun with --apply to install")
+    return 0
+
+
+def _rows(text):
+    return {"\t".join(line.split()) for line in text.splitlines() if line.strip() and not line.startswith("#")}
+
+
+# ---------------------------------------------------------------------------------------------------------- links
+
+def read_links(cfg, nodes):
+    """{node name: [link dict]} from `tblink links`, and every node's hostname."""
+    def one(n):
+        r = ssh(n, "hostname; /usr/local/sbin/tblink links 2>/dev/null || sudo -n /usr/local/sbin/tblink links", check=False)
+        lines = r.stdout.splitlines()
+        n.hostname = lines[0].strip()
+        hdr = lines[1].split("\t") if len(lines) > 1 else []
+        return [dict(zip(hdr, line.split("\t"))) for line in lines[2:] if line.strip()]
+    res = parallel(nodes, one)
+    for name, v in res.items():
+        if isinstance(v, Exception):
+            die(f"{name}: {v}")
+    return res
+
+
+def cable_report(cfg, nodes, links):
+    """Compare the live links with the cable map; returns (ok, lines, live) where live[(a, b)] lists (a bus, b bus, link)."""
+    by_host = {n.hostname: n.name for n in nodes}
+    live = {}
+    lines = []
+    for n in nodes:
+        for l in links[n.name]:
+            peer = by_host.get(l.get("peer"))
+            if peer is None:
+                continue
+            live.setdefault((n.name, peer), []).append((int(l["local_bus"]), int(l["peer_bus"]), l))
+    names = {n.name for n in nodes}
+    ok = True
+    expected = set()
+    for (an, ab), (bn, bb) in cfg.cables:
+        if an not in names or bn not in names:
+            continue
+        expected.add((an, ab))
+        expected.add((bn, bb))
+        hit = [l for (lb, pb, l) in live.get((an, bn), []) if lb == ab and pb == bb]
+        if not hit:
+            lines.append(f"MISSING  {an}:{ab} - {bn}:{bb}: no link seen")
+            ok = False
+            continue
+        l = hit[0]
+        state, lanes, stream = l.get("state"), l.get("lanes"), l.get("stream", "-")
+        flag = "OK      " if state == "up" and lanes == "2" and stream != "-" else "DEGRADED" if state == "up" else "DOWN    "
+        if state != "up":
+            ok = False
+        lines.append(f"{flag} {an}:{ab} - {bn}:{bb}: {state}, {lanes} lane(s), stream {stream}")
+    for (a_, b_), ls in sorted(live.items()):
+        for lb, pb, l in ls:
+            if (a_, lb) not in expected and a_ < b_:
+                lines.append(f"EXTRA    {a_}:{lb} - {b_}:{pb}: {l.get('state')} (not in the cable map)")
+    return ok, lines, live
+
+
+def cmd_links(cfg, a):
+    nodes = select_nodes(cfg, a.nodes, len(a.nodes.split(","))) if a.nodes else cfg.nodes
+    links = read_links(cfg, nodes)
+    for n in nodes:
+        for l in links[n.name]:
+            if l.get("state") in ("firmware", "no_carrier", "no_interface"):
+                say(f"{n.name}: {l.get('xdomain')} bus {l.get('local_bus')} -> {l.get('peer')}: {l.get('state')}")
+    ok, lines, _ = cable_report(cfg, nodes, links)
+    for line in lines:
+        say(line)
+    if not ok:
+        say("some cables are not up: see docs/deploy.md#thunderbolt-link-recovery")
+    return 0 if ok else 1
+
+
+def cmd_reload_all(cfg, a):
+    """`tblink reload` on every node at the same moment. UNTESTED as a recovery procedure (docs/deploy.md)."""
+    if not a.yes:
+        die("this reloads the Thunderbolt modules on every node at once and drops every link for a few seconds; "
+            "rerun with --yes when no engine runs anywhere")
+    nodes = select_nodes(cfg, a.nodes, len(a.nodes.split(","))) if a.nodes else cfg.nodes
+    busy = parallel(nodes, lambda n: ssh(n, ENGINE_PGREP, check=False).stdout.strip())
+    if any(v for v in busy.values() if not isinstance(v, Exception)):
+        die("an engine process is running: " + "; ".join(f"{k}: {v}" for k, v in busy.items() if v))
+    barrier = time.time() + 5
+    cmd = f"sleep $(python3 -c 'import time; print(max(0, {barrier} - time.time()))'); sudo -n /usr/local/sbin/tblink reload"
+    res = parallel(nodes, lambda n: ssh(n, cmd, check=False))
+    for name, r in res.items():
+        say(f"{name}: {'reloaded' if not isinstance(r, Exception) and r.returncode == 0 else 'FAILED ' + str(getattr(r, 'stderr', r)).strip()}")
+    say("waiting 30 s for the links to come back")
+    time.sleep(30)
+    return cmd_links(cfg, a)
+
+
+# -------------------------------------------------------------------------------------------------------- recipes
+
+ENGINE_PGREP = r"pgrep -af '(^|/)trashcan[^ /]* (serve|server|chat|bench|validate|qwen|qwen4|qwen-[a-z-]+) ' || true"
+
+
+def select_nodes(cfg, names, count):
+    if names:
+        sel = []
+        for name in names.split(","):
+            if name not in cfg.by_name:
+                die(f"no node {name} in {cfg.path}")
+            sel.append(cfg.by_name[name])
+    else:
+        sel = cfg.nodes[:count]
+    if len(sel) != count:
+        die(f"need {count} nodes, got {len(sel)}")
+    return sel
+
+
+class Proc:
+    """One engine process on a node."""
+
+    def __init__(self, role, node, argv, port, kind):
+        self.role, self.node, self.argv, self.port, self.kind = role, node, argv, port, kind
+        self.ssh = None  # attached ssh process
+
+    def as_dict(self, run):
+        return {"role": self.role, "node": self.node.name, "port": self.port, "kind": self.kind,
+                "pidfile": f"{run}/{self.role}.pid", "log": f"{run}/{self.role}.log", "argv": self.argv}
+
+
+def addr(host, bus, port):
+    return f"{host}.tb{bus}:{port}"
+
+
+def plan(cfg, recipe, nodes, a):
+    """The processes for a recipe on these nodes, in start order (nodes first, the driver last)."""
+    r = cfg.recipes[recipe]
+    models = {k: cfg.model_path(k) for k in r.get("models", []) + r.get("mtp_models", [])}
+    mtp = a.mtp if a.mtp is not None else r.get("mtp_default", False)
+
+    def fmt(args):
+        out = []
+        for x in args:
+            for k, v in models.items():
+                x = x.replace("{" + k + "}", v)
+            out.append(x.replace("{serve_port}", str(cfg.ports["serve"])))
+        return out
+
+    driver_args = fmt(r["driver"] + (r.get("driver_mtp", []) if mtp else []))
+    node_extra = fmt(r.get("node_mtp", [])) if mtp else []
+    kind = r["kind"]
+    procs = []
+    if kind == "single":
+        pass
+    elif kind in ("tp2", "tp4"):
+        links = read_links(cfg, nodes)
+        ok, lines, live = cable_report(cfg, nodes, links)
+        port = cfg.ports["tp_node"]
+        if kind == "tp2":
+            d, n1 = nodes
+            lanes = [addr(n1.hostname, lb, port) for lb, pb, l in sorted(live.get((d.name, n1.name), []), key=lambda t: t[0])
+                     if l.get("state") == "up"]
+            if not lanes:
+                if not a.tcp_fallback:
+                    die(f"no Thunderbolt link up between {d.name} and {n1.name}; fix the cable or pass --tcp-fallback")
+                lanes = [f"{n1.lan}:{port}"]
+                say(f"TCP fallback: {d.name} -> {n1.name} over {n1.lan}")
+            procs.append(Proc("node1", n1, fmt(r["node"]) + node_extra + ["--listen", f"0.0.0.0:{port}"], port, "tp"))
+            driver_args += ["--tp-connect", ",".join(lanes)]
+        else:
+            order, cabled = tp4_order(nodes, live, a.tcp_fallback)
+            m = {i: n for i, n in enumerate(order)}
+
+            def lanes(i, j):
+                ls = [addr(m[j].hostname, lb, port) for lb, pb, l in sorted(live.get((m[i].name, m[j].name), []), key=lambda t: t[0])
+                      if l.get("state") == "up"]
+                return ls or [f"{m[j].lan}:{port}"]
+            for i in (3, 2, 1):
+                peers = []
+                for j in sorted(cabled[i]):
+                    peers += ["--peer", f"{j}={','.join(lanes(i, j))}" if j > i else str(j)]
+                procs.append(Proc(f"machine{i}", m[i], fmt(r["node"]) + node_extra +
+                                  ["--listen", f"0.0.0.0:{port}", "--machine", str(i), *peers], port, "tp"))
+            for j in sorted(cabled[0]):
+                driver_args += ["--tp-peer", f"{j}={','.join(lanes(0, j))}"]
+            nodes[:] = order
+    elif kind == "chain":
+        links = read_links(cfg, nodes)
+        ok, lines, live = cable_report(cfg, nodes, links)
+        order = chain_order(nodes, live)
+        port = cfg.ports["qwen4_node"]
+        addrs = []
+        for prev, n in zip(order, order[1:]):
+            ls = [l for l in live.get((prev.name, n.name), []) if l[2].get("state") == "up"]
+            if ls:
+                addrs.append(addr(n.hostname, sorted(ls, key=lambda t: t[0])[0][0], port))
+            elif a.tcp_fallback:
+                addrs.append(f"{n.lan}:{port}")
+                say(f"TCP fallback: {prev.name} -> {n.name} over {n.lan}")
+            else:
+                die(f"no Thunderbolt link up between {prev.name} and {n.name}")
+        for i, n in reversed(list(enumerate(order))[1:]):
+            procs.append(Proc(f"stage{i}", n, fmt(r["node"]) + ["--listen", f"0.0.0.0:{port}"], port, "chain"))
+        driver_args += ["--nodes", ",".join(addrs)]
+        nodes[:] = order
+    else:
+        die(f"recipe {recipe}: unknown kind {kind}")
+    procs.append(Proc("driver", nodes[0], driver_args, cfg.ports["serve"], "serve"))
+    return procs
+
+
+def tp4_order(nodes, live, tcp_fallback):
+    """Machine numbers 0-3 (nodes[0] stays machine 0) so that the cables 0-1, 0-2, 1-3 and 2-3 exist (the ring), or
+    all six (full mesh). Returns (order, {machine: set of cabled machines})."""
+    def up(x, y):
+        return any(l.get("state") == "up" for _, _, l in live.get((x.name, y.name), []))
+    ring = [(0, 1), (0, 2), (1, 3), (2, 3)]
+    d, rest = nodes[0], nodes[1:]
+    if all(up(x, y) for x, y in itertools.combinations(nodes, 2)):
+        order = nodes
+        pairs = list(itertools.combinations(range(4), 2))
+    else:
+        order = None
+        for perm in itertools.permutations(rest):
+            o = [d, *perm]
+            if all(up(o[i], o[j]) for i, j in ring):
+                order = o
+                break
+        if order is None:
+            if not tcp_fallback:
+                die("these four nodes have no Thunderbolt ring 0-1, 0-2, 1-3, 2-3 (see `links`); recable or pass --tcp-fallback")
+            # The order given, Ethernet where a ring cable is missing.
+            order = nodes
+            for i, j in ring:
+                if not up(order[i], order[j]):
+                    say(f"TCP fallback: machine {i} ({order[i].name}) - machine {j} ({order[j].name}) over Ethernet")
+        pairs = ring
+    cabled = {i: set() for i in range(4)}
+    for i, j in pairs:
+        cabled[i].add(j)
+        cabled[j].add(i)
+    return order, cabled
+
+
+def chain_order(nodes, live):
+    """The pipeline order: the nodes as given if every neighbour pair is cabled, else the ring followed from the
+    driver."""
+    def up(x, y):
+        return any(l.get("state") == "up" for _, _, l in live.get((x.name, y.name), []))
+    if all(up(x, y) for x, y in zip(nodes, nodes[1:])):
+        return list(nodes)
+    order, prev = [nodes[0]], None
+    names = {n.name: n for n in nodes}
+    while len(order) < len(nodes):
+        here = order[-1]
+        nxt = sorted([(lb, p) for (x, p), ls in live.items() if x == here.name and p in names and names[p] not in order
+                      for lb, _, l in ls if l.get("state") == "up"])
+        if not nxt:
+            return list(nodes)  # broken ring: keep the given order; the caller reports the missing link
+        order.append(names[nxt[0][1]])
+    return order
+
+
+# ------------------------------------------------------------------------------------------------------ preflight
+
+def required_files(cfg, recipe, procs, mtp):
+    r = cfg.recipes[recipe]
+    per = {}
+    for p in procs:
+        keys = list(r.get("models", []))
+        if mtp and (p.role == "driver" or r.get("node_mtp")):
+            keys += r.get("mtp_models", [])
+        for k in keys:
+            per.setdefault(p.node.name, {})[k] = cfg.model_path(k)
+    return per
+
+
+def preflight(cfg, recipe, a, quiet=False):
+    """Every check before a launch. Returns (ok, procs, nodes)."""
+    if recipe not in cfg.recipes:
+        die(f"no recipe {recipe}; recipes: {', '.join(cfg.recipes)}")
+    r = cfg.recipes[recipe]
+    nodes = select_nodes(cfg, a.nodes, r["macs"])
+    procs = plan(cfg, recipe, nodes, a)
+    mtp = a.mtp if a.mtp is not None else r.get("mtp_default", False)
+    files = required_files(cfg, recipe, procs, mtp)
+    ports = {}
+    for p in procs:
+        ports.setdefault(p.node.name, []).append(p.port)
+    say(f"preflight {recipe} on {', '.join(n.name for n in nodes)} (model files are hashed once per node and cached; "
+        "the first time takes minutes)")
+    infos = parallel(nodes, lambda n: probe(cfg, n, files.get(n.name, {}).values(), True, ports.get(n.name, [])))
+    man = cfg.manifest
+    problems, warnings = [], []
+    accepted = man["kernel"].get("accepted", {})
+    bin_hashes = {}
+    for n in nodes:
+        i = infos[n.name]
+        if isinstance(i, Exception):
+            problems.append(str(i))
+            continue
+        pre = f"{n.name}:"
+        # kernel
+        rel = i["kernel"]
+        ks = accepted.get(rel)
+        if ks is None:
+            pid = i.get("kernel_patchset")
+            match = [k for k, v in man["kernel"].get("patchsets", {}).items() if v.get("id") == pid]
+            if match:
+                ks = {"patchset": match[0], "status": man["kernel"]["patchsets"][match[0]].get("status", "")}
+        if ks is None:
+            problems.append(f"{pre} kernel {rel} is not a kernel built from kernel/ (see docs/kernel.md)")
+        elif ks.get("status") != "qualified":
+            warnings.append(f"{pre} kernel {rel} ({ks.get('patchset')}) is {ks.get('status') or 'not qualified'}")
+        if i.get("boot_config_sha256") and i["boot_config_sha256"] != man["kernel"]["config_sha256_normalized"]:
+            warnings.append(f"{pre} /boot/config-{rel} differs from kernel/configs (ignoring LOCALVERSION)")
+        for p in ("amdgpu.si_support=1", "radeon.si_support=0"):
+            if p not in i["cmdline"].split():
+                problems.append(f"{pre} kernel command line lacks {p}")
+        if not i["p2pdma"]:
+            problems.append(f"{pre} kernel without CONFIG_PCI_P2PDMA")
+        # GPUs
+        gpus = i["gpus"]
+        vb = sorted(g["vbios"] for g in gpus)
+        if len(gpus) != 2:
+            problems.append(f"{pre} {len(gpus)} amdgpu GPUs (want 2)")
+        elif vb != sorted(man["hardware"]["vbios"]):
+            problems.append(f"{pre} VBIOS {vb} (want {sorted(man['hardware']['vbios'])}: each card its own; see docs/hardware.md)")
+        for g in gpus:
+            if g["vram_total_mib"] < man["hardware"]["vram_mib_min"]:
+                problems.append(f"{pre} GPU {g['pci']} has {g['vram_total_mib']} MiB VRAM")
+            if g["vram_used_mib"] > 512:
+                problems.append(f"{pre} GPU {g['pci']} has {g['vram_used_mib']} MiB VRAM in use: something else runs on it")
+            if g["dpm"] != "auto":
+                warnings.append(f"{pre} GPU {g['pci']} DPM level is {g['dpm']} (a stopped engine left it; the launcher "
+                                "restores auto when it stops)")
+        if not i["in_render"]:
+            problems.append(f"{pre} {i['user']} is not in the render group (nodes/macpro/install.sh)")
+        # Mesa
+        want = man["mesa"]["version"]
+        if i["mesa"] != want:
+            msg = f"{pre} Mesa {i['mesa']}, the qualified version is {want}"
+            (problems if r.get("mesa_strict") else warnings).append(
+                msg + (": Flash-Next relies on its barrier behaviour (docs/qwen4.md); rerun the ISA audit first"
+                       if r.get("mesa_strict") else ""))
+        # services
+        for s in ("fancurve", "tblink"):
+            if i["services"].get(s) != "active":
+                (problems if s == "fancurve" else warnings).append(f"{pre} {s}.service is {i['services'].get(s)}")
+        if not i["configfs"]:
+            warnings.append(f"{pre} configfs not mounted: no USB4STREAM, links run over TCP")
+        # engine processes and ports
+        if i["engines"]:
+            problems.append(f"{pre} an engine process is running: {i['engines'][0]}")
+        for port in i["busy_ports"]:
+            problems.append(f"{pre} port {port} is in use")
+        # binary
+        b = i.get("binary")
+        if not b or not b.get("sha256"):
+            problems.append(f"{pre} no engine binary at {cfg.remote(cfg.binary)}")
+        else:
+            bin_hashes[n.name] = b["sha256"]
+        # models
+        for key, path in files.get(n.name, {}).items():
+            f = i["files"].get(path)
+            m = man["models"][key]
+            if not f or not f.get("exists"):
+                problems.append(f"{pre} missing {path} ({key})")
+            elif f["size"] != m["size"]:
+                problems.append(f"{pre} {path}: {f['size']} bytes, want {m['size']}")
+            elif f.get("sha256") != m["sha256"]:
+                problems.append(f"{pre} {path}: sha256 {f.get('sha256', '?')[:16]}..., want {m['sha256'][:16]}...")
+    if len(set(bin_hashes.values())) > 1:
+        problems.append("engine binaries differ between nodes: " + ", ".join(f"{k} {v[:12]}" for k, v in bin_hashes.items()))
+    pin = man.get("engine", {}).get("binary_sha256")
+    if pin and bin_hashes and set(bin_hashes.values()) != {pin}:
+        problems.append(f"engine binary is not the pinned {pin[:12]} ({sorted(set(v[:12] for v in bin_hashes.values()))})")
+    # links
+    if r["kind"] != "single":
+        links = read_links(cfg, nodes)
+        ok, lines, live = cable_report(cfg, nodes, links)
+        for line in lines:
+            if not line.startswith("OK"):
+                warnings.append("link " + line)
+    if not quiet or problems or warnings:
+        for n in nodes:
+            i = infos[n.name]
+            if isinstance(i, Exception):
+                continue
+            g = ", ".join(f"{x['pci']} {x['vbios']} {x['vram_total_mib']} MiB" for x in i["gpus"])
+            say(f"  {n.name} ({i['hostname']}): {i['kernel']}, Mesa {i['mesa']}, {g}, engine "
+                f"{(i.get('binary') or {}).get('sha256', '-')[:12]}")
+        for p in procs:
+            say(f"  {p.role:9s} on {p.node.name}: trashcan {shlex.join(p.argv)}")
+        for w in warnings:
+            say(f"warning: {w}")
+        for p in problems:
+            say(f"PROBLEM: {p}")
+    say(f"preflight {recipe}: {'OK' if not problems else 'FAILED'} ({len(problems)} problems, {len(warnings)} warnings)")
+    return not problems, procs, nodes
+
+
+def cmd_preflight(cfg, a):
+    ok, _, _ = preflight(cfg, a.recipe, a)
+    return 0 if ok else 1
+
+
+# --------------------------------------------------------------------------------------------------------- launch
+
+class Run:
+    def __init__(self, cfg, recipe, procs, a, attached):
+        self.cfg, self.recipe, self.procs, self.a, self.attached = cfg, recipe, procs, a, attached
+        self.id = time.strftime("%Y%m%d-%H%M%S") + f"-{recipe}"
+        self.dir = f"{cfg.run_dir}/{self.id}"
+        self.wrap = parse_wraps(a.wrap)
+        self.stopping = False
+
+    def save(self):
+        self.cfg.state.mkdir(parents=True, exist_ok=True)
+        rec = {"id": self.id, "recipe": self.recipe, "dir": self.dir, "wrap": self.a.wrap,
+               "procs": [p.as_dict(self.dir) for p in self.procs], "started": time.time()}
+        (self.cfg.state / "run.json").write_text(json.dumps(rec, indent=1) + "\n")
+
+    def prefix(self, node):
+        return self.wrap.get(node.name, self.wrap.get("*", []))
+
+    def command(self, p):
+        """The node command: write the engine's pid, then exec it with its output in the run's log."""
+        cfg = self.cfg
+        binary = p.node.path(cfg.remote(cfg.binary))
+        argv = [p.node.path(x) for x in p.argv]
+        inner = f"echo $$ > {self.dir}/{p.role}.pid; exec {shlex.quote(binary)} {shlex.join(argv)}"
+        cmd = ["bash", "-c", inner]
+        if str(cfg.cpu_latency_us) == "0":
+            # Holds a 0 us CPU latency request for the process's lifetime only (busy-polls idle cores; docs/qwen.md).
+            cmd = ["sudo", "-n", "python3", f"{cfg.workspace}/scripts/latency-run.py", *cmd]
+        cmd = [*self.prefix(p.node), *cmd]
+        env = " ".join(self.a.env or [])
+        body = f"cd {cfg.workspace} && mkdir -p {self.dir} && exec env {env} {shlex.join(cmd)} >> {self.dir}/{p.role}.log 2>&1"
+        if self.attached:
+            return body
+        # setsid -f: a new session, so the process outlives this SSH connection, and ssh returns at once.
+        return f"mkdir -p {self.dir} && setsid -f bash -c {shlex.quote(body)} > /dev/null 2>&1 < /dev/null"
+
+    def start(self, p):
+        say(f"start {p.role} on {p.node.name}")
+        if self.attached:
+            p.ssh = subprocess.Popen(ssh_argv(p.node, self.command(p)), stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        else:
+            ssh(p.node, self.command(p))
+
+    def state(self, p):
+        """(alive, listening) from the node."""
+        q = (f"pid=$(cat {self.dir}/{p.role}.pid 2>/dev/null); "
+             f"if [ -n \"$pid\" ] && kill -0 $pid 2>/dev/null; then echo alive; else echo dead; fi; "
+             f"ss -ltnH 'sport = :{p.port}' | grep -q . && echo listening || echo closed")
+        r = ssh(p.node, q, check=False, timeout=30)
+        out = r.stdout.split()
+        return (out[:1] == ["alive"]), (out[1:2] == ["listening"])
+
+    def health(self, p):
+        q = f"python3 -c \"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:{p.port}/health', timeout=3).status)\""
+        r = ssh(p.node, q, check=False, timeout=30)
+        return r.stdout.strip() == "200"
+
+    def tail(self, p, n=15):
+        r = ssh(p.node, f"tail -n {n} {self.dir}/{p.role}.log 2>/dev/null", check=False, timeout=30)
+        return r.stdout.rstrip()
+
+    def wait_ready(self):
+        """Start every process in order and wait for it: a node until its port listens, the driver until /health
+        answers. Any process that ends first fails the run."""
+        r = self.cfg.recipes[self.recipe]
+        for p in self.procs:
+            self.start(p)
+            deadline = time.time() + (r.get("load_deadline_s", 300) if p.role == "driver" else r.get("listen_deadline_s", 60))
+            t0 = time.time()
+            while True:
+                if self.stopping:
+                    return False
+                alive, listening = self.state(p)
+                if p.ssh is not None and p.ssh.poll() is not None and not alive:
+                    alive = False
+                if not alive and time.time() - t0 > 3:
+                    say(f"{p.role} on {p.node.name} ended before it was ready:\n{self.tail(p)}")
+                    return False
+                for q in self.procs[: self.procs.index(p)]:
+                    if not self.state(q)[0]:
+                        say(f"{q.role} on {q.node.name} ended:\n{self.tail(q)}")
+                        return False
+                if p.role != "driver" and listening:
+                    say(f"{p.role} on {p.node.name} listening on {p.port} after {time.time() - t0:.0f} s")
+                    break
+                if p.role == "driver" and listening and self.health(p):
+                    say(f"driver on {p.node.name} ready on 127.0.0.1:{p.port} after {time.time() - t0:.0f} s")
+                    break
+                if time.time() > deadline:
+                    say(f"{p.role} on {p.node.name} not ready after {deadline - t0:.0f} s:\n{self.tail(p)}")
+                    return False
+                time.sleep(1)
+        return True
+
+    def stop(self):
+        self.stopping = True
+        return stop_recorded(self.cfg, {"dir": self.dir, "procs": [p.as_dict(self.dir) for p in self.procs],
+                                        "wrap": self.a.wrap})
+
+
+def parse_wraps(items):
+    out = {}
+    for w in items or []:
+        host, _, prefix = w.partition("=")
+        out[host] = shlex.split(prefix)
+    return out
+
+
+def stop_recorded(cfg, rec):
+    """Stop a run's processes (driver first, then all nodes at once: SIGTERM, then SIGKILL), restore the GPUs' DPM
+    level and copy the logs here. Returns True when everything stopped."""
+    procs = rec["procs"]
+    wraps = parse_wraps(rec.get("wrap"))
+    binary = cfg.remote(cfg.binary)
+
+    def signal_and_wait(p, sig, wait):
+        n = cfg.by_name[p["node"]]
+        q = (f"pid=$(cat {p['pidfile']} 2>/dev/null) || exit 0; "
+             f"grep -qa {shlex.quote(os.path.basename(binary))} /proc/$pid/cmdline 2>/dev/null || exit 0; "
+             f"kill -{sig} $pid 2>/dev/null; for i in $(seq {wait * 5}); do kill -0 $pid 2>/dev/null || exit 0; sleep 0.2; done; exit 1")
+        return ssh(n, q, check=False, timeout=wait + 30).returncode == 0
+
+    ok = True
+    for group in ([p for p in procs if p["role"] == "driver"], [p for p in procs if p["role"] != "driver"]):
+        if not group:
+            continue
+        done = {}
+        for sig, wait in (("TERM", 30), ("KILL", 10)):
+            left = [p for p in group if not done.get(p["role"])]
+            if not left:
+                break
+            r = parallel_items(left, lambda p: signal_and_wait(p, sig, wait))
+            for p in left:
+                done[p["role"]] = r[p["role"]] is True
+                if done[p["role"]]:
+                    say(f"stopped {p['role']} on {p['node']}" + (" (SIGKILL)" if sig == "KILL" else ""))
+        for p in group:
+            if not done.get(p["role"]):
+                say(f"{p['role']} on {p['node']} still running after SIGKILL")
+                ok = False
+    # Restore: the engine raises its GPUs to the high DPM level while it works and returns them to auto when idle;
+    # a process that was killed leaves them high (35 W more per idle D700).
+    hosts = sorted({p["node"] for p in procs})
+    restore = ("for f in /sys/class/drm/card[0-9]*/device/power_dpm_force_performance_level; do "
+               "[ -e \"$f\" ] || continue; [ \"$(cat $f)\" = auto ] || { echo auto | sudo -n tee $f > /dev/null && echo \"$f: restored auto\"; }; done; "
+               "pgrep -af 'latency-run.py' | grep -v pgrep || true")
+    res = parallel([cfg.by_name[h] for h in hosts],
+                   lambda n: ssh(n, shlex.join([*wraps.get(n.name, wraps.get("*", [])), "bash", "-c", restore]), check=False).stdout.strip())
+    for h, v in res.items():
+        if v:
+            say(f"{h}: {v}")
+    # Logs to the local state directory.
+    local = cfg.state / "logs" / os.path.basename(rec["dir"])
+    local.mkdir(parents=True, exist_ok=True)
+    for p in procs:
+        r = ssh(cfg.by_name[p["node"]], f"cat {p['log']} 2>/dev/null", check=False)
+        (local / f"{p['role']}-{p['node']}.log").write_text(r.stdout)
+    say(f"logs in {local}")
+    return ok
+
+
+def parallel_items(items, fn):
+    out = {}
+
+    def run(p):
+        try:
+            out[p["role"]] = fn(p)
+        except Exception as e:  # noqa: BLE001
+            out[p["role"]] = e
+    ts = [threading.Thread(target=run, args=(p,)) for p in items]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    return out
+
+
+def smoke_request(run):
+    """One greedy request to the driver; the recipe's smoke check must appear in the answer."""
+    r = run.cfg.recipes[run.recipe]
+    d = run.procs[-1]
+    body = {"input": r.get("smoke_prompt", "What is the capital of France? Answer with one word."),
+            "temperature": 0, "max_output_tokens": r.get("smoke_tokens", 64), "reasoning": {"effort": "none"},
+            "store": False}
+    code = ("import json, sys, time, urllib.error, urllib.request\n"
+            f"req = urllib.request.Request('http://127.0.0.1:{d.port}/v1/responses', data=sys.stdin.buffer.read(), "
+            "headers={'Content-Type': 'application/json'})\n"
+            "t = time.time()\n"
+            "try:\n    r = json.load(urllib.request.urlopen(req, timeout=600))\n"
+            "except urllib.error.HTTPError as e:\n    sys.exit(f'HTTP {e.code}: {e.read().decode()[:600]}')\n"
+            "t = time.time() - t\n"
+            "text = ''.join(c.get('text', '') for o in r.get('output', []) if o.get('type') == 'message' for c in o.get('content', []))\n"
+            "print(json.dumps({'status': r.get('status'), 'text': text, 'seconds': round(t, 2), 'usage': r.get('usage')}))\n")
+    res = ssh(d.node, f"python3 -c {shlex.quote(code)}", check=False, timeout=900, input=json.dumps(body))
+    if res.returncode != 0:
+        say(f"smoke request failed: {res.stderr.strip()[-500:]}")
+        return False
+    out = json.loads(res.stdout)
+    want = r.get("smoke_expect", "Paris")
+    ok = out["status"] == "completed" and want.lower() in out["text"].lower()
+    say(f"smoke: status {out['status']}, {out['seconds']} s, usage {out['usage']}, answer {out['text'][:200]!r}: "
+        f"{'PASS' if ok else 'FAIL'} (want {want!r})")
+    vram = ssh(d.node, "for d in /sys/bus/pci/drivers/amdgpu/0000:*; do echo \"$(basename $d) $(( $(cat $d/mem_info_vram_used) >> 20 )) MiB\"; done",
+               check=False).stdout.split("\n")
+    say(f"driver VRAM in use: {', '.join(v for v in vram if v)}")
+    return ok
+
+
+def launch(cfg, a, mode):
+    ok, procs, nodes = preflight(cfg, a.recipe, a, quiet=True)
+    if not ok:
+        return 1
+    run = Run(cfg, a.recipe, procs, a, attached=(mode != "up"))
+    if (cfg.state / "run.json").exists() and mode == "up":
+        die(f"a run is recorded in {cfg.state / 'run.json'}: `down` first")
+    run.save()
+    say(f"run {run.id}: logs on the nodes in {run.dir}")
+
+    def stopped(signum, _frame):
+        if run.stopping:
+            return
+        say(f"signal {signum}: stopping every process")
+        run.stop()
+        (cfg.state / "run.json").unlink(missing_ok=True)
+        os._exit(128 + signum)
+
+    for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(s, stopped)
+    t0 = time.time()
+    ready = run.wait_ready()
+    if not ready:
+        say("start failed: stopping every process")
+        run.stop()
+        (cfg.state / "run.json").unlink(missing_ok=True)
+        return 1
+    say(f"{a.recipe} ready after {time.time() - t0:.0f} s")
+    if mode == "smoke":
+        good = smoke_request(run)
+        stopped_ok = run.stop()
+        (cfg.state / "run.json").unlink(missing_ok=True)
+        return 0 if good and stopped_ok else 1
+    if mode == "up":
+        say(f"running; `trashcan-cluster down` stops it. Server: 127.0.0.1:{cfg.ports['serve']} on {nodes[0].name} "
+            "(forward it with ssh -L, or add --host to the recipe)")
+        return 0
+    say("running; Ctrl-C stops every process")
+    while True:
+        time.sleep(5)
+        for p in run.procs:
+            if not run.state(p)[0]:
+                say(f"{p.role} on {p.node.name} ended:\n{run.tail(p)}\nstopping every process")
+                run.stop()
+                (cfg.state / "run.json").unlink(missing_ok=True)
+                return 1
+
+
+def cmd_down(cfg, a):
+    f = cfg.state / "run.json"
+    if not f.exists():
+        say("no run recorded")
+        return 0
+    rec = json.loads(f.read_text())
+    if a.wrap:
+        rec["wrap"] = a.wrap
+    ok = stop_recorded(cfg, rec)
+    f.unlink()
+    return 0 if ok else 1
+
+
+def cmd_status(cfg, a):
+    f = cfg.state / "run.json"
+    if not f.exists():
+        say("no run recorded")
+        return 0
+    rec = json.loads(f.read_text())
+    say(f"run {rec['id']} ({rec['recipe']}), started {time.ctime(rec['started'])}")
+    for p in rec["procs"]:
+        r = ssh(cfg.by_name[p["node"]], f"pid=$(cat {p['pidfile']} 2>/dev/null) && kill -0 $pid 2>/dev/null && echo running || echo stopped",
+                check=False)
+        say(f"  {p['role']:9s} {p['node']:10s} port {p['port']}: {r.stdout.strip()}")
+    return 0
+
+
+def cmd_install(cfg, a):
+    """Copy the node installer to each node and run it there (preview unless --apply)."""
+    repo = HERE.parent
+    parts = ["nodes/macpro/install.sh", "nodes/macpro/root", "scripts/fancurve.sh", "scripts/fancurve.service"]
+    if (repo / "lights").is_dir():
+        parts += ["lights", "kernel/patches-7.3"]   # lights/install.sh can build the driver from the patches
+    nodes = select_nodes(cfg, a.nodes, len(a.nodes.split(","))) if a.nodes else cfg.nodes
+    reg = cfg.state / "nodes.tsv"
+    if a.registry and not reg.exists():
+        die(f"no {reg}: run `registry` first")
+    rc = 0
+    for n in nodes:
+        dest = ".cache/trashcan-node-install"
+        ssh(n, f"rm -rf ~/{dest} && mkdir -p ~/{dest}")
+        subprocess.run(["rsync", "-aR", "-e", "ssh " + " ".join(SSH_OPTS), *parts, f"{n.ssh}:{dest}/"], cwd=repo, check=True)
+        args = (["--apply"] if a.apply else []) + (["--uninstall"] if a.uninstall else []) + \
+            (["--skip", a.skip] if a.skip else [])
+        if a.lights is not None:
+            largs = a.lights
+            if a.lights_bin:
+                subprocess.run(["rsync", "-a", "-e", "ssh " + " ".join(SSH_OPTS), a.lights_bin, f"{n.ssh}:{dest}/portlights"], check=True)
+                largs = f"--bin {dest}/portlights {largs}".strip()
+            args += ["--lights"] + (["--lights-args", largs] if largs else [])
+        if a.registry:
+            subprocess.run(["rsync", "-a", "-e", "ssh " + " ".join(SSH_OPTS), str(reg), f"{n.ssh}:{dest}/nodes.tsv"], check=True)
+            args += ["--registry", f"{dest}/nodes.tsv"]
+        r = subprocess.run(ssh_argv(n, f"cd ~ && sudo -n bash {dest}/nodes/macpro/install.sh {shlex.join(args)}"))
+        rc |= r.returncode
+    return rc
+
+
+def cmd_hash(cfg, a):
+    n = cfg.by_name.get(a.node) or Node({"name": a.node, "index": 1})
+    info = probe(cfg, n, a.paths, True, binary=False)
+    for path in a.paths:
+        f = info["files"][path]
+        say(f"{f.get('sha256', '-')}  {f.get('size', '-')}  {path}")
+    return 0
+
+
+def main():
+    p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("-c", "--config", default=os.environ.get("TRASHCAN_CLUSTER", "cluster.toml"),
+                   help="inventory file (default $TRASHCAN_CLUSTER or ./cluster.toml)")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("check")
+    s = sub.add_parser("registry")
+    s.add_argument("--push", action="store_true", help="compare with every node's /etc/tblink/nodes.tsv")
+    s.add_argument("--apply", action="store_true", help="with --push: install where it differs")
+    s = sub.add_parser("links")
+    s.add_argument("--nodes")
+    s = sub.add_parser("links-reload-all")
+    s.add_argument("--yes", action="store_true")
+    s.add_argument("--nodes")
+    for name in ("preflight", "run", "smoke", "up"):
+        s = sub.add_parser(name)
+        s.add_argument("recipe")
+        s.add_argument("--nodes", help="node names in role order (default: the first ones in the inventory)")
+        s.add_argument("--mtp", action=argparse.BooleanOptionalAction, default=None, help="speculative decoding")
+        s.add_argument("--tcp-fallback", action="store_true", help="use Ethernet where a Thunderbolt cable is missing")
+        s.add_argument("--wrap", action="append", metavar="NODE=PREFIX",
+                       help="run node commands under PREFIX (e.g. a scheduler), * for every node")
+        s.add_argument("--env", action="append", metavar="K=V", help="environment for every engine process")
+    s = sub.add_parser("install")
+    s.add_argument("--nodes")
+    s.add_argument("--apply", action="store_true")
+    s.add_argument("--uninstall", action="store_true")
+    s.add_argument("--skip", help="components to leave out, e.g. panic,ssh")
+    s.add_argument("--registry", action="store_true", help="also install the generated tblink registry")
+    s.add_argument("--lights", nargs="?", const="", metavar="ARGS",
+                   help="also install the port lights (lights/install.sh ARGS, e.g. --build-module); docs/lights.md")
+    s.add_argument("--lights-bin", metavar="FILE", help="with --lights: a portlights build to install")
+    s = sub.add_parser("down")
+    s.add_argument("--wrap", action="append", metavar="NODE=PREFIX")
+    sub.add_parser("status")
+    s = sub.add_parser("hash")
+    s.add_argument("node")
+    s.add_argument("paths", nargs="+")
+    a = p.parse_args()
+    if not os.path.exists(a.config):
+        die(f"no inventory {a.config}: copy deploy/cluster.example.toml and edit it (docs/deploy.md)")
+    cfg = Config(a.config)
+    fn = {"check": cmd_check, "registry": cmd_registry, "links": cmd_links, "links-reload-all": cmd_reload_all,
+          "preflight": cmd_preflight, "install": cmd_install, "down": cmd_down, "status": cmd_status, "hash": cmd_hash,
+          "run": lambda c, x: launch(c, x, "run"), "smoke": lambda c, x: launch(c, x, "smoke"),
+          "up": lambda c, x: launch(c, x, "up")}[a.cmd]
+    sys.exit(fn(cfg, a))
+
+
+if __name__ == "__main__":
+    main()

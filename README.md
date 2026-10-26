@@ -30,7 +30,8 @@ speculative decoding, prefix reuse across turns, and validation against referenc
 - Rust (stable), `glslc` and the Vulkan headers to build.
 
 To set up a fresh Debian install over SSH (kernel, packages, GPU and Thunderbolt configuration, build), use
-[`nodes/macpro/provision.sh`](nodes/macpro/README.md).
+[`nodes/macpro/provision.sh`](nodes/macpro/README.md). To check, start and stop the published one- to six-Mac
+recipes, use [`deploy/trashcan-cluster`](docs/deploy.md).
 
 ## Build
 
@@ -99,6 +100,7 @@ and compares activations against [`tests/reference-vulkan/`](tests/reference-vul
 ## Documentation
 
 - [docs/hardware.md](docs/hardware.md): the Mac Pro 6,1 and D700s, the clock bug, Thunderbolt, fans
+- [docs/deploy.md](docs/deploy.md): setting up nodes and running the 1-, 2-, 4- and 6-Mac recipes
 - [docs/kernel.md](docs/kernel.md): building and installing the patched kernel
 - [docs/implementation.md](docs/implementation.md): build, run, validation and benchmarks for Gemma 4
 - [docs/engine-spec.md](docs/engine-spec.md): Gemma 4 math, constants, formats, tokenizer and GPU details
@@ -109,6 +111,7 @@ and compares activations against [`tests/reference-vulkan/`](tests/reference-vul
 
 ## Repository layout
 
+- `deploy/`: cluster inventory example, recipes, pinned artifacts and `trashcan-cluster`
 - `engine/`: the Rust/Vulkan engine and its GLSL compute shaders
 - `kernel/`: kernel patches, config and build script
 - `lights/`: `portlights`, the port lights service and visualizer, with its install scripts

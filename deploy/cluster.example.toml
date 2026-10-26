@@ -1,0 +1,66 @@
+# A trashcan cluster: copy this file (e.g. to cluster.toml), name your nodes and describe the cables.
+# deploy/trashcan-cluster -c cluster.toml check
+#
+# Nodes are reached over SSH as `ssh` (a name from ~/.ssh/config or HOST / USER@HOST); the account needs
+# passwordless sudo for setup and membership of `render` (nodes/macpro/install.sh adds it).
+
+[cluster]
+workspace = "~/trashcan"                 # the repository on every node, built (cargo build --release)
+binary = "target/release/trashcan"       # relative to workspace; every node must have the same build
+models = "~/models"                      # model files, laid out as in deploy/manifest.toml
+run_dir = "~/.local/state/trashcan-cluster"   # pid files and logs on the nodes
+state = "cluster-state"                  # generated registry, run record and copied logs, here
+cpu_latency_us = "none"                  # "0": hold a 0 us CPU latency request while the engine runs (the
+                                         # measured setting; idle cores then busy-poll, ~55 W more per Mac)
+
+[ports]
+serve = 8000        # the Responses server on the first node (127.0.0.1)
+tp_node = 7072      # qwen-tp-node lanes
+qwen4_node = 7071   # Flash-Next stages
+
+# One entry per Mac. index numbers the node for Thunderbolt addressing (1..15); never change it once links run.
+# The first nodes are the default for a recipe: mac0 drives. `--nodes` picks others.
+[[node]]
+name = "mac0"
+ssh = "mac0.example.net"
+index = 1
+
+[[node]]
+name = "mac1"
+ssh = "mac1.example.net"
+index = 2
+
+[[node]]
+name = "mac2"
+ssh = "mac2.example.net"
+index = 3
+
+[[node]]
+name = "mac3"
+ssh = "mac3.example.net"
+index = 4
+
+[[node]]
+name = "mac4"
+ssh = "mac4.example.net"
+index = 5
+
+[[node]]
+name = "mac5"
+ssh = "mac5.example.net"
+index = 6
+
+# Thunderbolt cables, NODE:BUS at each end. Bus 0 is the bottom row of ports, 1 the left column, 2 the right column.
+# Six Macs in a ring, each with one cable on bus 0 and one on bus 1 (the measured six-Mac cabling):
+[[cable]]
+ends = ["mac0:0", "mac1:0"]
+[[cable]]
+ends = ["mac1:1", "mac2:1"]
+[[cable]]
+ends = ["mac2:0", "mac3:0"]
+[[cable]]
+ends = ["mac3:1", "mac4:1"]
+[[cable]]
+ends = ["mac4:0", "mac5:0"]
+[[cable]]
+ends = ["mac5:1", "mac0:1"]

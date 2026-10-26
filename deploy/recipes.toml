@@ -1,0 +1,67 @@
+# The published recipes: one per number of Macs that has been measured end to end (README.md). Each runs the
+# Responses server (docs/server.md) as the driver on the first node, bound to 127.0.0.1 on the inventory's serve
+# port. `trashcan-cluster smoke RECIPE` starts it, sends one greedy request and stops it.
+#
+# kind: single (one Mac), tp2 (two Macs, tensor parallel), tp4 (four Macs, tensor parallel over the ring 0-1, 0-2,
+# 1-3, 2-3 or a full mesh), chain (Flash-Next pipeline along the cables). {MODEL} is a model's path from
+# manifest.toml under the inventory's models directory. `--mtp` adds driver_mtp/node_mtp (speculative decoding).
+# No 3- or 5-Mac recipe: those counts have not been qualified.
+
+[recipe.1-gemma]
+description = "Gemma 4 12B QAT Q4_0 on one Mac, tensor parallel over its two GPUs"
+macs = 1
+kind = "single"
+models = ["gemma4-12b"]
+mtp_models = ["gemma4-12b-assistant"]
+driver = ["serve", "{gemma4-12b}", "--port", "{serve_port}"]
+driver_mtp = ["--draft", "{gemma4-12b-assistant}"]
+load_deadline_s = 180
+
+[recipe.1-qwen9b]
+description = "Qwen3.5-9B on one Mac, tensor parallel over its two GPUs (TP2)"
+macs = 1
+kind = "single"
+models = ["qwen35-9b"]
+mtp_models = ["qwen35-9b-mtp"]
+driver = ["serve", "{qwen35-9b}", "--port", "{serve_port}", "--tp"]
+driver_mtp = ["--mtp", "{qwen35-9b-mtp}"]
+load_deadline_s = 180
+
+[recipe.2-qwen27b]
+description = "Qwen3.8-27B on two Macs, tensor parallel over four GPUs (TP4); one cable minimum, a lane per cable"
+macs = 2
+kind = "tp2"
+models = ["qwen38-27b"]
+mtp_models = ["qwen38-27b-mtp"]
+node = ["qwen-tp-node", "{qwen38-27b}"]
+node_mtp = ["--mtp", "{qwen38-27b-mtp}"]
+driver = ["serve", "{qwen38-27b}", "--port", "{serve_port}"]
+driver_mtp = ["--mtp", "{qwen38-27b-mtp}"]
+load_deadline_s = 300
+
+[recipe.4-qwen27b]
+description = "Qwen3.8-27B on four Macs, tensor parallel over eight GPUs (TP8); cables 0-1, 0-2, 1-3, 2-3 or all six"
+macs = 4
+kind = "tp4"
+models = ["qwen38-27b"]
+mtp_models = ["qwen38-27b-mtp"]
+node = ["qwen-tp-node", "{qwen38-27b}"]
+node_mtp = ["--mtp", "{qwen38-27b-mtp}"]
+driver = ["serve", "{qwen38-27b}", "--port", "{serve_port}"]
+driver_mtp = ["--mtp", "{qwen38-27b-mtp}"]
+load_deadline_s = 300
+
+[recipe.6-flashnext]
+description = "Qwen3.8-Flash-Next G-iq4 on six Macs: 12 GPU stages along the cables, head split 12, 32K context"
+macs = 6
+kind = "chain"
+# The measured layout: every Mac holds all six shards (the n-gram table, shard 3, is read from the driver's SSD).
+models = ["flashnext-1", "flashnext-2", "flashnext-3", "flashnext-4", "flashnext-5", "flashnext-6"]
+mtp_models = ["flashnext-mtp"]
+node = ["qwen4", "node", "{flashnext-1}", "--gpus", "0,1"]
+driver = ["serve", "{flashnext-1}", "--port", "{serve_port}", "--head-split", "12", "--context", "32768",
+          "--batch", "128", "--ngram", "disk"]
+driver_mtp = ["--mtp", "{flashnext-mtp}"]
+# Flash-Next's decode graphs rely on RADV's barrier behaviour in this Mesa version (docs/qwen4.md).
+mesa_strict = true
+load_deadline_s = 600
