@@ -20,6 +20,8 @@
 #   logs     persistent journal
 #   panic    reboot 10 s after a panic, oops or lockup; /usr/local/sbin/emergency-reboot
 #   ssh      sshd drops sessions whose client went away within about a minute
+#   disk     the write cache off on an original Apple SSD (APPLE SSD SM...), whose cache flushes stall all its I/O
+#            for up to seconds under load (udev rule, applied at once)
 #   lights   only with --lights: the port lights, by lights/install.sh (docs/lights.md) with --lights-args (e.g.
 #            "--bin FILE --build-module"); needs a portlights build and a kernel with 0009/0010 or the module.
 #            --uninstall removes them too (lights/uninstall.sh) when this installer installed them.
@@ -113,6 +115,14 @@ enable_service() {   # enable_service NAME RESTART(0|1)
 }
 
 R=$here/root
+# apple_ssds: the scsi_disk directories of original Apple SSDs (vendor ATA, model APPLE SSD SM...).
+apple_ssds() {
+    local d
+    for d in /sys/class/scsi_disk/*; do
+        [ -e "$d/cache_type" ] || continue
+        [[ $(cat "$d/device/vendor" 2>/dev/null) == ATA* && $(cat "$d/device/model" 2>/dev/null) == "APPLE SSD SM"* ]] && echo "$d"
+    done
+}
 user_ok() { [ -n "$user" ] && id "$user" > /dev/null 2>&1; }
 
 # ------------------------------------------------------------------------------------------------------- uninstall
@@ -140,6 +150,12 @@ if [ "$uninstall" = 1 ]; then
         fi
     done
     has /etc/udev/rules.d/70-tbstream.rules && act "reload udev rules" bash -c "udevadm control --reload && udevadm trigger --action=change --sysname-match='tbstream*'"
+    if has /etc/udev/rules.d/60-trashcan-apple-ssd.rules; then
+        act "reload udev rules" udevadm control --reload
+        for d in $(apple_ssds); do
+            act "turn the write cache of $(ls "$d/device/block") back on" sh -c "echo 'write back' > $d/cache_type"
+        done
+    fi
     has /etc/sysctl.d/ && act "reload sysctls" sysctl -q --system
     has /etc/systemd/journald.conf.d/ && act "restart journald" systemctl restart systemd-journald.service
     has /etc/ssh/sshd_config.d/ && act "reload sshd" bash -c 'sshd -t && systemctl reload ssh'
@@ -273,6 +289,14 @@ if want ssh; then
     echo "-- ssh"
     put "$R/etc/ssh/sshd_config.d/50-keepalive.conf" /etc/ssh/sshd_config.d/50-keepalive.conf 644
 fi
+if want disk && [ -n "$(apple_ssds)" ]; then
+    echo "-- disk"
+    put "$R/etc/udev/rules.d/60-trashcan-apple-ssd.rules" /etc/udev/rules.d/60-trashcan-apple-ssd.rules 644
+    # The rule acts when the disk appears (boot); set the running disk too.
+    for d in $(apple_ssds); do
+        [ "$(cat "$d/cache_type")" = "write through" ] || act "turn the write cache of $(ls "$d/device/block") off" sh -c "echo 'write through' > $d/cache_type"
+    done
+fi
 
 # ------------------------------------------------------------------------------------- reload what changed, services
 echo "-- services"
@@ -308,6 +332,7 @@ if is_changed /etc/systemd/journald.conf.d/90-trashcan-crash.conf; then
     act "restart journald (persistent journal)" bash -c 'systemctl restart systemd-journald.service && journalctl --flush'
 fi
 is_changed /etc/ssh/sshd_config.d/50-keepalive.conf && act "reload sshd" bash -c 'sshd -t && systemctl reload ssh'
+is_changed /etc/udev/rules.d/60-trashcan-apple-ssd.rules && act "reload udev rules" udevadm control --reload
 
 # ------------------------------------------------------------------------------------------------ prerequisites
 grep -qs ' /sys/kernel/config configfs ' /proc/mounts || note "configfs is not mounted: tblink cannot create streams (links run over TCP)"

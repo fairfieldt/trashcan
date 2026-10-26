@@ -92,6 +92,7 @@ deploy/trashcan-cluster -c cluster.toml install [--nodes A,B] [--apply]   # the 
 | `logs` | persistent journal | at once |
 | `panic` | reboot 10 s after a panic, oops or lockup (`/etc/sysctl.d/90-trashcan-panic.conf`); `emergency-reboot` | at once |
 | `ssh` | sshd drops sessions whose client went away within about a minute | at once |
+| `disk` | only on an original Apple SSD (`APPLE SSD SM...`): a udev rule that turns the drive's write cache off ([why](#cache-flushes-stall-the-apple-ssds)) | at once |
 | `lights` | only with `--lights [--lights-args "ARGS"]`: runs `lights/install.sh` (`--dry-run` in a preview) with ARGS, e.g. `--build-module` ([docs/lights.md](../../docs/lights.md)); `--uninstall` runs `lights/uninstall.sh` if this installer installed them | at once |
 
 State is kept in `/var/lib/trashcan-node`: the files installed, the originals they replaced, the targets masked, the
@@ -139,6 +140,28 @@ cat /sys/block/sda/queue/write_zeroes_max_bytes        # 0: no write-zeroes, so 
 ```
 
 A node with an Intel NVMe drive, which supports write-zeroes, never showed this.
+
+### Cache flushes stall the Apple SSDs
+
+With its write cache on, an Apple SSD stalls all I/O while it flushes the cache under load. These drives take no FUA
+and their flush is not queued, so every `fsync` and every ext4 journal commit sends one, and libata holds every other
+command until it ends. While the disk reads at full speed (a cold model load), a flush usually takes 30 ms, but every
+few seconds one takes 0.3-1.2 s with no read completing, and fsyncs then take 1.3-2.7 s. A cold model load whose
+threads fault in pages waits that long, and a few flushes in a row stop the disk for several seconds.
+
+The `disk` component of `install.sh` turns the write cache off (`cache_type` `write through`, now and by a udev rule at
+boot). The kernel then sends no flushes. In a reproduction (page cache dropped, 20 GB read by 4 readers, a 4 KiB
+fsync every 100 ms, a 4 KiB O_DIRECT read every 50 ms), on two nodes with different firmware:
+
+| Write cache | Load time | Time with reads < 20 MB/s | Longest 4 KiB read | Longest fsync |
+|---|---|---|---|---|
+| on | 23-39 s | 4-13 s | 1.2-1.3 s | 1.3-2.7 s |
+| off | 17.3-17.9 s | 0 | 37-48 ms | 94-124 ms |
+
+The cost is sequential writes: 360 MB/s instead of 470-620 MB/s (a 4 GiB `dd` with `fdatasync`). Small synced writes
+get faster: a 4 KiB append and `fsync` takes 3.7 ms instead of 9 ms (up to 1.2 s), and 3,000 small files and a
+`sync` take 0.5 s instead of 1.6 s. A power cut can no longer lose acknowledged writes. A smaller queue depth, smaller
+requests or another I/O scheduler did not help.
 
 ## Thunderbolt links between nodes (`tblink`)
 
