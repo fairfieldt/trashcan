@@ -7,8 +7,8 @@
 #   other steps:   reboot (reboots into the new kernel and waits), verify, itable (finishes ext4 inode-table
 #                  zeroing that `disk` paused; run while the node is idle)
 #   first run:     DEBS=DIR provision.sh HOST && provision.sh HOST reboot verify itable
-# env: DEBS (directory holding the linux-image and linux-headers packages from kernel/build-7.3.sh; needed by the
-#      kernel step), KVER (7.3.0-rc7-p2p)
+# env: DEBS (kernel/build-7.3.sh's WORK directory: packages, SHA256SUMS, kernel-build-KVER.txt; needed by the
+#      kernel step), KVER (7.3.0-rc7-p2p), INSTALL_ARGS (nodes/macpro/install.sh arguments, default --apply)
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
@@ -17,7 +17,6 @@ shift
 steps=${*:-check disk packages rust system tblink kernel workspace}
 KVER=${KVER:-7.3.0-rc7-p2p}
 DEBS=${DEBS:-}
-CMDLINE="quiet radeon.si_support=0 amdgpu.si_support=1 panic=10"
 # The node's login user and home directory (the account SSH logs in as), read on first use.
 USER_NAME= USER_HOME=
 
@@ -133,115 +132,29 @@ step_rust() {
 }
 
 step_system() {
-    say "system: config files, services, GRUB command line"
-    remote_user
-    ssh "$host" 'rm -rf ~/.cache/trashcan-node && mkdir -p ~/.cache/trashcan-node'
-    rsync -a "$here/root" "$repo/scripts/fancurve.sh" "$repo/scripts/fancurve.service" "$host":.cache/trashcan-node/
-    as_root USER_NAME="$USER_NAME" USER_HOME="$USER_HOME" CMDLINE="$CMDLINE" <<'EOF'
-set -e
-stage=$USER_HOME/.cache/trashcan-node
-rsync -a --chown=root:root "$stage/root/" /
-install -m 0755 "$stage/fancurve.sh" /usr/local/sbin/fancurve.sh
-install -m 0644 "$stage/fancurve.service" /etc/systemd/system/fancurve.service
-rm -rf "$stage"
-
-usermod -aG render,video "$USER_NAME"
-
-sysctl -q --system
-systemctl daemon-reload
-# Stream devices that exist already get the rule's group and mode too.
-udevadm control --reload
-udevadm trigger --action=change --sysname-match='tbstream*'
-systemctl enable -q fancurve.service tblink.service
-systemctl restart systemd-journald.service
-journalctl --flush
-systemctl restart fancurve.service tblink.service
-systemctl reload ssh
-systemctl reload NetworkManager 2>/dev/null || true
-
-# The Mac Pro doesn't resume from suspend.
-systemctl mask -q sleep.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
-g=/etc/gdm3/greeter.dconf-defaults
-if [ -f $g ]; then
-    [ -f $g.bak-trashcan ] || cp -a $g $g.bak-trashcan
-    if grep -q "^sleep-inactive-ac-type=" $g; then
-        sed -i "s/^sleep-inactive-ac-type=.*/sleep-inactive-ac-type='nothing'/" $g
-    else
-        sed -i "s/^# *sleep-inactive-ac-type=.*/sleep-inactive-ac-type='nothing'/" $g
-    fi
-    grep -q "^sleep-inactive-ac-type='nothing'" $g
-    /usr/share/gdm/generate-config
-fi
-
-# amdgpu (not radeon) for the Southern Islands GPUs; reboot 10 s after a panic.
-[ -f /etc/default/grub.bak-trashcan ] || cp -a /etc/default/grub /etc/default/grub.bak-trashcan
-sed -i "s/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT=\"$CMDLINE\"/" /etc/default/grub
-update-grub 2>/dev/null
-echo "fancurve $(systemctl is-active fancurve), tblink $(systemctl is-active tblink)"
-EOF
+    say "system: node services and configuration (nodes/macpro/install.sh)"
+    local dest=.cache/trashcan-node-install
+    ssh "$host" "rm -rf ~/$dest && mkdir -p ~/$dest"
+    (cd "$repo" && rsync -aR nodes/macpro/install.sh nodes/macpro/root scripts/fancurve.sh scripts/fancurve.service \
+        $( [ -d lights ] && echo lights ) "$host:$dest/")
+    ssh "$host" "sudo -n bash $dest/nodes/macpro/install.sh ${INSTALL_ARGS:---apply}"
 }
 
 step_tblink() {
-    say "tblink: record this node's Thunderbolt controllers and push the node table to every node"
-    local table="$here/tblink/nodes.tsv" name uuids idx n target
-    name=$(ssh "$host" hostname)
-    uuids=$(ssh "$host" 'for n in 0000:16:00.0 0000:5d:00.0 0000:a4:00.0; do
-            d=$(ls -d /sys/bus/pci/devices/$n/domain* 2>/dev/null | head -1)
-            cat /sys/bus/thunderbolt/devices/${d##*domain}-0/unique_id 2>/dev/null || echo -
-        done' | paste -sd '\t' -)
-    case $uuids in *-$'\t'*|*$'\t'-|-) echo "a Thunderbolt controller is missing on $name: $uuids" >&2; exit 1 ;; esac
-    idx=$(awk -v h="$name" '!/^#/ && $2 == h { print $1 }' "$table")
-    if [ -z "$idx" ]; then
-        idx=$(awk '!/^#/ && NF { if ($1 > m) m = $1 } END { print m + 1 }' "$table")
-        printf '%s\t%s\t%s\n' "$idx" "$name" "$uuids" >> "$table"
-    else
-        awk -v h="$name" -v line="$(printf '%s\t%s\t%s' "$idx" "$name" "$uuids")" \
-            'BEGIN { OFS = "\t" } !/^#/ && $2 == h { print line; next } { print }' "$table" > "$table.new" && mv "$table.new" "$table"
-    fi
-    echo "$name is node $idx (keep $table: indexes must not change)"
-    # The other nodes are reached by the hostnames in the table.
-    for n in $(awk '!/^#/ && NF { print $2 }' "$table"); do
-        target=$n; [ "$n" = "$name" ] && target=$host
-        if ssh -o ConnectTimeout=8 "$target" 'sudo -n install -D -m 0644 /dev/stdin /etc/tblink/nodes.tsv' < "$table"; then
-            echo "table -> $n"
-        else
-            echo "table -> $n FAILED (unreachable?)"
-        fi
-    done
-    ssh "$host" 'sudo -n systemctl enable -q --now tblink.service; sleep 8; sudo -n tblink status'
+    say "tblink: the node registry comes from deploy/trashcan-cluster"
+    echo "List every node in your inventory (deploy/cluster.example.toml), then run from this checkout:"
+    echo "  deploy/trashcan-cluster -c cluster.toml registry --push --apply"
 }
 
 step_kernel() {
     say "kernel $KVER"
-    local img hdr kdir=.cache/trashcan-kernel
-    remote_user
-    [ -n "$DEBS" ] || { echo "set DEBS to the directory holding the $KVER packages from kernel/build-7.3.sh" >&2; exit 1; }
-    img=$(ls -t "$DEBS"/linux-image-${KVER}_*_amd64.deb 2>/dev/null | head -1)
-    hdr=$(ls -t "$DEBS"/linux-headers-${KVER}_*_amd64.deb 2>/dev/null | head -1)
-    if [ -z "$img" ] || [ -z "$hdr" ]; then
-        echo "no $KVER packages in $DEBS; build them with kernel/build-7.3.sh" >&2; exit 1
-    fi
-    echo "packages: $(basename "$img") $(basename "$hdr")"
-    ssh "$host" "mkdir -p ~/$kdir"
-    rsync -a "$img" "$hdr" "$host":"$kdir"/
-    as_root KVER="$KVER" KDIR="$kdir" IMG="$(basename "$img")" HDR="$(basename "$hdr")" USER_HOME="$USER_HOME" <<'EOF'
-set -e
-cd "$USER_HOME/$KDIR"
-want=$(dpkg-deb -f "$IMG" Version)
-# Both packages fully installed at this version (an interrupted install leaves them half-installed).
-have=$(dpkg-query -W -f '${Version} ${Status},' "linux-image-$KVER" "linux-headers-$KVER" 2>/dev/null || true)
-# --force-unsafe-io: without the per-file fsyncs; an original Apple SSD needs up to seconds per cache flush.
-[ "$have" = "$want install ok installed,$want install ok installed," ] || dpkg --force-unsafe-io -i "$IMG" "$HDR"
-# Pin GRUB's default to this kernel by entry id, so installing other kernels never changes what boots.
-update-grub 2>/dev/null
-sub=$(grep -o "submenu 'Advanced options[^{]*\$menuentry_id_option '[^']*'" /boot/grub/grub.cfg | sed "s/.*option '//; s/'\$//")
-ent=$(grep -o "menuentry '[^']*, with Linux $KVER'[^{]*\$menuentry_id_option '[^']*'" /boot/grub/grub.cfg | sed "s/.*option '//; s/'\$//")
-[ -n "$sub" ] && [ -n "$ent" ] || { echo "no GRUB entry for $KVER" >&2; exit 1; }
-sed -i "s#^GRUB_DEFAULT=.*#GRUB_DEFAULT=\"$sub>$ent\"#" /etc/default/grub
-update-grub 2>/dev/null
-grep "^GRUB_DEFAULT=" /etc/default/grub
-echo "installed $(dpkg-query -W -f '${Version}' "linux-image-$KVER"); running $(uname -r)"
-EOF
+    local kdir=.cache/trashcan-kernel
+    [ -n "$DEBS" ] || { echo "set DEBS to the directory kernel/build-7.3.sh left the packages in (WORK)" >&2; exit 1; }
+    [ -f "$DEBS/SHA256SUMS" ] || { echo "no $DEBS/SHA256SUMS; build with kernel/build-7.3.sh" >&2; exit 1; }
+    ssh "$host" "rm -rf ~/$kdir && mkdir -p ~/$kdir"
+    rsync -a "$DEBS"/SHA256SUMS "$DEBS"/kernel-build-${KVER}.txt "$DEBS"/linux-image-${KVER}_*.deb \
+        "$DEBS"/linux-headers-${KVER}_*.deb "$repo/kernel/install-kernel.sh" "$host:$kdir/"
+    ssh "$host" "sudo -n bash $kdir/install-kernel.sh install ~/$kdir --apply"
 }
 
 step_reboot() {

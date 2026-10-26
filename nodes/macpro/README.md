@@ -1,9 +1,10 @@
 # Setting up a Mac Pro 6,1 node
 
 `provision.sh` turns a Mac Pro 6,1 with a fresh Debian 13 install into a trashcan node: kernel `7.3.0-rc7-p2p`
-(`docs/kernel.md`), the D700 GPU setup, panic recovery, the fan curve, Thunderbolt links to other nodes, the Rust
-toolchain, and the trashcan workspace built and checked. It runs from your workstation over SSH, every step is
-idempotent, and running it against a provisioned node changes nothing.
+(`docs/kernel.md`), the node services ([`install.sh`](#node-services-installsh)), the Rust toolchain, and the
+trashcan workspace built and checked. It runs from your workstation over SSH, every step is idempotent, and
+running it against a provisioned node changes nothing. Clusters of several nodes are described, checked, started
+and stopped with `deploy/trashcan-cluster` ([docs/deploy.md](../../docs/deploy.md)).
 
 ## Before running it
 
@@ -32,15 +33,16 @@ idempotent, and running it against a provisioned node changes nothing.
    ```
 
 4. Build the kernel packages with `kernel/build-7.3.sh` (natively on a Debian 13 x86_64 machine or a Mac Pro, or
-   cross-compiled with `ARCH=x86_64 CROSS_COMPILE=x86_64-linux-gnu-`) and copy the `linux-image-7.3.0-rc7-p2p_*` and
-   `linux-headers-7.3.0-rc7-p2p_*` packages to a directory on your workstation.
+   cross-compiled; [docs/kernel.md](../../docs/kernel.md)) and copy its `WORK` directory (packages, `SHA256SUMS`,
+   `kernel-build-7.3.0-rc7-p2p.txt`) to your workstation.
 5. Unplug any Thunderbolt cable that loops the machine's own controllers; the firmware hangs on reboot otherwise.
 
 ## Running it
 
 ```bash
-DEBS=~/kernel-debs nodes/macpro/provision.sh NODE
+DEBS=~/kernel/7.3 nodes/macpro/provision.sh NODE      # DEBS: kernel/build-7.3.sh's WORK directory
 nodes/macpro/provision.sh NODE reboot verify
+ssh NODE sudo .cache/trashcan-kernel/install-kernel.sh pin 7.3.0-rc7-p2p --apply   # once verify passes
 nodes/macpro/provision.sh NODE itable      # Apple SSDs only; the disk stays slow while this runs
 ```
 
@@ -54,9 +56,9 @@ the Gemma 4 12B QAT GGUF at `~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4
 | `disk` | On a drive without write-zeroes, pauses ext4's inode-table zeroing (`noinit_itable`, now and in `/etc/fstab`) so the rest runs at normal disk speed |
 | `packages` | Build tools, AMD firmware, Mesa Vulkan, `glslc`, kernel build dependencies, `iperf3`, `sockperf` |
 | `rust` | rustup with the stable toolchain |
-| `system` | Installs `root/` (panic sysctls, persistent journal, `emergency-reboot`, `tblink` with the links' streams and their udev rule, `thunderbolt_net throttling=32000`, NetworkManager ignoring `thunderbolt*`, sshd keepalive) and the fan curve from `scripts/`; masks suspend (the Mac Pro doesn't resume); sets the GRUB command line `quiet radeon.si_support=0 amdgpu.si_support=1 panic=10`; adds the login user to `render` and `video` |
-| `tblink` | Records the node's Thunderbolt controller UUIDs in `tblink/nodes.tsv` and copies the table to every node in it |
-| `kernel` | Installs the `7.3.0-rc7-p2p` image and headers from `DEBS` and pins `GRUB_DEFAULT` to that entry by id |
+| `system` | Runs [`install.sh`](#node-services-installsh) with `--apply` (`INSTALL_ARGS` overrides): fan control, tblink, suspend masked, amdgpu command line, groups, journal, panic policy, sshd keepalive |
+| `tblink` | Prints how to install the Thunderbolt node registry: `deploy/trashcan-cluster registry --push --apply` generates it from all nodes ([docs/deploy.md](../../docs/deploy.md)) |
+| `kernel` | Copies the packages, `SHA256SUMS` and `kernel-build-*.txt` from `DEBS` and runs `kernel/install-kernel.sh install --apply`: checksums checked, packages installed, the new kernel booted once at the next reboot. GRUB's default stays the previous kernel until you `pin` it |
 | `workspace` | Copies the repository to `~/trashcan` on the node (without `.git`, `target/` and git-ignored files), then `cargo build --release` and `make -C bench/xgpu` |
 | `reboot` | Reboots and waits for SSH (up to 5 minutes) |
 | `itable` | Finishes the zeroing that `disk` paused, all at once (`init_itable=0`), then removes `noinit_itable` from `/etc/fstab`. Not a default step: run it last, while nothing else uses the node |
@@ -64,6 +66,39 @@ the Gemma 4 12B QAT GGUF at `~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4
 
 Run any subset by naming steps, for example `provision.sh NODE system` after editing a file under `root/`, or
 `provision.sh NODE workspace` after changing the source.
+
+## Node services (`install.sh`)
+
+`install.sh` runs on the node as root and installs only what the engine and the links need. Without `--apply` it
+prints every file it would create or change (with a diff) and every command it would run, and changes nothing.
+Running it again after `--apply` reports `nothing to change`. It never reboots and never resets a Thunderbolt link.
+
+```bash
+sudo nodes/macpro/install.sh                    # preview
+sudo nodes/macpro/install.sh --apply
+sudo nodes/macpro/install.sh --uninstall        # preview of the removal; add --apply to remove
+sudo nodes/macpro/install.sh --skip panic,ssh   # leave components out
+sudo nodes/macpro/install.sh --lights --lights-args --build-module --apply   # with the port lights
+deploy/trashcan-cluster -c cluster.toml install [--nodes A,B] [--apply]   # the same from your workstation
+```
+
+| Component | Installs | Takes effect |
+|---|---|---|
+| `tblink` | `/usr/local/sbin/tblink`, `tblink.service`, the `tbstream` udev rule (devices to `render`), `thunderbolt_net throttling=32000`; `--registry FILE` installs `/etc/tblink/nodes.tsv` | at once; a restart keeps every link; the throttle when `thunderbolt_net` next loads |
+| `fan` | `fancurve.sh`, `fancurve.service` | at once |
+| `network` | NetworkManager leaves `thunderbolt*` alone; with ifupdown, DHCP on every Ethernet port that has no stanza (the Debian installer configures only the port cabled during the install) | at once |
+| `power` | masks the sleep, suspend and hibernate targets (the Mac Pro does not resume) | at once |
+| `gpu` | `radeon.si_support=0 amdgpu.si_support=1` in `/etc/default/grub.d/90-trashcan.cfg` unless GRUB has them already; the user in `render` and `video`; `/etc/sudoers.d/trashcan-amdgpu-dpm`, which lets `render` write the GPUs' DPM level files only | next boot; next login |
+| `logs` | persistent journal | at once |
+| `panic` | reboot 10 s after a panic, oops or lockup (`/etc/sysctl.d/90-trashcan-panic.conf`); `emergency-reboot` | at once |
+| `ssh` | sshd drops sessions whose client went away within about a minute | at once |
+| `lights` | only with `--lights [--lights-args "ARGS"]`: runs `lights/install.sh` (`--dry-run` in a preview) with ARGS, e.g. `--build-module` ([docs/lights.md](../../docs/lights.md)); `--uninstall` runs `lights/uninstall.sh` if this installer installed them | at once |
+
+State is kept in `/var/lib/trashcan-node`: the files installed, the originals they replaced, the targets masked, the
+groups added. `--uninstall --apply` restores the originals, removes the rest, unmasks, takes the user out of the
+groups it added and disables the two services (the fan returns to the SMC). Kernel crash capture (netconsole,
+kdump) is not part of it: with `panic`, a crashed node reboots after 10 s and the persistent journal keeps what
+was written before the crash.
 
 ## What to check in `verify`
 
@@ -108,10 +143,10 @@ A node with an Intel NVMe drive, which supports write-zeroes, never showed this.
 ## Thunderbolt links between nodes (`tblink`)
 
 `tblink.service` (`root/usr/local/sbin/tblink`) gives every cable between two nodes a fixed /30, whatever port or
-interface name it lands on. `tblink/nodes.tsv` lists each node's index, hostname and the UUID of each controller by
-Apple bus (bus 0 = bottom row, 1 = left column, 2 = right column). It ships empty: the `tblink` step adds the node it
-provisions (indexes from 1, in provisioning order, never changing) and copies the table to every node in it, reaching
-the other nodes by the hostnames in the table. Keep your copy of the table; a node that is not in it gets no links.
+interface name it lands on. `/etc/tblink/nodes.tsv` lists each node's index, hostname and the UUID of each controller
+by Apple bus (bus 0 = bottom row, 1 = left column, 2 = right column). `deploy/trashcan-cluster registry` reads the
+UUIDs from every node in your inventory and writes the table, with the indexes from the inventory (never change
+them); `registry --push --apply` installs it on every node. A node that is not in the table gets no links.
 For nodes a < b on buses da and db, the link is 10.99.(16a+b).(4(3da+db)+1) on a and +2 on b, named
 `<peer>.tb<local bus>` in `/etc/hosts`:
 
