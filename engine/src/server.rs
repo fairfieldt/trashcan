@@ -111,6 +111,10 @@ trait Backend {
     fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value>;
     /// Forget reusable state after a failed request.
     fn reset(&mut self);
+    /// A link to another machine has ended, so no request can succeed: the server stops.
+    fn broken(&self) -> bool {
+        false
+    }
 }
 
 struct Gemma {
@@ -300,6 +304,9 @@ impl Backend for Qwen4 {
     }
     fn reset(&mut self) {
         self.chain.forget();
+    }
+    fn broken(&self) -> bool {
+        self.chain.broken()
     }
 }
 
@@ -506,6 +513,7 @@ fn run(options: Options, mut backend: impl Backend) -> Result<()> {
         if let Err(e) = handle(request, &options, &model_id, defaults, &mut backend) {
             backend.reset();
             eprintln!("request failed: {e:#}");
+            ensure!(!backend.broken(), "the link to the next machine has ended; stopping");
         }
     }
     Ok(())

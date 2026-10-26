@@ -1259,7 +1259,7 @@ impl TpGroup {
         if let Some(m) = self.mesh.as_mut() {
             // While a gated submission waits on the GPUs, a stalled exchange must fail (and drain them) well
             // before amdgpu's job timeout, which is 2 s on these kernels. A healthy exchange takes microseconds,
-            // and a link whose stream dies goes on over TCP within about 100 ms (link/proto.rs).
+            // and a link whose stream dies ends (link/proto.rs).
             let stall = if self.shards[0].tp_gated() { Duration::from_millis(500) } else { crate::link::STALL };
             let last = m.all_reduce(sum, &mut self.remote[..len], stall, threads, self.c.d)?;
             exchanged = Instant::now();

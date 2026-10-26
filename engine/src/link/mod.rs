@@ -1,16 +1,17 @@
 //! Links between machines: the one transport every model uses across Thunderbolt cables (and any other network).
 //!
 //! A `Link` is an ordered, reliable byte stream each way between two processes, opened over TCP (`connect` and
-//! `accept`; the TCP connection names the session and is the fallback path). When the TCP connection runs over a
-//! Thunderbolt link and both ends have that cable's USB4STREAM device (created by `tblink`), the data moves to the
-//! stream, which has about half TCP's latency; when the stream fails it goes on over TCP, losing and repeating
-//! nothing, and returns to the stream once a new stream epoch opens. The choice is per link and automatic. See
-//! `proto.rs` for the protocol and `device.rs` for what the driver does.
+//! `accept`; the TCP connection names the session and carries control records). When the TCP connection runs over a
+//! Thunderbolt link and both ends have that cable's USB4STREAM device (created by `tblink`), the data goes on the
+//! stream, which has about half TCP's latency: `connect` returns once the stream is up, and a stream that fails, or
+//! does not come up within `Tuning::stream_wait`, ends the link with an error. Such a link never carries on over
+//! TCP. Without a stream at both ends (another network, tests) the link is TCP only. See `proto.rs` for the protocol
+//! and `device.rs` for what the driver does.
 //!
 //! Above the byte stream:
 //! - `Lanes`: the links to one machine, one per cable, for tensor-parallel exchanges (each lane carries an equal
 //!   slice) and small control messages (`[u32 length][bytes]` on the first lane). With several cables every lane
-//!   also gets a TCP path over the next cable, so a lane whose cable goes away carries on over another one.
+//!   also gets a TCP path over the next cable, so a TCP-only lane whose cable goes away carries on over another one.
 //! - `Conn`: the pipeline chains' frames, `[u32 header length][u64 blob length][JSON header][blob]`.
 //!
 //! The application drives a link while it sends, receives or exchanges: that thread polls the paths without sleeping
@@ -309,10 +310,10 @@ impl Link {
     }
 
     /// Connect to `addr` (keeps trying for `o.connect_for`), introduce this side with `tag` (what the other side
-    /// should do with the link), and move to the stream when both ends have one.
+    /// should do with the link), and, when both ends have a stream, return once it is up.
     pub fn connect_with(addr: &str, tag: &str, o: &Options) -> Result<Link> {
         let (link, same) = Self::handshake(addr, tag, o)?;
-        link.settle(same);
+        link.settle(same)?;
         Ok(link)
     }
 
@@ -341,24 +342,21 @@ impl Link {
         Ok((Link::start(st, o.streams.clone()), same))
     }
 
-    /// The connecting side, right after the handshake: with a stream at both ends, open the first epoch and give it
-    /// up to 1.5 s, so the session's data starts on the stream; without, look again later (tblink may create it).
-    fn settle(&self, same: bool) {
-        let start = Instant::now();
+    /// The connecting side, right after the handshake: with a stream at both ends, open epochs until one is up (the
+    /// link ends after `stream_wait` without), so that the session's data goes on the stream from its start.
+    fn settle(&self, same: bool) -> Result<()> {
         if !same {
-            let mut st = self.inner.lock();
-            let later = st.tune.backoff_max;
-            st.retry_later(start, later);
-            return;
+            return Ok(());
         }
-        self.inner.lock().first_epoch(start);
-        while start.elapsed() < Duration::from_millis(1500) {
+        self.inner.lock().first_epoch(Instant::now());
+        loop {
             if let Some(job) = self.inner.take_job() {
                 self.inner.run_job(job);
             }
             let mut st = self.inner.lock();
-            if st.pump(Instant::now(), &mut Sink::none()).is_err() || matches!(st.stream.phase, Phase::Up | Phase::Off) {
-                return;
+            st.pump(Instant::now(), &mut Sink::none())?;
+            if st.stream.phase == Phase::Up {
+                return Ok(());
             }
             drop(st);
             std::thread::sleep(Duration::from_micros(200));
@@ -440,20 +438,21 @@ impl Link {
         self.inner.lock().path()
     }
 
+    /// The link has ended (closed, or failed: see `report` and the link's messages).
+    pub fn is_closed(&self) -> bool {
+        self.inner.lock().is_closed()
+    }
+
     pub fn stats(&self) -> Stats {
         self.inner.lock().stats
     }
 
-    /// How this link carries its data, for run reports. `transport`: "stream" (on its stream since the first epoch),
-    /// "retried" (on its stream now, after a failed epoch or a fallback) or "tcp".
+    /// How this link carries its data, for run reports. `transport`: "stream" or "tcp" (`path`); a link whose stream
+    /// failed has ended. `failed_epochs` counts the epochs that did not come up before the first that did.
     pub fn report(&self) -> Value {
         let st = self.inner.lock();
         let s = st.stats;
-        let transport = match st.path() {
-            "stream" if s.failed_epochs == 0 && s.fallbacks == 0 => "stream",
-            "stream" => "retried",
-            _ => "tcp",
-        };
+        let transport = st.path();
         json!({"to": st.peer, "transport": transport, "stream_at_both_ends": st.expects_stream,
             "first_up_ms": s.first_up_ms, "epochs": s.epochs, "failed_epochs": s.failed_epochs,
             "fallbacks": s.fallbacks, "sent_stream": s.sent_stream, "sent_tcp": s.sent_tcp})
@@ -470,8 +469,8 @@ impl Link {
         self.inner.finish();
     }
 
-    /// Give the stream up as a failing device would (fault injection in `trashcan link-test`): the link goes on over
-    /// TCP and opens a new stream epoch later.
+    /// Give the stream up as a failing device would (fault injection in `trashcan link-test`): the link ends with an
+    /// error on both sides.
     pub fn give_up_stream(&self, why: &str) {
         self.inner.lock().stream_down(Instant::now(), why, true);
     }
@@ -681,8 +680,8 @@ impl Lanes {
                 }
             }
         }
-        for (l, same) in &lanes {
-            l.settle(*same);
+        for (i, (l, same)) in lanes.iter().enumerate() {
+            l.settle(*same).with_context(|| format!("lane {i} to {}", addrs[i]))?;
         }
         Ok(Self { lanes: lanes.into_iter().map(|l| l.0).collect() })
     }

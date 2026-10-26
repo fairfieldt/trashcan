@@ -4,7 +4,8 @@
 //! - frames written while the other end is closed wait (up to 255) and arrive when it opens, even after the writer
 //!   closed (the worst case for stale data);
 //! - closing an end sends a CLOSE, which the other end reads once as end of file;
-//! - faults: drop, damage or cut every Nth frame, lose everything (`dead`), refuse to open, and `hold`: the last
+//! - faults: drop, damage or cut one frame in N (at random: a fixed period can line up with the sender's
+//!   retransmissions and hit the same record every time), lose everything (`dead`), refuse to open, and `hold`: the last
 //!   `hold` frames to arrive are not read until more follow them (the Mac Pros' NHIs hold up to three, results/kernel/
 //!   usb4stream-reliable-20261013).
 use super::device::{Found, Frames, Streams};
@@ -146,6 +147,15 @@ impl Pair {
     }
 }
 
+/// Frame `k` is hit by a fault of rate one in `n` (0: never), pseudo-randomly (`salt` tells the faults apart).
+fn one_in(n: u64, k: u64, salt: u64) -> bool {
+    let mut x = k.wrapping_mul(0x9e37_79b9_7f4a_7c15) ^ salt.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x ^= x >> 31;
+    x = x.wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^= x >> 29;
+    n > 0 && x.is_multiple_of(n)
+}
+
 pub struct End {
     pair: Arc<Pair>,
     side: usize,
@@ -205,18 +215,18 @@ impl Frames for End {
             let f = w.faults;
             w.wrote[self.side] += 1;
             let muted = f.mute_once.is_some_and(|(s, n)| s == self.side && w.wrote[self.side] > n);
-            if f.dead || muted || f.deaf_once == Some(peer) || (f.drop_every > 0 && k.is_multiple_of(f.drop_every)) {
+            if f.dead || muted || f.deaf_once == Some(peer) || one_in(f.drop_every, k, 1) {
                 w.counts.dropped += 1;
                 taken += chunk.len();
                 continue;
             }
             let mut frame = chunk.to_vec();
-            if f.corrupt_every > 0 && k.is_multiple_of(f.corrupt_every) {
+            if one_in(f.corrupt_every, k, 2) {
                 let i = (k as usize * 7919) % frame.len();
                 frame[i] ^= 0x5a;
                 w.counts.damaged += 1;
             }
-            if f.truncate_every > 0 && k.is_multiple_of(f.truncate_every) && frame.len() > 1 {
+            if one_in(f.truncate_every, k, 3) && frame.len() > 1 {
                 frame.truncate(frame.len() / 2);
                 w.counts.damaged += 1;
             }

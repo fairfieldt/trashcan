@@ -131,67 +131,132 @@ fn lost_damaged_and_cut_frames_are_sent_again() {
         both_ways(&a, &b, 6 << 20);
         let (sa, sb) = (a.stats(), b.stats());
         assert!(sa.rewinds + sb.rewinds > 0, "{f:?}: {sa:?} {sb:?}");
-        // With faults this dense (up to 1 frame in 15), a record the go-back can lose again and again sends the
-        // stream back to TCP after `dead`; the data stays intact either way.
-        assert!(sa.got_stream + sb.got_stream > 1 << 20, "{f:?}: on the stream: {sa:?} {sb:?}");
+        assert_eq!(sa.fallbacks + sb.fallbacks, 0, "{f:?}: {sa:?} {sb:?}");
+        assert_eq!(sa.sent_tcp + sb.sent_tcp, 0, "{f:?}: {sa:?} {sb:?}");
     }
 }
 
 #[test]
-fn credits_hold_with_a_small_ring_and_overdrive_recovers() {
+fn credits_hold_with_a_small_ring() {
     let p = Pair::new(32);
     let (a, b) = link_pair(Some(&p), 32, Tuning { margin: 4, ..fast() });
     both_ways(&a, &b, 4 << 20);
     assert_eq!(p.counts().overrun, 0);
-    // Sending past the credits overruns the ring; the link recovers every byte.
-    let p = Pair::new(32);
-    let (a, b) = link_pair(Some(&p), 32, Tuning { overdrive: 64, ..fast() });
-    both_ways(&a, &b, 4 << 20);
-    assert!(p.counts().overrun > 0);
 }
 
 #[test]
-fn dead_stream_falls_back_to_tcp_and_returns() {
-    let p = Pair::new(256);
-    let (a, b) = link_pair(Some(&p), 256, fast());
-    wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
+fn a_stream_that_dies_ends_the_link_and_delivers_nothing_wrong() {
+    // The stream loses everything mid-transfer: both sides end the link within about `dead`, with an error to every
+    // reader and writer, and every byte read before that is the byte sent. Nothing goes on over TCP.
+    for how in 0..4 {
+        let p = Pair::new(256);
+        p.set_faults(Faults { hold: 3, ..Default::default() });
+        let (a, b) = link_pair(Some(&p), 256, fast());
+        wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
+        let start = Instant::now();
+        let (ea, eb) = thread::scope(|s| {
+            let ra = s.spawn(|| until_error(&a, 0));
+            let rb = s.spawn(|| until_error(&b, 1));
+            thread::sleep(Duration::from_millis(30));
+            match how {
+                0 => p.set_faults(Faults { dead: true, ..Default::default() }),
+                1 => p.close_from(1),
+                2 => a.give_up_stream("test"),
+                _ => b.give_up_stream("test"),
+            }
+            (ra.join().unwrap(), rb.join().unwrap())
+        });
+        assert!(start.elapsed() < Duration::from_secs(2), "case {how}: {:?}", start.elapsed());
+        for e in [&ea, &eb] {
+            assert!(!e.contains("differ"), "case {how}: {e}");
+        }
+        let (sa, sb) = (a.stats(), b.stats());
+        assert!(sa.fallbacks + sb.fallbacks >= 1, "case {how}: {sa:?} {sb:?}");
+        assert_eq!(sa.sent_tcp + sb.sent_tcp, 0, "case {how}: no data over TCP: {sa:?} {sb:?}");
+    }
+}
+
+/// Send and read pattern bytes both ways until the link fails; the error, or "differ" if a byte read was wrong.
+fn until_error(me: &Link, who: u64) -> String {
     thread::scope(|s| {
-        s.spawn(|| both_ways(&a, &b, 16 << 20));
-        thread::sleep(Duration::from_millis(30));
-        p.set_faults(Faults { dead: true, ..Default::default() });
-        wait_for("fallback", Duration::from_secs(3), || a.path() == "tcp" && b.path() == "tcp");
-        thread::sleep(Duration::from_millis(50));
-        p.set_faults(Faults::default());
-    });
-    wait_for("the stream back", Duration::from_secs(5), || a.path() == "stream" && b.path() == "stream");
-    both_ways(&a, &b, 2 << 20);
-    let (sa, sb) = (a.stats(), b.stats());
-    assert!(sa.fallbacks + sb.fallbacks >= 1 && sa.ups >= 2, "{sa:?} {sb:?}");
+        let w = s.spawn(|| {
+            let mut at = 0u64;
+            loop {
+                let n = 40 << 10;
+                if let Err(e) = me.send(&[&pattern(who, at, n)]) {
+                    return e.to_string();
+                }
+                at += n as u64;
+            }
+        });
+        let mut at = 0u64;
+        let mut buf = vec![0u8; 64 << 10];
+        let r = loop {
+            match me.read_exact(&mut buf, Wait::Stall(Duration::from_secs(5))) {
+                Ok(()) => {
+                    if buf != pattern(1 - who, at, buf.len()) {
+                        break format!("bytes {at}.. differ");
+                    }
+                    at += buf.len() as u64;
+                }
+                Err(e) => break e.to_string(),
+            }
+        };
+        let wr = w.join().unwrap();
+        format!("{r}; {wr}")
+    })
 }
 
 #[test]
-fn closed_stream_falls_back_and_returns() {
-    let p = Pair::new(256);
-    let (a, b) = link_pair(Some(&p), 256, fast());
-    wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
-    both_ways(&a, &b, 1 << 20);
-    p.close_from(1);
-    wait_for("fallback", Duration::from_secs(2), || b.path() == "tcp");
-    both_ways(&a, &b, 3 << 20);
-    wait_for("the stream back", Duration::from_secs(5), || a.path() == "stream" && b.path() == "stream");
-    both_ways(&a, &b, 1 << 20);
+fn closing_a_link_on_the_stream_is_a_clean_end() {
+    // The other side says goodbye and closes its stream device: this side reads what was sent, then the end of the
+    // link, with no stream failure on either side.
+    for _ in 0..20 {
+        let p = Pair::new(256);
+        p.set_faults(Faults { hold: 3, ..Default::default() });
+        let (a, b) = link_pair(Some(&p), 256, fast());
+        wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
+        a.send(&[&pattern(0, 0, 100_000)]).unwrap();
+        drop(a);
+        let mut buf = vec![0u8; 100_000];
+        b.read_exact(&mut buf, Wait::Stall(Duration::from_secs(2))).unwrap();
+        assert!(buf == pattern(0, 0, 100_000));
+        let e = b.read_exact(&mut [0u8; 1], Wait::Stall(Duration::from_secs(2))).unwrap_err();
+        assert_eq!(e.kind(), ErrorKind::UnexpectedEof, "{e}");
+        assert_eq!(b.stats().fallbacks, 0, "{:?}", b.stats());
+    }
 }
 
 #[test]
-fn a_device_that_will_not_open_leaves_tcp() {
+fn a_stream_that_does_not_come_up_fails_the_connection() {
+    // Both ends have the stream but its device will not open: no link (rather than one over TCP).
     let p = Pair::new(256);
     p.set_faults(Faults { refuse_open: true, ..Default::default() });
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let tune = Tuning { stream_wait: Duration::from_millis(500), ..fast() };
+    let ob = opts(Arc::new(SimStreams { pair: p.clone(), side: 1, ring: 256 }), tune.clone());
+    let accepting = thread::spawn(move || {
+        let (s, _) = listener.accept().unwrap();
+        let Ok(Accepted::Link(l, _)) = Link::accept_with(s, &ob) else { panic!("accept") };
+        l.read_exact(&mut [0u8; 1], Wait::Stall(Duration::from_secs(3))).unwrap_err()
+    });
+    let start = Instant::now();
+    let e = Link::connect_with(&addr, "test", &opts(Arc::new(SimStreams { pair: p.clone(), side: 0, ring: 256 }), tune))
+        .err()
+        .expect("the connection must fail");
+    assert!(format!("{e:#}").contains("stream was not up"), "{e:#}");
+    assert!(start.elapsed() < Duration::from_secs(2), "{:?}", start.elapsed());
+    accepting.join().unwrap();
+    // A first epoch that fails is tried again at once: the link comes up on the stream.
+    let p = Pair::new(256);
+    p.set_faults(Faults { deaf_once: Some(1), hold: 3, ..Default::default() });
     let (a, b) = link_pair(Some(&p), 256, fast());
-    assert_eq!(a.path(), "tcp");
-    both_ways(&a, &b, 2 << 20);
-    p.set_faults(Faults::default());
-    wait_for("the stream once the device opens", Duration::from_secs(5), || a.path() == "stream" && b.path() == "stream");
-    both_ways(&a, &b, 2 << 20);
+    assert_eq!(a.path(), "stream");
+    both_ways(&a, &b, 1 << 20);
+    assert_eq!(a.report()["transport"], "stream");
+    // (Two when the next open finds the device still closing: the sim's close runs on a thread of its own.)
+    assert!((1..=2).contains(&a.stats().failed_epochs), "{:?}", a.stats());
 }
 
 #[test]
@@ -541,13 +606,13 @@ fn an_epoch_whose_other_side_is_not_heard_is_given_up_on_its_reports() {
     let (a, b) = link_pair(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() });
     wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
     let s = a.stats();
-    assert_eq!(s.failed_epochs, 1, "{s:?}");
+    // (Two when the retry finds the device still closing: the sim's close runs on a thread of its own.)
+    assert!((1..=2).contains(&s.failed_epochs), "{s:?}");
     assert!(s.first_up_ms.is_some_and(|ms| (50. ..300.).contains(&ms)), "{s:?}");
 }
 
 #[test]
 fn reports_say_how_a_link_carried_its_data() {
-    // On the stream from its first epoch.
     let p = Pair::new(256);
     let (a, b) = link_pair(Some(&p), 256, fast());
     wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
@@ -556,25 +621,29 @@ fn reports_say_how_a_link_carried_its_data() {
         assert_eq!(r["stream_at_both_ends"], true, "{r}");
         assert!(r["first_up_ms"].as_f64().is_some_and(|ms| ms < 1000.), "{r}");
     }
-    // A device that does not open at first: on TCP, said so after `tcp_warn`, then on the stream after failed
-    // epochs.
-    let p = Pair::new(256);
-    p.set_faults(Faults { refuse_open: true, ..Default::default() });
-    let (a, b) = link_pair(Some(&p), 256, Tuning { tcp_warn: Duration::from_millis(100), ..fast() });
-    assert_eq!(a.report()["transport"], "tcp");
-    assert!(a.report()["first_up_ms"].is_null());
-    wait_for("the warning", Duration::from_secs(2), || a.stats().tcp_warnings == 1);
-    p.set_faults(Faults::default());
-    wait_for("the stream", Duration::from_secs(5), || a.path() == "stream" && b.path() == "stream");
-    let r = a.report();
-    assert_eq!(r["transport"], "retried", "{r}");
-    assert!(r["failed_epochs"].as_u64().is_some_and(|n| n >= 1), "{r}");
-    assert_eq!(a.stats().tcp_warnings, 1, "one warning per stretch on TCP");
-    // No stream at both ends: TCP, and no warning.
-    let (a, _b) = link_pair(None, 256, Tuning { tcp_warn: Duration::from_millis(50), ..fast() });
-    thread::sleep(Duration::from_millis(150));
+    // No stream at both ends: TCP.
+    let (a, _b) = link_pair(None, 256, fast());
     let r = a.report();
     assert_eq!(r["transport"], "tcp");
     assert_eq!(r["stream_at_both_ends"], false);
-    assert_eq!(a.stats().tcp_warnings, 0);
+}
+
+#[test]
+fn a_peer_that_stops_for_a_second_does_not_lose_its_stream() {
+    // The accepting side does not turn its link for a second while data flows both ways (its thread holds the link,
+    // as a node thread waiting for the disk did): the stream waits for it, and every byte arrives.
+    let p = Pair::new(256);
+    p.set_faults(Faults { hold: 3, ..Default::default() });
+    let d = Tuning::default();
+    let (a, b) = link_pair(Some(&p), 256, Tuning { dead: d.dead, idle_dead: d.idle_dead, ..fast() });
+    wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
+    thread::scope(|s| {
+        s.spawn(|| both_ways(&a, &b, 16 << 20));
+        thread::sleep(Duration::from_millis(20));
+        let st = b.inner.lock();
+        thread::sleep(Duration::from_secs(1));
+        drop(st);
+    });
+    let (sa, sb) = (a.stats(), b.stats());
+    assert_eq!(sa.fallbacks + sb.fallbacks, 0, "{sa:?} {sb:?}");
 }

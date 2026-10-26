@@ -3,8 +3,9 @@
 //!
 //! Every byte has a sequence number (its offset in the stream), and every record says which bytes it carries and
 //! which of the other side's bytes have arrived (`ack`). The receiver takes bytes in order from whichever path
-//! brings them first and drops what it already has, so the sender may move unacknowledged bytes to another path at
-//! any time: when the stream fails, everything not yet acknowledged goes again over TCP.
+//! brings them first and drops what it already has. A link with a stream at both ends carries its data on the stream
+//! only (until an epoch is up the data waits; TCP carries the control records); once the stream has carried data, a
+//! stream that fails ends the link with an error, and so does one that is not up within `stream_wait`.
 //!
 //! On the stream the sender keeps within the other side's receive ring (credits, counted in frames: `tx`/`rx`), so
 //! the ring cannot overflow; a gap (lost or damaged frame) is answered with a NAK and the sender goes back to the
@@ -28,7 +29,7 @@ use std::{
 pub struct Tuning {
     /// Go back to the first unacknowledged byte on the stream after this long without progress.
     pub rto: Duration,
-    /// Give the stream up after this long without progress.
+    /// Give the stream up (and end the link) after this long without progress.
     pub dead: Duration,
     /// Keepalive on an idle stream.
     pub ping: Duration,
@@ -51,8 +52,9 @@ pub struct Tuning {
     pub inq_limit: usize,
     /// Fault injection for tests and `trashcan link-test`: send this many frames past the credits.
     pub overdrive: u32,
-    /// Say so on stderr when a link with a stream at both ends has been on TCP this long.
-    pub tcp_warn: Duration,
+    /// A link with a stream at both ends whose stream is not up this long after it started (or after an epoch that
+    /// had not carried data yet failed) ends.
+    pub stream_wait: Duration,
 }
 
 impl Tuning {
@@ -66,9 +68,13 @@ impl Default for Tuning {
     fn default() -> Self {
         Self {
             rto: Duration::from_millis(5),
-            dead: Duration::from_millis(100),
+            // Long enough for a peer that does not run its link for a while: a node thread that waits for the disk
+            // while the model loads held its link for about a second, and the nodes' SSDs answered nothing for up
+            // to 8 s after their page cache was dropped (results/deploy/link-fallback-20261026). Losses are repaired
+            // by the go-back after `rto`; these only give up a stream that no longer works, which ends the link.
+            dead: Duration::from_secs(10),
             ping: Duration::from_secs(1),
-            idle_dead: Duration::from_secs(3),
+            idle_dead: Duration::from_secs(10),
             probe_timeout: Duration::from_secs(3),
             backoff_min: Duration::from_secs(1),
             backoff_max: Duration::from_secs(30),
@@ -78,7 +84,7 @@ impl Default for Tuning {
             margin: 32,
             inq_limit: 32 << 20,
             overdrive: 0,
-            tcp_warn: Duration::from_secs(5),
+            stream_wait: Duration::from_secs(20),
         }
     }
 }
@@ -93,6 +99,12 @@ const PROBE_FAST: Duration = Duration::from_millis(500);
 
 /// An epoch that takes longer than this to come up (or to fail) is described in its message.
 const SLOW_EPOCH: Duration = Duration::from_millis(100);
+
+/// How long a link whose other side closed its stream device waits for word over TCP of why (`peer_closed_stream`).
+const EOF_WAIT: Duration = Duration::from_millis(200);
+
+/// A pause of the link's turns this long, or a turn this long, is said on stderr (`State::slow`).
+const SLOW_TURN: Duration = Duration::from_millis(20);
 
 /// An epoch that carries one way only is given up on evidence that the other side is going on without us, so that
 /// the next epoch can open (the one-cable churn and the main suite saw epochs where one side's frames stopped
@@ -180,12 +192,12 @@ pub struct Stats {
     pub failed_epochs: u64,
     /// Milliseconds from the link's start to its stream's first epoch up (none: never up).
     pub first_up_ms: Option<f64>,
-    /// Times the link said it had been on TCP for `tcp_warn` with a stream at both ends.
-    pub tcp_warnings: u64,
     /// TCP paths given up while others remained.
     pub tcp_failovers: u64,
     /// Frames written after a write on the stream so that its last frame is read (`send`).
     pub pushes: u64,
+    /// Acknowledgements and credits sent over TCP because the stream had no room for them.
+    pub tcp_reports: u64,
 }
 
 /// A byte buffer filled at the end and consumed at the front.
@@ -547,11 +559,15 @@ pub struct State {
     /// Both ends have a stream on this cable, so the link should be on it.
     pub expects_stream: bool,
     born: Instant,
-    /// Since when the data has gone over TCP (the link's start, or the stream's last fallback), whether that was
-    /// reported, and why the last epoch failed.
-    tcp_since: Instant,
-    tcp_warned: bool,
+    /// Why the last epoch failed, and since when the stream has been down (the link's start, or the last failed
+    /// epoch).
     last_fail: String,
+    down_since: Instant,
+    /// When a pause of the link was last said (`slow`).
+    slow_said: Option<Instant>,
+    /// The other side closed its stream device; it said (over TCP) that its stream had failed.
+    stream_eof: bool,
+    peer_failed: bool,
 }
 
 fn err(kind: ErrorKind, msg: &str) -> io::Error {
@@ -593,10 +609,17 @@ impl State {
             peer: String::new(),
             expects_stream: false,
             born: now,
-            tcp_since: now,
-            tcp_warned: false,
             last_fail: String::new(),
+            down_since: now,
+            slow_said: None,
+            stream_eof: false,
+            peer_failed: false,
         })
+    }
+
+    /// The stream has carried data (either way): from then on a stream that fails ends the link.
+    fn carried(&self) -> bool {
+        self.stats.sent_stream > 0 || self.stats.got_stream > 0
     }
 
     fn sid(&self) -> u32 {
@@ -684,17 +707,55 @@ impl State {
             // A long pause while an epoch opens (or just after it came up) is when the other side hears nothing.
             let s = &self.stream;
             let opening = matches!(s.phase, Phase::Opening | Phase::Probing);
-            if gap > Duration::from_millis(100) && (opening || (s.phase == Phase::Up && now - s.up_since < Duration::from_secs(2))) {
+            if gap > Duration::from_millis(100) && opening {
                 say(format!(
-                    "link {}: no turn for {gap:.0?} while stream epoch {:08x} {} [{}]",
+                    "link {}: no turn for {gap:.0?} while stream epoch {:08x} was opening [{}]",
                     self.label,
                     s.epoch,
-                    if opening { "was opening" } else { "had just come up" },
                     clock()
                 ));
             }
         }
+        // On the stream the link turns every millisecond or more often (`service.rs`): a longer pause is the
+        // process not running it, which the other side sees as a stream that acknowledges nothing.
+        if self.stream.phase == Phase::Up && gap > SLOW_TURN {
+            self.slow(now, format!("no turn for {gap:.0?}"));
+        }
         self.last_pump = self.last_pump.max(now);
+        let r = self.turn(now, sink);
+        let took = now.elapsed();
+        if took > SLOW_TURN && !self.is_closed() {
+            self.slow(now, format!("a turn took {took:.0?}"));
+        }
+        r
+    }
+
+    /// Say that the link was held up (at most once a second), with this thread's page faults and involuntary context
+    /// switches so far: a thread that waits for the disk (its code paged out by a model load) shows major faults.
+    fn slow(&mut self, now: Instant, what: String) {
+        if self.slow_said.is_some_and(|t| now - t < Duration::from_secs(1)) {
+            return;
+        }
+        self.slow_said = Some(now);
+        // SAFETY: getrusage fills `ru`, which outlives the call.
+        let mut ru: libc::rusage = unsafe { std::mem::zeroed() };
+        #[cfg(target_os = "linux")]
+        unsafe {
+            libc::getrusage(libc::RUSAGE_THREAD, &mut ru)
+        };
+        let thread = std::thread::current();
+        say(format!(
+            "link {}: {what} on the stream (thread {}: {} major and {} minor faults, {} involuntary switches so far) [{}]",
+            self.label,
+            thread.name().unwrap_or("?"),
+            ru.ru_majflt,
+            ru.ru_minflt,
+            ru.ru_nivcsw,
+            clock()
+        ));
+    }
+
+    fn turn(&mut self, now: Instant, sink: &mut Sink) -> io::Result<bool> {
         // While the stream carries the data, TCP brings only rare control records: a read every 100 µs keeps them
         // timely without a socket call in every turn of a spinning exchange.
         let mut progress = false;
@@ -703,6 +764,9 @@ impl State {
             progress |= self.read_tcp(now, sink);
         }
         progress |= self.read_stream(now, sink);
+        if let Some(e) = self.error() {
+            return Err(e);
+        }
         if self.full && self.inq.len() <= self.tune.inq_limit / 2 {
             self.full = false;
             self.tcp_control(kind::OPEN, 0, &[]);
@@ -711,6 +775,9 @@ impl State {
             self.stream.stalled_since = None;
         }
         self.timers(now);
+        if let Some(e) = self.error() {
+            return Err(e);
+        }
         progress |= self.send(now);
         self.check_tcp(now);
         if let Some(e) = self.error() {
@@ -874,6 +941,8 @@ impl State {
             kind::FAIL => {
                 if h.epoch == self.stream.epoch && self.stream.phase != Phase::Off {
                     self.stream_down(now, "the other side gave the stream up", false);
+                } else if h.epoch == self.stream.epoch && self.stream_eof {
+                    self.peer_failed = true;
                 }
             }
             kind::FULL => self.peer_full = true,
@@ -897,6 +966,10 @@ impl State {
             return;
         }
         s.reports += 1;
+        // Up, it is a credit report: sent over TCP when the stream had no room for one (`send`).
+        if s.phase == Phase::Up && h.rx > s.peer_rx {
+            s.peer_rx = h.rx.min(s.tx);
+        }
         s.rep_rx = s.rep_rx.max(h.rx);
         s.rep_tx = s.rep_tx.max(h.tx);
         if h.rx == 0 && !s.peer_heard && s.first_tx_at.is_some_and(|t| now - t >= ONE_WAY) {
@@ -907,12 +980,12 @@ impl State {
     }
 
     /// Our frames of the epoch read and written, over TCP (see `on_report`).
-    fn tcp_report(&mut self, now: Instant) {
+    fn tcp_report(&mut self, now: Instant, flags: u8) {
         let Some(p) = self.tcp.iter_mut().find(|p| p.alive) else { return };
         let s = &mut self.stream;
         let h = Header {
             kind: kind::ACK,
-            flags: REPORT,
+            flags: REPORT | flags,
             session: self.session as u32,
             epoch: s.epoch,
             ack: self.expected,
@@ -947,8 +1020,8 @@ impl State {
                         self.stream.eofs += 1;
                         continue;
                     }
-                    self.stream_down(now, "the other side closed its stream", true);
-                    return progress;
+                    self.peer_closed_stream(now, sink);
+                    return true;
                 }
                 Ok(n) => {
                     self.stream.rbuf.filled(n);
@@ -967,6 +1040,47 @@ impl State {
             }
         }
         progress
+    }
+
+    /// The other side closed its stream device while the stream was up. Its process ended, it closed the link (a
+    /// goodbye on the stream ahead of the CLOSE, or over TCP) or its stream failed (FAIL over TCP); what it said over
+    /// TCP may still be on the way, so wait for that up to `EOF_WAIT`. Only a failure (or silence) is a lost stream.
+    fn peer_closed_stream(&mut self, now: Instant, sink: &mut Sink) {
+        if let Some(d) = self.stream.dev.take() {
+            close_later(d);
+        }
+        self.stream.phase = Phase::Off;
+        self.stream.rbuf.clear();
+        self.stream_eof = true;
+        let until = Instant::now() + EOF_WAIT;
+        loop {
+            if self.closed.is_some() {
+                return;
+            }
+            if self.bye {
+                self.close(ErrorKind::UnexpectedEof, format!("{} closed the link", self.label));
+                return;
+            }
+            let failed = self.peer_failed;
+            if (failed || Instant::now() > until) && !self.carried() {
+                // Before the stream carried data: a failed epoch, tried again (`stream_down` from the state it had).
+                self.stream_eof = false;
+                self.peer_failed = false;
+                self.stream.phase = Phase::Up;
+                self.stream_down(now, "the other side closed its stream", !failed);
+                return;
+            }
+            if failed || Instant::now() > until {
+                self.stats.fallbacks += 1;
+                let why = if failed { "the other side gave the stream up" } else { "the other side closed its stream and said nothing" };
+                say(format!("link {}: stream lost ({why}); the link ends [{}]", self.label, clock()));
+                self.close(ErrorKind::ConnectionAborted, format!("{}: the stream failed ({why})", self.label));
+                return;
+            }
+            // A TCP end of file here closes the link: its process ended.
+            self.read_tcp(now, sink);
+            std::thread::sleep(Duration::from_micros(100));
+        }
     }
 
     fn parse_stream(&mut self, now: Instant, sink: &mut Sink) {
@@ -1074,6 +1188,7 @@ impl State {
                     }
                 }
             }
+            kind::BYE => self.bye = true,
             kind::PROBE => {
                 // A probe's `seq` is its sender's receive ring size.
                 if (32..=65536).contains(&h.seq) {
@@ -1098,7 +1213,6 @@ impl State {
         if now - self.stream.opened_at > SLOW_EPOCH {
             after = format!("{after} ({})", self.stream.detail(now));
         }
-        self.tcp_warned = false;
         let s = &mut self.stream;
         s.phase = Phase::Up;
         s.up_since = now;
@@ -1112,59 +1226,64 @@ impl State {
         say(format!("link {}: stream up{label}, epoch {:08x}{after} [{}]", self.label, s.epoch, clock()));
     }
 
-    /// Give the current stream epoch up: close the device off this thread, tell the other side (unless it gave up
-    /// first), and send whatever was not acknowledged again over TCP. The connecting side tries again later.
+    /// Give the current stream epoch up: close the device off this thread and tell the other side (unless it gave up
+    /// first). Once the stream has carried data this ends the link: it does not go on over TCP. Before that the
+    /// connecting side tries another epoch (at once the first time, then backing off) until `stream_wait`.
     pub fn stream_down(&mut self, now: Instant, why: &str, tell: bool) {
         if self.stream.phase == Phase::Off {
             return;
         }
         let detail = self.stream.detail(now);
+        let was = self.stream.phase;
+        let epoch = self.stream.epoch;
+        let brief = now - self.stream.up_since < Duration::from_secs(1);
+        {
+            let s = &mut self.stream;
+            if let Some(d) = s.dev.take() {
+                close_later(d);
+            }
+            s.phase = Phase::Off;
+            s.job = None;
+            s.rbuf.clear();
+            s.nak = None;
+            s.nak_due = false;
+            s.probe_reply = false;
+        }
+        if was == Phase::Up {
+            self.down_since = now;
+        }
+        if was == Phase::Up && self.carried() {
+            self.stats.fallbacks += 1;
+            let more = if brief { format!(" ({detail})") } else { String::new() };
+            say(format!("link {}: stream lost ({why}); the link ends{more} [{}]", self.label, clock()));
+            if tell {
+                self.tcp_control(kind::FAIL, epoch, &[]);
+                for p in self.tcp.iter_mut().filter(|p| p.alive) {
+                    let _ = p.flush();
+                }
+            }
+            self.close(ErrorKind::ConnectionAborted, format!("{}: the stream failed ({why})", self.label));
+            return;
+        }
+        // An epoch that never came up, or came up and failed before it carried any data (the other side gave up on
+        // it while it still probed): the connecting side tries again, until `stream_wait`.
         let s = &mut self.stream;
-        let was = s.phase;
-        // An epoch that falls soon after it came up is described too (the other side may have given it up).
-        let brief = was == Phase::Up && now - s.up_since < Duration::from_secs(1);
-        if let Some(d) = s.dev.take() {
-            close_later(d);
-        }
-        s.phase = Phase::Off;
-        s.job = None;
-        s.rbuf.clear();
-        s.nak = None;
-        s.nak_due = false;
-        s.probe_reply = false;
-        // A stream that held for a minute starts the backoff again.
-        if was == Phase::Up && now - s.up_since > Duration::from_secs(60) {
-            s.backoff = self.tune.backoff_min;
-        }
         if self.connector {
-            // The first epoch that fails after the stream was up (or at the start) is tried again at once: the new
-            // open waits for this epoch's close anyway. Later failures and fallbacks back off.
-            if was != Phase::Up && s.failed_since_up == 0 {
+            // The first failed epoch is tried again at once: the new open waits for this epoch's close anyway.
+            if s.failed_since_up == 0 {
                 s.retry_at = Some(now);
             } else {
                 s.retry_at = Some(now + s.backoff);
                 s.backoff = (s.backoff * 2).min(self.tune.backoff_max);
             }
         }
-        if was != Phase::Up {
-            s.failed_since_up += 1;
-        }
-        let epoch = s.epoch;
+        s.failed_since_up += 1;
+        self.stats.failed_epochs += 1;
         if !why.is_empty() {
             self.last_fail = why.to_owned();
+            let what = if was == Phase::Up { "lost before it carried data" } else { "not opened" };
+            say(format!("link {}: stream epoch {epoch:08x} {what} ({why}; {detail}) [{}]", self.label, clock()));
         }
-        if was == Phase::Up {
-            self.stats.fallbacks += 1;
-            self.tcp_since = now;
-            let more = if brief { format!(" ({detail})") } else { String::new() };
-            say(format!("link {}: stream down ({why}); continuing over TCP{more} [{}]", self.label, clock()));
-        } else {
-            self.stats.failed_epochs += 1;
-            if !why.is_empty() {
-                say(format!("link {}: stream epoch {epoch:08x} not opened ({why}; {detail}) [{}]", self.label, clock()));
-            }
-        }
-        // Whatever the stream had not delivered goes again over TCP (`send_tcp_data` starts at `acked`).
         if tell {
             self.tcp_control(kind::FAIL, epoch, &[]);
         }
@@ -1236,13 +1355,6 @@ impl State {
         }
     }
 
-    /// The connecting side looks for a stream again after `after`.
-    pub fn retry_later(&mut self, now: Instant, after: Duration) {
-        if self.connector && self.stream.phase == Phase::Off {
-            self.stream.retry_at = Some(now + after);
-        }
-    }
-
     /// The connecting side's next epoch, when one is due.
     fn maybe_retry(&mut self, now: Instant) {
         let s = &mut self.stream;
@@ -1265,21 +1377,18 @@ impl State {
 
     fn timers(&mut self, now: Instant) {
         self.maybe_retry(now);
-        if self.expects_stream
-            && self.stream.phase != Phase::Up
-            && !self.tcp_warned
-            && self.closed.is_none()
-            && now - self.tcp_since > self.tune.tcp_warn
-        {
-            self.tcp_warned = true;
-            self.stats.tcp_warnings += 1;
+        // The connecting side opens the epochs and says why none came up; the other side waits twice as long.
+        let wait = if self.connector { self.tune.stream_wait } else { self.tune.stream_wait * 2 };
+        if self.expects_stream && self.stream.phase != Phase::Up && self.closed.is_none() && now - self.down_since > wait {
             let last = if self.last_fail.is_empty() { String::new() } else { format!(" (last attempt: {})", self.last_fail) };
-            say(format!(
-                "link {}: on TCP for {:.0?} with a stream at both ends{last} [{}]",
-                self.label,
-                now - self.tcp_since,
-                clock()
-            ));
+            let why = format!("the stream was not up within {wait:.0?}{last}");
+            say(format!("link {}: {why}; the link ends [{}]", self.label, clock()));
+            if let Some(d) = self.stream.dev.take() {
+                close_later(d);
+            }
+            self.stream.phase = Phase::Off;
+            self.close(ErrorKind::TimedOut, format!("{}: {why}", self.label));
+            return;
         }
         let waiting = self.full || self.peer_full;
         match self.stream.phase {
@@ -1431,7 +1540,8 @@ impl State {
                 self.stream.next = self.acked;
             }
             progress |= self.send_stream_data(now);
-        } else if self.stream.phase != Phase::Up {
+        } else if self.stream.phase != Phase::Up && !self.expects_stream {
+            // A link with a stream at both ends sends its data on the stream only: before it is up, the data waits.
             progress |= self.send_tcp_data();
         }
         // Acknowledgements, credits, keepalives and answers not carried by data.
@@ -1455,6 +1565,18 @@ impl State {
                 self.ping_due = false;
                 self.ack_due = None;
                 self.stream.probe_reply = false;
+            } else if self.stream.phase == Phase::Up && now - self.stream.last_report >= self.tune.rto {
+                // No room on the stream for an acknowledgement: when both sides have filled the other's ring and the
+                // frames that would return credits were lost, neither could send another. Acknowledgement and credits
+                // go over TCP instead (a ping too, answered on the stream).
+                self.tcp_report(now, flags);
+                self.stats.tcp_reports += 1;
+                if self.ping_due {
+                    self.stream.last_ping = now;
+                }
+                self.pong_due = false;
+                self.ping_due = false;
+                self.ack_due = None;
             }
         }
         // The last frames to arrive are not read on these NHIs until up to three more follow them (results/kernel/
@@ -1476,7 +1598,7 @@ impl State {
             _ => false,
         };
         if report && s.dev.is_some() && now - s.last_report >= REPORT_EVERY {
-            self.tcp_report(now);
+            self.tcp_report(now, 0);
         }
         for i in 0..self.tcp.len() {
             if !self.tcp[i].alive {
@@ -1721,6 +1843,15 @@ impl State {
             return;
         }
         let deadline = Instant::now() + Duration::from_millis(200);
+        // On the stream too, ahead of the CLOSE that closing the device sends, so that the other side does not take
+        // that for a failed stream (with the frames that make the receiver read it).
+        if self.stream.phase == Phase::Up && self.stream_control(kind::BYE, 0, 0) {
+            for _ in 0..PUSH {
+                if !self.stream_control(kind::ACK, 0, 0) {
+                    break;
+                }
+            }
+        }
         for i in 0..self.tcp.len() {
             if !self.tcp[i].alive {
                 continue;

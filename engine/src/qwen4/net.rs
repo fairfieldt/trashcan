@@ -878,6 +878,11 @@ impl Chain {
     }
 
     /// Discard the live state: the next prompt starts from position 0.
+    /// The link to the next machine has ended: the chain cannot serve again.
+    pub fn broken(&self) -> bool {
+        self.next.as_ref().is_some_and(|c| c.w.is_closed())
+    }
+
     pub fn forget(&mut self) {
         // Chunks still in flight after an error are dropped with the rest of the state.
         let _ = self.local.drain(|_| Ok(()));
