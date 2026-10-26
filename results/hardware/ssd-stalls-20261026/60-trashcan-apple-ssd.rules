@@ -1,0 +1,4 @@
+# Original Mac Pro SSDs (APPLE SSD SM...): turn the drive's volatile write cache off. With it on, a cache flush
+# during heavy reads stops all I/O for 0.3-1.2 s (seconds with several), and the kernel sends one per fsync and
+# journal commit. With it off the kernel sends no flushes. Installed by nodes/macpro/install.sh (component disk).
+ACTION=="add", SUBSYSTEM=="scsi_disk", ATTRS{vendor}=="ATA*", ATTRS{model}=="APPLE SSD SM*", ATTR{cache_type}="write through"

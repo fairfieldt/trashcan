@@ -1,0 +1,32 @@
+orig qd=32 ms=4096 ct=write back sched=none [mq-deadline] 
+== qd=1
+gpuq: heartbeat failed (https://gpuq.tdf.sh/m/inflight/api/tickets/139/heartbeat: io: failed to lookup address information: Name or service not known); the command keeps running
+load: 18.7 s, 1107 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 27
+fsync probe: n=37 p50=9.1 p99=10232.0 max=10232.0 ms, >500ms: 2
+read probe : n=99 p50=5.9 p99=631.4 max=631.4 ms, >500ms: 30
+gpuq: heartbeat failed (https://gpuq.tdf.sh/m/inflight/api/tickets/139/heartbeat: io: failed to lookup address information: Name or service not known); the command keeps running
+load: 18.7 s, 1121 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 16
+fsync probe: n=33 p50=9.0 p99=10244.4 max=10244.4 ms, >500ms: 2
+read probe : n=101 p50=5.9 p99=505.6 max=661.8 ms, >500ms: 30
+== ms=512
+load: 26.4 s, 794 MB/s read; time with reads < 20 MB/s: 5.00 s; flushes 441
+fsync probe: n=236 p50=22.0 p99=1236.7 max=1246.3 ms, >500ms: 5
+read probe : n=472 p50=3.6 p99=1146.3 max=1187.9 ms, >500ms: 5
+load: 24.1 s, 869 MB/s read; time with reads < 20 MB/s: 3.00 s; flushes 441
+fsync probe: n=238 p50=21.9 p99=1165.8 max=1221.1 ms, >500ms: 3
+read probe : n=474 p50=3.4 p99=51.9 max=1171.3 ms, >500ms: 3
+== sched=[none] mq-deadline 
+load: 48.9 s, 423 MB/s read; time with reads < 20 MB/s: 23.25 s; flushes 333
+fsync probe: n=161 p50=131.1 p99=2499.9 max=2579.0 ms, >500ms: 23
+read probe : n=386 p50=30.9 p99=1235.2 max=1274.5 ms, >500ms: 25
+== ct=write through
+load: 17.4 s, 1208 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: n=203 p50=73.2 p99=103.6 max=122.4 ms, >500ms: 0
+read probe : n=404 p50=23.7 p99=29.0 max=47.6 ms, >500ms: 0
+load: 17.3 s, 1200 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: n=203 p50=72.8 p99=93.4 max=98.1 ms, >500ms: 0
+read probe : n=403 p50=23.6 p99=27.7 max=36.8 ms, >500ms: 0
+load: 19.3 s, 1080 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: n=182 p50=101.2 p99=250.8 max=276.7 ms, >500ms: 0
+read probe : n=421 p50=24.9 p99=38.4 max=51.6 ms, >500ms: 0
+restored qd=32 ms=4096 ct=write back sched=none [mq-deadline] 

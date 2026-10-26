@@ -1,0 +1,17 @@
+== write back
+seq 4 GiB write+fdatasync: 471.91 MB/s
+4 KiB append+fsync x200: p50 9.0 p99 35.8 max 1191.8 ms
+3000 x 16 KiB files + sync: 1.60 s
+== write through
+seq 4 GiB write+fdatasync: 362.06 MB/s
+4 KiB append+fsync x200: p50 3.7 p99 4.2 max 4.3 ms
+3000 x 16 KiB files + sync: 0.52 s
+== write back
+seq 4 GiB write+fdatasync: 620.64 MB/s
+4 KiB append+fsync x200: p50 8.9 p99 37.3 max 1211.0 ms
+3000 x 16 KiB files + sync: 1.54 s
+== write through
+seq 4 GiB write+fdatasync: 365.97 MB/s
+4 KiB append+fsync x200: p50 3.7 p99 4.1 max 4.2 ms
+3000 x 16 KiB files + sync: 0.51 s
+write back

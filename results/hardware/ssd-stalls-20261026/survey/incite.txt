@@ -1,0 +1,59 @@
+## incite 7.3.0-rc7-p2p up:  15:53:02 up  1:54,  4 users,  load average: 0.03, 1.20, 2.21
+NAME                  MODEL               TRAN   ROTA   SIZE DISC-GRAN DISC-MAX FSTYPE      MOUNTPOINTS
+nvme0n1               INTEL SSDPEKNW010T8 nvme      0 953.9G      512B       2T             
+├─nvme0n1p1                               nvme      0   976M      512B       2T vfat        /boot/efi
+├─nvme0n1p2                               nvme      0   977M      512B       2T ext4        /boot
+└─nvme0n1p3                               nvme      0   952G      512B       2T LVM2_member 
+  ├─incite--vg-root                                 0  54.1G      512B       2T ext4        /
+  ├─incite--vg-swap_1                               0  47.6G      512B       2T swap        [SWAP]
+  └─incite--vg-home                                 0 829.7G      512B       2T ext4        /home
+/ /dev/mapper/incite--vg-root rw,relatime,errors=remount-ro
+/boot /dev/nvme0n1p2 rw,relatime
+/home /dev/mapper/incite--vg-home rw,relatime
+/boot/efi /dev/nvme0n1p1 rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro
+/dev/mapper/incite--vg-root /               ext4    errors=remount-ro 0       1
+UUID=31047b5f-d694-4c4d-8a41-82aa1f7abc6a /boot           ext4    defaults        0       2
+UUID=8ED3-111A  /boot/efi       vfat    umask=0077      0       1
+/dev/mapper/incite--vg-home /home           ext4    defaults        0       2
+/dev/mapper/incite--vg-swap_1 none            swap    sw              0       0
+192.168.0.64:/srv/models  /mnt/models  nfs  ro,nfsvers=4.2,noatime,_netdev,x-systemd.automount  0 0
+-- /sys/block/nvme0n1
+queue/scheduler=[none] mq-deadline 
+queue/nr_requests=255
+queue/read_ahead_kb=128
+queue/max_sectors_kb=128
+queue/write_cache=write back
+queue/fua=1
+queue/write_zeroes_max_bytes=131072
+queue/discard_max_bytes=2199023255040
+queue/rotational=0
+queue/wbt_lat_usec=2000
+device/queue_depth=
+device/queue_type=
+device/timeout=
+/sys/class/scsi_host/host* lpm=
+bash: line 7: swapon: command not found
+Filename				Type		Size		Used		Priority
+/dev/dm-1                               partition	49860604	0		-1
+enabled
+Mon 2026-10-26 18:41:41 PDT 2h 48min Wed 2026-10-14 14:58:52 PDT            - apt-daily.timer              apt-daily.service
+Mon 2026-10-26 23:56:22 PDT       8h Wed 2026-10-14 17:41:02 PDT            - man-db.timer                 man-db.service
+Tue 2026-10-27 00:38:27 PDT       8h Mon 2026-10-26 12:09:56 PDT            - logrotate.timer              logrotate.service
+Tue 2026-10-27 06:11:15 PDT      14h Mon 2026-10-26 12:09:56 PDT            - apt-daily-upgrade.timer      apt-daily-upgrade.service
+Sun 2026-11-01 03:10:34 PST   5 days Mon 2026-10-26 11:37:36 PDT            - e2scrub_all.timer            e2scrub_all.service
+Mon 2026-11-02 00:21:11 PST   6 days Mon 2026-10-26 11:53:21 PDT            - fstrim.timer                 fstrim.service
+some avg10=0.00 avg60=0.00 avg300=2.73 total=321895888
+full avg10=0.00 avg60=0.00 avg300=2.54 total=302425740
+               total        used        free      shared  buff/cache   available
+Mem:              62           1          50           0          11          60
+Swap:             47           0          47
+sudo: smartctl: command not found
+Oct 26 13:59:15 incite kernel: ACPI: SSDT 0x000000007E582000 00010B (v01 SataRe SataAhci 00001000 INTL 20100915)
+Oct 26 13:59:16 incite kernel: nvme nvme0: pci function 0000:0e:00.0
+Oct 26 13:59:16 incite kernel: nvme nvme0: passthrough uses implicit buffer lengths
+Oct 26 13:59:16 incite kernel: nvme nvme0: 8/0/0 default/read/poll queues
+Oct 26 13:59:16 incite kernel:  nvme0n1: p1 p2 p3
+Oct 26 13:59:16 incite kernel: Modules linked in: apple_gmux(+) fjes(-) apple_mfi_fastcharge evdev msr i2c_dev parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid hid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_client_lib drm_kms_helper xhci_pci iTCO_wdt intel_pmc_bxt xhci_hcd ehci_pci drm ehci_hcd nvme watchdog at24 tg3 thunderbolt nvme_core usbcore libphy i2c_i801 nvme_keyring i2c_smbus lpc_ich nvme_auth ioatdma mdio_bus configfs dca usb_common button
+Oct 26 13:59:16 incite kernel: EXT4-fs (nvme0n1p2): mounted filesystem 31047b5f-d694-4c4d-8a41-82aa1f7abc6a r/w with ordered data mode. Quota mode: none.
+Oct 26 13:59:18 incite kernel: block nvme0n1: No UUID available providing old NGUID
+BOOT_IMAGE=/vmlinuz-7.3.0-rc7-p2p root=/dev/mapper/incite--vg-root ro quiet radeon.si_support=0 amdgpu.si_support=1 panic=10

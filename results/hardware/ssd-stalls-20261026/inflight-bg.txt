@@ -1,0 +1,33 @@
+== inflight write back 1
+load: 16.6 s, 1242 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 23
+fsync probe: off
+read probe : n=389 p50=23.0 p99=40.3 max=53.8 ms, >500ms: 0
+== inflight write through 1
+load: 16.7 s, 1246 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: off
+read probe : n=392 p50=22.8 p99=38.6 max=58.6 ms, >500ms: 0
+== inflight write back 2
+load: 16.7 s, 1258 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 27
+fsync probe: off
+read probe : n=390 p50=22.9 p99=43.1 max=51.6 ms, >500ms: 0
+== inflight write through 2
+load: 16.7 s, 1250 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: off
+read probe : n=392 p50=22.9 p99=39.9 max=58.9 ms, >500ms: 0
+== inflight write back 3
+load: 16.7 s, 1244 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 23
+fsync probe: off
+read probe : n=390 p50=22.8 p99=38.2 max=44.8 ms, >500ms: 0
+== inflight write through 3
+load: 16.7 s, 1245 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: off
+read probe : n=393 p50=22.7 p99=35.9 max=48.7 ms, >500ms: 0
+== inflight write back 4
+load: 16.7 s, 1245 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 26
+fsync probe: off
+read probe : n=374 p50=23.1 p99=42.8 max=742.3 ms, >500ms: 1
+== inflight write through 4
+load: 16.7 s, 1247 MB/s read; time with reads < 20 MB/s: 0.00 s; flushes 0
+fsync probe: off
+read probe : n=393 p50=22.9 p99=36.3 max=56.8 ms, >500ms: 0
+write back

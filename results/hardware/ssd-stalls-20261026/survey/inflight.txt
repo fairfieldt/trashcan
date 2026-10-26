@@ -1,0 +1,104 @@
+## inflight 7.3.0-rc7-p2p up:  15:53:02 up  2:18,  2 users,  load average: 0.02, 1.46, 3.08
+NAME   MODEL             TRAN   ROTA   SIZE DISC-GRAN DISC-MAX FSTYPE MOUNTPOINTS
+sda    APPLE SSD SM1024F sata      0 931.8G        4K       2G        
+├─sda1                             0   976M        4K       2G vfat   /boot/efi
+├─sda2                             0    55G        4K       2G ext4   /
+├─sda3                             0  48.5G        4K       2G swap   [SWAP]
+└─sda4                             0 827.3G        4K       2G ext4   /home
+/ /dev/sda2 rw,relatime,errors=remount-ro
+/boot/efi /dev/sda1 rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=ascii,shortname=mixed,utf8,errors=remount-ro
+/home /dev/sda4 rw,relatime
+UUID=c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7	/	ext4	errors=remount-ro	0	1
+UUID=929C-3196  /boot/efi       vfat    umask=0077      0       1
+UUID=99c4b9a3-e92e-4b9e-b219-7a1a560c7ff9	/home	ext4	defaults	0	2
+UUID=54a7ced7-b5df-41ed-a2c3-683642c4992f none            swap    sw              0       0
+-- /sys/block/sda
+queue/scheduler=none [mq-deadline] 
+queue/nr_requests=64
+queue/read_ahead_kb=128
+queue/max_sectors_kb=4096
+queue/write_cache=write back
+queue/fua=0
+queue/write_zeroes_max_bytes=0
+queue/discard_max_bytes=2147450880
+queue/rotational=0
+queue/wbt_lat_usec=2000
+device/queue_depth=32
+device/queue_type=simple
+device/timeout=30
+/sys/class/scsi_host/host0 lpm=max_performance
+bash: line 7: swapon: command not found
+Filename				Type		Size		Used		Priority
+/dev/sda3                               partition	50868220	0		-1
+enabled
+Mon 2026-10-26 18:12:15 PDT 2h 19min Wed 2026-10-07 16:55:56 PDT           - apt-daily.timer              apt-daily.service
+Tue 2026-10-27 00:27:16 PDT       8h Mon 2026-10-26 11:59:50 PDT           - logrotate.timer              logrotate.service
+Tue 2026-10-27 05:32:35 PDT      13h Mon 2026-10-26 11:49:08 PDT           - man-db.timer                 man-db.service
+Tue 2026-10-27 06:09:19 PDT      14h Mon 2026-10-26 12:04:39 PDT           - apt-daily-upgrade.timer      apt-daily-upgrade.service
+Sun 2026-11-01 03:10:13 PST   5 days Mon 2026-10-26 11:37:32 PDT           - e2scrub_all.timer            e2scrub_all.service
+Mon 2026-11-02 00:19:09 PST   6 days Mon 2026-10-26 11:59:50 PDT           - fstrim.timer                 fstrim.service
+some avg10=0.00 avg60=0.22 avg300=12.26 total=2300982552
+full avg10=0.00 avg60=0.22 avg300=11.97 total=2254831956
+               total        used        free      shared  buff/cache   available
+Mem:              62           1          51           0          11          61
+Swap:             48           0          48
+smartctl 7.4 2023-08-01 r5530 [x86_64-linux-7.3.0-rc7-p2p] (local build)
+Copyright (C) 2002-23, Bruce Allen, Christian Franke, www.smartmontools.org
+
+=== START OF INFORMATION SECTION ===
+Model Family:     Apple SD/SM/TS...E/F/G SSDs
+Device Model:     APPLE SSD SM1024F
+Serial Number:    S1FVNYAG403317
+LU WWN Device Id: 5 002538 655584d30
+Firmware Version: UXM8JA1Q
+User Capacity:    1,000,555,581,440 bytes [1.00 TB]
+Sector Sizes:     512 bytes logical, 4096 bytes physical
+Rotation Rate:    Solid State Device
+TRIM Command:     Available
+Device is:        In smartctl database 7.3/5528
+ATA Version is:   ATA8-ACS T13/1699-D revision 4c
+SATA Version is:  SATA 3.0, 6.0 Gb/s (current: 6.0 Gb/s)
+Local Time is:    Mon Oct 26 15:53:02 2026 PDT
+SMART support is: Available - device has SMART capability.
+SMART support is: Enabled
+
+=== START OF READ SMART DATA SECTION ===
+SMART Attributes Data Structure revision number: 40
+Vendor Specific SMART Attributes with Thresholds:
+ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+  1 Raw_Read_Error_Rate     0x001a   200   200   000    Old_age   Always       -       0
+  5 Reallocated_Sector_Ct   0x0033   100   100   000    Pre-fail  Always       -       0
+  9 Power_On_Hours          0x0032   087   087   000    Old_age   Always       -       62395
+ 12 Power_Cycle_Count       0x0032   098   098   000    Old_age   Always       -       1847
+169 Unknown_Apple_Attrib    0x0013   253   253   010    Pre-fail  Always       -       6929157995520
+173 Wear_Leveling_Count     0x0032   191   191   100    Old_age   Always       -       227651747890
+174 Host_Reads_MiB          0x0022   099   099   000    Old_age   Always       -       25292114
+175 Host_Writes_MiB         0x0022   099   099   000    Old_age   Always       -       39952680
+192 Power-Off_Retract_Count 0x0012   099   099   000    Old_age   Always       -       102
+194 Temperature_Celsius     0x0022   066   066   000    Old_age   Always       -       34 (Min/Max 14/71)
+197 Current_Pending_Sector  0x0022   100   100   000    Old_age   Always       -       0
+199 UDMA_CRC_Error_Count    0x001a   200   200   000    Old_age   Always       -       0
+240 Unknown_SSD_Attribute   0x0022   100   100   000    Old_age   Always       -       0
+
+Oct 26 13:34:17 inflight kernel: ACPI: SSDT 0x000000007E582000 00010B (v01 SataRe SataAhci 00001000 INTL 20100915)
+Oct 26 13:34:17 inflight kernel: ahci 0000:0e:00.0: AHCI vers 0001.0300, 32 command slots, 6 Gbps, SATA mode
+Oct 26 13:34:17 inflight kernel: ahci 0000:0e:00.0: 1/1 ports implemented (port mask 0x1)
+Oct 26 13:34:17 inflight kernel: ahci 0000:0e:00.0: flags: 64bit ncq led clo only pio ccc 
+Oct 26 13:34:17 inflight kernel: scsi host0: ahci
+Oct 26 13:34:17 inflight kernel: ata1: SATA max UDMA/133 abar m8192@0xa0500000 port 0xa0500100 irq 16 lpm-pol 1
+Oct 26 13:34:17 inflight kernel: ata1: SATA link up 6.0 Gbps (SStatus 133 SControl 300)
+Oct 26 13:34:17 inflight kernel: ata1.00: ACPI cmd ef/90:03:00:00:00:a0(SET FEATURES) rejected by device (Stat=0x51 Err=0x04)
+Oct 26 13:34:17 inflight kernel: ata1.00: ATA-8: APPLE SSD SM1024F, UXM8JA1Q, max UDMA/133
+Oct 26 13:34:17 inflight kernel: ata1.00: 1954210120 sectors, multi 16: LBA48 NCQ (depth 32), AA
+Oct 26 13:34:17 inflight kernel: ata1.00: ACPI cmd ef/90:03:00:00:00:a0(SET FEATURES) rejected by device (Stat=0x51 Err=0x04)
+Oct 26 13:34:17 inflight kernel: ata1.00: configured for UDMA/133
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] 1954210120 512-byte logical blocks: (1.00 TB/932 GiB)
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] 4096-byte physical blocks
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] Write Protect is off
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] Mode Sense: 00 3a 00 00
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] Write cache: enabled, read cache: enabled, doesn't support DPO or FUA
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] Preferred minimum I/O size 4096 bytes
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: [sda] Attached SCSI disk
+Oct 26 13:34:17 inflight kernel: sd 0:0:0:0: Attached scsi generic sg0 type 0
+Oct 26 13:34:18 inflight kernel: Modules linked in: mei(+) pcspkr(+) i2c_algo_bit apple_gmux(+) bcma(+) soundcore video wmi button sg drm efi_pstore efivarfs autofs4 ext4 crc16 mbcache jbd2 sd_mod ahci libahci xhci_pci libata xhci_hcd ehci_pci ehci_hcd iTCO_wdt intel_pmc_bxt thunderbolt watchdog tg3 at24 scsi_mod usbcore libphy i2c_i801 ioatdma i2c_smbus lpc_ich scsi_common mdio_bus configfs dca usb_common
+BOOT_IMAGE=/boot/vmlinuz-7.3.0-rc7-p2p root=UUID=c97bcbf3-3b9e-40e3-b869-72bbd95ccfb7 ro quiet radeon.si_support=0 amdgpu.si_support=1 panic=10
