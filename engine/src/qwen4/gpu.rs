@@ -71,10 +71,11 @@ enum Dense {
 }
 
 /// A hyper-connection mixer: gamma `[hc][d]`, bottleneck down `rank x hc*d` and up `hc*d x rank` (Q4_0), write
-/// weights `hc x hc*d` (f32; absent for the final mixer).
+/// weights `hc x hc*d` (f32; absent for the final mixer). Q8_0 mixers with write rows read only the fused matrix, so
+/// they have neither the separate down matrix nor the f32 write weights.
 struct Mix {
     norm: Buffer,
-    down: Dense,
+    down: Option<Dense>,
     up: Dense,
     inject: Option<Buffer>,
     /// The bottleneck rows followed by the write rows in one matrix, for the fused small-batch kernels.
@@ -574,11 +575,13 @@ impl GpuStage {
             } else {
                 None
             };
+            let up = q4(tt("up")?)?;
+            let separate = !matches!((&fused, &up), (Some(Dense::Q8(..)), Dense::Q8(..)));
             Ok(Mix {
                 norm: vecb(tt("norm")?)?,
-                down: q4(tt("down")?)?,
-                up: q4(tt("up")?)?,
-                inject: if inject {
+                down: if separate { Some(q4(tt("down")?)?) } else { None },
+                up,
+                inject: if inject && separate {
                     Some(mat32(&rows_f32(g, tt("inject")?)?)?)
                 } else {
                     None
@@ -1504,16 +1507,16 @@ impl GpuStage {
             // Q8_0 above FUSED_MAX tokens: the bottleneck and write rows (the fused matrix; the final mixer has no
             // write rows) as a split-K GEMM, its partial sums (in hgate) reduced with the activations, then the up
             // projection with the read gates folded into the sublayer input. Fewer tokens (the final mixer) take the
-            // matrix-vector kernels below.
+            // matrix-vector kernels below, unless the mixer has only the fused matrix.
             let q8 = match (&m.fused, &m.down, &m.up) {
-                _ if n <= FUSED_MAX => None,
-                (Some(Dense::Q8(b, st)), _, Dense::Q8(ub, ust)) => Some((b, *st, c.hc_rank + hc, ub, *ust)),
-                (None, Dense::Q8(b, st), Dense::Q8(ub, ust)) if m.inject.is_none() && hc == 4 => {
-                    Some((b, *st, c.hc_rank, ub, *ust))
+                _ if n <= FUSED_MAX && m.down.is_some() => None,
+                (Some(Dense::Q8(b, st)), _, Dense::Q8(ub, ust)) => Some((b, *st, c.hc_rank + hc, ub, *ust, true)),
+                (None, Some(Dense::Q8(b, st)), Dense::Q8(ub, ust)) if m.inject.is_none() && hc == 4 => {
+                    Some((b, *st, c.hc_rank, ub, *ust, false))
                 }
                 _ => None,
             };
-            if let Some((b, stride, rows, ub, ustride)) = q8 {
+            if let Some((b, stride, rows, ub, ustride, writes)) = q8 {
                 let mut u = [0; 16];
                 u[0] = rows as u32;
                 u[1] = w as u32;
@@ -1565,12 +1568,13 @@ impl GpuStage {
                     ub,
                 )?;
                 capture(graph, format!("hc_mixed{tag}"), &self.u, d)?;
-                if m.inject.is_some() {
+                if writes {
                     wloc.set((self.w.address, hc as u32, 0));
                 }
                 return Ok(());
             }
-            matrix(&m.down, &self.xn, &self.lo, w, c.hc_rank, false)?;
+            let down = m.down.as_ref().context("a mixer without its down matrix on the matrix-vector path")?;
+            matrix(down, &self.xn, &self.lo, w, c.hc_rank, false)?;
             act(&self.lo, c.hc_rank, 0, 1. / hc as f32);
             matrix(&m.up, &self.lo, &self.hgate, c.hc_rank, w, false)?;
             capture(graph, format!("hc_gate{tag}"), &self.hgate, w)?;

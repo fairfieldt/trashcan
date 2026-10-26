@@ -172,7 +172,8 @@ Q8_0 dense matrices:
 | head split over all 12 GPUs (`--head-split 12`) | 64 per GPU, 5907 per GPU: 19 over |
 | the same with 128-token prefill chunks (`--batch 128`) | 5828 per GPU: fits by 60 |
 | layers 0-3 and the first twelfth of the head (rows 0..21504), 128-token chunks, **measured** | 5830 of 5888 (budget 5869); decodes at 32K |
-| with four savings not implemented yet (`--lean`: prefill reuses the fused mixer matrix, Q8_0 router and indexer projections, a raw indexer-key ring) | 5766 per GPU at 128-token chunks: fits by 122 |
+| the same without the Q8_0 mixers' separate down copies and f32 write weights, **measured** 2026-10-26 | 5802 of 5888 -> 5774 (28 less on every GPU) |
+| with the savings not implemented yet (`--lean`: Q8_0 router and indexer projections, a raw indexer-key ring) | 5766 per GPU at 128-token chunks: fits by 122 |
 
 Q4_0 experts do not fit six Macs (6043 MiB before any head share). Five Macs put 5 layers on most GPUs, where even
 IQ3_XXS gate/up with IQ4_NL down is 106 MiB over (`--lean`, 128-token chunks). Four Macs give 6 layers per GPU
@@ -417,8 +418,8 @@ tensors alone take KLD from 0.039 to 0.078 (same top token 93.1% against 95.1%),
 0.021, and ggml's own (absmax) Q2_0 codes for the routed experts would make it 0.179; GSQ's codes are worth having.
 
 Headroom on the fullest GPU (IQ4_XS/IQ4_NL experts, Q8_0 dense, head split over 12 GPUs). `--lean` and `--more` model
-six savings that are not implemented: prefill reusing the fused mixer matrix, Q8_0 router and indexer projections,
-the head kept at Q6_K size, f16 pooled indexer keys and block scores in tiles:
+six savings: prefill reusing the fused mixer matrix (implemented since this table, 28 MiB per GPU), Q8_0 router and
+indexer projections, the head kept at Q6_K size, f16 pooled indexer keys and block scores in tiles:
 
 | K/V cache | Q2_0 down | current, 128-token chunks | `--lean` | `--lean --more` | `--lean --more`, 64-token chunks |
 |---|---|---|---|---|---|
@@ -476,9 +477,9 @@ step 4.8 and 5.1-5.8 ms, `draft-bench`; 2.0 and 3.0-5.9 ms before). Not measured
 1. **Head storage**: the Macs score their head slices at once, so about 1.1 ms per token follows the last layer (the
    top-k passes are bitonic, 0.13 ms per slice). The head is repacked to 10 bits per weight; storing it compactly
    (Q6_K is 6.6 bits) would free VRAM.
-2. **The `--lean` savings** (about 60 MiB per GPU) are not implemented; they would add margin at 32K and room for
-   256-token prefill chunks. Q8_0 mixers with write rows no longer read their separate down copy or f32 write rows
-   (prefill uses the fused matrix too), so those uploads can go (~28 MiB per GPU).
+2. **The remaining `--lean` savings** (about 20 MiB per GPU) are not implemented. Q8_0 mixers with write rows keep
+   only the fused matrix (28 MiB per GPU less, measured). At 32K, 256-token chunks then fit the first GPU with 25 MiB
+   to spare, but measured no faster than 128-token chunks (prefill +0.5% at 2048 and 8192 tokens), so 128 stays.
 3. **Prefill**: the expert tiles take 42-45% of a chunk (occupancy splits, prefetch, vector-loaded inputs and unrolled
    lines all lost there), and the Q8_0 GEMMs at 64-128 tokens run at 58-63% of the FMA peak, LDS-bound.
 4. **Decode**: a DeltaNet layer takes 0.83 ms for 117 MB with the light barriers, 142 GB/s against the practical 205

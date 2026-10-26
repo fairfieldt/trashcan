@@ -9,8 +9,9 @@ indexer projections (f32), a ring of raw indexer keys and the pooled keys; per s
 stages the final mixer and their share of the head (Q6_K repacked to int8 with f32 scales per 16, 10 bits per
 weight). `--check` compares the model with every stage measured on a Mac Pro.
 
-`--lean` models three savings that are not implemented: prefill reuses the fused mixer matrix (no separate down
-copy), and the router and indexer projections in Q8_0. `--more` adds three more: the head kept at Q6_K size (6.56
+Q8_0 mixers with write rows keep only the fused matrix (no separate down copy or f32 write weights); the stages of
+`--check` were measured before that and model the copies. `--lean` models two savings that are not implemented: the
+router and indexer projections in Q8_0. `--more` adds three more: the head kept at Q6_K size (6.56
 bits per weight instead of the 10-bit repack), f16 pooled indexer keys, and block scores computed in tiles of 4096
 blocks instead of the whole context at once. `--q2-down rco` puts one layer per GPU (RCO's least
 sensitive: 1, 5, 8, 12, 16, 20, 24, 30, 33, 36, 40, 45) at Q2_0 down projections, routed and shared.
@@ -42,11 +43,12 @@ Q2 = 2.25
 RCO_Q2 = (1, 5, 8, 12, 16, 20, 24, 30, 33, 36, 40, 45)
 
 
-def mixer_bytes(dense, inject=True, lean=False):
-    down = 0 if (lean and inject) else RANK * W * dense / 8   # lean: prefill uses the fused matrix too
+def mixer_bytes(dense, inject=True, copies=False):
+    separate = not inject or dense != Q8 or copies              # Q8_0 with write rows reads only the fused matrix
+    down = RANK * W * dense / 8 if separate else 0
     up = W * RANK * dense / 8
-    fused = (RANK + HC) * W * dense / 8 if inject else 0       # decode: down and write rows in one matrix
-    write = HC * W * 4 if inject else 0                         # write weights in f32
+    fused = (RANK + HC) * W * dense / 8 if inject else 0       # down and write rows in one matrix
+    write = HC * W * 4 if inject and separate else 0            # write weights in f32
     return down + up + fused + write + HC * D * 4
 
 
@@ -65,9 +67,9 @@ def ring_rows(batch):
 MORE = False  # set by --more (see the module docstring)
 
 
-def layer_bytes(il, r, context, batch, lean=False, kv='f16', ring=True, q2=False):
+def layer_bytes(il, r, context, batch, lean=False, kv='f16', ring=True, q2=False, copies=False):
     dense = r['dense']
-    b = 2 * mixer_bytes(dense, lean=lean)
+    b = 2 * mixer_bytes(dense, copies=copies)
     if il in QSA:
         b += (D * 2 * QD + 2 * D * KVD + QD * D) * dense / 8                       # q|gate, k, v, out
         b += context * KV_HEADS * (kv_row(kv == 'q8') + kv_row(kv != 'f16'))        # K and V caches
@@ -104,8 +106,8 @@ def head_bytes(r, rows=VOCAB, ends=True):
             + (mixer_bytes(r['dense'], inject=False) if ends else 0))
 
 
-def stage_bytes(a, b, r, context, batch, head=0.0, lean=False, kv='f16', ring=True, q2=()):
-    return (sum(layer_bytes(il, r, context, batch, lean, kv, ring, il in q2) for il in range(a, b))
+def stage_bytes(a, b, r, context, batch, head=0.0, lean=False, kv='f16', ring=True, q2=(), copies=False):
+    return (sum(layer_bytes(il, r, context, batch, lean, kv, ring, il in q2, copies) for il in range(a, b))
             + scratch_bytes(batch, context, kv) + head)
 
 
@@ -133,7 +135,8 @@ RECIPES = {
 }
 
 # Stages measured on a Mac Pro (`GPUn: ... MiB allocated`), 2026-10-06 GPU and context runs. `ring`:
-# the raw indexer keys in a ring (from "Add Q8 K/V caches for QSA ..."); before that they spanned the context.
+# the raw indexer keys in a ring (from "Add Q8 K/V caches for QSA ..."); before that they spanned the context. All
+# of them have the mixers' separate down copies and f32 write weights.
 G_Q4 = dict(gate_up=4.5, down=4.5, dense=5.0)
 G_Q8D = dict(gate_up=4.5, down=4.5, dense=Q8)
 G_IQ4 = RECIPES['IQ4_XS gate/up + IQ4_NL down']
@@ -165,7 +168,7 @@ MEASURED = [  # name, recipe, first, last, context, batch, head, kv, ring, q2 la
 def check():
     for name, r, x, y, ctx, batch, head, kv, ring, q2, mib in MEASURED:
         hb = head_bytes(r) if head is True else head_bytes(r, head, ends=False) if head else 0
-        p = stage_bytes(x, y, r, ctx, batch, hb, False, kv, ring, q2) / MIB
+        p = stage_bytes(x, y, r, ctx, batch, hb, False, kv, ring, q2, copies=True) / MIB
         print(f'{name:50s} measured {mib:7.1f} MiB, model {p:7.1f} MiB ({p - mib:+.1f})')
 
 
