@@ -1,0 +1,18 @@
+[Unit]
+Description=Mac Pro port lights: blinkenlights while the GPUs work
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# PORTLIGHTS_ARGS: node options, e.g. --listen 7465 to take frames from a conductor (lights/install.sh --conductor)
+Environment=PORTLIGHTS_ARGS=
+EnvironmentFile=-/etc/default/portlights
+ExecStart=/usr/local/bin/portlights node $PORTLIGHTS_ARGS
+# when the node stops or dies, the lights go back to the SMC and the power light to steady
+ExecStopPost=-/bin/sh -c 'cd /sys/devices/platform/applesmc.768 && [ -e port_lights ] && echo auto > port_lights && echo on > power_light'
+Restart=always
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target

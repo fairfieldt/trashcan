@@ -105,11 +105,13 @@ and compares activations against [`tests/reference-vulkan/`](tests/reference-vul
 - [docs/qwen.md](docs/qwen.md): Qwen3.8-27B and Qwen3.5-9B: stages, tensor parallelism, MTP, prefix reuse
 - [docs/qwen4.md](docs/qwen4.md): Qwen3.8-Flash-Next on a chain of Mac Pros
 - [docs/server.md](docs/server.md): the Responses API server
+- [docs/lights.md](docs/lights.md): the port lights as blinkenlights and a music visualizer (optional)
 
 ## Repository layout
 
 - `engine/`: the Rust/Vulkan engine and its GLSL compute shaders
 - `kernel/`: kernel patches, config and build script
+- `lights/`: `portlights`, the port lights service and visualizer, with its install scripts
 - `nodes/macpro/`: setup script and system configuration for a Mac Pro node
 - `scripts/`: tests, benchmarks, clock recording and fan control
 - `tools/`: activation comparison, fixture generation and profiling tools

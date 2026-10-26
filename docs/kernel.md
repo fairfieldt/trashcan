@@ -2,9 +2,10 @@
 
 The Mac Pros run **Linux 7.3 from kernel.org, 7.3-rc7, built as `7.3.0-rc7-p2p`** with local patches
 (`kernel/patches-7.3/`) and the config in `kernel/configs/`. The engine depends on 0001-0007, and the measurements in
-these docs were taken on a kernel with 0001-0007 only. 0009 and 0010 (the applesmc port lights) are optional, newer
-and have had little testing (as a module override on one machine); the engine does not need them. To build the tested
-kernel, remove them from your copy of `kernel/patches-7.3/` before building. Debian's own kernels can stay in the GRUB menu as a
+these docs were taken on a kernel with 0001-0007 only. 0009 and 0010 (the applesmc port lights) are optional and newer;
+the engine does not need them. They have been tested as an applesmc module on 7.3.0-rc7 kernels without them
+(`lights/driver.sh`, [lights.md](lights.md)), which needs no new kernel; to build the tested kernel, remove them from
+your copy of `kernel/patches-7.3/` before building. Debian's own kernels can stay in the GRUB menu as a
 fallback, but without the patches the D700s run at 300/150 MHz and P2P DMA between them is refused
 ([hardware.md](hardware.md#clock-bug)).
 
@@ -20,7 +21,7 @@ fallback, but without the patches the D700s run at 300/150 MHz and P2P DMA betwe
 | 0005 `thunderbolt-stream-no-tx-e2e` | USB4STREAM Tx ring without E2E flow control (Rx keeps it) | With Tx-side E2E the Falcon Ridge NHI wedges and stops answering config reads | Not yet submitted; the same failure was fixed upstream in `thunderbolt_net` with revert 1881f2efbf7f |
 | 0006 `thunderbolt-stream-io-after-close` | A CLOSE that has been read no longer fails every later read (end of file) and write (`ENXIO`) until the device is closed, as in 7.2 | On 7.3 a CLOSE left from the previous session kept links off their streams: 9 of 25 chain links needed retries, 2 never got there | Candidate (`Fixes: e120d14d03b3`), not sent |
 | 0007 `thunderbolt-stream-no-rx-flush-on-close` | A close stops the RX ring without waiting for it to drain | The RX ring never drains (its buffers stay posted), so every close took 500 ms and a reopen waited for it | Candidate (`Fixes: 6db21d817b43`), not sent |
-| 0009 `applesmc-mac-pro-port-lights` | The I/O panel's 20 port lights as LED class devices (`smc::usb`, `smc::power`, ...) plus `port_lights`, `port_lights_motion`, `port_lights_hold_ms`, `port_lights_show` (Hello, You Again) and `power_light` on the applesmc device, documented in `Documentation/ABI/testing/sysfs-devices-platform-applesmc` | Optional: control of the port lights ([hardware.md](hardware.md#port-lights)); little testing, not needed by the engine | Not yet submitted |
+| 0009 `applesmc-mac-pro-port-lights` | The I/O panel's 20 port lights as LED class devices (`smc::usb`, `smc::power`, ...) plus `port_lights`, `port_lights_motion`, `port_lights_hold_ms`, `port_lights_show` (Hello, You Again) and `power_light` on the applesmc device, documented in `Documentation/ABI/testing/sysfs-devices-platform-applesmc` | Optional: control of the port lights ([lights.md](lights.md)); not needed by the engine | Not yet submitted |
 | 0010 `applesmc-port-lights-levels` | `port_lights_levels`: all 20 LEDs in one write, sending only the changed ones | Optional, on top of 0009: setting all 20 up to 40 times a second (8.1 ms for all 20, 2.2 ms for 5); kept apart from 0009 because it duplicates the LED class path and needs its own justification upstream | Not yet submitted |
 
 The numbering skips 0002 and 0008. 0002 (`si-dpm-gpio-dc-mobile-only`, without which the cards stay in the DC power

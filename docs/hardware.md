@@ -142,8 +142,8 @@ The SMC lights the 20 LEDs behind the I/O panel for 15 s when the accelerometer 
 patches 0009 and 0010 ([kernel.md](kernel.md)) make them LED class devices (`/sys/class/leds/smc::*`) with `port_lights`
 (`auto`/`manual`), `port_lights_motion`, `port_lights_hold_ms`, `port_lights_show`, `port_lights_levels` and
 `power_light` (off, on, breathe, bright) in `/sys/devices/platform/applesmc.768/`. The SMC keys are described in the
-patches. These patches have had little testing (as a module override on one machine) and the engine does not need
-them.
+patches. [lights.md](lights.md) installs the driver as a module for the running kernel and the `portlights` service
+that uses them. The engine does not need them.
 
 ## Suspend is disabled
 
