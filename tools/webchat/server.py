@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
-"""A browser chat for a trashcan server: serves this directory, passes /v1/* through to the server (same origin, so
-no CORS), and runs the page's tools (web search, page fetch). Python standard library only.
+"""The pipe web UI on a trashcan server, without a pi process: serves the UI (--root, a copy of piPE's web/ plus
+trashcan-transport.js; deploy.sh lays it out), passes /v1/* through to `trashcan serve` (same origin, so no CORS), and
+runs the tools the page's agent calls: web_search, fetch_page, bash. Python standard library only.
 
-usage: server.py [--port 8080] [--host 127.0.0.1] [--upstream http://127.0.0.1:8000]
-Then open http://127.0.0.1:8080/ (on the machine running `trashcan serve`, e.g. the cluster's first Mac).
+usage: server.py [--root DIR] [--port 8080] [--host 127.0.0.1] [--upstream http://127.0.0.1:8000] [--workdir DIR]
+Then open http://127.0.0.1:8080/?transport=/trashcan-transport.js&ui=win31&working=open on the machine running it
+(loopback only: bash runs commands on this machine).
 """
-import argparse, html.parser, http.server, json, os, re, socketserver, sys, urllib.parse, urllib.request
+import argparse, html.parser, http.server, json, os, re, socketserver, subprocess, sys, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.join(HERE, 'web')
+WORKDIR = os.path.expanduser('~')
 UA = 'Mozilla/5.0 (X11; Linux x86_64) trashcan-webchat'
 
 
@@ -88,11 +92,24 @@ def fetch_page(url, limit=8000):
     return {'url': url, 'text': text[:limit], 'truncated': len(text) > limit}
 
 
+def bash(command, timeout=60, limit=16000):
+    try:
+        p = subprocess.run(['bash', '-lc', command], cwd=WORKDIR, capture_output=True, text=True, timeout=timeout,
+                           stdin=subprocess.DEVNULL)
+        out, code = (p.stdout + (('\n' if p.stdout and p.stderr else '') + p.stderr)), p.returncode
+    except subprocess.TimeoutExpired as e:
+        out, code = (e.stdout or '') if isinstance(e.stdout, str) else '', 124
+        out += f'\n(stopped after {timeout} s)'
+    if len(out) > limit:
+        out = out[:limit] + f'\n(output cut at {limit} characters)'
+    return {'output': out or '(no output)', 'exitCode': code}
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     upstream = 'http://127.0.0.1:8000'
 
     def __init__(self, *a, **k):
-        super().__init__(*a, directory=HERE, **k)
+        super().__init__(*a, directory=ROOT, **k)
 
     def log_message(self, fmt, *args):
         sys.stderr.write('%s %s\n' % (self.log_date_time_string(), fmt % args))
@@ -148,6 +165,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                     out = {'results': web_search(str(args.get('query', '')), int(args.get('num_results') or 6))}
                 elif req.get('name') == 'fetch_page':
                     out = fetch_page(str(args.get('url', '')))
+                elif req.get('name') == 'bash':
+                    out = bash(str(args.get('command', '')))
                 else:
                     out = {'error': f"unknown tool {req.get('name')!r}"}
             except Exception as e:  # the model sees the error and can try something else
@@ -162,11 +181,15 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def main():
+    global ROOT, WORKDIR
     ap = argparse.ArgumentParser()
     ap.add_argument('--host', default='127.0.0.1')
     ap.add_argument('--port', type=int, default=8080)
     ap.add_argument('--upstream', default='http://127.0.0.1:8000')
+    ap.add_argument('--root', default=ROOT)
+    ap.add_argument('--workdir', default=WORKDIR)
     a = ap.parse_args()
+    ROOT, WORKDIR = os.path.abspath(a.root), os.path.abspath(os.path.expanduser(a.workdir))
     Handler.upstream = a.upstream.rstrip('/')
     print(f'webchat on http://{a.host}:{a.port}/ -> {Handler.upstream}', flush=True)
     Server((a.host, a.port), Handler).serve_forever()
