@@ -1,0 +1,12 @@
+on1: pp 881.1 tok/s, tg 21.410 tok/s, 35 s; node CPU s per Mac [2.17, 1.73, 2.01, 1.96, 1.89, 2.02]; 'blinkenlights' journal lines 6
+   fan target min / pwm1_enable / fancurve / port_lights: [(2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto')]
+   [clocks] 119 samples card0 (02:00.0) sclk/mclk: 850/1370 x118 300/150 x1  max 47C card1 (06:00.0) sclk/mclk: 850/1370 x119  max 46C  log=results/clocks/a15-pair-on1.txt
+off1: pp 883.5 tok/s, tg 20.256 tok/s, 35 s; node CPU s per Mac [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; 'blinkenlights' journal lines 4
+   fan target min / pwm1_enable / fancurve / port_lights: [(2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto')]
+   [clocks] 113 samples card0 (02:00.0) sclk/mclk: 850/1370 x113  max 50C card1 (06:00.0) sclk/mclk: 850/1370 x113  max 49C  log=results/clocks/a15-pair-off1.txt
+off2: pp 885.5 tok/s, tg 20.628 tok/s, 34 s; node CPU s per Mac [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]; 'blinkenlights' journal lines 0
+   fan target min / pwm1_enable / fancurve / port_lights: [(2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto'), (2350, '1', 'active', 'auto')]
+   [clocks] 111 samples card0 (02:00.0) sclk/mclk: 850/1370 x111  max 52C card1 (06:00.0) sclk/mclk: 850/1370 x111  max 51C  log=results/clocks/a15-pair-off2.txt
+on2: pp 885.0 tok/s, tg 20.423 tok/s, 35 s; node CPU s per Mac [2.14, 1.87, 2.38, 2.38, 2.21, 2.44]; 'blinkenlights' journal lines 6
+   fan target min / pwm1_enable / fancurve / port_lights: [(2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto'), (2350, '1', 'active', 'manual,auto')]
+   [clocks] 115 samples card0 (02:00.0) sclk/mclk: 850/1370 x115  max 54C card1 (06:00.0) sclk/mclk: 850/1370 x115  max 53C  log=results/clocks/a15-pair-on2.txt

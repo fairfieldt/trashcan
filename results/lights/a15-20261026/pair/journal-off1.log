@@ -1,0 +1,18 @@
+== incite
+-- No entries --
+== indite
+-- No entries --
+== inflight
+-- No entries --
+== alight
+Oct 26 12:51:47.777211 alight systemd[1]: Stopping portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work...
+Oct 26 12:51:47.834065 alight systemd[1]: portlights-node.service: Deactivated successfully.
+Oct 26 12:51:47.834451 alight systemd[1]: Stopped portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:51:47.835084 alight systemd[1]: portlights-node.service: Consumed 2.095s CPU time, 3.2M memory peak.
+== invite
+Oct 26 12:51:47.790860 invite systemd[1]: Stopping portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work...
+Oct 26 12:51:47.841152 invite systemd[1]: portlights-node.service: Deactivated successfully.
+Oct 26 12:51:47.841465 invite systemd[1]: Stopped portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:51:47.841779 invite systemd[1]: portlights-node.service: Consumed 2.035s CPU time, 2.9M memory peak.
+== enlight
+-- No entries --

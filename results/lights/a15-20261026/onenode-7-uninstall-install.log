@@ -1,0 +1,33 @@
+== uninstall
+portlights: portlights-node: stopped and disabled
+portlights: /etc/systemd/system/portlights-node.service: removed
+portlights: /usr/local/bin/portlights: removed
+portlights: /etc/default/portlights: removed
+lights driver: removed /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko
+lights driver: applesmc reloaded without the port lights
+rc=0
+  lights: ls: cannot access '/sys/devices/platform/applesmc.768/port_lights': No such file or directory; fancurve=active pwm1_enable=1; node unit: not-found
+== uninstall again
+portlights: portlights-node: not installed
+portlights: /etc/systemd/system/portlights-node.service: not there
+portlights: /usr/local/bin/portlights: not there
+portlights: /etc/default/portlights: not there
+lights driver: no applesmc override for 7.3.0-rc7-p2p-s2
+rc=0
+== install --module
+lights driver: would install applesmc-7.3.0-rc7-p2p-s2.ko as /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko, run depmod and reload applesmc
+portlights: /usr/local/bin/portlights: would be installed
+portlights: /etc/systemd/system/portlights-node.service: would be installed
+portlights: /etc/default/portlights: would be installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: would be enabled and restarted
+lights driver: installed /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko
+lights driver: applesmc reloaded: 20 port lights
+portlights: /usr/local/bin/portlights: installed
+portlights: /etc/systemd/system/portlights-node.service: installed
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)
+rc=0
+  power_light=breathe fancurve=active pwm1_enable=1
+kernel: 7.3.0-rc7-p2p-s2
+override: /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko (built for 7.3.0-rc7-p2p-s2)
+port lights: yes (20 LEDs)

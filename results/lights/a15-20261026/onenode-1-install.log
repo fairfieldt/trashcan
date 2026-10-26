@@ -1,0 +1,38 @@
++ sudo lights/install.sh --conductor 7465
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)
+rc=0
++ echo rc=0
++ sudo lights/install.sh --conductor 7465
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: unchanged
+portlights: /etc/systemd/system/portlights-node.service: unchanged
+portlights: /etc/default/portlights: unchanged
+portlights: portlights-node: running, unchanged
+rc=0
++ echo rc=0
++ sudo lights/install.sh
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: unchanged
+portlights: /etc/systemd/system/portlights-node.service: unchanged
+portlights: /etc/default/portlights: kept
+portlights: portlights-node: running, unchanged
+rc=0
++ echo rc=0
++ cat /etc/default/portlights
+# Options for portlights node. --listen [ADDR:]PORT takes frames from a conductor (the music visualizer).
+PORTLIGHTS_ARGS="--listen 7465"
++ systemctl is-active portlights-node fancurve
+active
+active
++ sudo journalctl -u portlights-node -n 4 -o short-precise --no-pager
+Oct 26 12:44:39.247404 indite systemd[1]: portlights-node.service: Consumed 21.347s CPU time, 3.2M memory peak.
+Oct 26 12:44:39.250157 indite systemd[1]: Started portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:44:39.258772 indite portlights[126476]: portlights: node, conductor frames on UDP 0.0.0.0:7465, 2 GPUs watched, idle auto (power light breathe)
+Oct 26 12:44:39.259555 indite portlights[126476]: portlights: smc
++ cat /sys/devices/platform/applesmc.768/port_lights /sys/devices/platform/applesmc.768/power_light
+auto
+breathe

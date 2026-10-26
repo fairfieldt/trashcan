@@ -1,0 +1,9 @@
+GPU1: uploading sharded weights
+GPU0: target allocations 4572.1 MiB
+GPU1: target allocations 4572.1 MiB
+{"device_allocations_mib":[4572.125762939453,4572.125762939453],"draft_accepted":null,"draft_proposed":null,"last_forward_submit_wait_read_ms":[0.092923,37.915747,0.027173999999995146],"pp":512,"pp_seconds":2.856598902,"pp_tok_s":179.2341233631126,"tg":256,"tg_seconds":10.048046876,"tg_tok_s":25.47758814814669}
+node CPU during run: 2114 ms over 33.865574201 s
+after 14 s idle: auto power_light=breathe
+Oct 26 12:45:03.327992 indite portlights[126476]: portlights: blinkenlights
+Oct 26 12:45:47.480357 indite portlights[126476]: portlights: smc
+node CPU idle (smc mode): 117 ms over 30 s

@@ -1,0 +1,20 @@
+# time fan1_input fan1_target pwm1_enable port_lights fancurve
+12:51:52 2349 2350 1 auto active
+12:51:54 2349 2350 1 auto active
+12:51:56 2349 2350 1 auto active
+12:51:58 2350 2350 1 auto active
+12:52:00 2349 2350 1 auto active
+12:52:02 2350 2350 1 auto active
+12:52:04 2349 2350 1 auto active
+12:52:06 2349 2350 1 auto active
+12:52:08 2349 2350 1 auto active
+12:52:10 2349 2350 1 auto active
+12:52:12 2349 2350 1 auto active
+12:52:14 2349 2350 1 auto active
+12:52:16 2349 2350 1 auto active
+12:52:18 2349 2350 1 auto active
+12:52:20 2349 2350 1 auto active
+12:52:22 2349 2350 1 auto active
+12:52:24 2350 2350 1 auto active
+12:52:26 2350 2350 1 auto active
+12:52:28 2350 2350 1 auto active

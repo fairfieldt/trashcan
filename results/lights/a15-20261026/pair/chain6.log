@@ -1,0 +1,23 @@
+chain6: queued incite=267,indite=144,inflight=122,alight=141,invite=270,enlight=151
+chain6: holding incite=267,indite=144,inflight=122,alight=141,invite=270,enlight=151
+12:51:08 on1 start
+12:51:47 on1 rc 0:   File "<string>", line 1
+    import json,sys; d=json.loads(open(sys.argv[1]).read().strip().splitlines()[-1]); print(f"pp {d[\"pp_tok_s\"]:.1f} tg {d[\"tg_tok_s\"]:.3f} tok/s")
+                                                                                                     ^
+SyntaxError: unexpected character after line continuation character
+12:51:52 off1 start
+12:52:30 off1 rc 0:   File "<string>", line 1
+    import json,sys; d=json.loads(open(sys.argv[1]).read().strip().splitlines()[-1]); print(f"pp {d[\"pp_tok_s\"]:.1f} tg {d[\"tg_tok_s\"]:.3f} tok/s")
+                                                                                                     ^
+SyntaxError: unexpected character after line continuation character
+12:52:34 off2 start
+12:53:11 off2 rc 0:   File "<string>", line 1
+    import json,sys; d=json.loads(open(sys.argv[1]).read().strip().splitlines()[-1]); print(f"pp {d[\"pp_tok_s\"]:.1f} tg {d[\"tg_tok_s\"]:.3f} tok/s")
+                                                                                                     ^
+SyntaxError: unexpected character after line continuation character
+12:53:16 on2 start
+12:53:55 on2 rc 0:   File "<string>", line 1
+    import json,sys; d=json.loads(open(sys.argv[1]).read().strip().splitlines()[-1]); print(f"pp {d[\"pp_tok_s\"]:.1f} tg {d[\"tg_tok_s\"]:.3f} tok/s")
+                                                                                                     ^
+SyntaxError: unexpected character after line continuation character
+a15 pair: 

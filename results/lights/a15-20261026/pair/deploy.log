@@ -1,0 +1,36 @@
+== incite
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)
+== indite
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: unchanged
+portlights: /etc/systemd/system/portlights-node.service: unchanged
+portlights: /etc/default/portlights: unchanged
+portlights: portlights-node: running, unchanged
+== inflight
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)
+== alight
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)
+== invite
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)
+== enlight
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: installed: PORTLIGHTS_ARGS="--listen 7465"
+portlights: portlights-node: running (portlights: smc)

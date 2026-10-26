@@ -1,0 +1,53 @@
+  fancurve=active pwm1_enable=1 fan1_target=2350 fan1_input=2348 node=active
+== driver uninstall (stock applesmc)
+lights driver: removed /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko
+lights driver: applesmc reloaded without the port lights
+  fancurve=active pwm1_enable=1 fan1_target=2350 fan1_input=2348 node=active
+kernel: 7.3.0-rc7-p2p-s2
+override: none
+port lights: no
+== driver install
+lights driver: would install applesmc-7.3.0-rc7-p2p-s2.ko as /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko, run depmod and reload applesmc
+lights driver: installed /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko
+lights driver: applesmc reloaded: 20 port lights
+  fancurve=active pwm1_enable=1 fan1_target=2350 fan1_input=2349 node=active
+== again (idempotent)
+lights driver: /lib/modules/7.3.0-rc7-p2p-s2/updates/applesmc.ko: unchanged
+== plain rmmod/modprobe with the node running
+  fancurve=active pwm1_enable=1 fan1_target=2350 fan1_input=2283 node=active
+on
+== journal
+Oct 26 12:47:45.652551 indite systemd[1]: Stopping portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work...
+Oct 26 12:47:45.690835 indite systemd[1]: portlights-node.service: Deactivated successfully.
+Oct 26 12:47:45.691172 indite systemd[1]: Stopped portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:47:45.702526 indite systemd[1]: Stopping fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher...
+Oct 26 12:47:45.702926 indite fancurve.sh[670]: fan returned to automatic SMC control
+Oct 26 12:47:45.703714 indite systemd[1]: fancurve.service: Deactivated successfully.
+Oct 26 12:47:45.703955 indite systemd[1]: Stopped fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher.
+Oct 26 12:47:45.704154 indite systemd[1]: fancurve.service: Consumed 31.733s CPU time, 6.5M memory peak.
+Oct 26 12:47:46.012614 indite systemd[1]: Started fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher.
+Oct 26 12:47:46.054468 indite systemd[1]: Started portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:47:46.071826 indite fancurve.sh[131510]: fan policy: at least 2350 rpm, or the live SMC maximum if higher, at all temperatures; refresh every 2s
+Oct 26 12:47:46.072102 indite portlights[131512]: portlights: no port lights (No such file or directory (os error 2)); needs applesmc with trashcan kernel patches 0009 and 0010
+Oct 26 12:47:46.073536 indite fancurve.sh[131510]: fan target 2350 rpm (live SMC maximum 2114)
+Oct 26 12:48:00.432038 indite systemd[1]: Stopping portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work...
+Oct 26 12:48:01.089370 indite sh[131953]: /bin/sh: 1: cannot create port_lights: Permission denied
+Oct 26 12:48:01.089846 indite systemd[1]: portlights-node.service: Deactivated successfully.
+Oct 26 12:48:01.090234 indite systemd[1]: Stopped portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:48:01.103243 indite systemd[1]: Stopping fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher...
+Oct 26 12:48:01.103594 indite fancurve.sh[131510]: fan returned to automatic SMC control
+Oct 26 12:48:01.105465 indite systemd[1]: fancurve.service: Deactivated successfully.
+Oct 26 12:48:01.105976 indite systemd[1]: Stopped fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher.
+Oct 26 12:48:01.363421 indite systemd[1]: Started fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher.
+Oct 26 12:48:01.402027 indite systemd[1]: Started portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Oct 26 12:48:01.423309 indite fancurve.sh[131970]: fan policy: at least 2350 rpm, or the live SMC maximum if higher, at all temperatures; refresh every 2s
+Oct 26 12:48:01.423984 indite portlights[131972]: portlights: node, conductor frames on UDP 0.0.0.0:7465, 2 GPUs watched, idle auto (power light breathe)
+Oct 26 12:48:01.423984 indite portlights[131972]: portlights: smc
+Oct 26 12:48:01.428660 indite fancurve.sh[131970]: fan target 2350 rpm (live SMC maximum 2115)
+Oct 26 12:48:04.500341 indite systemd[1]: Stopping fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher...
+Oct 26 12:48:04.500942 indite fancurve.sh[131970]: fan returned to automatic SMC control
+Oct 26 12:48:04.502590 indite systemd[1]: fancurve.service: Deactivated successfully.
+Oct 26 12:48:04.503191 indite systemd[1]: Stopped fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher.
+Oct 26 12:48:07.801298 indite systemd[1]: Started fancurve.service - Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher.
+Oct 26 12:48:07.849676 indite fancurve.sh[132164]: fan policy: at least 2350 rpm, or the live SMC maximum if higher, at all temperatures; refresh every 2s
+Oct 26 12:48:07.865047 indite fancurve.sh[132164]: fan target 2350 rpm (live SMC maximum 2116)

@@ -1,0 +1,11 @@
+portlights: driver: the port lights are there
+portlights: /usr/local/bin/portlights: updated
+portlights: /etc/systemd/system/portlights-node.service: updated
+portlights: /etc/default/portlights: kept
+portlights: portlights-node: running (portlights: smc)
+power_light before: breathe
+right after reload: on
+12 s later: breathe
+portlights: No such device (os error 19)
+portlights: no port lights (No such file or directory (os error 2)); needs applesmc with trashcan kernel patches 0009 and 0010
+portlights: smc

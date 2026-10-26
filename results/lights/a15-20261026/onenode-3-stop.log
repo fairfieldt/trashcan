@@ -1,0 +1,25 @@
+== blinken idle mode: force manual via a conductor-less blinken? (skip)
+== stop
+  port_lights=auto power_light=on node=inactive
+== start
+  port_lights=auto power_light=breathe node=active
+== SIGKILL (failure)
+  port_lights=auto power_light=on node=activating
+  after RestartSec:
+  port_lights=auto power_light=breathe node=active
+== SIGTERM during blinkenlights
+  while blinken: manual
+  port_lights=auto power_light=on node=inactive
+  port_lights=auto power_light=breathe node=active
+portlights-node.service: Main process exited, code=killed, status=9/KILL
+portlights-node.service: Failed with result 'signal'.
+portlights-node.service: Scheduled restart job, restart counter is at 1.
+Started portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+portlights: node, conductor frames on UDP 0.0.0.0:7465, 2 GPUs watched, idle auto (power light breathe)
+portlights: smc
+Stopping portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work...
+portlights-node.service: Deactivated successfully.
+Stopped portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+Started portlights-node.service - Mac Pro port lights: blinkenlights while the GPUs work.
+portlights: node, conductor frames on UDP 0.0.0.0:7465, 2 GPUs watched, idle auto (power light breathe)
+portlights: smc
