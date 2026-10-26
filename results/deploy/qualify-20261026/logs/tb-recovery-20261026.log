@@ -64,3 +64,18 @@ OK       alight:0 - indite:0: up, 2 lane(s), stream /dev/tbstream0
 OK       indite:1 - invite:1: up, 2 lane(s), stream /dev/tbstream1
 OK       invite:0 - enlight:0: up, 2 lane(s), stream /dev/tbstream1
 OK       enlight:1 - incite:1: up, 2 lane(s), stream /dev/tbstream1
+## after rollout reboot of five Macs, reload-all 14:01:41
+enlight: reloaded
+alight: reloaded
+invite: reloaded
+incite: reloaded
+inflight: reloaded
+indite: reloaded
+waiting 30 s for the links to come back
+OK       incite:2 - inflight:2: up, 2 lane(s), stream /dev/tbstream1
+OK       inflight:1 - alight:1: up, 2 lane(s), stream /dev/tbstream0
+OK       alight:0 - indite:0: up, 2 lane(s), stream /dev/tbstream0
+OK       indite:1 - invite:1: up, 2 lane(s), stream /dev/tbstream0
+OK       invite:0 - enlight:0: up, 2 lane(s), stream /dev/tbstream0
+OK       enlight:1 - incite:1: up, 2 lane(s), stream /dev/tbstream1
+## rc=0

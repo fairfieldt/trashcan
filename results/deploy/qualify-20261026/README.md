@@ -41,3 +41,18 @@ Ethernet (`--tcp-fallback`); with every link on Thunderbolt, none failed.
 - The inflight-alight link stayed missing through that, and two `scripts/tb-reset.sh inflight alight` rounds: its
   cable had been taken for the mesh. Not a recovery failure.
 - Recabled to the six-Mac ring, one `links-reload-all` round: all six links up on two lanes with streams.
+
+## Rollout to all six Macs (14:00)
+
+incite, invite, indite, enlight, alight: package copied from inflight with lan-copy, `sha256sum -c SHA256SUMS`,
+`install-kernel.sh install --apply`, the five rebooted together (all back on 7.3.0-rc7-p2p within 75 s), `verify`
+PASS on each, `pin --apply`. The lights module built for inflight (sha256 0f3c67f9...) installed on each: 20 port
+lights, fancurve and portlights-node active. The inventory now uses the launcher's own manifest; `preflight
+6-flashnext`: 0 problems, 0 warnings.
+
+After the reboots every ring link was down (`no_interface`, peers in firmware); one `links-reload-all` round brought
+all six up on two lanes with streams.
+
+6-flashnext smoke, three runs ([logs/rollout-smoke-*](logs/)): "Paris" each, ready 38 / 20 / 22 s, requests 0.94 /
+0.44 / 0.45 s. Each run's only "continuing over TCP" is enlight's last line, after the launcher stopped incite's
+driver (the stream closed at teardown), not a fallback during the run.

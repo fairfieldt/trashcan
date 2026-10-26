@@ -5,8 +5,6 @@ binary = "trashcan"
 models = "~/models"
 run_dir = "~/trashcan-exp/a16/runs"
 state = "state"
-manifest = "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/main/deploy/manifest.toml"
-recipes = "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/main/deploy/recipes.toml"
 
 [ports]
 serve = 8000
