@@ -1,0 +1,225 @@
+chain6: queued incite=274,indite=147,inflight=124,alight=142,invite=273,enlight=157
+chain6: holding incite=274,indite=147,inflight=124,alight=142,invite=273,enlight=157
+=== 1. smoke
+preflight 6-flashnext on incite, inflight, alight, indite, invite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  inflight (inflight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  alight (alight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  stage5    on enlight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage4    on invite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage3    on indite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage2    on alight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage1    on inflight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  driver    on incite: trashcan serve '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --port 8000 --head-split 12 --context 32768 --batch 128 --ngram disk --nodes inflight.tb0:7071,alight.tb1:7071,indite.tb0:7071,invite.tb1:7071,enlight.tb0:7071
+warning: alight: GPU 0000:02:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: alight: GPU 0000:06:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: link DEGRADED incite:0 - inflight:0: up, 1 lane(s), stream /dev/tbstream0
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 6-flashnext: OK (0 problems, 5 warnings)
+run 20261026-131810-6-flashnext: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131810-6-flashnext
+start stage5 on enlight
+stage5 on enlight listening on 7071 after 2 s
+start stage4 on invite
+stage4 on invite listening on 7071 after 2 s
+start stage3 on indite
+stage3 on indite listening on 7071 after 3 s
+start stage2 on alight
+stage2 on alight listening on 7071 after 4 s
+start stage1 on inflight
+stage1 on inflight listening on 7071 after 4 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 23 s
+6-flashnext ready after 37 s
+smoke: status completed, 1.36 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 5830 MiB, 0000:06:00.0 5819 MiB
+stopped driver on incite
+stopped stage5 on enlight
+stopped stage4 on invite
+stopped stage3 on indite
+stopped stage2 on alight
+stopped stage1 on inflight
+incite: /sys/class/drm/card0/device/power_dpm_force_performance_level: restored auto
+/sys/class/drm/card1/device/power_dpm_force_performance_level: restored auto
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131810-6-flashnext
+rc 0
+--- after smoke: engine processes, ports, DPM on incite,inflight,alight,indite,invite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+inflight: engines [] ports [] dpm [auto auto ]
+alight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+=== 2. run, then a node process killed (SIGKILL)
+killing enlight's node process at 13:19:26
+preflight 6-flashnext on incite, inflight, alight, indite, invite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  inflight (inflight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  alight (alight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  stage5    on enlight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage4    on invite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage3    on indite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage2    on alight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage1    on inflight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  driver    on incite: trashcan serve '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --port 8000 --head-split 12 --context 32768 --batch 128 --ngram disk --nodes inflight.tb0:7071,alight.tb1:7071,indite.tb0:7071,invite.tb1:7071,enlight.tb0:7071
+warning: link DEGRADED incite:0 - inflight:0: up, 1 lane(s), stream /dev/tbstream0
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 6-flashnext: OK (0 problems, 3 warnings)
+run 20261026-131902-6-flashnext: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131902-6-flashnext
+start stage5 on enlight
+stage5 on enlight listening on 7071 after 2 s
+start stage4 on invite
+stage4 on invite listening on 7071 after 2 s
+start stage3 on indite
+stage3 on indite listening on 7071 after 3 s
+start stage2 on alight
+stage2 on alight listening on 7071 after 3 s
+start stage1 on inflight
+stage1 on inflight listening on 7071 after 4 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 12 s
+6-flashnext ready after 25 s
+running; Ctrl-C stops every process
+stage5 on enlight ended:
+qwen4 node: /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf on 0.0.0.0:7071, devices Gpus([0, 1])
+qwen4 node: session from 10.99.36.1:37480
+link invite (10.99.36.1:37480): stream up (0-1.1/trashcan /dev/tbstream0), epoch e4e036f4, 5.0 ms after the link started [13:19:16.746]
+GPU0: layers 40..44 + head rows 215040..236544
+GPU0: 5768.5 MiB allocated in 1.15 s; device-local heap 5769 of 5888 MiB used, budget 5868
+GPU1: layers 44..48 + head rows 236544..248320
+GPU1: 5745.3 MiB allocated in 3.20 s; device-local heap 5745 of 5888 MiB used, budget 5868
+stopping every process
+stopped driver on incite
+stopped stage5 on enlight
+stopped stage4 on invite
+stopped stage3 on indite
+stopped stage2 on alight
+stopped stage1 on inflight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131902-6-flashnext
+rc 1, launcher ended 8 s after the kill
+--- after node kill: engine processes, ports, DPM on incite,inflight,alight,indite,invite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+inflight: engines [] ports [] dpm [auto auto ]
+alight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+=== 3. run, then SIGINT to the launcher
+SIGINT at 13:20:09
+preflight 6-flashnext on incite, inflight, alight, indite, invite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  inflight (inflight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  alight (alight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  stage5    on enlight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage4    on invite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage3    on indite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage2    on alight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage1    on inflight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  driver    on incite: trashcan serve '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --port 8000 --head-split 12 --context 32768 --batch 128 --ngram disk --nodes inflight.tb0:7071,alight.tb1:7071,indite.tb0:7071,invite.tb1:7071,enlight.tb0:7071
+warning: link DEGRADED incite:0 - inflight:0: up, 1 lane(s), stream /dev/tbstream0
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 6-flashnext: OK (0 problems, 3 warnings)
+run 20261026-131943-6-flashnext: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131943-6-flashnext
+start stage5 on enlight
+stage5 on enlight listening on 7071 after 2 s
+start stage4 on invite
+stage4 on invite listening on 7071 after 3 s
+start stage3 on indite
+stage3 on indite listening on 7071 after 3 s
+start stage2 on alight
+stage2 on alight listening on 7071 after 3 s
+start stage1 on inflight
+stage1 on inflight listening on 7071 after 3 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 12 s
+6-flashnext ready after 25 s
+running; Ctrl-C stops every process
+signal 2: stopping every process
+stopped driver on incite
+stopped stage5 on enlight
+stopped stage4 on invite
+stopped stage3 on indite
+stopped stage2 on alight
+stopped stage1 on inflight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131943-6-flashnext
+rc 130, stopped 5 s after SIGINT
+--- after SIGINT: engine processes, ports, DPM on incite,inflight,alight,indite,invite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+inflight: engines [] ports [] dpm [auto auto ]
+alight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+=== 4. up, status, a second up (refused), down, status
+preflight 6-flashnext on incite, inflight, alight, indite, invite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  inflight (inflight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  alight (alight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  stage5    on enlight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage4    on invite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage3    on indite: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage2    on alight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  stage1    on inflight: trashcan qwen4 node '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --gpus 0,1 --listen 0.0.0.0:7071
+  driver    on incite: trashcan serve '~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf' --port 8000 --head-split 12 --context 32768 --batch 128 --ngram disk --nodes inflight.tb0:7071,alight.tb1:7071,indite.tb0:7071,invite.tb1:7071,enlight.tb0:7071
+warning: link DEGRADED incite:0 - inflight:0: up, 1 lane(s), stream /dev/tbstream0
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 6-flashnext: OK (0 problems, 3 warnings)
+run 20261026-132020-6-flashnext: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-132020-6-flashnext
+start stage5 on enlight
+stage5 on enlight listening on 7071 after 0 s
+start stage4 on invite
+stage4 on invite listening on 7071 after 0 s
+start stage3 on indite
+stage3 on indite listening on 7071 after 1 s
+start stage2 on alight
+stage2 on alight listening on 7071 after 1 s
+start stage1 on inflight
+stage1 on inflight listening on 7071 after 1 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 8 s
+6-flashnext ready after 15 s
+running; `trashcan-cluster down` stops it. Server: 127.0.0.1:8000 on incite (forward it with ssh -L, or add --host to the recipe)
+rc 0
+run 20261026-132020-6-flashnext (6-flashnext), started Mon Oct 26 13:20:20 2026
+  stage5    enlight    port 7071: running
+  stage4    invite     port 7071: running
+  stage3    indite     port 7071: running
+  stage2    alight     port 7071: running
+  stage1    inflight   port 7071: running
+  driver    incite     port 8000: running
+PROBLEM: enlight: an engine process is running: 261186 gpuq run 157 -- bash -c echo $$ > ~/trashcan-exp/a16/runs/20261026-132020-6-flashnext/stage5.pid; exec /home/fairfieldt/trashcan-exp/a16/trashcan qwen4 node /home/fairfieldt/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf --gpus 0,1 --listen 0.0.0.0:7071
+PROBLEM: enlight: port 7071 is in use
+preflight 6-flashnext: FAILED (24 problems, 3 warnings)
+rc 1
+stopped driver on incite
+stopped stage5 on enlight
+stopped stage4 on invite
+stopped stage3 on indite
+stopped stage2 on alight
+stopped stage1 on inflight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-132020-6-flashnext
+rc 0
+no run recorded
+--- after down: engine processes, ports, DPM on incite,inflight,alight,indite,invite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+inflight: engines [] ports [] dpm [auto auto ]
+alight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+chain6 rc 0

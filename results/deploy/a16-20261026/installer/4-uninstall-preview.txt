@@ -1,0 +1,12 @@
+$ deploy/trashcan-cluster -c cluster.toml install --nodes inflight --uninstall
+== uninstall (preview)
+  restore /usr/local/sbin/tblink (the original it replaced)
+  restore /etc/udev/rules.d/70-tbstream.rules (the original it replaced)
+  restore /etc/modprobe.d/thunderbolt-net.conf (the original it replaced)
+  remove /etc/sudoers.d/trashcan-amdgpu-dpm
+  restore /etc/sysctl.d/90-trashcan-panic.conf (the original it replaced)
+  restart tblink.service (its files changed; links are kept)
+  reload udev rules
+  reload sysctls
+inflight: 8 changes; rerun with --apply
+rc 0

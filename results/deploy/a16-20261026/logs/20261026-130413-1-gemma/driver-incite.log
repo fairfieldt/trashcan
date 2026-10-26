@@ -1,0 +1,5 @@
+GPU0: uploading sharded weights
+GPU1: uploading sharded weights
+GPU0: target allocations 4572.1 MiB
+GPU1: target allocations 4572.1 MiB
+Responses server listening on http://127.0.0.1:8000 (model: gemma-4-12b)

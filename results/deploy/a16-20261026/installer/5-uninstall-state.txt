@@ -1,0 +1,12 @@
+93f08bfda7e53e01312d0d1db40eba22  /usr/local/sbin/tblink
+32d656bb08bdf51a94f1790d8e9e4641  /etc/udev/rules.d/70-tbstream.rules
+65f0adaf88d3dcfd059dfb3c98b95d62  /etc/modprobe.d/thunderbolt-net.conf
+a97abf75bde4e9a0edf7217f68179a65  /etc/sysctl.d/90-trashcan-panic.conf
+md5sum: /etc/sudoers.d/trashcan-amdgpu-dpm: No such file or directory
+8bb683e41ee17f25f73a7ac1a07421a2  /usr/local/sbin/emergency-reboot
+active
+active
+ls: cannot access '/var/lib/trashcan-node': No such file or directory
+peer    local_bus  lanes  state  stream
+incite  0          1      up     /dev/tbstream1
+alight  1          2      up     /dev/tbstream0

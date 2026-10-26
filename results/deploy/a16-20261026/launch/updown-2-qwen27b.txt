@@ -1,0 +1,39 @@
+lease: queued incite=271 enlight=154
+lease: holding incite=271,enlight=154
+preflight 2-qwen27b on incite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  node1     on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --tp-connect enlight.tb1:7072
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 2-qwen27b: OK (0 problems, 1 warnings)
+run 20261026-131111-2-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131111-2-qwen27b
+start node1 on enlight
+node1 on enlight listening on 7072 after 0 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 23 s
+2-qwen27b ready after 24 s
+running; `trashcan-cluster down` stops it. Server: 127.0.0.1:8000 on incite (forward it with ssh -L, or add --host to the recipe)
+rc 0
+run 20261026-131111-2-qwen27b (2-qwen27b), started Mon Oct 26 13:11:11 2026
+  node1     enlight    port 7072: running
+  driver    incite     port 8000: running
+--- a second up while it runs
+preflight 2-qwen27b on incite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+PROBLEM: incite: GPU 0000:02:00.0 has 4519 MiB VRAM in use: something else runs on it
+PROBLEM: incite: GPU 0000:06:00.0 has 4541 MiB VRAM in use: something else runs on it
+PROBLEM: incite: an engine process is running: 276267 gpuq run 271 -- bash -c echo $$ > ~/trashcan-exp/a16/runs/20261026-131111-2-qwen27b/driver.pid; exec /home/fairfieldt/trashcan-exp/a16/trashcan serve /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --port 8000 --tp-connect enlight.tb1:7072
+PROBLEM: incite: port 8000 is in use
+PROBLEM: enlight: GPU 0000:02:00.0 has 4516 MiB VRAM in use: something else runs on it
+PROBLEM: enlight: GPU 0000:06:00.0 has 4516 MiB VRAM in use: something else runs on it
+PROBLEM: enlight: an engine process is running: 217604 gpuq run 154 -- bash -c echo $$ > ~/trashcan-exp/a16/runs/20261026-131111-2-qwen27b/node1.pid; exec /home/fairfieldt/trashcan-exp/a16/trashcan qwen-tp-node /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --listen 0.0.0.0:7072
+PROBLEM: enlight: port 7072 is in use
+preflight 2-qwen27b: FAILED (8 problems, 1 warnings)
+rc 1
+stopped driver on incite
+stopped node1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131111-2-qwen27b
+rc 0
+no run recorded
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]

@@ -1,0 +1,143 @@
+lease: queued incite=269 enlight=152
+lease: holding incite=269,enlight=152
+=== 1. smoke
+preflight 2-qwen27b on incite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  node1     on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --tp-connect enlight.tb1:7072
+warning: enlight: GPU 0000:02:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: enlight: GPU 0000:06:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 2-qwen27b: OK (0 problems, 3 warnings)
+run 20261026-130554-2-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-130554-2-qwen27b
+start node1 on enlight
+node1 on enlight listening on 7072 after 2 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 59 s
+2-qwen27b ready after 60 s
+smoke: status completed, 1.94 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 4788 MiB, 0000:06:00.0 4810 MiB
+stopped driver on incite
+stopped node1 on enlight
+enlight: /sys/class/drm/card0/device/power_dpm_force_performance_level: restored auto
+/sys/class/drm/card1/device/power_dpm_force_performance_level: restored auto
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-130554-2-qwen27b
+rc 0
+--- after smoke: engine processes, ports, DPM on incite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+=== 2. run, then a node process killed (SIGKILL)
+killing enlight's node process at 13:07:34
+preflight 2-qwen27b on incite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  node1     on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --tp-connect enlight.tb1:7072
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 2-qwen27b: OK (0 problems, 1 warnings)
+run 20261026-130705-2-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-130705-2-qwen27b
+start node1 on enlight
+node1 on enlight listening on 7072 after 2 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 26 s
+2-qwen27b ready after 28 s
+running; Ctrl-C stops every process
+node1 on enlight ended:
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 1, peers [], GPUs [0, 1]
+tp-node: session as machine 1, lanes to machines [(0, 1, "tcp")]
+link incite (10.99.20.17:33604): stream up (1-3.1/trashcan /dev/tbstream1), epoch 021bbcbc, 5.9 ms after the link started [13:07:07.254]
+GPU0: rank 2 of 4 + MTP, 4541.9 MiB allocated
+GPU1: rank 3 of 4 + MTP, 4541.9 MiB allocated
+stopping every process
+stopped driver on incite
+stopped node1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-130705-2-qwen27b
+rc 1, launcher ended 9 s after the kill
+--- after node kill: engine processes, ports, DPM on incite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+=== 3. run, then SIGINT to the launcher
+SIGINT at 13:08:12
+preflight 2-qwen27b on incite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  node1     on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --tp-connect enlight.tb1:7072
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 2-qwen27b: OK (0 problems, 1 warnings)
+run 20261026-130745-2-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-130745-2-qwen27b
+start node1 on enlight
+node1 on enlight listening on 7072 after 2 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 25 s
+2-qwen27b ready after 26 s
+running; Ctrl-C stops every process
+signal 2: stopping every process
+stopped driver on incite
+stopped node1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-130745-2-qwen27b
+rc 130, stopped 6 s after SIGINT
+--- after SIGINT: engine processes, ports, DPM on incite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+=== 4. up, status, a second up (refused), down, status
+preflight 2-qwen27b on incite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  node1     on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --mtp '~/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf' --tp-connect enlight.tb1:7072
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 2-qwen27b: OK (0 problems, 1 warnings)
+run 20261026-130820-2-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b
+start node1 on enlight
+Traceback (most recent call last):
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 1005, in <module>
+    main()
+    ~~~~^^
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 1001, in main
+    sys.exit(fn(cfg, a))
+             ~~^^^^^^^^
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 1000, in <lambda>
+    "up": lambda c, x: launch(c, x, "up")}[a.cmd]
+                       ~~~~~~^^^^^^^^^^^^
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 870, in launch
+    ready = run.wait_ready()
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 710, in wait_ready
+    self.start(p)
+    ~~~~~~~~~~^^^
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 685, in start
+    ssh(p.node, self.command(p))
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/../main/deploy/trashcan-cluster", line 154, in ssh
+    r = subprocess.run(ssh_argv(node, command), capture_output=True, text=True, timeout=timeout, input=input)
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 2154, in _communicate
+    self._check_timeout(endtime, orig_timeout, stdout, stderr)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 1268, in _check_timeout
+    raise TimeoutExpired(
+    ...<2 lines>...
+            stderr=b''.join(stderr_seq) if stderr_seq else None)
+subprocess.TimeoutExpired: Command '['ssh', '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10', '-o', 'ServerAliveInterval=15', '-o', 'ServerAliveCountMax=4', 'enlight', 'mkdir -p ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b && setsid nohup bash -c \'cd ~/trashcan-exp/a16 && mkdir -p ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b && exec env  gpuq run 152 -- bash -c \'"\'"\'echo $$ > ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b/node1.pid; exec /home/fairfieldt/trashcan-exp/a16/trashcan qwen-tp-node /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --listen 0.0.0.0:7072\'"\'"\' >> ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b/node1.log 2>&1\' > /dev/null 2>&1 < /dev/null & sleep 0.5']' timed out after 120 seconds
+rc 1
+run 20261026-130820-2-qwen27b (2-qwen27b), started Mon Oct 26 13:08:20 2026
+  node1     enlight    port 7072: running
+  driver    incite     port 8000: stopped
+PROBLEM: enlight: an engine process is running: 213053 bash -c mkdir -p ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b && setsid nohup bash -c 'cd ~/trashcan-exp/a16 && mkdir -p ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b && exec env  gpuq run 152 -- bash -c '"'"'echo $$ > ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b/node1.pid; exec /home/fairfieldt/trashcan-exp/a16/trashcan qwen-tp-node /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --mtp /home/fairfieldt/models/qwen3.8-27b/mtp-Qwen3.8-27B-trashcan-Q4_0.gguf --listen 0.0.0.0:7072'"'"' >> ~/trashcan-exp/a16/runs/20261026-130820-2-qwen27b/node1.log 2>&1' > /dev/null 2>&1 < /dev/null & sleep 0.5
+PROBLEM: enlight: port 7072 is in use
+preflight 2-qwen27b: FAILED (2 problems, 1 warnings)
+rc 1
+stopped driver on incite
+stopped node1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-130820-2-qwen27b
+rc 0
+no run recorded
+--- after down: engine processes, ports, DPM on incite,enlight
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]

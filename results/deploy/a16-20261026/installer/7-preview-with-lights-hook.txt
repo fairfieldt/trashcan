@@ -1,0 +1,85 @@
+== inflight: preview
+-- tblink
+  update /usr/local/sbin/tblink
+      @@ -7,8 +7,10 @@
+       # with "<peer>.tb<local bus>" in /etc/hosts. A link that still shows the Mac firmware's peer (vendor 0xa27), or has
+       # no working interface, for GRACE seconds is reported once in the log and by `tblink status`. It is not reset
+       # automatically: unbinding one controller's driver triggered a thunderbolt bug (duplicate XDomain device) and
+      -# coincided with the peer Mac resetting (results/kernel/tb-nodes-20261006). `tblink reload` reloads the
+      -# Thunderbolt modules on this node; run it on the stuck node's neighbour first, then on the node.
+      +# coincided with the peer Mac resetting. `tblink reload` reloads the Thunderbolt modules on this node; run it on the
+      +# stuck node's neighbour first, then on the node.
+      +#
+      +# A node missing from the table (or a missing or empty table) does nothing: no addresses, no streams.
+       #
+       # Every working link also gets a USB4STREAM, `trashcan`, under its XDomain's stream service (configfs), with input
+       # and output HopID 15 at both ends (thunderbolt_net takes the lowest free HopIDs from 8), so neither end needs the
+      @@ -33,7 +35,7 @@
+           case $1 in 0000:16:00.0) echo 0 ;; 0000:5d:00.0) echo 1 ;; 0000:a4:00.0) echo 2 ;; esac
+       }
+       # UUID -> "index hostname bus"
+      -lookup() { awk -v u="$1" '!/^#/ && NF >= 5 { for (i = 3; i <= 5; i++) if ($i == u) { print $1, $2, i - 3; exit } }' "$NODES"; }
+      +lookup() { awk -v u="$1" '!/^#/ && NF >= 5 { for (i = 3; i <= 5; i++) if ($i == u) { print $1, $2, i - 3; exit } }' "$NODES" 2>/dev/null; }
+       log() { echo "$*"; }
+       
+       # Print one line per XDomain link: "xd nhi lbus rindex rhost rbus iface vendor"
+      @@ -142,7 +144,7 @@
+               if [ "$vendor" = "$APPLE_FIRMWARE" ]; then
+                   bad="peer is the Mac firmware"
+               elif [ "$rindex" = 0 ] || [ "$rindex" = "$me" ]; then
+      -            continue    # a host we don't know, or a cable looping this Mac's own controllers
+      +            continue    # a host we don't know, or a cable looping this node's own controllers
+               elif [ "$iface" = - ]; then
+                   bad="no network interface"
+               else
+      @@ -182,6 +184,7 @@
+           status)
+               me=$(awk -v h="$(hostname)" '!/^#/ && $2 == h { print $1 }' "$NODES" 2>/dev/null)
+               echo "node $(hostname) index ${me:-unknown} ($NODES)"
+      +        [ -n "$me" ] || echo "$(hostname) is not in $NODES: add it with deploy/trashcan-cluster registry --push --apply"
+               links | while read -r xd nhi lbus rindex rhost rbus iface vendor; do
+                   lanes=$(cat "$DEVS/$xd/rx_lanes" 2>/dev/null)
+  update /etc/udev/rules.d/70-tbstream.rules
+      @@ -1,4 +1,4 @@
+       # USB4STREAM devices (/dev/tbstreamN, one per link to another node, created by tblink) for the engine, which runs as
+      -# a member of render (nodes/macpro/provision.sh adds fairfieldt). The engine opens each one for one process at a time
+      +# a member of render (nodes/macpro/provision.sh adds the login user). The engine opens each one for one process at a time
+       # (flock) and falls back to TCP without it (engine/src/link).
+       KERNEL=="tbstream[0-9]*", GROUP="render", MODE="0660"
+  update /etc/modprobe.d/thunderbolt-net.conf
+      @@ -1,3 +1,3 @@
+      -# Ring interrupt throttle for thunderbolt_net (kernel/patches-7.2/0004): 32 us gives about 40 us round trips at the
+      -# same throughput as the default 128 us (results/kernel/tb-loopback-20261006).
+      +# Ring interrupt throttle for thunderbolt_net (kernel/patches-7.3/0004): 32 us gave about 40 us round trips at the
+      +# same throughput as the default 128 us (Thunderbolt loopback, 2026-10-06).
+       options thunderbolt_net throttling=32000
+-- fan
+-- network
+-- power
+-- gpu
+  create /etc/sudoers.d/trashcan-amdgpu-dpm
+-- logs
+-- panic
+  update /etc/sysctl.d/90-trashcan-panic.conf
+      @@ -3,7 +3,7 @@
+       kernel.panic = 10
+       kernel.hardlockup_panic = 1
+       kernel.softlockup_panic = 1
+      -# Send info-level kernel messages to consoles (netconsole).
+      +# Send info-level kernel messages to the consoles.
+       kernel.printk = 7 4 1 7
+       # Panic (and reboot after kernel.panic seconds) on any oops instead of running on with a broken kernel.
+       kernel.panic_on_oops = 1
+-- ssh
+-- services
+  restart tblink.service (its files changed)
+  reload udev rules for /dev/tbstream*
+  apply the panic sysctls
+-- lights (lights/install.sh)
+  portlights: driver: the port lights are there
+  portlights: /usr/local/bin/portlights: unchanged
+  portlights: /etc/systemd/system/portlights-node.service: unchanged
+  portlights: /etc/default/portlights: kept
+  portlights: portlights-node: running, unchanged
+
+inflight: 8 changes; rerun with --apply

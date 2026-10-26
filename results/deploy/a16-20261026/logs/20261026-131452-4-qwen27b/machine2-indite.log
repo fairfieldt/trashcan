@@ -1,0 +1,6 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 2, peers [(0, []), (3, ["invite.tb1:7072"])], GPUs [0, 1]
+tp-node: session as machine 2, lanes to machines [(0, 1, "tcp"), (3, 1, "stream")]
+link invite (invite.tb1:7072): stream up (1-3.1/trashcan /dev/tbstream1), epoch 12bb128d, 15.6 ms after the link started [13:14:58.327]
+GPU0: rank 4 of 8, 2269.6 MiB allocated
+GPU1: rank 5 of 8, 2269.6 MiB allocated
+tp-node: session ended: the other machine closed the lanes: incite (100.108.0.1:46734) closed the link without saying goodbye

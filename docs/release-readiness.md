@@ -144,6 +144,14 @@ These links describe the archival lab versions; review the cleaned main versions
   historical procedure can need a cable replug. Firmware can hang before chime with self-looping controller cables;
   broken controllers can need a power cycle. Document an operator's safe escalation, not unattended recovery claims.
 
+Status 2026-10-26 (A16, [results/deploy/a16-20261026](../results/deploy/a16-20261026/README.md)): inventory,
+manifest (model sha256 from all six Macs), recipes 1/2/4/6, `deploy/trashcan-cluster` (preflight, run/smoke/up/down,
+generated registry), `nodes/macpro/install.sh` (preview/apply/repeat/uninstall) and the kernel package path
+(`+ps` patch set ids, `kernel/install-kernel.sh`) are on main (1920bf46, e73949c4, 22c78924). Hardware-tested: the
+installer on inflight; smoke, node kill, SIGINT and up/down for 1-, 2- and 6-Mac recipes; 4-Mac only with one TCP
+lane (first request failed 2 of 3). Open: boot the `+ps9c9a5449` package on one Mac (needs approval), the 4-Mac
+recipe on its own cabling, the untested all-at-once link reload, a fresh-node install.
+
 ## P1 — Integrate existing portlights (new grouped To-do)
 
 The implementation is in **`~/dev/homelab/portlights/`**, last relevant commit `eaec80c`, from task **#1127**:

@@ -1,0 +1,12 @@
+93567e57a8fe10b23569b9d9ec38cd005deedf71e29477c421a4b83f418a538b  6975879296  ~/models/gemma-4-12b-qat-gguf/gemma-4-12b-it-qat-q4_0.gguf
+67f1420cf24aa5065089aaed175223f7c245ccfda16111b6c56765afd7280db6  845719296  ~/models/gemma-4-12b-assistant/model.safetensors
+d531d17a3eb1a23793a6ef328f45efd90b2d3f4b8b7081ce6c1cce537955c5d8  10946656  ~/models/qwen3.8-flash-next/G-iq4/G-iq4-00001-of-00006.gguf
+de8328a8d88b3a4b5364e198efe62c3d697ca378bd131d02817b4a77a0eb3b04  528476512  ~/models/qwen3.8-flash-next/G-iq4/G-iq4-00002-of-00006.gguf
+34efd79a80a1ce540a517a5d56171924b66ce1c38b04c904f17ad6d8ef17cf20  54400261312  ~/models/qwen3.8-flash-next/G-iq4/G-iq4-00003-of-00006.gguf
+8ef48b441412023d1576ac12606888bdaef211f5f75840eda8d00d82065deb15  26254316416  ~/models/qwen3.8-flash-next/G-iq4/G-iq4-00004-of-00006.gguf
+ae169ebd9ed97944417dcaa25d13668e2d39ad276bec808028130e2c8bdc9b9c  26029890400  ~/models/qwen3.8-flash-next/G-iq4/G-iq4-00005-of-00006.gguf
+916805561ec70ea6ae6e0ef9f056477f225e355c56e44fcee90e8646376f168e  17809743584  ~/models/qwen3.8-flash-next/G-iq4/G-iq4-00006-of-00006.gguf
+
+real	5m25.092s
+user	0m0.062s
+sys	0m0.024s

@@ -1,0 +1,15 @@
+release 7.3.0-rc7-p2p
+package_version 7.3.0~rc7-1p2p+ps9c9a5449
+patchset engine 9c9a5449
+source linux-7.3-rc7.tar.gz f789fc0d7b3713b6be23284f2a9c35bf41fb86785b24cfcc506c20d8ff712523
+base_config 7.3.0-rc7-p2p.config f32b60c742085128277e7e062910284fe04fe0ae16965f3f8853c63e9a7a3d48
+config config-7.3.0-rc7-p2p f32b60c742085128277e7e062910284fe04fe0ae16965f3f8853c63e9a7a3d48
+patch f8a661ae983ad87f9d8af5e0baa601864bdaa9c94d6cec479b84d2515bcad82b  0001-amdgpu-vfct-exact-match-first.patch
+patch 1d454a2768b3f3080b22ed22f7b9bb574e24f704ceaa640e6e8b8e4cbbc193ec  0003-p2pdma-whitelist-ivy-bridge-ep.patch
+patch 4a067fbf2596c41eae986c569ac6dd5e016cf07f37a450aaf1116d3b6114b5b5  0004-thunderbolt-net-throttling-param.patch
+patch 7ac929ca3fc2bf41d9e2f060802618be40844882dd88a0fc5d35bf15ff53b407  0005-thunderbolt-stream-no-tx-e2e.patch
+patch 6efd668122c4f65bb1c8911573f6d4258f5e24bf2d5d931df720ee09df03d33f  0006-thunderbolt-stream-io-after-close.patch
+patch 53c992748a785c83b928b72b85fcb525a23fd3be633e709e4eadeaf2ee762314  0007-thunderbolt-stream-no-rx-flush-on-close.patch
+package f7a0b39c295aaf8f923d427eda5291a4ce5d7546f20bbae2c6d2f253a93f1d0d  linux-image-7.3.0-rc7-p2p_7.3.0~rc7-1p2p+ps9c9a5449_amd64.deb
+package 9f539e1371ca285128f5bd4a1b43d0465b7ff70b8ff083802d62a16e4bc310c4  linux-headers-7.3.0-rc7-p2p_7.3.0~rc7-1p2p+ps9c9a5449_amd64.deb
+built 2026-10-26T19:59:06Z on aarch64 with x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0

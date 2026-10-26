@@ -1,0 +1,24 @@
+lease: queued incite=273 indite=146 invite=272 enlight=156
+lease: holding incite=273,indite=146,invite=272,enlight=156
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+4-qwen27b ready after 24 s
+smoke request failed: lf.parent.error(
+stopped driver on incite
+stopped machine3 on invite
+stopped machine2 on indite
+stopped machine1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131620-4-qwen27b
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+4-qwen27b ready after 25 s
+smoke: status completed, 1.95 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+stopped driver on incite
+stopped machine3 on invite
+stopped machine2 on indite
+stopped machine1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131655-4-qwen27b

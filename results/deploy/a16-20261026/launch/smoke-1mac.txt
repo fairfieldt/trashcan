@@ -1,0 +1,26 @@
+lease: queued incite=268
+lease: holding incite=268
+=== smoke 1-gemma
+preflight 1-gemma on incite (hashing artifacts not yet hashed on a node; the first time this takes minutes)
+preflight 1-gemma: OK (0 problems, 0 warnings)
+run 20261026-130413-1-gemma: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-130413-1-gemma
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 26 s
+1-gemma ready after 26 s
+smoke: status completed, 0.61 s, usage {'input_tokens': 25, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 27}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 4612 MiB, 0000:06:00.0 4634 MiB
+stopped driver on incite
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-130413-1-gemma
+rc 0
+=== smoke 1-qwen9b
+preflight 1-qwen9b on incite (hashing artifacts not yet hashed on a node; the first time this takes minutes)
+preflight 1-qwen9b: OK (0 problems, 0 warnings)
+run 20261026-130442-1-qwen9b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-130442-1-qwen9b
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 23 s
+1-qwen9b ready after 23 s
+smoke: status completed, 0.56 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 3202 MiB, 0000:06:00.0 3224 MiB
+stopped driver on incite
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-130442-1-qwen9b
+rc 0

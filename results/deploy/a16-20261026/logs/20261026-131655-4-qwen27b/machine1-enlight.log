@@ -1,0 +1,8 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 1, peers [(0, []), (3, ["invite.tb0:7072"])], GPUs [0, 1]
+link incite (10.99.20.17:55314): stream up (1-3.1/trashcan /dev/tbstream1), epoch b8339911, 6.9 ms after the link started [13:17:01.688]
+link invite (invite.tb0:7072): stream up (0-1.1/trashcan /dev/tbstream0), epoch 4d7563e7, 6.8 ms after the link started [13:17:01.690]
+tp-node: session as machine 1, lanes to machines [(0, 1, "stream"), (3, 1, "stream")]
+GPU0: rank 2 of 8, 2269.6 MiB allocated
+GPU1: rank 3 of 8, 2269.6 MiB allocated
+link incite (10.99.20.17:55314): stream down (the other side closed its stream); continuing over TCP [13:17:25.337]
+tp-node: session ended: the other machine closed the lanes: incite (10.99.20.17:55314): 10.99.20.18:7072 -> 10.99.20.17:55314 (read: Connection reset by peer (os error 104))

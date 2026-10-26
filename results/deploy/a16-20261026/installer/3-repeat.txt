@@ -1,0 +1,16 @@
+$ deploy/trashcan-cluster -c cluster.toml install --nodes inflight --apply
+== inflight: apply
+-- tblink
+-- fan
+-- network
+-- power
+-- gpu
+-- logs
+-- panic
+-- ssh
+-- services
+-- lights
+  not in this checkout (lights/install.sh); skipped
+
+inflight: nothing to change
+rc 0

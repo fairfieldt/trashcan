@@ -1,0 +1,16 @@
+d2a74e20ef3891554269848d5fe4214c  /usr/local/sbin/tblink
+9953005e35fbd06a6d52e2aaf942376b  /etc/udev/rules.d/70-tbstream.rules
+c8cf781673dc24451da040938f6dd86c  /etc/modprobe.d/thunderbolt-net.conf
+87ddc99c6443380a0ed6db29984a62e6  /etc/sysctl.d/90-trashcan-panic.conf
+e94adb801dd30107e1540d14ab293283  /etc/sudoers.d/trashcan-amdgpu-dpm
+8bb683e41ee17f25f73a7ac1a07421a2  /usr/local/sbin/emergency-reboot
+active
+active
+backup
+enabled
+files
+groups
+masked
+peer    local_bus  lanes  state  stream
+incite  0          1      up     /dev/tbstream1
+alight  1          2      up     /dev/tbstream0

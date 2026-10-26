@@ -1,0 +1,6 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 1, peers [], GPUs [0, 1]
+tp-node: session as machine 1, lanes to machines [(0, 1, "tcp")]
+link incite (10.99.20.17:58772): stream up (1-3.1/trashcan /dev/tbstream1), epoch 17c0063d, 10.3 ms after the link started [13:05:56.359]
+GPU0: rank 2 of 4 + MTP, 4541.9 MiB allocated
+GPU1: rank 3 of 4 + MTP, 4541.9 MiB allocated
+link incite (10.99.20.17:58772): stream down (the other side closed its stream); continuing over TCP [13:06:59.458]

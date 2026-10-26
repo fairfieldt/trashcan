@@ -1,0 +1,185 @@
+lease: queued incite=272 indite=145 invite=271 enlight=155
+lease: holding incite=272,indite=145,invite=271,enlight=155
+=== 1. smoke
+TCP fallback: machine 0 (incite) - machine 2 (indite) over Ethernet
+preflight 4-qwen27b on incite, enlight, indite, invite (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  machine3  on invite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 3 --peer 1 --peer 2
+  machine2  on indite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 2 --peer 0 --peer 3=invite.tb1:7072
+  machine1  on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 1 --peer 0 --peer 3=invite.tb0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --tp-peer 1=enlight.tb1:7072 --tp-peer 2=indite.tdf.sh:7072
+warning: indite: GPU 0000:02:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: indite: GPU 0000:06:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: invite: GPU 0000:02:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: invite: GPU 0000:06:00.0 DPM level is high (a stopped engine left it; the launcher restores auto when it stops)
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 4-qwen27b: OK (0 problems, 6 warnings)
+run 20261026-131214-4-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131214-4-qwen27b
+start machine3 on invite
+machine3 on invite listening on 7072 after 3 s
+start machine2 on indite
+machine2 on indite listening on 7072 after 2 s
+start machine1 on enlight
+machine1 on enlight listening on 7072 after 2 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 50 s
+4-qwen27b ready after 57 s
+smoke request failed: lf.parent.error(
+        'http', request, response, code, msg, hdrs)
+  File "/usr/lib/python3.13/urllib/request.py", line 533, in error
+    return self._call_chain(*args)
+           ~~~~~~~~~~~~~~~~^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.13/urllib/request.py", line 613, in http_error_default
+    raise HTTPError(req.full_url, code, msg, hdrs, fp)
+urllib.error.HTTPError: HTTP Error 500: Internal Server Error
+stopped driver on incite
+stopped machine3 on invite
+stopped machine2 on indite
+stopped machine1 on enlight
+invite: /sys/class/drm/card0/device/power_dpm_force_performance_level: restored auto
+/sys/class/drm/card1/device/power_dpm_force_performance_level: restored auto
+indite: /sys/class/drm/card0/device/power_dpm_force_performance_level: restored auto
+/sys/class/drm/card1/device/power_dpm_force_performance_level: restored auto
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131214-4-qwen27b
+rc 1
+--- after smoke: engine processes, ports, DPM on incite,enlight,indite,invite
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+=== 2. run, then a node process killed (SIGKILL)
+killing invite's node process at 13:14:00
+TCP fallback: machine 0 (incite) - machine 2 (indite) over Ethernet
+preflight 4-qwen27b on incite, enlight, indite, invite (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  machine3  on invite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 3 --peer 1 --peer 2
+  machine2  on indite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 2 --peer 0 --peer 3=invite.tb1:7072
+  machine1  on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 1 --peer 0 --peer 3=invite.tb0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --tp-peer 1=enlight.tb1:7072 --tp-peer 2=indite.tdf.sh:7072
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 4-qwen27b: OK (0 problems, 2 warnings)
+run 20261026-131325-4-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131325-4-qwen27b
+start machine3 on invite
+machine3 on invite listening on 7072 after 4 s
+start machine2 on indite
+machine2 on indite listening on 7072 after 2 s
+start machine1 on enlight
+machine1 on enlight listening on 7072 after 3 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 24 s
+4-qwen27b ready after 33 s
+running; Ctrl-C stops every process
+machine3 on invite ended:
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 3, peers [(1, []), (2, [])], GPUs [0, 1]
+link enlight (10.99.36.2:53852): stream up (0-1.1/trashcan /dev/tbstream1), epoch 2ad197ef, 5.6 ms after the link started [13:13:35.459]
+tp-node: session as machine 3, lanes to machines [(1, 1, "stream"), (2, 1, "tcp")]
+link indite (10.99.35.18:42936): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2111dfea, 2059.7 ms after the link started [13:13:38.548]
+GPU0: rank 6 of 8, 2269.6 MiB allocated
+GPU1: rank 7 of 8, 2269.6 MiB allocated
+stopping every process
+stopped driver on incite
+stopped machine3 on invite
+stopped machine2 on indite
+stopped machine1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131325-4-qwen27b
+rc 1, launcher ended 12 s after the kill
+--- after node kill: engine processes, ports, DPM on incite,enlight,indite,invite
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+=== 3. run, then SIGINT to the launcher
+SIGINT at 13:14:43
+TCP fallback: machine 0 (incite) - machine 2 (indite) over Ethernet
+preflight 4-qwen27b on incite, enlight, indite, invite (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  machine3  on invite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 3 --peer 1 --peer 2
+  machine2  on indite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 2 --peer 0 --peer 3=invite.tb1:7072
+  machine1  on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 1 --peer 0 --peer 3=invite.tb0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --tp-peer 1=enlight.tb1:7072 --tp-peer 2=indite.tdf.sh:7072
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 4-qwen27b: OK (0 problems, 2 warnings)
+run 20261026-131416-4-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131416-4-qwen27b
+start machine3 on invite
+machine3 on invite listening on 7072 after 2 s
+start machine2 on indite
+machine2 on indite listening on 7072 after 2 s
+start machine1 on enlight
+machine1 on enlight listening on 7072 after 4 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 18 s
+4-qwen27b ready after 26 s
+running; Ctrl-C stops every process
+signal 2: stopping every process
+stopped driver on incite
+stopped machine3 on invite
+stopped machine2 on indite
+stopped machine1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131416-4-qwen27b
+rc 130, stopped 6 s after SIGINT
+--- after SIGINT: engine processes, ports, DPM on incite,enlight,indite,invite
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
+=== 4. up, status, a second up (refused), down, status
+TCP fallback: machine 0 (incite) - machine 2 (indite) over Ethernet
+preflight 4-qwen27b on incite, enlight, indite, invite (model files are hashed once per node and cached; the first time takes minutes)
+  incite (incite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  enlight (enlight): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  indite (indite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  invite (invite): 7.3.0-rc7-p2p-s2, Mesa 25.0.7-2+deb13u1, 0000:02:00.0 113-C3861XA-028 6144 MiB, 0000:06:00.0 113-C3861XB-028 6144 MiB, engine 034690eb0c1c
+  machine3  on invite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 3 --peer 1 --peer 2
+  machine2  on indite: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 2 --peer 0 --peer 3=invite.tb1:7072
+  machine1  on enlight: trashcan qwen-tp-node '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --listen 0.0.0.0:7072 --machine 1 --peer 0 --peer 3=invite.tb0:7072
+  driver    on incite: trashcan serve '~/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf' --port 8000 --tp-peer 1=enlight.tb1:7072 --tp-peer 2=indite.tdf.sh:7072
+warning: link DEGRADED invite:0 - enlight:0: up, 1 lane(s), stream /dev/tbstream1
+warning: link DEGRADED enlight:1 - incite:1: up, 1 lane(s), stream /dev/tbstream1
+preflight 4-qwen27b: OK (0 problems, 2 warnings)
+run 20261026-131452-4-qwen27b: logs on the nodes in ~/trashcan-exp/a16/runs/20261026-131452-4-qwen27b
+start machine3 on invite
+machine3 on invite listening on 7072 after 0 s
+start machine2 on indite
+machine2 on indite listening on 7072 after 0 s
+start machine1 on enlight
+machine1 on enlight listening on 7072 after 1 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 18 s
+4-qwen27b ready after 20 s
+running; `trashcan-cluster down` stops it. Server: 127.0.0.1:8000 on incite (forward it with ssh -L, or add --host to the recipe)
+rc 0
+run 20261026-131452-4-qwen27b (4-qwen27b), started Mon Oct 26 13:14:52 2026
+  machine3  invite     port 7072: running
+  machine2  indite     port 7072: running
+  machine1  enlight    port 7072: running
+  driver    incite     port 8000: running
+PROBLEM: invite: an engine process is running: 226954 gpuq run 271 -- bash -c echo $$ > ~/trashcan-exp/a16/runs/20261026-131452-4-qwen27b/machine3.pid; exec /home/fairfieldt/trashcan-exp/a16/trashcan qwen-tp-node /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf --listen 0.0.0.0:7072 --machine 3 --peer 1 --peer 2
+PROBLEM: invite: port 7072 is in use
+preflight 4-qwen27b: FAILED (16 problems, 2 warnings)
+rc 1
+stopped driver on incite
+stopped machine3 on invite
+stopped machine2 on indite
+stopped machine1 on enlight
+logs in /Users/fairfieldt/dev/claude-work/trashcan-release-20261026/a16/lab-inv/state/logs/20261026-131452-4-qwen27b
+rc 0
+no run recorded
+--- after down: engine processes, ports, DPM on incite,enlight,indite,invite
+incite: engines [] ports [] dpm [auto auto ]
+enlight: engines [] ports [] dpm [auto auto ]
+indite: engines [] ports [] dpm [auto auto ]
+invite: engines [] ports [] dpm [auto auto ]
