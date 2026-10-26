@@ -22,8 +22,11 @@ The failed run ([logs/six-run1/](logs/six-run1/)): invite's stream to enlight re
 100ms" at 13:50:05.732 and fell back to TCP; the stream came back at 13:50:06.78 (epoch 795207f2 → 795207f3), as
 the smoke request ran (ready at about 13:50:09; the request took 2.5 s against 1-1.4 s otherwise). Both Macs of that
 link run 7.3.0-rc7-p2p-s2; inflight's own links stayed on their streams in all four runs. No kernel message on either
-Mac. A greedy, seeded request that answers differently once in four runs points at the link's switch to TCP, which
-is meant to lose and repeat nothing. Follow-up: TCP fallback is to be a failure, and its cause fixed.
+Mac. I attributed the wrong answer to the link's switch to TCP; that was wrong. It was a race in the engine's prefill
+pipeline (a queued chunk overwrote the previous chunk's output before the host read it), which also answered "France"
+on a cold start with no stream failure; the TCP fallback was a separate fault, a link thread stalled for about 1 s
+on SSD page faults against a 100 ms timeout. Both fixed on main (be839c7e, 79ed078f):
+[link-fallback-20261026](../link-fallback-20261026/README.md).
 
 The lights driver for this kernel: `lights/driver.sh build --kernel 7.3.0-rc7-p2p` in kbuild against inflight's
 headers (applesmc.ko sha256 0f3c67f9...), `driver.sh install`: 20 port lights, fancurve and portlights-node active.
