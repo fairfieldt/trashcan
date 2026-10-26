@@ -309,7 +309,9 @@ fn node(idle: &str, idle_power: &str, listen: Option<SocketAddr>) {
         {
             ("conductor", panel.show(&frame))
         } else {
-            let working = active_at.is_some_and(|t| t.elapsed() < Duration::from_secs(10));
+            // 1 s bridges the gaps within a job (sampling is 100 ms; a chain stage waits well under a second for its
+            // neighbour) and keeps the panel in step with the answer: it goes out about a second after the GPUs stop.
+            let working = active_at.is_some_and(|t| t.elapsed() < Duration::from_secs(1));
             let busy = if working || idle == "blinken" {
                 blinken::busyness(&sample).max(0.05)
             } else {

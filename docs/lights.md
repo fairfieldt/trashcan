@@ -70,7 +70,7 @@ sudo lights/driver.sh uninstall           # back to the kernel's own applesmc
 The node shows, in order of priority:
 
 1. frames from a conductor, while they keep coming (0.5 s), if the node listens for them;
-2. blinkenlights while either GPU signals jobs, and for 10 s after;
+2. blinkenlights while either GPU signals jobs, and for 1 s after;
 3. otherwise the SMC's own behaviour: dark, lit for 15 s when the Mac is moved, the power light breathing.
 
 The USB, Thunderbolt and Ethernet rows count in binary while GPU 0, GPU 1 and the network work; the box edges and HDMI
