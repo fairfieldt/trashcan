@@ -2,12 +2,21 @@
 
 The Mac Pros run **Linux 7.3 from kernel.org, 7.3-rc7, built as `7.3.0-rc7-p2p`** with local patches
 (`kernel/patches-7.3/`) and the config in `kernel/configs/`. The engine depends on 0001-0007, and the measurements in
-these docs were taken on a kernel with 0001-0007 only. 0009 and 0010 (the applesmc port lights) are optional and newer;
-the engine does not need them. They have been tested as an applesmc module on 7.3.0-rc7 kernels without them
-(`lights/driver.sh`, [lights.md](lights.md)), which needs no new kernel; to build the tested kernel, remove them from
-your copy of `kernel/patches-7.3/` before building. Debian's own kernels can stay in the GRUB menu as a
-fallback, but without the patches the D700s run at 300/150 MHz and P2P DMA between them is refused
-([hardware.md](hardware.md#clock-bug)).
+these docs were taken on a kernel with 0001-0007 only (built as `7.3.0-rc7-p2p-s2`; same patch code and config).
+0009 and 0010 (the applesmc port lights) are optional and newer; the engine does not need them. They have been
+tested as an applesmc module on 7.3.0-rc7 kernels without them (`lights/driver.sh`, [lights.md](lights.md)), which
+needs no new kernel. `kernel/build-7.3.sh` builds one of two patch sets:
+
+| `KSET` | Patches | Kernel release | Patch set id | Status |
+|---|---|---|---|---|
+| `engine` (default) | 0001, 0003-0007 | `7.3.0-rc7-p2p` | `9c9a5449` | the patches every published measurement ran on |
+| `lights` | 0001, 0003-0007, 0009, 0010 | `7.3.0-rc7-p2p-lights` | `86bb27d4` | not qualified as a kernel |
+
+The id is the first 8 hex digits of the sha256 of `sha256sum` over the set's patch files, in order. It ends the
+package version (`7.3.0~rc7-1p2p+ps9c9a5449`), so `dpkg -l` and `deploy/trashcan-cluster preflight` tell which
+patches a kernel carries; [deploy/manifest.toml](../deploy/manifest.toml) lists the ids and file hashes. Debian's own
+kernels stay in the GRUB menu as a fallback, but without the patches the D700s run at 300/150 MHz and P2P DMA
+between them is refused ([hardware.md](hardware.md#clock-bug)).
 
 7.3 is needed for USB4STREAM busy polling (`busy_poll` in each stream's configfs group).
 
@@ -39,14 +48,16 @@ modules, P2PDMA).
 | `PCI_P2PDMA` | `y` | P2P DMA between the D700s' BARs |
 | `USB4_STREAM` | `m` | USB4STREAM |
 | `DEBUG_INFO_*`, `DEBUG_INFO_BTF` | off | Halves build time |
-| `LOCALVERSION` | `-p2p` | Kernel release `7.3.0-rc7-p2p` |
+| `LOCALVERSION` | `-p2p` (`-p2p-lights` with `KSET=lights`) | Kernel release `7.3.0-rc7-p2p` |
 
 ## Building
 
-`kernel/build-7.3.sh` downloads the kernel.org tarball, checks its sha256, applies `kernel/patches-7.3/`, configures
-and builds Debian packages with `make bindeb-pkg`. Build natively on Debian 13 x86_64 (a Mac Pro takes about 40
+`kernel/build-7.3.sh` downloads the kernel.org tarball, checks its sha256, applies the patch set, configures and
+builds Debian packages with `make bindeb-pkg`. Build natively on Debian 13 x86_64 (a Mac Pro takes about 40
 minutes), or cross-compile on any other Debian 13 host with Debian's `gcc-x86-64-linux-gnu`: the script sets
-`ARCH=x86_64 CROSS_COMPILE=x86_64-linux-gnu-` itself when the host is not x86_64. Build dependencies:
+`ARCH=x86_64 CROSS_COMPILE=x86_64-linux-gnu-` itself when the host is not x86_64. A Debian 13 arm64 VM on a Mac
+(e.g. Lima) works; keep the tree on the VM's own disk, since macOS filesystems are case-insensitive. Build
+dependencies:
 
 ```bash
 sudo apt install build-essential bc bison flex cpio rsync kmod python3 libssl-dev libelf-dev debhelper curl
@@ -56,14 +67,23 @@ sudo apt install gcc-x86-64-linux-gnu      # cross-compiling only
 Then:
 
 ```bash
-REV=1 kernel/build-7.3.sh
+REV=1 kernel/build-7.3.sh                  # KSET=lights for the port-light patches
 ```
 
-It leaves `linux-{image,headers}-7.3.0-rc7-p2p_7.3.0~rc7-${REV}p2p_amd64.deb` and `config-7.3.0-rc7-p2p` in `WORK`
-(default `~/kernel/7.3`). Bump `REV` for every rebuild so `dpkg -i` upgrades in place. `JOBS` overrides `make -j`
-(default `nproc`); `KLOCAL` changes the release suffix, so a test build such as `KLOCAL=-p2p-test` installs beside the
-running kernel. For 7.3 final (or a later 7.3.N), add the tarball's sha256 from kernel.org's signed `sha256sums.asc`
-to the table in `kernel/build-7.3.sh` and set `VER=7.3`.
+It leaves in `WORK` (default `~/kernel/7.3`):
+
+- `linux-image-7.3.0-rc7-p2p_7.3.0~rc7-1p2p+ps9c9a5449_amd64.deb` and the matching `linux-headers-` package,
+- `SHA256SUMS` for the two packages,
+- `kernel-build-7.3.0-rc7-p2p.txt`: release, package version, patch set and the sha256 of the source tarball, base
+  config, resulting config, every patch and both packages, the compiler and the build time,
+- `config-7.3.0-rc7-p2p`.
+
+Keep the three files together; `kernel/install-kernel.sh` checks them. The packages themselves are not
+bit-for-bit reproducible (they carry build times), so compare builds by `kernel-build-*.txt`: source, config and
+patch hashes. Bump `REV` for every rebuild so `dpkg -i` upgrades in place. `JOBS` overrides `make -j` (default
+`nproc`); `KLOCAL` changes the release suffix, so a test build such as `KLOCAL=-p2p-test` installs beside the
+running kernel. For 7.3 final (or a later 7.3.N), add the tarball's sha256 from kernel.org's signed
+`sha256sums.asc` to the table in `kernel/build-7.3.sh` and set `VER=7.3`.
 
 A cross-built headers package has mixed host tools (e.g. objtool for the build host, fixdep for x86-64), so
 out-of-tree modules don't build against it on the Mac Pro; build those on the cross host or build the kernel
@@ -71,38 +91,36 @@ natively.
 
 ## Installing and booting
 
-Copy the image and headers packages to the Mac Pro and install them:
+Copy `WORK` (the two packages, `SHA256SUMS`, `kernel-build-*.txt`) and `kernel/install-kernel.sh` to the node, then:
 
 ```bash
-sudo dpkg --force-unsafe-io -i linux-image-7.3.0-rc7-p2p_*.deb linux-headers-7.3.0-rc7-p2p_*.deb
+sudo ./install-kernel.sh install DIR            # preview: checksums, versions, what it would run
+sudo ./install-kernel.sh install DIR --apply    # install, and boot the new kernel once at the next reboot
+sudo systemctl reboot                           # when nothing runs on the node
+./install-kernel.sh verify DIR                  # read-only: release, package, config, command line, VBIOS, modules
+sudo ./install-kernel.sh pin 7.3.0-rc7-p2p --apply   # make it GRUB's default, once verify passes
 ```
 
-Don't install `linux-libc-dev`; it would replace Debian's userspace kernel headers. `--force-unsafe-io` skips the
-per-file fsyncs, since the original Apple SSDs take seconds per cache flush.
+`nodes/macpro/provision.sh NODE kernel` does the copy and the `install --apply`. `install` refuses packages whose
+checksums do not match. It installs with `dpkg --force-unsafe-io` (the original Apple SSDs take seconds per cache
+flush; don't install `linux-libc-dev`, which would replace Debian's userspace kernel headers) and sets a one-time
+boot (`grub-reboot`), leaving GRUB's default alone: if the new kernel does not come up, a power cycle boots the
+previous default. `pin` writes the default by GRUB entry id to `/etc/default/grub.d/91-trashcan-default.cfg`, so
+installing another kernel never changes what boots. `once RELEASE --apply` boots any installed kernel once (e.g.
+Debian's as a fallback); `list` shows the installed kernels, the default and the next boot. None of them reboots.
 
-The kernel command line needs `radeon.si_support=0 amdgpu.si_support=1` so amdgpu drives the D700s; add it to
-`GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub` (the Mac Pros use `quiet radeon.si_support=0
-amdgpu.si_support=1 panic=10`). Boot the new kernel once, and pin it as the default by entry id once it checks out,
-so installing another kernel never changes what boots and a one-time boot that fails goes back to the default after a
-power cycle:
-
-```bash
-sudo update-grub
-sub=$(sudo grep -o "submenu 'Advanced options[^{]*\$menuentry_id_option '[^']*'" /boot/grub/grub.cfg | sed "s/.*option '//; s/'\$//")
-ent=$(sudo grep -o "menuentry '[^']*, with Linux 7.3.0-rc7-p2p'[^{]*\$menuentry_id_option '[^']*'" /boot/grub/grub.cfg | sed "s/.*option '//; s/'\$//")
-sudo grub-reboot "$sub>$ent" && sudo systemctl reboot
-# after checking it:
-sudo sed -i "s#^GRUB_DEFAULT=.*#GRUB_DEFAULT=\"$sub>$ent\"#" /etc/default/grub && sudo update-grub
-```
+The kernel command line needs `radeon.si_support=0 amdgpu.si_support=1` so amdgpu drives the D700s.
+`nodes/macpro/install.sh` adds them (`/etc/default/grub.d/90-trashcan.cfg`) unless GRUB has them already.
 
 **Unplug Thunderbolt cables that loop the machine's own controllers before rebooting.** With three cables forming a
 triangle between the three controllers, the Mac hangs in firmware before the startup chime, whatever the kernel;
 unplugging them lets it chime and boot at once. One cable between two controllers reboots normally. Linux shuts down
-cleanly either way. After a reboot, the Mac's Thunderbolt links to other Macs need a reset of all of them together
-(`scripts/tb-reset.sh`, [hardware.md](hardware.md#thunderbolt)).
+cleanly either way. After a reboot, the Mac's Thunderbolt links to other Macs can need recovery
+([deploy.md](deploy.md#thunderbolt-link-recovery)).
 
 ## Checking a new kernel
 
+- `kernel/install-kernel.sh verify DIR` passes. It checks the items below that need no GPU work.
 - `uname -r` prints `7.3.0-rc7-p2p` and `/proc/cmdline` has `amdgpu.si_support=1`.
 - Each card has its own VBIOS: `cat /sys/bus/pci/drivers/amdgpu/0000:*/vbios_version` gives `113-C3861XA-028`
   (02:00.0) and `113-C3861XB-028` (06:00.0).
