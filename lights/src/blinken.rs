@@ -98,13 +98,37 @@ impl Activity {
     }
 }
 
-/// Sum of "Last signaled fence" over a GPU's rings.
+/// Sum of "Last signaled fence" over a GPU's compute rings (`--- ring N (comp_...) ---`). trashcan's work is
+/// compute; a desktop drawing on the same GPU signals the gfx and sdma rings, and must not count as work.
 fn read_fences(path: &PathBuf) -> u64 {
-    let text = fs::read_to_string(path).unwrap_or_default();
-    text.lines()
-        .filter_map(|l| l.strip_prefix("Last signaled fence"))
-        .filter_map(|v| u64::from_str_radix(v.trim().trim_start_matches("0x"), 16).ok())
-        .sum()
+    compute_fences(&fs::read_to_string(path).unwrap_or_default())
+}
+
+fn compute_fences(text: &str) -> u64 {
+    let mut compute = false;
+    let mut sum = 0;
+    for l in text.lines() {
+        if let Some(ring) = l.strip_prefix("--- ring ") {
+            compute = ring.contains("(comp_");
+        } else if let Some(v) = l.strip_prefix("Last signaled fence") {
+            if compute {
+                sum += u64::from_str_radix(v.trim().trim_start_matches("0x"), 16).unwrap_or(0);
+            }
+        }
+    }
+    sum
+}
+
+#[cfg(test)]
+mod fence_tests {
+    #[test]
+    fn only_compute_rings_count() {
+        let text = "--- ring 0 (gfx) ---\nLast signaled fence          0x0000009d\nLast emitted                 0x0000009d\n\
+                    Last signaled trailing fence 0x00000000\n--- ring 1 (comp_1.0.0) ---\n\
+                    Last signaled fence          0x00000010\n--- ring 2 (comp_1.1.1) ---\n\
+                    Last signaled fence          0x00000020\n--- ring 3 (sdma0) ---\nLast signaled fence          0x00000500\n";
+        assert_eq!(super::compute_fences(text), 0x30);
+    }
 }
 
 fn read_packets() -> u64 {

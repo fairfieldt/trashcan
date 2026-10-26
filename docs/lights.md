@@ -74,7 +74,8 @@ The node shows, in order of priority:
 3. otherwise the SMC's own behaviour: dark, lit for 15 s when the Mac is moved, the power light breathing.
 
 The USB, Thunderbolt and Ethernet rows count in binary while GPU 0, GPU 1 and the network work; the box edges and HDMI
-flicker faster the busier the GPUs are; the audio jacks alternate. Any GPU work counts, not only trashcan's.
+flicker faster the busier the GPUs are; the audio jacks alternate. Compute work counts, trashcan's or any other job's;
+a desktop drawing on the GPUs does not.
 
 Node options go in `PORTLIGHTS_ARGS` in `/etc/default/portlights` (then `sudo systemctl restart portlights-node`):
 
