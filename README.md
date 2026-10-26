@@ -115,3 +115,9 @@ and compares activations against [`tests/reference-vulkan/`](tests/reference-vul
 - `tools/`: activation comparison, fixture generation and profiling tools
 - `tests/`: tokenizer and chat fixtures, reference activations
 - `bench/xgpu/`: cross-GPU sync and copy microbenchmark
+
+## License
+
+MIT; see [LICENSE](LICENSE). The GLSL shaders adapted from llama.cpp keep its MIT notice in
+[engine/shaders/LICENSE.llama.cpp](engine/shaders/LICENSE.llama.cpp). The kernel patches in `kernel/` modify
+GPL-2.0 Linux sources and are under GPL-2.0.

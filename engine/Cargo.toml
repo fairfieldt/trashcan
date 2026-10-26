@@ -3,6 +3,7 @@ name = "trashcan"
 version = "0.1.0"
 edition = "2021"
 description = "LLM inference on Mac Pro 6,1 FirePro D700s over Vulkan, across GPUs and machines"
+license = "MIT"
 publish = false
 
 [dependencies]
