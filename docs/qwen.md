@@ -151,8 +151,8 @@ state is replicated. Each rank runs the unchanged kernels with the per-rank head
 value head h reads key head h % k_heads, so taking each group of k_heads value heads' share in order keeps that
 mapping locally. Each mixer and FFN ends a segment with its partial output projection in host memory; the host
 adds the ranks' partials and all-reduces the sum with the other machines (`link/`, a lane per cable, each on the
-cable's USB4STREAM when both machines have it and over TCP otherwise: TP4 on two Macs decodes 10.7% faster on the
-stream than over TCP; `Mesh` in
+cable's USB4STREAM when both machines have it, and a stream that fails ends the session; over TCP only where neither
+end has a stream, e.g. tests on one machine: TP4 on two Macs decodes 10.7% faster on the stream than over TCP; `Mesh` in
 `tp.rs`): two all-reduces per layer, 2 × layers + 1 segments per forward. A group is 2, 4 or 8 machines. With four,
 the all-reduce takes two rounds of recursive doubling over a ring of cables (machines 0-1, 0-2, 1-3, 2-3), each round
 sending half the vector to each of a machine's two partners; every machine adds each element in the same pairs, so

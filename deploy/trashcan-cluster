@@ -51,7 +51,6 @@ class Node:
         self.name = d["name"]
         self.ssh = d.get("ssh", self.name)
         self.index = int(d["index"])
-        self.lan = d.get("lan", self.ssh)       # address other nodes use over Ethernet (TCP fallback only)
         self.hostname = d.get("hostname")       # filled from the node when needed
         self.home = None                         # filled by the probe
 
@@ -396,20 +395,17 @@ def plan(cfg, recipe, nodes, a):
             lanes = [addr(n1.hostname, lb, port) for lb, pb, l in sorted(live.get((d.name, n1.name), []), key=lambda t: t[0])
                      if l.get("state") == "up"]
             if not lanes:
-                if not a.tcp_fallback:
-                    die(f"no Thunderbolt link up between {d.name} and {n1.name}; fix the cable or pass --tcp-fallback")
-                lanes = [f"{n1.lan}:{port}"]
-                say(f"TCP fallback: {d.name} -> {n1.name} over {n1.lan}")
+                die(f"no Thunderbolt link up between {d.name} and {n1.name}; fix the cable (see `links`)")
             procs.append(Proc("node1", n1, fmt(r["node"]) + node_extra + ["--listen", f"0.0.0.0:{port}"], port, "tp"))
             driver_args += ["--tp-connect", ",".join(lanes)]
         else:
-            order, cabled = tp4_order(nodes, live, a.tcp_fallback)
+            order, cabled = tp4_order(nodes, live)
             m = {i: n for i, n in enumerate(order)}
 
             def lanes(i, j):
                 ls = [addr(m[j].hostname, lb, port) for lb, pb, l in sorted(live.get((m[i].name, m[j].name), []), key=lambda t: t[0])
                       if l.get("state") == "up"]
-                return ls or [f"{m[j].lan}:{port}"]
+                return ls
             for i in (3, 2, 1):
                 peers = []
                 for j in sorted(cabled[i]):
@@ -429,9 +425,6 @@ def plan(cfg, recipe, nodes, a):
             ls = [l for l in live.get((prev.name, n.name), []) if l[2].get("state") == "up"]
             if ls:
                 addrs.append(addr(n.hostname, sorted(ls, key=lambda t: t[0])[0][0], port))
-            elif a.tcp_fallback:
-                addrs.append(f"{n.lan}:{port}")
-                say(f"TCP fallback: {prev.name} -> {n.name} over {n.lan}")
             else:
                 die(f"no Thunderbolt link up between {prev.name} and {n.name}")
         for i, n in reversed(list(enumerate(order))[1:]):
@@ -444,7 +437,7 @@ def plan(cfg, recipe, nodes, a):
     return procs
 
 
-def tp4_order(nodes, live, tcp_fallback):
+def tp4_order(nodes, live):
     """Machine numbers 0-3 (nodes[0] stays machine 0) so that the cables 0-1, 0-2, 1-3 and 2-3 exist (the ring), or
     all six (full mesh). Returns (order, {machine: set of cabled machines})."""
     def up(x, y):
@@ -462,13 +455,7 @@ def tp4_order(nodes, live, tcp_fallback):
                 order = o
                 break
         if order is None:
-            if not tcp_fallback:
-                die("these four nodes have no Thunderbolt ring 0-1, 0-2, 1-3, 2-3 (see `links`); recable or pass --tcp-fallback")
-            # The order given, Ethernet where a ring cable is missing.
-            order = nodes
-            for i, j in ring:
-                if not up(order[i], order[j]):
-                    say(f"TCP fallback: machine {i} ({order[i].name}) - machine {j} ({order[j].name}) over Ethernet")
+            die("these four nodes have no Thunderbolt ring 0-1, 0-2, 1-3, 2-3 (see `links`); recable")
         pairs = ring
     cabled = {i: set() for i in range(4)}
     for i, j in pairs:
@@ -686,13 +673,15 @@ class Run:
             ssh(p.node, self.command(p))
 
     def state(self, p):
-        """(alive, listening) from the node."""
+        """(alive, listening) from the node; alive is "not known to have ended" (see below)."""
         q = (f"pid=$(cat {self.dir}/{p.role}.pid 2>/dev/null); "
-             f"if [ -n \"$pid\" ] && kill -0 $pid 2>/dev/null; then echo alive; else echo dead; fi; "
+             f"if [ -z \"$pid\" ]; then echo starting; elif kill -0 $pid 2>/dev/null; then echo alive; else echo dead; fi; "
              f"ss -ltnH 'sport = :{p.port}' | grep -q . && echo listening || echo closed")
         r = ssh(p.node, q, check=False, timeout=30)
         out = r.stdout.split()
-        return (out[:1] == ["alive"]), (out[1:2] == ["listening"])
+        # No pid file yet (a node whose disk is slow can take seconds to start the shell that writes it) or no answer
+        # from the node: not ended; the start deadline still applies.
+        return (out[:1] != ["dead"]), (out[1:2] == ["listening"])
 
     def health(self, p):
         q = f"python3 -c \"import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:{p.port}/health', timeout=3).status)\""
@@ -715,8 +704,8 @@ class Run:
                 if self.stopping:
                     return False
                 alive, listening = self.state(p)
-                if p.ssh is not None and p.ssh.poll() is not None and not alive:
-                    alive = False
+                if p.ssh is not None and p.ssh.poll() is not None and not listening:
+                    alive = False  # its ssh command ended (e.g. the scheduler prefix failed) before it was ready
                 if not alive and time.time() - t0 > 3:
                     say(f"{p.role} on {p.node.name} ended before it was ready:\n{self.tail(p)}")
                     return False
@@ -740,6 +729,34 @@ class Run:
         self.stopping = True
         return stop_recorded(self.cfg, {"dir": self.dir, "procs": [p.as_dict(self.dir) for p in self.procs],
                                         "wrap": self.a.wrap})
+
+
+# Engine log lines of a link that is not on its Thunderbolt stream (engine/src/link): a stream that failed (older
+# engines went on over TCP), one that did not come up, or a Thunderbolt link without a stream at one end. Each is a
+# failure of the run.
+LINK_FAILURES = "stream lost|continuing over TCP|the stream was not up|link: no stream|on TCP for"
+
+
+def link_failures(cfg, rec):
+    """The run's link failures, from its logs on the nodes: ["node: line", ...]."""
+    nodes = [cfg.by_name[h] for h in sorted({p["node"] for p in rec["procs"]})]
+    res = parallel(nodes, lambda n: ssh(n, f"grep -hE {shlex.quote(LINK_FAILURES)} {rec['dir']}/*.log 2>/dev/null",
+                                        check=False, timeout=30).stdout)
+    out = []
+    for name, v in res.items():
+        if isinstance(v, Exception):
+            out.append(f"{name}: could not read the logs ({v})")
+            continue
+        out += [f"{name}: {line}" for line in v.splitlines() if line.strip()]
+    return out
+
+
+def report_links(cfg, rec, when):
+    """Say the link failures (with `when`); True when there are none."""
+    bad = link_failures(cfg, rec)
+    for line in bad:
+        say(f"LINK FAILURE ({when}): {line}")
+    return not bad
 
 
 def parse_wraps(items):
@@ -877,12 +894,23 @@ def launch(cfg, a, mode):
         run.stop()
         (cfg.state / "run.json").unlink(missing_ok=True)
         return 1
+    rec = {"dir": run.dir, "procs": [p.as_dict(run.dir) for p in run.procs]}
+    if not report_links(cfg, rec, "start"):
+        say("a link is not on its Thunderbolt stream: stopping every process")
+        run.stop()
+        (cfg.state / "run.json").unlink(missing_ok=True)
+        return 1
     say(f"{a.recipe} ready after {time.time() - t0:.0f} s")
     if mode == "smoke":
         good = smoke_request(run)
+        links_ok = report_links(cfg, rec, "smoke")
         stopped_ok = run.stop()
+        # The stop itself must not look like a failed stream either.
+        links_ok &= report_links(cfg, rec, "stop")
         (cfg.state / "run.json").unlink(missing_ok=True)
-        return 0 if good and stopped_ok else 1
+        if not links_ok:
+            say("smoke: FAIL (a link left its Thunderbolt stream)")
+        return 0 if good and links_ok and stopped_ok else 1
     if mode == "up":
         say(f"running; `trashcan-cluster down` stops it. Server: 127.0.0.1:{cfg.ports['serve']} on {nodes[0].name} "
             "(forward it with ssh -L, or add --host to the recipe)")
@@ -896,6 +924,11 @@ def launch(cfg, a, mode):
                 run.stop()
                 (cfg.state / "run.json").unlink(missing_ok=True)
                 return 1
+        if not report_links(cfg, rec, "running"):
+            say("a link left its Thunderbolt stream: stopping every process")
+            run.stop()
+            (cfg.state / "run.json").unlink(missing_ok=True)
+            return 1
 
 
 def cmd_down(cfg, a):
@@ -922,7 +955,7 @@ def cmd_status(cfg, a):
         r = ssh(cfg.by_name[p["node"]], f"pid=$(cat {p['pidfile']} 2>/dev/null) && kill -0 $pid 2>/dev/null && echo running || echo stopped",
                 check=False)
         say(f"  {p['role']:9s} {p['node']:10s} port {p['port']}: {r.stdout.strip()}")
-    return 0
+    return 0 if report_links(cfg, rec, "status") else 1
 
 
 def cmd_install(cfg, a):
@@ -984,7 +1017,6 @@ def main():
         s.add_argument("recipe")
         s.add_argument("--nodes", help="node names in role order (default: the first ones in the inventory)")
         s.add_argument("--mtp", action=argparse.BooleanOptionalAction, default=None, help="speculative decoding")
-        s.add_argument("--tcp-fallback", action="store_true", help="use Ethernet where a Thunderbolt cable is missing")
         s.add_argument("--wrap", action="append", metavar="NODE=PREFIX",
                        help="run node commands under PREFIX (e.g. a scheduler), * for every node")
         s.add_argument("--env", action="append", metavar="K=V", help="environment for every engine process")

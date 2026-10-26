@@ -526,9 +526,9 @@ trashcan serve ~/models/qwen3.8-flash-next/G-iq4-00001-of-00006.gguf --host 0.0.
 ```
 
 Each `--nodes` address is resolved on the previous machine of the chain (`<peer>.tb<bus>` names from `tblink`; the bus
-numbers depend on the cabling). Each hop is a link (`engine/src/link`): opened over TCP on that cable, it moves to the
-cable's USB4STREAM when both machines have it (tblink makes one on every link) and falls back to TCP if the stream
-fails, without losing or repeating a byte. On the streams the six Macs decode 2.2% and run MTP 2.0% faster than over
+numbers depend on the cabling). Each hop is a link (`engine/src/link`): opened over TCP on that cable, its data goes on
+the cable's USB4STREAM (tblink makes one on every link) once that is up; a stream that fails ends the session with an
+error (`stream lost`) rather than going on over TCP, and the server stops. On the streams the six Macs decode 2.2% and run MTP 2.0% faster than over
 TCP, with identical output.
 A request continues from the live state when everything processed so far (the previous prompt and its reply) is a
 prefix of its prompt, as in a growing conversation; any other prompt starts again at position 0, because the DeltaNet

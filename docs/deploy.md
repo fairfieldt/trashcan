@@ -128,8 +128,11 @@ prefix (a job scheduler, `nice`, ...), `*` for every node.
 When a process ends during a run (a crash, a killed process, a node going down), `run` notices within about 5 s
 and stops the rest; with `up`, `status` shows it and `down` stops the rest. Its neighbours fail their next exchange
 with it: a tensor-parallel exchange that moves no data for 500 ms ends the session (`lanes stalled for 500ms`). Each
-link moves to its cable's USB4STREAM when both ends have it and falls back to TCP otherwise; the logs say which
-(`link ...: stream up`, `lanes to machines [(0, 1, "stream")]`, `continuing over TCP`).
+link runs on its cable's USB4STREAM (`link ...: stream up`); a stream that fails ends the session instead of going on
+over TCP (`link ...: stream lost (...); the link ends`), and so does one that is not up within 20 s. `smoke`, `run`,
+`up` and `status` check the engines' logs and fail on any link off its stream (`LINK FAILURE`), including a
+Thunderbolt link without a stream at one end (`link: no stream`). A link whose other machine stops shows as
+`closed the link`, not as a failure.
 
 ## Thunderbolt link recovery
 
@@ -172,5 +175,5 @@ inspection at the console. After a node reboots, check its links (above) before 
 - Flash-Next's 32K context is the configured cache capacity, not a qualified 32K-token prompt.
 - 3- and 5-Mac configurations, other model files and quantizations, and the `lights` kernel patch set are not
   qualified.
-- `--tcp-fallback` is for checking a setup, not for serving: TP8 with one of its four cables replaced by Ethernet
-  started and stopped cleanly, but its first request failed in two of three runs (`lanes stalled for 500ms`).
+- Every link of a recipe must be a Thunderbolt cable with a stream at both ends; the launcher has no Ethernet
+  fallback (TP8 with one cable replaced by Ethernet failed its first request in two of three runs).
