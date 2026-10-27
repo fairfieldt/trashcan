@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """The pipe web UI on a trashcan server, without a pi process: serves the UI (--root, a copy of piPE's web/ plus
 trashcan-transport.js; deploy.sh lays it out), passes /v1/* through to `trashcan serve` (same origin, so no CORS), and
-runs the tools the page's agent calls: web_search, fetch_page, bash. Python standard library only.
+runs the tools the page's agent calls: web_search, fetch_page, bash, and switches the served model (POST /switch
+{recipe}, GET /switch) with cluster.sh next to this file. Python standard library only.
 
 usage: server.py [--root DIR] [--port 8080] [--host 127.0.0.1] [--upstream http://127.0.0.1:8000] [--workdir DIR]
 Then open http://127.0.0.1:8080/?transport=/trashcan-transport.js&ui=win31&working=open on the machine running it
 (loopback only: bash runs commands on this machine).
 """
-import argparse, html.parser, http.server, json, os, re, socketserver, subprocess, sys, urllib.parse, urllib.request
+import argparse, html.parser, http.server, json, os, re, socketserver, subprocess, sys, threading, time, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.join(HERE, 'web')
@@ -105,6 +106,29 @@ def bash(command, timeout=60, limit=16000):
     return {'output': out or '(no output)', 'exitCode': code}
 
 
+RECIPES = ('6-flashnext', '4-qwen27b')
+switch = {'state': 'idle', 'recipe': None, 'log': '', 'since': 0.0}
+switch_lock = threading.Lock()
+
+
+def run_switch(recipe):
+    p = subprocess.run([os.path.join(HERE, 'cluster.sh'), 'up', recipe], capture_output=True, text=True,
+                       stdin=subprocess.DEVNULL)
+    with switch_lock:
+        switch.update(state='idle' if p.returncode == 0 else 'error', log=(p.stdout + p.stderr)[-3000:])
+
+
+def start_switch(recipe):
+    if recipe not in RECIPES:
+        return 400, {'error': f'unknown recipe {recipe!r}'}
+    with switch_lock:
+        if switch['state'] == 'switching':
+            return 409, {'error': f"already switching to {switch['recipe']}"}
+        switch.update(state='switching', recipe=recipe, log='', since=time.time())
+    threading.Thread(target=run_switch, args=(recipe,), daemon=True).start()
+    return 202, dict(switch)
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     upstream = 'http://127.0.0.1:8000'
 
@@ -152,11 +176,21 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/v1/'):
             return self.proxy('GET')
+        if self.path == '/switch':
+            with switch_lock:
+                return self.send_json(200, dict(switch))
         return super().do_GET()
 
     def do_POST(self):
         if self.path.startswith('/v1/'):
             return self.proxy('POST')
+        if self.path == '/switch':
+            try:
+                req = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)) or b'{}')
+            except ValueError:
+                req = {}
+            code, out = start_switch(str(req.get('recipe', '')))
+            return self.send_json(code, out)
         if self.path == '/tool':
             try:
                 req = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)))

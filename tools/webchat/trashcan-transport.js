@@ -3,7 +3,8 @@
 // Each round is one POST /v1/responses (passed through to `trashcan serve` by server.py); the tools the model calls
 // run through server.py's POST /tool. Responses stream events become pi's stream events (thinking/text/toolcall
 // start, delta, end), and the transcript is kept as pi's unified messages, one session per conversation in
-// localStorage.
+// localStorage. model.set switches what the cluster serves (server.py POST /switch runs cluster.sh): Flash-Next on six
+// Macs or Qwen3.8-27B on four (30 s to 3 min measured).
 
 const INSTRUCTIONS = `You are a helpful assistant running on a cluster of six 2013 Mac Pros (trashcan).
 Tools: web_search, fetch_page, and bash (a shell on the cluster's first Mac).
@@ -33,7 +34,12 @@ const TOOLS = [
 const LEVELS = ['off', 'low', 'medium', 'high'];
 const MAX_ROUNDS = 10;
 const STORE = 'trashcan.sessions';
-const CONTEXT = { 'qwen3.8-flash-next': 32768 };
+// What the cluster can serve: the model id its server reports, the recipe that starts it, the server's context.
+const MODELS = [
+  { id: 'qwen3.8-flash-next', name: 'Qwen3.8-Flash-Next · 6 Macs', recipe: '6-flashnext', context: 32768 },
+  { id: 'qwen3.8-27b', name: 'Qwen3.8-27B · 4 Macs', recipe: '4-qwen27b', context: 8192 },
+];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const now = () => Date.now();
 const uid = () => now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -52,6 +58,7 @@ class TrashcanTransport {
     this.controller = null;
     this.thinking = localStorage.getItem('trashcan.thinking') || 'medium';
     this.modelId = null;
+    this.switching = null;
     this.contextTokens = 0;
   }
 
@@ -59,6 +66,12 @@ class TrashcanTransport {
   emit(name, data) { for (const fn of this.handlers) { try { fn(name, data); } catch (e) { console.error(e); } } }
 
   async ready() {
+    // Opened mid-switch: wait for the model to come up (cluster.sh: 30 s to a few minutes).
+    for (let i = 0; i < 120; i++) {
+      const st = await fetch('/switch').then((x) => x.json()).catch(() => ({}));
+      if (st.state !== 'switching') break;
+      await sleep(2000);
+    }
     const r = await fetch('/v1/models');
     if (!r.ok) throw new Error('no trashcan server behind this page');
     const j = await r.json();
@@ -80,10 +93,11 @@ class TrashcanTransport {
   }
 
   // ------------------------------------------------------------------ state
-  model() {
-    const ctx = CONTEXT[this.modelId] || 8192;
+  model(id = this.modelId) {
+    const known = MODELS.find((m) => m.id === id);
+    const ctx = known ? known.context : 8192;
     return {
-      provider: 'trashcan', id: this.modelId, name: this.modelId, api: 'openai-responses', contextWindow: ctx,
+      provider: 'trashcan', id, name: known ? known.name : id, api: 'openai-responses', contextWindow: ctx,
       maxTokens: Math.min(8192, Math.floor(ctx / 4)), reasoning: true, thinkingLevels: LEVELS, supportsFast: false,
       configured: true, visible: true,
     };
@@ -115,7 +129,38 @@ class TrashcanTransport {
     if (!s) throw rpcError(404, 'no such session');
     return s;
   }
-  idle() { if (this.running) throw rpcError(409, 'a turn is running'); }
+  idle() {
+    if (this.running) throw rpcError(409, 'a turn is running');
+    if (this.switching) throw rpcError(409, `switching to ${this.switching}`);
+  }
+
+  // Ask server.py to start the other model and wait until the trashcan server answers with it.
+  async switchTo(id) {
+    const target = MODELS.find((m) => m.id === id);
+    if (!target) throw rpcError(404, `unknown model ${id}`);
+    if (id === this.modelId) return;
+    this.idle();
+    this.switching = target.name;
+    this.emit('notify', { message: `Starting ${target.name}. This can take a few minutes.`, level: 'info' });
+    try {
+      const r = await fetch('/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recipe: target.recipe }) });
+      if (!r.ok) throw new Error((await r.json()).error || `switch: HTTP ${r.status}`);
+      for (;;) {
+        await sleep(2000);
+        const st = await (await fetch('/switch')).json();
+        if (st.state === 'error') throw new Error(`could not start ${target.name}: ${(st.log || '').trim().split('\n').slice(-2).join(' ')}`);
+        if (st.state === 'idle') break;
+      }
+      const j = await (await fetch('/v1/models')).json();
+      this.modelId = j.data && j.data[0] && j.data[0].id;
+      if (this.modelId !== id) throw new Error(`the server came up with ${this.modelId}, not ${id}`);
+      this.contextTokens = 0;
+      this.emit('notify', { message: `${target.name} is ready`, level: 'info' });
+    } finally {
+      this.switching = null;
+      this.emit('state', this.state());
+    }
+  }
 
   async handle(method, p) {
     switch (method) {
@@ -123,8 +168,10 @@ class TrashcanTransport {
         return { protocol: 1, name: 'trashcan', version: 'trashcan-transport', state: this.state(), commands: [], tools: TOOLS.map((t) => t.name), extensions: 0, local: { available: false }, app: null, capsules: [] };
       case 'state': return this.state();
       case 'messages.list': return { messages: this.current.messages, running: this.running, queued: [] };
-      case 'model.list': return { models: [this.model()], current: `trashcan/${this.modelId}`, selection: null };
-      case 'model.set': this.idle(); return { model: `trashcan/${this.modelId}` };
+      case 'model.list': return { models: MODELS.map((m) => this.model(m.id)), current: `trashcan/${this.modelId}`, selection: null };
+      case 'model.set':
+        await this.switchTo(String(p.model || '').replace(/^trashcan\//, ''));
+        return { model: `trashcan/${this.modelId}` };
       case 'model.select': return { models: p.models || null };
       case 'thinking.set':
         this.idle();
@@ -172,7 +219,7 @@ class TrashcanTransport {
       case 'agent.prompt': {
         const text = String(p.text || '').trim();
         if (!text) throw rpcError(400, 'empty prompt');
-        if (this.running) throw rpcError(409, 'a turn is running');
+        this.idle();
         this.turn(text);
         return { kind: 'prompt', queued: false };
       }
