@@ -8,7 +8,7 @@
 #   cluster.sh status       the launcher's status; cluster.sh current prints the running recipe
 set -uo pipefail
 C=$HOME/trashcan-exp/cluster
-LAUNCH=(python3 "$C/deploy/trashcan-cluster" -c "$C/cluster.toml")
+LAUNCH=(python3 -u "$C/deploy/trashcan-cluster" -c "$C/cluster.toml")
 S=$C/state
 mkdir -p "$S"
 exec 9> "$S/lock"
@@ -63,6 +63,8 @@ while True:
         sys.exit(0)
     if time.time() - start > 600:
         sys.exit('leases not granted after 10 min: ' + ', '.join(waiting))
+    if int(time.time() - start) % 30 < 10:
+        print('waiting for ' + ', '.join(waiting), flush=True)
     time.sleep(10)
 PY
     W=(); for t in $(cat "$S/tickets"); do W+=(--wrap "${t%%=*}=gpuq run ${t#*=} --"); done

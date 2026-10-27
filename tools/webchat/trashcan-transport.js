@@ -66,18 +66,21 @@ class TrashcanTransport {
   emit(name, data) { for (const fn of this.handlers) { try { fn(name, data); } catch (e) { console.error(e); } } }
 
   async ready() {
-    // Opened mid-switch: wait for the model to come up (cluster.sh: 30 s to a few minutes).
-    for (let i = 0; i < 120; i++) {
-      const st = await fetch('/switch').then((x) => x.json()).catch(() => ({}));
-      if (st.state !== 'switching') break;
-      await sleep(2000);
-    }
-    const r = await fetch('/v1/models');
-    if (!r.ok) throw new Error('no trashcan server behind this page');
-    const j = await r.json();
-    this.modelId = j.data && j.data[0] && j.data[0].id;
-    if (!this.modelId) throw new Error('the trashcan server lists no model');
     this.current = this.sessions[0] || this.newSession();
+    // Opened mid-switch: show the model being started and follow the switch in the background.
+    const st = await fetch('/switch').then((x) => x.json()).catch(() => ({}));
+    const target = st.state === 'switching' && MODELS.find((m) => m.recipe === st.recipe);
+    if (target) {
+      this.modelId = target.id;
+      this.switching = target.name;
+      this.followSwitch(target).catch((e) => this.emit('notify', { message: e.message, level: 'error' }));
+    } else {
+      const r = await fetch('/v1/models');
+      if (!r.ok) throw new Error('no trashcan server behind this page');
+      const j = await r.json();
+      this.modelId = j.data && j.data[0] && j.data[0].id;
+      if (!this.modelId) throw new Error('the trashcan server lists no model');
+    }
     queueMicrotask(() => this.emit('state', this.state()));
   }
 
@@ -140,20 +143,47 @@ class TrashcanTransport {
     if (!target) throw rpcError(404, `unknown model ${id}`);
     if (id === this.modelId) return;
     this.idle();
+    const r = await fetch('/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recipe: target.recipe }) });
+    if (!r.ok) throw rpcError(r.status, (await r.json()).error || `switch: HTTP ${r.status}`);
+    const before = this.modelId;
+    this.modelId = id;             // the picker and header show the choice at once; reverted if it fails
     this.switching = target.name;
+    this.emit('state', this.state());
     this.emit('notify', { message: `Starting ${target.name}. This can take a few minutes.`, level: 'info' });
+    this.followSwitch(target).catch((e) => {
+      this.modelId = before;
+      this.emit('state', this.state());
+      this.emit('notify', { message: e.message, level: 'error' });
+    });
+  }
+
+  // Poll server.py's /switch until the target serves, telling the user what it waits for.
+  async followSwitch(target) {
+    const PHASES = [
+      [/^waiting for (.+)$/, (m) => `Waiting for ${m[1]}`],
+      [/^preflight .*: OK/, () => 'Checking the Macs: OK'],
+      [/^start /, () => 'Loading the model'],
+    ];
+    let said = '';
     try {
-      const r = await fetch('/switch', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ recipe: target.recipe }) });
-      if (!r.ok) throw new Error((await r.json()).error || `switch: HTTP ${r.status}`);
       for (;;) {
         await sleep(2000);
         const st = await (await fetch('/switch')).json();
-        if (st.state === 'error') throw new Error(`could not start ${target.name}: ${(st.log || '').trim().split('\n').slice(-2).join(' ')}`);
+        const lines = (st.log || '').trim().split('\n');
+        if (st.state === 'error') throw new Error(`Could not start ${target.name}: ${lines.slice(-2).join(' ')}`);
         if (st.state === 'idle') break;
+        for (let i = lines.length - 1; i >= 0; i--) {
+          const hit = PHASES.find(([re]) => re.test(lines[i]));
+          if (!hit) continue;
+          const msg = hit[1](lines[i].match(hit[0]));
+          if (msg !== said) { said = msg; this.emit('notify', { message: msg, level: 'info' }); }
+          break;
+        }
       }
       const j = await (await fetch('/v1/models')).json();
-      this.modelId = j.data && j.data[0] && j.data[0].id;
-      if (this.modelId !== id) throw new Error(`the server came up with ${this.modelId}, not ${id}`);
+      const id = j.data && j.data[0] && j.data[0].id;
+      if (id !== target.id) throw new Error(`The server came up with ${id}, not ${target.id}`);
+      this.modelId = id;
       this.contextTokens = 0;
       this.emit('notify', { message: `${target.name} is ready`, level: 'info' });
     } finally {
@@ -171,7 +201,7 @@ class TrashcanTransport {
       case 'model.list': return { models: MODELS.map((m) => this.model(m.id)), current: `trashcan/${this.modelId}`, selection: null };
       case 'model.set':
         await this.switchTo(String(p.model || '').replace(/^trashcan\//, ''));
-        return { model: `trashcan/${this.modelId}` };
+        return { model: `trashcan/${this.modelId}` };   // the switch continues in the background
       case 'model.select': return { models: p.models || null };
       case 'thinking.set':
         this.idle();

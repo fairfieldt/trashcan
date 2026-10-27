@@ -112,10 +112,15 @@ switch_lock = threading.Lock()
 
 
 def run_switch(recipe):
-    p = subprocess.run([os.path.join(HERE, 'cluster.sh'), 'up', recipe], capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL)
+    # The log is shared as it grows, so the page can show what the switch is waiting for.
+    p = subprocess.Popen([os.path.join(HERE, 'cluster.sh'), 'up', recipe], stdout=subprocess.PIPE,
+                         stderr=subprocess.STDOUT, text=True, stdin=subprocess.DEVNULL)
+    for line in p.stdout:
+        with switch_lock:
+            switch['log'] = (switch['log'] + line)[-3000:]
+    code = p.wait()
     with switch_lock:
-        switch.update(state='idle' if p.returncode == 0 else 'error', log=(p.stdout + p.stderr)[-3000:])
+        switch['state'] = 'idle' if code == 0 else 'error'
 
 
 def start_switch(recipe):
@@ -134,6 +139,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
     def __init__(self, *a, **k):
         super().__init__(*a, directory=ROOT, **k)
+
+    def end_headers(self):
+        # The page's files change with deploys: browsers revalidate each load (a cheap 304 when unchanged) instead of
+        # keeping a stale stylesheet for days.
+        if self.command == 'GET' and not self.path.startswith('/v1/'):
+            self.send_header('Cache-Control', 'no-cache')
+        super().end_headers()
 
     def log_message(self, fmt, *args):
         sys.stderr.write('%s %s\n' % (self.log_date_time_string(), fmt % args))
