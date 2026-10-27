@@ -52,15 +52,16 @@ driver_mtp = ["--mtp", "{qwen38-27b-mtp}"]
 load_deadline_s = 300
 
 [recipe.6-flashnext]
-description = "Qwen3.8-Flash-Next G-iq4 on six Macs: 12 GPU stages along the cables, head split 12, 32K context"
+description = "Qwen3.8-Flash-Next G-iq4 on six Macs: 12 GPU stages along the cables, head split 12, 112K context (Q8 K/V)"
 macs = 6
 kind = "chain"
 # The measured layout: every Mac holds all six shards (the n-gram table, shard 3, is read from the driver's SSD).
 models = ["flashnext-1", "flashnext-2", "flashnext-3", "flashnext-4", "flashnext-5", "flashnext-6"]
 mtp_models = ["flashnext-mtp"]
 node = ["qwen4", "node", "{flashnext-1}", "--gpus", "0,1"]
-driver = ["serve", "{flashnext-1}", "--port", "{serve_port}", "--head-split", "12", "--context", "32768",
-          "--batch", "128", "--ngram", "disk"]
+# 114,688 positions is the most a Q8 K/V cache leaves room for on the fullest GPU (docs/qwen4.md, 200K context).
+driver = ["serve", "{flashnext-1}", "--port", "{serve_port}", "--head-split", "12", "--context", "114688",
+          "--kv", "q8", "--batch", "128", "--ngram", "disk"]
 driver_mtp = ["--mtp", "{flashnext-mtp}"]
 # Flash-Next's decode graphs rely on RADV's barrier behaviour in this Mesa version (docs/qwen4.md).
 mesa_strict = true

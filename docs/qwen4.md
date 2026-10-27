@@ -332,8 +332,9 @@ kernels read them (4 rows of 512 bytes or 8 of 256 per wave and step) reach 198 
 36 DeltaNet layers of ~110 MB (62 MB DeltaNet, 14 MB mixers, 5 MB router, 29 MB for 11 experts) plus 6.3 MB of
 recurrent state, 12 QSA layers of ~104 MB, the n-gram module (35 MB) and the head (0.8 GB at 10 bits per weight,
 spread over the 12 GPUs). QSA reads at most ~2,051 positions per token (4 MB of f16 K/V, 2.2 MB of Q8) whatever the
-context, plus 128 bytes per position of pooled indexer keys (50 MB over 12 layers at 32K, 315 MB at 200K). Contexts
-past 32K need the S-q2dn build and a Q8 K/V cache ([200K context](#200k-context-on-six-macs)).
+context, plus 128 bytes per position of pooled indexer keys (50 MB over 12 layers at 32K, 315 MB at 200K). With f16
+K/V, G-iq4 fits 32K; with a Q8 K/V cache 114,688 positions (the serving recipe), and longer contexts need the S-q2dn
+build as well ([200K context](#200k-context-on-six-macs)).
 
 **Decode** (one stream; in the pipeline one GPU works at a time, so the ceiling is all bytes at 263 GB/s; at the
 practical 205 GB/s the same bytes take ~27 ms at 512, so with today's ~4.5 ms of host work plain decoding tops out
@@ -522,8 +523,12 @@ trashcan qwen4 node ~/models/qwen3.8-flash-next/G-iq4-00001-of-00006.gguf --list
 # mac0
 trashcan serve ~/models/qwen3.8-flash-next/G-iq4-00001-of-00006.gguf --host 0.0.0.0 --port 8000 \
     --nodes mac1.tb0:7071,mac2.tb1:7071,mac3.tb0:7071,mac4.tb1:7071,mac5.tb0:7071 \
-    --head-split 12 --context 32768 --batch 128 --ngram disk
+    --head-split 12 --context 114688 --kv q8 --batch 128 --ngram disk
 ```
+
+The Q8 K/V cache holds 114,688 positions, the most the fullest GPU has room for (5850 of 5888 MiB allocated). Against
+the f16 cache at 32K it gives the same greedy tokens on the reference prompts, the same prefill, decode within 0.5%,
+and MTP about 2% slower; its quality cost is in [200K context](#200k-context-on-six-macs).
 
 Each `--nodes` address is resolved on the previous machine of the chain (`<peer>.tb<bus>` names from `tblink`; the bus
 numbers depend on the cabling). Each hop is a link (`engine/src/link`): opened over TCP on that cable, its data goes on

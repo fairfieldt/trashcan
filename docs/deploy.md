@@ -10,7 +10,7 @@ covers checking, stopping, restarting and recovering it. Everything runs from yo
 | 1 | `1-qwen9b` | Qwen3.5-9B, tensor parallel over both GPUs (TP2); `--mtp` adds its MTP layer | none |
 | 2 | `2-qwen27b` | Qwen3.8-27B, tensor parallel over four GPUs (TP4) | at least one between the two; one lane per cable, up to three |
 | 4 | `4-qwen27b` | Qwen3.8-27B, tensor parallel over eight GPUs (TP8) | a ring: machines 0-1, 0-2, 1-3, 2-3 (or all six pairs) |
-| 6 | `6-flashnext` | Qwen3.8-Flash-Next G-iq4, 12 GPU stages, 32K context | a chain along the Macs (the measured cabling is a ring, each Mac on bus 0 and bus 1) |
+| 6 | `6-flashnext` | Qwen3.8-Flash-Next G-iq4, 12 GPU stages, 112K context (Q8 K/V cache) | a chain along the Macs (the measured cabling is a ring, each Mac on bus 0 and bus 1) |
 
 The recipes are defined in [deploy/recipes.toml](../deploy/recipes.toml) and their files, kernel and Mesa version
 pinned in [deploy/manifest.toml](../deploy/manifest.toml). The README's rates were measured with these models on
@@ -172,7 +172,7 @@ inspection at the console. After a node reboots, check its links (above) before 
 - Flash-Next's decode relies on RADV's barrier behaviour in Mesa 25.0.7 ([qwen4.md](qwen4.md)); after a Mesa
   upgrade `preflight` refuses it until the ISA audit is rerun and the manifest updated.
 - amdgpu resets a GPU when one job runs longer than 2 s; the engine keeps its submissions well under that.
-- Flash-Next's 32K context is the configured cache capacity, not a qualified 32K-token prompt.
+- Flash-Next's 112K context is the configured cache capacity, not a qualified 112K-token prompt.
 - 3- and 5-Mac configurations, other model files and quantizations, and the `lights` kernel patch set are not
   qualified.
 - Every link of a recipe must be a Thunderbolt cable with a stream at both ends; the launcher has no Ethernet
