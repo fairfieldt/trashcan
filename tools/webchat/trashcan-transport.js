@@ -42,6 +42,18 @@ const MODELS = [
 ];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// iOS suspends a page in the background and its connections drop ("Load failed"). server.py keeps each request
+// running and its output, so after a drop: wait until the page is visible again, then reconnect where it stopped.
+const RETRIES = 30;
+const isDrop = (e) => e && e.name !== 'AbortError' && (e.name === 'TypeError' || e.dropped);
+function visible() {
+  if (typeof document === 'undefined' || document.visibilityState !== 'hidden') return Promise.resolve();
+  return new Promise((resolve) => {
+    const on = () => { if (document.visibilityState !== 'hidden') { document.removeEventListener('visibilitychange', on); resolve(); } };
+    document.addEventListener('visibilitychange', on);
+  });
+}
+
 const now = () => Date.now();
 const uid = () => now().toString(36) + Math.random().toString(36).slice(2, 8);
 const rpcError = (code, message) => Object.assign(new Error(message), { code });
@@ -338,8 +350,12 @@ class TrashcanTransport {
       reasoning: this.thinking === 'off' ? { effort: 'none' } : { effort: this.thinking, summary: 'auto' },
       max_output_tokens: this.model().maxTokens,
     };
-    const r = await fetch('/v1/responses', {
-      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: this.controller.signal,
+    const sid = `${uid()}${uid()}`;
+    const signal = this.controller.signal;
+    const onStop = () => { fetch(`/stream/${sid}/cancel`, { method: 'POST' }).catch(() => {}); };
+    signal.addEventListener('abort', onStop, { once: true });
+    let r = await fetch('/v1/responses', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-stream-id': sid }, body: JSON.stringify(body), signal,
     });
     if (!r.ok || !r.body) {
       let msg = `trashcan answered HTTP ${r.status}`;
@@ -362,11 +378,32 @@ class TrashcanTransport {
     };
     const close = (b) => { if (b && !b.closed) { b.closed = true; this.emit('stream', { type: `${b.kind}_end`, index: b.index, block: { ...b.block } }); } };
     let final = null;
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let buf = '';
+    let reader = r.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '', got = 0, retries = 0;
     for (;;) {
-      const { value, done } = await reader.read();
+      let value, done;
+      try {
+        ({ value, done } = await reader.read());
+      } catch (e) {
+        if (!isDrop(e) || ++retries > RETRIES) throw e;
+        // Dropped mid-answer: resume at the byte where it stopped.
+        for (;;) {
+          await visible();
+          await sleep(retries > 1 ? 1500 : 300);
+          try {
+            r = await fetch(`/stream/${sid}?from=${got}`, { signal });
+            if (!r.ok || !r.body) throw new Error(`the answer could not be resumed (HTTP ${r.status})`);
+            reader = r.body.getReader();
+            break;
+          } catch (e2) {
+            if (!isDrop(e2) || ++retries > RETRIES) throw e2;
+          }
+        }
+        continue;
+      }
       if (done) break;
+      got += value.length;
       buf += dec.decode(value, { stream: true });
       let k;
       while ((k = buf.indexOf('\n\n')) >= 0) {
@@ -414,6 +451,7 @@ class TrashcanTransport {
         }
       }
     }
+    signal.removeEventListener('abort', onStop);
     if (!final) throw new Error('the response ended early');
     for (const b of blocks.values()) close(b);
     const u = final.usage || {};
@@ -437,11 +475,23 @@ class TrashcanTransport {
 
   async runTool(call) {
     try {
-      const r = await fetch('/tool', {
-        method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: call.name, arguments: call.arguments || {} }), signal: this.controller.signal,
-      });
-      const out = await r.json();
+      // The call id makes a retry after a drop return the same run's result instead of running it again.
+      let out;
+      const key = `${uid()}-${call.id}`;   // unique per call, kept across this call's retries
+      for (let tries = 0; ; tries++) {
+        try {
+          const r = await fetch('/tool', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ call_id: key, name: call.name, arguments: call.arguments || {} }), signal: this.controller.signal,
+          });
+          out = await r.json();
+          break;
+        } catch (e) {
+          if (!isDrop(e) || tries >= RETRIES) throw e;
+          await visible();
+          await sleep(1000);
+        }
+      }
       if (out.error) return { text: out.error, isError: true };
       if (call.name === 'web_search') {
         const rs = out.results || [];

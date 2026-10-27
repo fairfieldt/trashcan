@@ -134,6 +134,93 @@ def start_switch(recipe):
     return 202, dict(switch)
 
 
+# A phone that leaves the browser drops its connection mid-answer. So the page names each model request
+# (X-Stream-Id): this server runs it to completion whatever the page does, keeps what arrived, and the page reconnects
+# with GET /stream/ID?from=BYTES to continue where it stopped. POST /stream/ID/cancel is the page's Stop. Tool calls
+# are kept by call id the same way, so a retried call never runs twice (bash may have side effects).
+class Stream:
+    def __init__(self):
+        self.data = bytearray()
+        self.status, self.ctype = 200, 'text/event-stream'
+        self.done = False
+        self.cond = threading.Condition()
+        self.resp = None
+        self.finished_at = None
+
+    def run(self, upstream, path, body):
+        try:
+            req = urllib.request.Request(upstream + path, data=body, method='POST',
+                                         headers={'Content-Type': 'application/json'})
+            try:
+                r = urllib.request.urlopen(req, timeout=3600)
+            except urllib.error.HTTPError as e:
+                r = e
+            with self.cond:
+                self.resp = r
+                self.status = getattr(r, 'status', None) or r.code
+                self.ctype = r.headers.get('Content-Type', 'application/json')
+                self.cond.notify_all()
+            while True:
+                chunk = r.read1(65536) if hasattr(r, 'read1') else r.read(65536)
+                if not chunk:
+                    break
+                with self.cond:
+                    self.data += chunk
+                    self.cond.notify_all()
+        except Exception as e:  # unreachable server, or cancelled
+            with self.cond:
+                if not self.data:
+                    self.status, self.ctype = 502, 'application/json'
+                    self.data += json.dumps({'error': {'message': f'trashcan server: {e}'}}).encode()
+        finally:
+            with self.cond:
+                self.done, self.finished_at = True, time.time()
+                self.cond.notify_all()
+
+    def cancel(self):
+        with self.cond:
+            r = self.resp
+        if r is not None:
+            try:
+                r.close()  # the engine stops at its next write
+            except Exception:
+                pass
+
+
+streams, tool_calls = {}, {}
+registry_lock = threading.Lock()
+
+
+def sweep():
+    # Finished streams and tool results are kept for 15 minutes, for a page that comes back late.
+    cutoff = time.time() - 900
+    for table in (streams, tool_calls):
+        for k in [k for k, v in table.items() if v.finished_at and v.finished_at < cutoff]:
+            del table[k]
+
+
+class ToolCall:
+    def __init__(self, name, args):
+        self.out, self.finished_at = None, None
+        self.event = threading.Event()
+        threading.Thread(target=self.run, args=(name, args), daemon=True).start()
+
+    def run(self, name, args):
+        try:
+            if name == 'web_search':
+                out = {'results': web_search(str(args.get('query', '')), int(args.get('num_results') or 6))}
+            elif name == 'fetch_page':
+                out = fetch_page(str(args.get('url', '')))
+            elif name == 'bash':
+                out = bash(str(args.get('command', '')))
+            else:
+                out = {'error': f'unknown tool {name!r}'}
+        except Exception as e:  # the model sees the error and can try something else
+            out = {'error': str(e)}
+        self.out, self.finished_at = out, time.time()
+        self.event.set()
+
+
 class Handler(http.server.SimpleHTTPRequestHandler):
     upstream = 'http://127.0.0.1:8000'
 
@@ -185,7 +272,39 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         finally:
             r.close()
 
+    def send_stream(self, st, start):
+        with st.cond:
+            while st.resp is None and not st.done:
+                st.cond.wait()
+            status, ctype = st.status, st.ctype
+        self.send_response(status)
+        self.send_header('Content-Type', ctype)
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        pos = start
+        try:
+            while True:
+                with st.cond:
+                    while len(st.data) <= pos and not st.done:
+                        st.cond.wait(15)
+                    chunk, done = bytes(st.data[pos:]), st.done
+                if chunk:
+                    self.wfile.write(chunk)
+                    self.wfile.flush()
+                    pos += len(chunk)
+                elif done:
+                    break
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # the page went away; the request runs on and the page can reconnect
+
     def do_GET(self):
+        m = re.fullmatch(r'/stream/([A-Za-z0-9_-]{8,64})\?from=(\d+)', self.path)
+        if m:
+            with registry_lock:
+                st = streams.get(m.group(1))
+            if st is None:
+                return self.send_json(404, {'error': {'message': 'unknown or expired stream'}})
+            return self.send_stream(st, int(m.group(2)))
         if self.path == '/':  # the chat: the pipe UI on this server's transport, pipe 3.1 look, working sections open
             self.send_response(302)
             self.send_header('Location', '/?transport=/trashcan-transport.js&ui=win31&working=open')
@@ -199,6 +318,23 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return super().do_GET()
 
     def do_POST(self):
+        sid = self.headers.get('X-Stream-Id', '')
+        if self.path == '/v1/responses' and re.fullmatch(r'[A-Za-z0-9_-]{8,64}', sid):
+            body = self.rfile.read(int(self.headers.get('Content-Length') or 0))
+            with registry_lock:
+                sweep()
+                st = streams.get(sid)
+                if st is None:
+                    st = streams[sid] = Stream()
+                    threading.Thread(target=st.run, args=(self.upstream, self.path, body), daemon=True).start()
+            return self.send_stream(st, 0)
+        m = re.fullmatch(r'/stream/([A-Za-z0-9_-]{8,64})/cancel', self.path)
+        if m:
+            with registry_lock:
+                st = streams.get(m.group(1))
+            if st is not None:
+                st.cancel()
+            return self.send_json(200, {'cancelled': st is not None})
         if self.path.startswith('/v1/'):
             return self.proxy('POST')
         if self.path == '/switch':
@@ -211,18 +347,18 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == '/tool':
             try:
                 req = json.loads(self.rfile.read(int(self.headers.get('Content-Length') or 0)))
-                args = req.get('arguments') or {}
-                if req.get('name') == 'web_search':
-                    out = {'results': web_search(str(args.get('query', '')), int(args.get('num_results') or 6))}
-                elif req.get('name') == 'fetch_page':
-                    out = fetch_page(str(args.get('url', '')))
-                elif req.get('name') == 'bash':
-                    out = bash(str(args.get('command', '')))
-                else:
-                    out = {'error': f"unknown tool {req.get('name')!r}"}
-            except Exception as e:  # the model sees the error and can try something else
-                out = {'error': str(e)}
-            return self.send_json(200, out)
+            except ValueError:
+                return self.send_json(400, {'error': 'invalid JSON'})
+            key = str(req.get('call_id') or '') or None
+            with registry_lock:
+                sweep()
+                call = tool_calls.get(key) if key else None
+                if call is None:
+                    call = ToolCall(str(req.get('name', '')), req.get('arguments') or {})
+                    if key:
+                        tool_calls[key] = call
+            call.event.wait()
+            return self.send_json(200, call.out)
         self.send_error(404)
 
 
