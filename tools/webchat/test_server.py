@@ -59,7 +59,7 @@ def split(text):
     return out + ([cur] if cur else [])
 
 
-def response(*parts, model='qwen3.8-27b', status='completed', usage=(100, 20)):
+def response(*parts, model='qwen3.8-27b', status='completed', usage=(100, 20), cached=0):
     """The event list of one streamed response made of (events, item) parts."""
     evs = [ev_created(model)]
     items = []
@@ -68,7 +68,7 @@ def response(*parts, model='qwen3.8-27b', status='completed', usage=(100, 20)):
         items.append(item)
     final = {'id': 'resp_1', 'model': model, 'status': status, 'output': items,
              'usage': {'input_tokens': usage[0], 'output_tokens': usage[1], 'total_tokens': sum(usage),
-                       'input_tokens_details': {'cached_tokens': 0}}}
+                       'input_tokens_details': {'cached_tokens': cached}}}
     evs.append(('response.completed' if status == 'completed' else 'response.incomplete', {'response': final}))
     return evs
 
@@ -241,6 +241,21 @@ class TurnTests(Base):
         self.assertEqual([st['result']['results'][0]['title'] for st in t['steps'][1:3]], ['About a', 'About b'])
         outs = [i for i in self.fake.requests[1]['input'] if i.get('type') == 'function_call_output']
         self.assertEqual([o['call_id'] for o in outs], ['c1', 'c2'])
+
+    def test_reply_stats(self):
+        # Totals over both rounds of a reply; the decode rate counts the tokens after each round's first one.
+        self.fake.script.append(response(reasoning('need a shell'), call('bash', {'command': 'true'}, 'c1'),
+                                         usage=(100, 20)))
+        self.fake.script.append(response(message('Done.'), usage=(150, 30), cached=100))
+        s, t = self.turn('run it')
+        st = t['stats']
+        self.assertEqual((st['input'], st['output'], st['cached'], st['rounds']), (250, 50, 100, 2))
+        self.assertEqual(st['gen_tokens'], 19 + 29)
+        self.assertGreater(st['gen_s'], 0)
+        self.assertIsNotNone(st['tps'])
+        # kept with the conversation
+        hub2 = W.Hub(self.data, self.fake.url, HERE)
+        self.assertEqual(hub2.sessions[s.id].turns[0]['stats']['cached'], 100)
 
     def test_bash_error_exit_code(self):
         self.fake.script.append(response(call('bash', {'command': 'echo oops; exit 3'}, 'c1')))

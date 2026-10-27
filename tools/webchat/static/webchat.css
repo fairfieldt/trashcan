@@ -148,3 +148,7 @@ html[data-skin="win31"] .dlg-head h3 { margin-left: 0; }
   html[data-skin="win31"] .composer { margin: 8px 3px 3px; padding: 7px 6px 6px; width: calc(100% - 6px); justify-self: stretch; }
   html[data-skin="win31"] .composer textarea { font-size: 16px; }
 }
+
+/* Speed and tokens under a reply. */
+.turn-stats { margin: 4px 2px 10px; font-family: var(--font-mono); font-size: var(--fs-0, 11px); color: var(--text-2); letter-spacing: .02em; }
+.turn-stats.live { opacity: .8; }

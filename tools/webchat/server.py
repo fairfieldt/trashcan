@@ -631,6 +631,7 @@ class Hub:
             if task.cancel.is_set():
                 raise Stopped()
             try:
+                t0 = time.monotonic()
                 conn.request('POST', '/v1/responses', body, {'Content-Type': 'application/json'})
                 r = conn.getresponse()
             except OSError:
@@ -647,7 +648,7 @@ class Hub:
                 if m:
                     raise TurnError('context', self.full_message(turn, int(m.group(2))))
                 raise TurnError('upstream', f'The model server refused the request: {msg}')
-            return self.read_events(s, turn, task, r)
+            return self.read_events(s, turn, task, r, t0)
         finally:
             with task.lock:
                 task.sock = None
@@ -660,10 +661,22 @@ class Hub:
         name = m['name'] if m else (mid or 'this model')
         return f'This conversation is too long for {name} ({ctx:,} tokens). Start a new conversation.'
 
-    def read_events(self, s, turn, task, r):
+    def read_events(self, s, turn, task, r, t0):
         keys = {}          # (item id, kind) -> step index
         final, failed = None, None
         data = []
+        # Speed: the first streamed token ends the prefill; tokens after it over the time they took is the decode
+        # rate. Streamed text deltas stand in for tokens while the round runs; the engine's usage replaces them at the end.
+        clock = {'first': None, 'n': 0, 'shown': 0.0}
+
+        def live_stats():
+            now = time.monotonic()
+            # A rate from the first few tokens is noise (two can arrive together): wait for 5 and half a second.
+            if clock['first'] is None or clock['n'] < 5 or now - clock['first'] < 0.5 or now - clock['shown'] < 1.0:
+                return
+            clock['shown'] = now
+            s.emit('stats', turn=turn['id'], stats=turn.get('stats'),
+                   live={'tps': round((clock['n'] - 1) / max(now - clock['first'], 1e-3), 1), 'output': clock['n']})
 
         def step(key, kind):
             i = keys.get(key)
@@ -677,8 +690,12 @@ class Hub:
         def delta(i, text):
             if text:
                 with self.cond:
+                    if clock['first'] is None:
+                        clock['first'] = time.monotonic()
+                    clock['n'] += 1
                     turn['steps'][i]['text'] += text
                     s.emit('delta', turn=turn['id'], index=i, text=text)
+                    live_stats()
 
         def finish(i):
             with self.cond:
@@ -728,8 +745,15 @@ class Hub:
                                               'result': None, 'round': turn.get('rounds', 0)})
                         i = len(turn['steps']) - 1
                         s.emit('step', turn=turn['id'], index=i, step=turn['steps'][i])
+                elif t == 'response.function_call_arguments.delta':
+                    with self.cond:
+                        if clock['first'] is None:
+                            clock['first'] = time.monotonic()
+                        clock['n'] += 1
+                        live_stats()
                 elif t in ('response.completed', 'response.incomplete'):
                     final = ev.get('response') or {}
+                    t_end = time.monotonic()
                 elif t == 'response.failed':
                     failed = ((ev.get('response') or {}).get('error') or {}).get('message') or 'generation failed'
         except OSError:
@@ -754,6 +778,20 @@ class Hub:
             turn['rounds'] = turn.get('rounds', 0) + 1
             turn['usage'] = {'input': u.get('input_tokens', 0), 'output': u.get('output_tokens', 0),
                              'cached': (u.get('input_tokens_details') or {}).get('cached_tokens', 0)}
+            # The reply's totals over all its rounds; each round sends the whole conversation, so 'input' counts
+            # every prompt token processed and 'cached' the ones the engine reused.
+            st = turn.get('stats') or {'input': 0, 'output': 0, 'cached': 0, 'gen_tokens': 0, 'gen_s': 0.0,
+                                       'prefill_s': 0.0, 'rounds': 0}
+            st['input'] += turn['usage']['input']
+            st['output'] += turn['usage']['output']
+            st['cached'] += turn['usage']['cached']
+            st['rounds'] += 1
+            if clock['first'] is not None and turn['usage']['output'] > 1:
+                st['gen_tokens'] += turn['usage']['output'] - 1
+                st['gen_s'] += t_end - clock['first']
+                st['prefill_s'] += clock['first'] - t0
+            st['tps'] = round(st['gen_tokens'] / st['gen_s'], 1) if st['gen_s'] > 0 else None
+            turn['stats'] = st
             # Text written in a round that goes on to call tools is narration of the work, not the answer.
             if calls:
                 for st in turn['steps']:

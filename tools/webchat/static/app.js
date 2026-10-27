@@ -220,6 +220,31 @@ function stepSummary(step, kind) {
   return oneLine(step.text);
 }
 
+// Speed and tokens for a reply: decode rate, prompt tokens processed over all its rounds, tokens generated, and how
+// many prompt tokens the engine reused from its cache. While it streams, an estimate from the streamed tokens.
+function statsText(turn) {
+  const n = (v) => Number(v || 0).toLocaleString();
+  if (turn.status === 'running' && turn.live) {
+    return `${turn.live.tps.toFixed(1)} tok/s · ${n(turn.live.output)} out so far`;
+  }
+  const st = turn.stats;
+  if (!st) return '';
+  const parts = [];
+  if (st.tps) parts.push(`${st.tps.toFixed(1)} tok/s`);
+  parts.push(`${n(st.input)} in`, `${n(st.output)} out`);
+  if (st.input) parts.push(`${Math.round((100 * st.cached) / st.input)}% cached`);
+  return parts.join(' · ');
+}
+
+function statsEl(turn) {
+  const text = statsText(turn);
+  const d = el('div', 'turn-stats mono');
+  d.textContent = text;
+  if (turn.status === 'running') d.classList.add('live');
+  d.hidden = !text;
+  return d;
+}
+
 function renderTurn(turn) {
   let node = turnEl(turn.id);
   if (!node) {
@@ -275,6 +300,7 @@ function renderTurn(turn) {
     parts.push(m);
   }
 
+  if (turn.stats || turn.live) parts.push(statsEl(turn));
   if (turn.status === 'stopped') parts.push(el('div', 'msg-system', 'Stopped.'));
   if (turn.error) {
     const warn = turn.error.kind === 'length';
@@ -439,6 +465,20 @@ function connect(sid) {
     state.current.seq = d.seq;
     t.steps[d.index].text += d.text;
     markDirty(t, d.index);
+  });
+  on('stats', (d) => {
+    const t = state.current && state.current.turns.find((x) => x.id === d.turn);
+    if (!t) return;
+    state.current.seq = d.seq;
+    t.live = d.live;
+    if (d.stats) t.stats = d.stats;
+    const node = turnEl(t.id);
+    if (!node) return;
+    let line = node.querySelector('.turn-stats');
+    if (!line) { line = statsEl(t); node.appendChild(line); return; }
+    line.textContent = statsText(t);
+    line.hidden = !line.textContent;
+    line.classList.toggle('live', t.status === 'running');
   });
   on('status', (st) => applyStatus(st));
   on('ping', () => {});
