@@ -5,8 +5,8 @@ runs the tools the page's agent calls: web_search, fetch_page, bash, and switche
 {recipe}, GET /switch) with cluster.sh next to this file. Python standard library only.
 
 usage: server.py [--root DIR] [--port 8080] [--host 127.0.0.1] [--upstream http://127.0.0.1:8000] [--workdir DIR]
-Then open http://127.0.0.1:8080/?transport=/trashcan-transport.js&ui=win31&working=open on the machine running it
-(loopback only: bash runs commands on this machine).
+Then open http://localhost:8080 on the machine running it (it redirects to the UI with the transport; loopback only:
+bash runs commands on this machine).
 """
 import argparse, html.parser, http.server, json, os, re, socketserver, subprocess, sys, threading, time, urllib.parse, urllib.request
 
@@ -174,6 +174,11 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             r.close()
 
     def do_GET(self):
+        if self.path == '/':  # the chat: the pipe UI on this server's transport, pipe 3.1 look, working sections open
+            self.send_response(302)
+            self.send_header('Location', '/?transport=/trashcan-transport.js&ui=win31&working=open')
+            self.end_headers()
+            return
         if self.path.startswith('/v1/'):
             return self.proxy('GET')
         if self.path == '/switch':

@@ -7,7 +7,7 @@
 #
 #   tools/webchat/deploy.sh HOST [PIPE_WEB]      default PIPE_WEB: ~/dev/piPE/web
 #
-# Then, on HOST: http://127.0.0.1:8080/?transport=/trashcan-transport.js&ui=win31&working=open
+# Then, on HOST: http://localhost:8080
 set -euo pipefail
 host=${1:?usage: $0 HOST [PIPE_WEB]}
 web=${2:-$HOME/dev/piPE/web}
@@ -23,4 +23,4 @@ ssh "$host" 'set -e; cd ~/trashcan-exp/webchat
   pkill -f "^python3 .*server[.]py --port 8080" || true; rm -f index.html app.js markdown.js style.css; sleep 0.5
   setsid nohup python3 ~/trashcan-exp/webchat/server.py --port 8080 > server.log 2>&1 < /dev/null &
   sleep 1; cat server.log'
-echo "open on $host: http://127.0.0.1:8080/?transport=/trashcan-transport.js&ui=win31&working=open"
+echo "open on $host: http://localhost:8080"
