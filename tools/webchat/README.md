@@ -112,9 +112,10 @@ ssh -N -L 18090:127.0.0.1:8090 incite                     # then http://localhos
 python3 tools/webchat/test_server.py -v                   # unit tests, locally
 ```
 
-`deploy.sh` copies the files, stops the instance it started earlier on that port (pid file `server-PORT.pid`),
-refuses to start if anything else listens there, starts `server.py --port PORT --data DIR/sessions` with `setsid
-nohup`, and checks `/api/state`. Logs: `~/DIR/server-PORT.log`. Other options: `--upstream URL` (default
+`deploy.sh` copies the files, stops its earlier instance on that port, refuses to start if anything else listens
+there, installs and starts the systemd user service `webchat-PORT` (`server.py --port PORT --data DIR/sessions`,
+started at boot through linger, restarted when it exits), and checks `/api/state`. Logs: `journalctl --user -u
+webchat-PORT`. Other server options: `--upstream URL` (default
 `http://127.0.0.1:8000`), `--workdir DIR` (where bash runs, default `~`), `--cluster PATH` (tests use a fake).
 Bash runs as the server's user on incite with a 60 s limit; the server binds to loopback, and nginx admits tailnet
 addresses only.
