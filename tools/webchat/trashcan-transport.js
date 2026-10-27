@@ -37,7 +37,8 @@ const STORE = 'trashcan.sessions';
 // What the cluster can serve: the model id its server reports, the recipe that starts it, the server's context.
 const MODELS = [
   { id: 'qwen3.8-flash-next', name: 'Qwen3.8-Flash-Next · 6 Macs', recipe: '6-flashnext', context: 32768 },
-  { id: 'qwen3.8-27b', name: 'Qwen3.8-27B · 4 Macs', recipe: '4-qwen27b', context: 8192 },
+  // 204,800: what fits the D700s' VRAM at 17 KB of KV cache per token per GPU (cluster.sh's recipe passes --context).
+  { id: 'qwen3.8-27b', name: 'Qwen3.8-27B · 4 Macs', recipe: '4-qwen27b', context: 204800 },
 ];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -422,7 +423,15 @@ class TrashcanTransport {
     msg.usage.totalTokens = u.total_tokens || 0;
     this.contextTokens = msg.usage.totalTokens;
     if (msg.content.some((b) => b.type === 'toolCall')) msg.stopReason = 'toolUse';
-    else if (final.status === 'incomplete') msg.stopReason = 'length';
+    else if (final.status === 'incomplete') {
+      // The server ends a response "incomplete" when the output budget or the remaining context runs out; with the
+      // context full nothing more can be said in this conversation, which must not look like a silent stop.
+      const ctx = this.model().contextWindow;
+      if (msg.usage.input + msg.usage.output >= ctx - 64 || !msg.content.length) {
+        throw new Error(`This conversation is too long for ${this.model().name} (${ctx.toLocaleString()} tokens of context). Start a new chat.`);
+      }
+      msg.stopReason = 'length';
+    }
     return msg;
   }
 

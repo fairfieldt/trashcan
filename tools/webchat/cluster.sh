@@ -69,6 +69,15 @@ while True:
 PY
     W=(); for t in $(cat "$S/tickets"); do W+=(--wrap "${t%%=*}=gpuq run ${t#*=} --"); done
     extra=(); [ "$recipe" = 4-qwen27b ] && extra=(--mtp)
+    # Demo only, not the published recipe: the 27B with the most context the D700s hold in VRAM (204,800 tokens at
+    # 17 KB per token per GPU: 5,669 MiB each, decode as fast as at 8K; 262,144 spilled past VRAM).
+    [ "$recipe" = 4-qwen27b ] && python3 - "$C/deploy/recipes.toml" <<'PY'
+import re, sys
+p = sys.argv[1]; s = open(p).read()
+i = s.index('[recipe.4-qwen27b]'); j = s.index('driver =', i); k = s.index('\n', j)
+s = s[:j] + 'driver = ["serve", "{qwen38-27b}", "--port", "{serve_port}", "--context", "204800"]' + s[k:]
+open(p, 'w').write(s)
+PY
     if ! "${LAUNCH[@]}" up "$recipe" --nodes "$(echo $nodes | tr ' ' ,)" "${extra[@]}" "${W[@]}"; then
         echo "starting $recipe failed" >&2; down; exit 1
     fi
