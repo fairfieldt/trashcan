@@ -1,0 +1,20 @@
+chain6: queued incite=306,indite=177,inflight=155,alight=174,invite=296,enlight=180
+chain6: holding incite=306,indite=177,inflight=155,alight=174,invite=296,enlight=180
+fn100k-a-val14 rc 0 24 s
+fn100k-b-val14 rc 0 7 s
+fn100k-a-val100 rc 0 8 s
+fn100k-b-val100 rc 0 7 s
+fn100k-a-pp512-1 rc 0 13 s
+fn100k-b-pp512-1 rc 0 13 s
+fn100k-b-pp512-2 rc 0 12 s
+fn100k-a-pp512-2 rc 0 13 s
+fn100k-a-pp2048 rc 0 10 s
+fn100k-b-pp2048 rc 0 10 s
+fn100k-a-mtp rc 0 60 s
+fn100k-b-mtp rc 0 59 s
+fn100k-b-pp100k rc 255 151 s
+ssh: connect to host incite.tdf.sh port 22: Operation timed out
+fn100k-b-pp100k links: no report
+fn100k-smoke-mtp rc 1
+Terminated: 15
+exit 143
