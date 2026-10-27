@@ -1,0 +1,291 @@
+/* win31.css — the pipe 3.1 skin: Program Manager dress for the one
+ * conversation app. Everything here is chrome: hard 2px bevels (light on the
+ * top/left edge, dark on the bottom/right; inverted when sunken), acid title
+ * bars with Sixtyfour lettering, MDI child windows on a dark desktop. The
+ * rules nest under html[data-skin="win31"], so the sheet is always loaded and
+ * inert until the skin is on; app.js flips the attribute from the ?skin= /
+ * #skin= the host mounts the app with, or live from the inspector's look
+ * picker. Tokens (the --face-* set and the shared vocabulary) are in
+ * tokens.css under the same selector. From the Win31 artboard of the piPE
+ * Chat Directions canvas. */
+
+html[data-skin="win31"] {
+  /* the desktop and the application window */
+  & body {
+    padding: 10px;
+    background-color: var(--desk);
+    background-image:
+      linear-gradient(45deg, rgba(204,255,0,.05) 25%, transparent 25%, transparent 75%, rgba(204,255,0,.05) 75%),
+      linear-gradient(45deg, rgba(204,255,0,.05) 25%, transparent 25%, transparent 75%, rgba(204,255,0,.05) 75%);
+    background-size: 8px 8px;
+    background-position: 0 0, 4px 4px;
+  }
+  & .app {
+    height: calc(100dvh - 20px);
+    background: var(--face);
+    border: 2px solid;
+    border-color: var(--bevel-out);
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+    padding: 4px;
+    gap: 5px;
+  }
+
+  /* as a widget the panel around this frame is the window; no desktop, no
+     second bevel */
+  &[data-mini] body { padding: 0; background: var(--face); }
+  &[data-mini] .app { height: 100dvh; border: 0; box-shadow: none; padding: 3px; gap: 4px; }
+
+  /* A finger: there is no desktop to sit the window on, so the window is the
+     screen. The 10px gutter of dithered desktop around it — which on a phone
+     reads as a black border eating the width — goes, and with it the 100dvh
+     arithmetic that made room for it. Only the device's own insets survive,
+     so the title bar's controls stay out from under a notch. A widget panel
+     already has its own window around this frame: the data-mini rules above
+     outrank this one. */
+  @media (hover: none) and (pointer: coarse) {
+    & body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+    & .app { height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom)); }
+  }
+
+  /* focus: the dotted rectangle */
+  & :focus-visible { outline: 1px dotted var(--ink); outline-offset: 1px; }
+
+  /* no corner ticks, no conic borders, no glitch */
+  & .frame::before, & .frame::after { display: none; }
+  & .glitch:hover::before, & .glitch:hover::after { display: none; }
+
+  /* title bar: the system-menu box on the left, the acid bar, the controls */
+  & .topbar {
+    background: var(--acid);
+    color: var(--ink);
+    border-bottom: 0;
+    padding: 0 3px 0 0;
+    gap: 6px;
+  }
+  & .topbar::before {
+    content: "\2014";
+    display: inline-grid; place-items: center;
+    width: 18px; height: 18px; margin: 0 2px 0 0;
+    font: 700 12px/1 var(--font-mono);
+    background: var(--face); color: var(--ink);
+    border: 2px solid; border-color: var(--bevel-out);
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+  }
+  & .wordmark { font-size: 11px; letter-spacing: .14em; }
+  & .topbar .crumb { color: var(--ink); opacity: .75; }
+  & .topbar .tag { border: 0; background: var(--ink); color: var(--acid); font-family: var(--font-signal); font-size: 8px; padding: 2px 5px; }
+  & #toggle-theme, & #toggle-fx { display: none; }  /* 3.1 has one look */
+
+  /* buttons: raised chrome, sunken when pressed */
+  & .btn, & .iconbtn, & .chip, & .pill, & .tchip {
+    background: var(--face);
+    border: 2px solid;
+    border-color: var(--bevel-out);
+    border-radius: 0;
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+    translate: none;
+  }
+  & .btn:hover, & .iconbtn:hover, & .chip:hover, & .btn-sm:hover { translate: none; box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt); }
+  & .btn:active, & .iconbtn:active, & .chip:active { translate: none; border-color: var(--bevel-in); box-shadow: none; }
+  & .iconbtn { border-color: var(--bevel-out); padding: 2px 4px; min-width: 18px; height: 18px; line-height: 1; }
+  & .iconbtn[aria-pressed="true"] { background: var(--well); border-color: var(--bevel-in); box-shadow: none; }
+  & .topbar .iconbtn { background: var(--face); }
+  & .topbar .chip { height: 18px; padding: 0 6px; }
+  & .btn-primary {
+    background: var(--acid); color: var(--ink); font-weight: 700;
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 #F0FFAA, 0 0 0 1px var(--ink);
+  }
+  & .btn-danger { background: var(--face); color: var(--ink); }
+  & .btn:disabled { opacity: 1; color: var(--face-sh); text-shadow: 1px 1px 0 var(--face-hi); box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt); }
+  & .key { border: 1px solid var(--face-sh); border-bottom: 2px solid var(--face-dk); background: var(--face-lt); border-radius: 0; }
+
+  /* wells: anything you read or type into is sunken */
+  & .input, & .composer textarea, & pre.code, & .tool-body pre, & .boot-log, & .dir-list {
+    background: var(--well);
+    border: 2px solid;
+    border-color: var(--bevel-in);
+    border-radius: 0;
+    box-shadow: inset 1px 1px 0 var(--face-sh), inset -1px -1px 0 var(--face-lt);
+  }
+  & .composer textarea { font-family: var(--font-mono); font-size: 12px; padding: 6px; }
+  & code { border-radius: 0; background: var(--well); }
+
+  /* panes: MDI child windows */
+  & .pane {
+    background: var(--face);
+    border: 2px solid;
+    border-color: var(--bevel-out);
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+    padding: 2px;
+  }
+  & .pane-left, & .pane-right { border-right-color: var(--face-dk); border-left-color: var(--face-hi); }
+  & .pane-head {
+    background: var(--face-sh);
+    color: var(--face-lt);
+    border-bottom: 0;
+    padding: 3px 6px;
+    min-height: 22px;
+  }
+  & .pane-head .eyebrow, & .pane-head .signal { color: var(--face-lt); }
+  & .pane-head .btn { min-height: 18px; padding: 1px 6px; }
+  & .sessions, & .agents { background: var(--well); margin: 5px; border: 2px solid; border-color: var(--bevel-in); box-shadow: inset 1px 1px 0 var(--face-sh), inset -1px -1px 0 var(--face-lt); }
+  & .sessions li, & .agents li { border-radius: 0; border: 0; }
+  & .sessions li:hover, & .agents li:hover { background: var(--face-lt); }
+  & .sessions li[aria-selected="true"], & .agents li[aria-selected="true"] { background: var(--acid); color: var(--ink); border: 0; box-shadow: none; }
+  & .sessions li[aria-selected="true"] .s-meta, & .agents li[aria-selected="true"] .a-meta { color: var(--ink); }
+  & .sessions .s-del, & .sessions .s-stop { border: 0; box-shadow: none; background: transparent; }
+  & .pane-foot { border-top: 0; display: flex; flex-wrap: wrap; gap: 3px; }
+  & .pane-foot .status-item {
+    border: 2px solid; border-color: var(--bevel-group); background: var(--face);
+    padding: 2px 7px; flex: 1 1 auto;
+  }
+  & .status .dot { border-radius: 0; width: 7px; height: 7px; }
+  & .status[data-link="ok"] .dot { background: var(--acid-ink); box-shadow: none; }
+  & .insp-section { border-bottom: 0; margin: 0 4px 6px; border: 2px solid; border-color: var(--bevel-group); padding: 7px; background: var(--face); position: relative; }
+  & .insp-section > .eyebrow { position: absolute; top: -7px; left: 6px; padding: 0 3px; background: var(--face); line-height: 1; }
+  & .insp-section:first-of-type { margin-top: 10px; }
+  & .meter { border: 2px solid; border-color: var(--bevel-in); border-radius: 0; background: var(--well); height: 14px; padding: 2px; }
+  & .meter-fill { background: var(--acid); background-image: repeating-linear-gradient(90deg, transparent 0 7px, var(--face) 7px 9px); }
+
+  /* the stream is a sunken document */
+  & .stream { background: var(--well); margin: 5px; border: 2px solid; border-color: var(--bevel-in); box-shadow: inset 1px 1px 0 var(--face-sh), inset -1px -1px 0 var(--face-lt); }
+  & .hero { background: none; }
+  & .hero-glyph { color: var(--acid-ink); animation: none; }
+  & .msg-user .bubble {
+    background: var(--tint-user); border: 2px solid; border-color: var(--bevel-out);
+    border-radius: 0; box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+  }
+  & .msg-system { border-radius: 0; border-left-width: 4px; }
+  & .prose blockquote { border-left: 4px solid var(--face-sh); }
+  & .prose hr { border-top: 2px solid; border-color: var(--face-sh) var(--face-hi) var(--face-hi) var(--face-sh); border-bottom: 2px solid; }
+  /* tables wear the same shaded title bar as the tool cards */
+  & .prose .md-table thead th { background: var(--face-sh); color: var(--face-lt); }
+  & .prose .md-table tbody tr:nth-child(even) { background: var(--well); }
+
+  /* the renderer's own pieces (app.css "rich output") in 3.1 chrome: code
+     headers are group boxes over the same sunken well, and every control is
+     a beveled face button rather than a rounded chip */
+  & .code-head { background: var(--face); border: 2px solid; border-color: var(--bevel-group); border-bottom: 0; }
+  & .code-block > pre.code { border-top: 0; }
+  & .code-fold > .code-more { background: var(--face); border: 2px solid; border-color: var(--bevel-out); border-radius: 0; color: var(--ink); }
+  & .code-fold > .code-more:hover { background: var(--face-lt); }
+  & .tool-copy, & .diagram-head .copy, & .fv-head button, & .prose table .copy-table {
+    background: var(--face); border: 2px solid; border-color: var(--bevel-out); border-radius: 0; color: var(--ink);
+  }
+  & .tool-copy:hover, & .diagram-head .copy:hover, & .fv-head button:hover, & .prose table .copy-table:hover { background: var(--face-lt); }
+  & .tool-copy { width: 20px; height: 16px; }
+  & .chip, & .file-chip { background: var(--well); border: 2px solid; border-color: var(--bevel-in); border-radius: 0; }
+  & figure.diagram { background: var(--well); border: 2px solid; border-color: var(--bevel-in); border-radius: 0; }
+  & .diagram-head { background: var(--face); border-bottom: 2px solid; border-color: var(--bevel-group); }
+  & .diagram-head .eyebrow { color: var(--ink); }
+  & .tool-body .diff-wrap, & .tool-body .out-pre { background: var(--well); border: 2px solid; border-color: var(--bevel-in); border-radius: 0; }
+  & .match-line:hover { background: var(--acid); }
+  & .file-view { border-left: 2px solid var(--face-dk); box-shadow: none; }
+  & .fv-head { background: var(--face-sh); color: var(--face-lt); }
+  & .fv-path { color: var(--face-lt); }
+  & .fv-meta { color: var(--face-lt); }
+
+  /* thinking + probe cards: little windows with their own title bars */
+  & details.think, & .tool {
+    background: var(--face);
+    border: 2px solid; border-color: var(--bevel-out); border-left-color: var(--face-hi);
+    border-radius: 0; padding: 2px;
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+  }
+  & details.think > summary, & .tool-head { background: var(--face-sh); color: var(--face-lt); padding: 3px 7px; min-height: 20px; }
+  & .tool[data-state="running"] .tool-head { background: var(--acid); color: var(--ink); }
+  & .tool[data-state="running"] .tool-head .eyebrow, & .tool[data-state="running"] .tool-head .tool-summary,
+  & .tool[data-state="running"] .tool-head .tool-state { color: var(--ink); }
+  & .tool[data-state="error"] { background: var(--tint-err); }
+  & details.think .eyebrow, & .tool-head .eyebrow, & .tool-head .tool-state, & .tool-head .tool-summary { color: var(--face-lt); }
+  & details.think > summary .think-meta { color: var(--face-lt); }
+  & details.think .think-body { background: var(--well); margin: 5px; padding: 7px; border: 2px solid; border-color: var(--bevel-in); }
+  & .tool-body { padding: 6px; }
+
+  /* the turn's working section is a little window of its own */
+  & details.activity {
+    background: var(--face);
+    border: 2px solid; border-color: var(--bevel-out); border-left-color: var(--face-hi);
+    border-radius: 0; padding: 2px;
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt);
+  }
+  & details.activity > summary.activity-head { background: var(--face-sh); color: var(--face-lt); padding: 3px 7px; min-height: 20px; }
+  & details.activity[data-live] > summary.activity-head { background: var(--acid); color: var(--ink); }
+  & details.activity .activity-head .eyebrow, & details.activity .activity-summary, & details.activity .activity-count { color: var(--face-lt); }
+  & details.activity[data-live] .activity-head .eyebrow, & details.activity[data-live] .activity-summary, & details.activity[data-live] .activity-count { color: var(--ink); }
+  /* the items keep their own little windows here, inset from the frame:
+     no rail, no dots */
+  & details.activity .activity-body { padding: 4px 5px 5px; }
+  & details.activity .activity-body::before,
+  & details.activity .activity-body > details.think > summary::before,
+  & details.activity .activity-body > .tool > .tool-head::before,
+  & details.activity .activity-body > .act-note::before { content: none; }
+  & details.activity .activity-body > :where(details.think, .tool) > summary { border-radius: 0; }
+  & details.activity .activity-body > :where(details.think, .tool) > summary:hover { background: var(--face-sh); }
+  & details.activity .activity-body > .tool[data-state="running"] > .tool-head:hover { background: var(--acid); }
+  & details.activity .activity-body > .tool .tool-body pre { background: var(--well); border: 2px solid; border-color: var(--bevel-in); }
+  & details.activity .act-note { padding: 2px 7px; }
+  & details.activity .act-note .eyebrow { color: var(--ink); }
+  & details.msg-compaction { border-top: 2px solid; border-color: var(--bevel-in); }
+  & details.msg-compaction > summary.compaction-head { background: var(--face-sh); color: var(--face-lt); padding: 3px 7px; min-height: 20px; }
+  & details.msg-compaction .compaction-head .eyebrow, & details.msg-compaction .compaction-text, & details.msg-compaction .compaction-meta, & details.msg-compaction time { color: var(--face-lt); }
+  & details.msg-compaction .compaction-body { border: 2px solid; border-color: var(--bevel-in); border-radius: 0; background: var(--well); }
+
+  /* composer: the TRANSMIT group box */
+  & .composer {
+    border: 2px solid !important;
+    border-color: var(--bevel-group) !important;
+    background: var(--face) !important;
+    border-radius: 0; box-shadow: none; animation: none !important;
+    padding: 7px;
+  }
+  & .composer { margin-top: 8px; }
+  & .composer::before { content: "TRANSMIT"; position: absolute; top: -7px; left: 8px; padding: 0 3px; background: var(--face); font-family: var(--font-signal); font-size: 9px; letter-spacing: .08em; line-height: 1; color: var(--text-2); }
+  & .chips .tchip { border-radius: 0; font-size: 9px; }
+  & .chips .tchip[aria-checked="true"] { background: var(--acid); color: var(--ink); border-color: var(--bevel-in); box-shadow: none; }
+  & .carrier { color: var(--acid-ink); }
+  & .palette { border-radius: 0; border-color: var(--bevel-out); box-shadow: 3px 3px 0 rgba(0,0,0,.35); background: var(--face); }
+  & .palette li { border-radius: 0; }
+  & .palette li[aria-selected="true"], & .palette li:hover { background: var(--acid); color: var(--ink); }
+  & .palette li[aria-selected="true"] span { color: var(--ink); }
+
+  /* popover + dialogs: windows with acid title bars */
+  & .pop, & .dlg {
+    border: 2px solid; border-color: var(--bevel-out); border-radius: 0;
+    background: var(--face);
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt), 4px 4px 0 rgba(0,0,0,.35);
+  }
+  & .pop-head, & .dlg-head {
+    background: var(--acid); color: var(--ink);
+    margin: -12px -12px 8px; padding: 3px 8px; min-height: 22px;
+    display: flex; align-items: center;
+  }
+  & .dlg-head { margin: -16px -16px 10px; flex-wrap: wrap; }
+  & .pop-head .eyebrow, & .dlg-head .eyebrow { color: var(--ink); }
+  & .dlg-head h3 { font: 700 12px/1.2 var(--font-ui); margin: 0 0 0 6px; }
+  & .dlg::backdrop { background: rgba(11, 11, 16, .5); backdrop-filter: none; }
+  & .model-list li { border-radius: 0; }
+  & .model-list li:hover, & .model-list li[aria-selected="true"] { background: var(--acid); color: var(--ink); }
+  & .model-list li:hover .m-meta { color: var(--ink); }
+  & .model-list .m-badge, & .msel-row .m-badge, & .msel-head .m-badge, & .mcp-badge { border-radius: 0; }
+  & .dlg-body .opt { border-radius: 0; border: 2px solid; border-color: var(--bevel-group); }
+  & .dlg-body .opt:has(input:checked) { background: var(--acid); border-color: var(--bevel-in); }
+  & .msel-provider, & .mcp-row { border-radius: 0; border: 2px solid; border-color: var(--bevel-group); background: var(--face); }
+  & .msel-head { background: var(--face-sh); color: var(--face-lt); border-bottom: 0; }
+  & .msel-head b, & .msel-head .muted { color: var(--face-lt); }
+  & .msel-row:hover { background: var(--face-lt); }
+
+  /* toasts: system message boxes */
+  & .toast {
+    border: 2px solid; border-color: var(--bevel-out); border-left-width: 2px; border-radius: 0;
+    background: var(--face);
+    box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt), 3px 3px 0 rgba(0,0,0,.35);
+  }
+
+  /* scrollbars: the chunky kind, on the engines that let a page draw them */
+  & ::-webkit-scrollbar { width: 14px; height: 14px; }
+  & ::-webkit-scrollbar-track { background: var(--face-lt); background-image: repeating-conic-gradient(var(--face) 0 25%, transparent 0 50%); background-size: 4px 4px; }
+  & ::-webkit-scrollbar-thumb { background: var(--face); border: 2px solid; border-color: var(--bevel-out); box-shadow: inset -1px -1px 0 var(--face-sh), inset 1px 1px 0 var(--face-lt); }
+  & ::-webkit-scrollbar-button:single-button { background: var(--face); border: 2px solid; border-color: var(--bevel-out); height: 14px; width: 14px; }
+  & ::-webkit-scrollbar-corner { background: var(--face); }
+}

@@ -1,0 +1,140 @@
+/* tokens.css — the SIGNAL visual language: neo-brutalist objects, one acid
+ * accent used only as a fill with dark ink, a quiet "transmission" layer
+ * (pixel font eyebrows, corner ticks, opt-in scanlines). Light/dark via
+ * light-dark(); html[data-theme] overrides the system choice. */
+@font-face {
+  font-family: "Sixtyfour";
+  src: url(fonts/sixtyfour-latin.woff2) format("woff2");
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215;
+}
+@font-face {
+  font-family: "Space Grotesk";
+  src: url(fonts/spacegrotesk-latin.woff2) format("woff2");
+  font-weight: 300 700;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215;
+}
+
+:root {
+  color-scheme: light dark;
+  /* surfaces */
+  --bg-0: light-dark(#F4F1E8, #0B0B10);
+  --bg-1: light-dark(#FFFFFF, #12121C);
+  --bg-2: light-dark(#E9E5D8, #1A1A28);
+  --line: light-dark(#D3CEBF, #2A2A3E);
+  --ink: light-dark(#14141A, #ECECF4);
+  /* text */
+  --text: light-dark(#14141A, #ECECF4);
+  --text-2: light-dark(#585870, #9D9DB8);
+  --text-3: light-dark(#8A8A9E, #6B6B85);
+  /* accents: fill + -ink (text-safe) */
+  --acid: #CCFF00;                          --acid-ink: light-dark(#3F7A00, #CCFF00);
+  --pink: #FF5CDC;                          --pink-ink: light-dark(#B3007E, #FF5CDC);
+  --violet: light-dark(#C9C1FF, #9D8CFF);   --violet-ink: light-dark(#5B3DF0, #9D8CFF);
+  --cyan: light-dark(#9FF0FF, #5CE6FF);     --cyan-ink: light-dark(#006F8A, #5CE6FF);
+  --amber: light-dark(#FFD48A, #FFB443);    --amber-ink: light-dark(#8A5200, #FFB443);
+  --red: light-dark(#FFB3B3, #FF6B6B);      --red-ink: light-dark(#C62828, #FF6B6B);
+  --on-accent: #0B0B10;
+  --focus: var(--acid-ink);
+  /* tints */
+  --tint-user: color-mix(in oklab, var(--pink) 14%, var(--bg-1));
+  --tint-think: color-mix(in oklab, var(--violet) 18%, var(--bg-1));
+  --tint-tool: color-mix(in oklab, var(--cyan) 12%, var(--bg-1));
+  --tint-warn: color-mix(in oklab, var(--amber) 22%, var(--bg-1));
+  --tint-err: color-mix(in oklab, var(--red) 18%, var(--bg-1));
+  --tint-sys: color-mix(in oklab, var(--ink) 6%, var(--bg-1));
+  /* shape */
+  --r-1: 2px; --r-2: 6px; --r-3: 10px; --r-pill: 999px;
+  --bw: 2px;
+  --shadow-hard: 4px 4px 0 var(--ink);
+  --shadow-hard-sm: 2px 2px 0 var(--ink);
+  /* type */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  --font-display: "Space Grotesk", var(--font-ui);
+  --font-signal: "Sixtyfour", var(--font-mono);
+  --fs-0: 11px; --fs-1: 12px; --fs-2: 13px; --fs-3: 14px; --fs-4: 16px; --fs-5: 20px; --fs-6: 28px; --fs-7: 40px;
+  --lh-body: 1.5; --lh-tight: 1.15;
+  /* motion */
+  --dur-1: 120ms; --dur-2: 200ms; --dur-3: 320ms;
+  --ease-out: cubic-bezier(.2, .8, .2, 1);
+  --ease-snap: cubic-bezier(.7, 0, .2, 1);
+  /* spacing */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px;
+  /* layout */
+  --w-left: 260px; --w-right: 300px; --h-header: 44px; --measure: 78ch;
+  /* the widget's docked transmissions pane (app.css): narrower than the
+     full UI's, because the panel it sits in is only ~680px wide */
+  --w-left-dock: 240px;
+}
+html[data-theme="light"] { color-scheme: light; }
+html[data-theme="dark"] { color-scheme: dark; }
+@media (prefers-contrast: more) { :root { --text-2: var(--text); --bw: 3px; } }
+
+/* ------------------------------------------------------------ skin: 3.1 */
+/* The pipe 3.1 look, from the Win31 artboard of the piPE Chat Directions
+ * canvas: warm chrome face, hard bevels, acid title bars, Verdana UI over
+ * mono wells. One committed light theme — Windows 3.1 did not have a night
+ * side. A skin is the same app under html[data-skin]: this block overrides
+ * the vocabulary above and adds the --face-* bevel set win31.css builds its
+ * chrome from. It sits after html[data-theme] so it wins the color-scheme. */
+html[data-skin="win31"] {
+  color-scheme: light;
+  /* chrome face + bevel edges (win31.css) */
+  --face: #D8D3C2;
+  --face-lt: #F6F3E9;
+  --face-hi: #FFFFFF;
+  --face-sh: #A39D89;
+  --face-dk: #4A4739;
+  --well: #F4F1E8;
+  --desk: #0B0B10;
+  --bevel-out: var(--face-hi) var(--face-dk) var(--face-dk) var(--face-hi);
+  --bevel-in: var(--face-dk) var(--face-hi) var(--face-hi) var(--face-dk);
+  --bevel-group: var(--face-sh) var(--face-hi) var(--face-hi) var(--face-sh);
+  /* surfaces (shared vocabulary) */
+  --bg-0: var(--face);
+  --bg-1: var(--face-lt);
+  --bg-2: var(--well);
+  --line: var(--face-sh);
+  --ink: #14141A;
+  --text: #14141A;
+  --text-2: #585443;
+  --text-3: #7A745F;
+  /* accents: fill + -ink (text-safe) */
+  --acid: #CCFF00;    --acid-ink: #3F7A00;
+  --pink: #FF5CDC;    --pink-ink: #B3007E;
+  --violet: #C9C1FF;  --violet-ink: #5B3DF0;
+  --cyan: #9FF0FF;    --cyan-ink: #00808F;
+  --amber: #FFD48A;   --amber-ink: #8A5200;
+  --red: #FFB3B3;     --red-ink: #C62828;
+  --on-accent: #14141A;
+  --focus: var(--face-dk);
+  /* tints */
+  --tint-user: #F3E4F2;
+  --tint-think: #EBE7FA;
+  --tint-tool: #E4F2F4;
+  --tint-warn: #F6EBD2;
+  --tint-err: #F6DDDD;
+  --tint-sys: #EDEAE0;
+  /* shape: everything is square; "shadows" are bevel offsets */
+  --r-1: 0; --r-2: 0; --r-3: 0; --r-pill: 0;
+  --bw: 2px;
+  --shadow-hard: 2px 2px 0 var(--face-dk);
+  --shadow-hard-sm: 1px 1px 0 var(--face-dk);
+  /* type */
+  --font-ui: Verdana, Geneva, "DejaVu Sans", sans-serif;
+  --font-mono: ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace;
+  --font-display: var(--font-ui);
+  --font-signal: "Sixtyfour", var(--font-mono);
+  --fs-0: 10px; --fs-1: 11px; --fs-2: 12px; --fs-3: 12px; --fs-4: 13px; --fs-5: 16px; --fs-6: 22px; --fs-7: 32px;
+  --lh-body: 1.45; --lh-tight: 1.15;
+  /* motion: instant, like the machine it remembers */
+  --dur-1: 0ms; --dur-2: 0ms; --dur-3: 0ms;
+  --ease-out: linear;
+  --ease-snap: linear;
+  /* spacing */
+  --s-1: 3px; --s-2: 6px; --s-3: 10px; --s-4: 14px; --s-5: 20px; --s-6: 28px;
+  /* layout */
+  --w-left: 232px; --w-right: 250px; --h-header: 24px; --measure: 78ch;
+}

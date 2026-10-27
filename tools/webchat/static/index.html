@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" data-skin="win31" data-working="open">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#0B0B10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<title>trashcan chat</title>
+<link rel="stylesheet" href="pipe/tokens.css">
+<link rel="stylesheet" href="pipe/app.css">
+<link rel="stylesheet" href="pipe/win31.css">
+<link rel="stylesheet" href="webchat.css">
+</head>
+<body>
+<svg hidden aria-hidden="true">
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="1"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+  <symbol id="i-radio" viewBox="0 0 24 24"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5M19.1 4.9C23 8.8 23 15.1 19.1 19"/><circle cx="12" cy="12" r="2"/></symbol>
+  <symbol id="i-panel-l" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M19 12l-7 7-7-7"/></symbol>
+</svg>
+
+<div class="app" id="app" data-left="open" data-right="closed">
+  <header class="topbar">
+    <button class="iconbtn" id="toggle-left" type="button" title="Conversations" aria-label="Show conversations" aria-controls="pane-left"><svg class="i"><use href="#i-panel-l"/></svg></button>
+    <button class="iconbtn" id="new-thread" type="button" title="New conversation" aria-label="New conversation"><svg class="i"><use href="#i-plus"/></svg></button>
+    <h1 class="wordmark">piPE</h1>
+    <div class="topbar-center"><span class="crumb" id="title"></span></div>
+    <button class="chip" id="model-chip" type="button" title="Choose model" aria-label="Choose model" aria-haspopup="dialog" aria-controls="model-pop">
+      <svg class="i" aria-hidden="true"><use href="#i-radio"/></svg>
+      <span class="signal eyebrow">MODEL</span>
+      <span id="model-name">…</span>
+    </button>
+  </header>
+
+  <aside class="pane pane-left" id="pane-left" aria-label="Conversations">
+    <div class="pane-head">
+      <span class="eyebrow signal">conversations</span>
+      <button class="btn btn-sm" id="new-session" type="button"><svg class="i"><use href="#i-plus"/></svg> new</button>
+    </div>
+    <ul class="sessions" id="sessions" aria-label="Conversations"></ul>
+  </aside>
+
+  <main class="stream-wrap" id="stream-wrap">
+    <div class="stream" id="stream" role="log" aria-live="polite" aria-relevant="additions">
+      <section class="hero" id="hero">
+        <div class="hero-glyph" aria-hidden="true">✦</div>
+        <p class="muted">Ask a question. The model can search the web, read pages and run shell commands on incite.</p>
+      </section>
+    </div>
+    <button class="pill newsignal hidden" id="scroll-down" type="button"><svg class="i"><use href="#i-down"/></svg> latest</button>
+    <form class="composer frame" id="composer" autocomplete="off">
+      <div class="banner hidden" id="banner" role="status"></div>
+      <div class="composer-row">
+        <textarea id="composer-input" rows="1" placeholder="Ask anything" aria-label="Message" spellcheck="true"></textarea>
+        <div class="composer-actions">
+          <button class="btn btn-primary" id="send" type="submit" title="Send" aria-label="Send">
+            <svg class="i"><use href="#i-send"/></svg> <span class="label">send</span>
+          </button>
+          <button class="btn btn-danger hidden" id="abort" type="button" title="Stop" aria-label="Stop">
+            <svg class="i"><use href="#i-stop"/></svg> <span class="label">stop</span>
+          </button>
+        </div>
+      </div>
+      <div class="composer-foot">
+        <span class="ctx hidden" id="ctx" title="Context used by this conversation">
+          <span class="meter"><span class="meter-fill" id="ctx-fill"></span></span>
+          <span class="mono small" id="ctx-text"></span>
+        </span>
+        <span class="composer-controls">
+          <span class="muted small think-label" id="think-label">thinking</span>
+          <span class="chips" id="thinking-chips" role="radiogroup" aria-labelledby="think-label"></span>
+        </span>
+      </div>
+    </form>
+  </main>
+</div>
+<div class="scrim hidden" id="scrim"></div>
+
+<div id="model-pop" class="pop" role="dialog" aria-label="Model">
+  <div class="pop-head"><span class="eyebrow signal">model</span><button class="iconbtn pop-close" id="model-close" type="button" aria-label="Close"><svg class="i"><use href="#i-x"/></svg></button></div>
+  <ul class="model-list" id="model-list"></ul>
+  <p class="pop-status small hidden" id="model-status"></p>
+</div>
+
+<dialog class="dlg" id="confirm-dialog">
+  <form method="dialog">
+    <div class="dlg-head"><h3 id="confirm-title"></h3></div>
+    <div class="dlg-body"><p class="muted" id="confirm-body"></p></div>
+    <div class="dlg-actions">
+      <button class="btn" value="cancel" type="submit">cancel</button>
+      <button class="btn btn-primary" value="ok" id="confirm-ok" type="submit">ok</button>
+    </div>
+  </form>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="pipe/vendor/markdown-it-task-lists.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

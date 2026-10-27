@@ -1,0 +1,150 @@
+/* webchat.css: what the trashcan chat page changes in piPE's stylesheets (pipe/: tokens.css, app.css, win31.css, the
+ * pipe 3.1 skin). The page has no inspector pane, its model picker is a small window (a sheet on a phone), and on a
+ * touch screen the 3.1 chrome gets finger-sized controls and follows the keyboard. */
+
+/* ------------------------------------------------------------------ layout: conversations | chat */
+html, body { overflow: hidden; overscroll-behavior: none; }
+.app, .app[data-left], .app[data-left][data-right] {
+  grid-template-areas: "top top" "left main" !important;
+  grid-template-columns: var(--w-left) minmax(0, 1fr) !important;
+}
+.app[data-left="closed"] { grid-template-areas: "top" "main" !important; grid-template-columns: minmax(0, 1fr) !important; }
+@media (min-width: 1101px) { .app[data-left="closed"] .pane-left { display: none; } }
+@media (max-width: 1100px) {
+  .app, .app[data-left], .app[data-left][data-right] { grid-template-areas: "top" "main" !important; grid-template-columns: minmax(0, 1fr) !important; }
+  .pane-left { top: calc(var(--vvt, 0px) + env(safe-area-inset-top) + var(--h-header) + 8px); bottom: env(safe-area-inset-bottom); left: env(safe-area-inset-left); }
+}
+html[data-skin="win31"] .app { height: 100%; }
+html[data-skin="win31"] body { height: var(--vvh, 100dvh); }
+.scrim { position: fixed; inset: 0; z-index: 25; background: rgb(11 11 16 / .45); }
+.scrim[data-for="models"] { background: rgb(11 11 16 / .2); }
+
+/* A finger: the body follows the visual viewport (app.js sets --vvh/--vvt), so with the keyboard up the composer sits
+   right above it and the title bar stays on screen; the bottom inset is under the keyboard then. */
+html[data-touch] body { position: fixed; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh); }
+html[data-touch][data-kb] body { padding-bottom: 0; }
+
+/* ------------------------------------------------------------------ title bar */
+.topbar .wordmark { flex: none; }
+.topbar .chip { flex: none; }
+.chip #model-name { max-width: 30ch; display: inline-block; vertical-align: bottom; }
+@media (max-width: 720px) {
+  .chip { max-width: 56vw; }
+  .chip .eyebrow { display: none; }
+  .topbar-center { display: block !important; flex: 1; }
+  .topbar-center .crumb { display: none; }
+}
+
+/* ------------------------------------------------------------------ transcript */
+.turn { display: block; }
+.stream > .turn { max-width: var(--measure); margin-inline: auto; }
+.msg-head .msg-copy { flex: none; display: grid; place-items: center; width: 22px; height: 18px; padding: 0; border: 0; background: none; color: var(--text-3); cursor: pointer; }
+.msg-head .msg-copy .i { width: 12px; height: 12px; }
+.msg-head .msg-copy:hover, .msg-copy.copied, pre.code .copy.copied { color: var(--acid-ink); }
+.msg-system { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-block: var(--s-2); font-family: var(--font-ui); }
+.msg-system .retry { margin-left: auto; }
+.hero p { max-width: 36ch; margin: 0; }
+.code-title[data-file], .prose a.file-link, .prose .file-link { cursor: auto; text-decoration: none; color: inherit; }
+@media (hover: none) { pre.code .copy { opacity: 1; } }
+details.think .think-body { max-height: 40vh; }
+/* code: the language label and the copy button get their own strip above the first line */
+pre.code { padding-top: 26px; }
+pre.code[data-lang]:not([data-lang=""])::before { top: 6px; right: auto; left: var(--s-3); }
+.tool-body .cmd pre.code { padding-top: 26px; }
+.tool-body .cmd pre.code::before { display: none; }
+/* a command's output keeps its columns and scrolls sideways */
+.tool-body .out-pre.term { white-space: pre; overflow-x: auto; }
+
+/* tool cards: a search's results, a command's line */
+.tool-body .query { font-family: var(--font-mono); font-size: var(--fs-1); overflow-wrap: anywhere; padding: 2px 0; }
+.tool-body .results { margin: 0; padding: 6px 6px 6px 2.2em; display: grid; gap: 6px; font-size: var(--fs-2); max-height: 45vh; overflow: auto; }
+.tool-body .results li > * { display: block; overflow-wrap: anywhere; }
+.tool-body .results a { font-weight: 600; }
+.tool-body .results .url { font-family: var(--font-mono); font-size: var(--fs-0); color: var(--text-3); }
+.tool-body .results .snip { color: var(--text-2); }
+.tool-body .cmd pre.code { margin: 0; }
+html[data-skin="win31"] .tool-body .results { background: var(--well); border: 2px solid; border-color: var(--bevel-in); }
+html[data-skin="win31"] .tool[data-state="stopped"] { opacity: .8; }
+
+/* ------------------------------------------------------------------ composer */
+html[data-skin="win31"] .composer::before { content: "MESSAGE"; }
+.composer { position: relative; }
+.banner { margin: 0 0 8px; }
+.banner .btn { margin-left: auto; }
+.composer-foot .ctx { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); min-width: 0; }
+.composer-foot .ctx .meter { display: inline-block; width: 64px; height: 10px; flex: none; }
+.composer-foot .ctx .meter-fill { display: block; }
+html[data-skin="win31"] .composer-foot .ctx .meter { height: 12px; padding: 1px; }
+.think-label { white-space: nowrap; }
+.composer #send:disabled { cursor: not-allowed; }
+@media (max-width: 720px) {
+  .composer-foot #thinking-chips { display: flex !important; }
+  .composer-foot { flex-wrap: nowrap; }
+  .composer-controls { flex-wrap: nowrap; }
+}
+#ctx-text { white-space: nowrap; }
+@media (max-width: 480px) {
+  .composer-foot { gap: 6px; padding-top: 8px; }
+  .composer-foot .ctx .meter { display: none; }
+  .composer-controls { gap: 5px; }
+  html[data-skin="win31"] .composer-foot .chips .tchip { padding: 7px 5px; font-size: 9px; }
+  .composer-foot .chips { gap: 3px; flex-wrap: nowrap; }
+}
+@media (max-width: 350px) { .think-label { display: none; } }
+
+/* ------------------------------------------------------------------ model picker: a window, a sheet on a phone */
+.pop { position: fixed; display: none; z-index: 40; top: calc(env(safe-area-inset-top) + var(--h-header) + 14px); right: 16px; width: min(380px, calc(100vw - 24px)); max-height: 70vh; }
+.pop.open { display: flex; }
+.pop, .dlg { overflow-x: hidden; }   /* the title bars' negative margins must not make a sideways scrollbar */
+.pop-head { justify-content: space-between; }
+.pop-head .pop-close { margin-left: auto; }
+.model-list { flex: none; min-height: 0; overflow: visible; }
+.model-list li { cursor: pointer; }
+.model-list li[data-current="true"] { border: 0; }
+.model-list li .m-badge { justify-self: end; }
+.pop-status { margin: 4px 2px 0; color: var(--text-2); }
+.pop-status.err { color: var(--red-ink); }
+html[data-skin="win31"] .model-list li[data-current="true"] { background: var(--well); box-shadow: inset 1px 1px 0 var(--face-sh); }
+html[data-skin="win31"] .pop-head .iconbtn { height: 18px; min-width: 18px; padding: 1px; }
+@media (max-width: 720px) {
+  .pop { left: calc(8px + env(safe-area-inset-left)); right: calc(8px + env(safe-area-inset-right)); width: auto; top: auto;
+    bottom: calc(8px + env(safe-area-inset-bottom)); max-height: min(70dvh, 520px); }
+}
+
+/* ------------------------------------------------------------------ conversations pane */
+.sessions li { grid-template-columns: minmax(0, 1fr) auto; }
+.sessions .s-del { grid-column: 2; }
+.sessions li[data-live="running"] .s-meta::before { content: '●'; margin-right: 6px; color: var(--acid-ink); animation: pulse 1.2s ease-in-out infinite; display: inline-block; }
+html[data-skin="win31"] .sessions li[aria-selected="true"][data-live="running"] .s-meta::before { color: var(--ink); }
+
+/* ------------------------------------------------------------------ toasts and dialogs */
+.toasts { bottom: calc(var(--composer-h, 120px) + 24px + env(safe-area-inset-bottom)); }
+@media (max-width: 720px) { .toasts { left: 12px; right: 12px; max-width: none; } }
+.dlg { max-width: calc(100vw - 24px); }
+html[data-skin="win31"] .dlg-head h3 { margin-left: 0; }
+#confirm-body { overflow-wrap: anywhere; }
+
+/* ------------------------------------------------------------------ finger-sized 3.1 */
+@media (hover: none) and (pointer: coarse) {
+  html[data-skin="win31"] { --h-header: 40px; }
+  html[data-skin="win31"] .topbar { gap: 8px; padding-right: 4px; }
+  html[data-skin="win31"] .topbar::before { width: 26px; height: 26px; }
+  html[data-skin="win31"] .topbar .iconbtn { min-width: 34px; height: 32px; padding: 4px 7px; }
+  html[data-skin="win31"] .topbar .chip { height: 32px; padding: 0 10px; }
+  html[data-skin="win31"] .wordmark { font-size: 12px; }
+  html[data-skin="win31"] .chips .tchip { padding: 7px 8px; font-size: 10px; }
+  html[data-skin="win31"] .btn { min-height: 36px; }
+  html[data-skin="win31"] .btn-sm { min-height: 30px; }
+  html[data-skin="win31"] .pane-head .btn { min-height: 30px; padding: 4px 10px; }
+  html[data-skin="win31"] .sessions li { padding: 10px 10px; }
+  html[data-skin="win31"] .sessions .s-del { min-width: 36px; height: 34px; }
+  html[data-skin="win31"] .model-list li { padding: 12px 10px; }
+  html[data-skin="win31"] .pop-head .iconbtn { height: 30px; min-width: 32px; }
+  html[data-skin="win31"] details.think > summary, html[data-skin="win31"] .tool-head,
+  html[data-skin="win31"] details.activity > summary.activity-head { min-height: 32px; }
+  .msg-head .msg-copy { width: 34px; height: 28px; }
+  .stream { padding: var(--s-4) var(--s-3) var(--s-3); }
+  html[data-skin="win31"] .stream { margin: 3px; }
+  html[data-skin="win31"] .composer { margin: 8px 3px 3px; padding: 7px 6px 6px; width: calc(100% - 6px); justify-self: stretch; }
+  html[data-skin="win31"] .composer textarea { font-size: 16px; }
+}

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Start or switch the model the demo serves, from the cluster's first Mac (incite), under gpuq leases. Uses the
-# launcher and inventory in ~/trashcan-exp/cluster (deploy/trashcan-cluster, cluster.toml); server.py's /switch runs it.
+# launcher and inventory in ~/trashcan-exp/cluster (deploy/trashcan-cluster, cluster.toml); server.py's POST /api/switch runs it.
 #
 #   cluster.sh up RECIPE    stop what runs, lease RECIPE's Macs, start it: 6-flashnext (six Macs) or 4-qwen27b (four,
 #                           with MTP)
