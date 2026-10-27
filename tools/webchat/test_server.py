@@ -527,7 +527,7 @@ class HttpTests(Base):
         self.assertEqual(self.hub.switch['state'], 'idle')
         self.assertIn('Waiting for invite (queued: blocked by #12)', phases)
         st = self.api('GET', '/api/state')[1]['status']
-        self.assertEqual((st['model']['id'], st['model']['state'], st['model']['context']), ('qwen3.8-flash-next', 'ready', 32768))
+        self.assertEqual((st['model']['id'], st['model']['state'], st['model']['context']), ('qwen3.8-flash-next', 'ready', 114688))
         self.assertEqual(self.api('POST', '/api/switch', {'recipe': 'nope'})[0], 400)
 
     def test_switch_failure(self):

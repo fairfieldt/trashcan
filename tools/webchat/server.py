@@ -38,7 +38,7 @@ TOOLS = [
 
 # What the cluster can serve: the model id `trashcan serve` reports, the cluster.sh recipe that starts it, its context.
 MODELS = [
-    {'id': 'qwen3.8-flash-next', 'name': 'Qwen3.8-Flash-Next', 'macs': 6, 'recipe': '6-flashnext', 'context': 32768},
+    {'id': 'qwen3.8-flash-next', 'name': 'Qwen3.8-Flash-Next', 'macs': 6, 'recipe': '6-flashnext', 'context': 114688},
     # 204,800 tokens: what the D700s' VRAM holds for the 27B (cluster.sh passes --context).
     {'id': 'qwen3.8-27b', 'name': 'Qwen3.8-27B', 'macs': 4, 'recipe': '4-qwen27b', 'context': 204800},
 ]

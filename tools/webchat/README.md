@@ -59,7 +59,7 @@ browser ──HTTP + SSE──▶ server.py ──POST /v1/responses (SSE)──
   progress above the composer). Failures show cluster.sh's last lines.
 
 The tools, the system instructions (factual question: 1-3 `web_search`, `fetch_page` when needed, then the direct
-answer first, details in sections or bullets, sources last) and the two models (Qwen3.8-Flash-Next, 32,768 tokens, six
+answer first, details in sections or bullets, sources last) and the two models (Qwen3.8-Flash-Next, 114,688 tokens, six
 Macs; Qwen3.8-27B, 204,800 tokens, four Macs with MTP) are at the top of `server.py`.
 
 ### HTTP API
