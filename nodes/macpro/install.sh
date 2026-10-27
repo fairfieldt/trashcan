@@ -11,7 +11,7 @@
 # Components (all by default; --skip leaves one out):
 #   tblink   Thunderbolt link addressing and USB4STREAM creation (tblink.service), stream device access (udev),
 #            thunderbolt_net interrupt throttle; --registry installs the node table (deploy/trashcan-cluster registry)
-#   fan      fan control (fancurve.service): the main fan at 2350 rpm or the SMC maximum, whichever is higher
+#   fan      fan control (fancurve.service): the main fan at full speed while the GPUs work, slower when idle and cool
 #   network  NetworkManager leaves thunderbolt* alone; with ifupdown, DHCP on every Ethernet port, so a cable in
 #            either port works (the Debian installer configures only the port cabled at install time)
 #   power    suspend masked (the Mac Pro does not resume)

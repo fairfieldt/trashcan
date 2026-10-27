@@ -112,10 +112,22 @@ two rounds needs a replug. Create the streams again afterwards.
 ## Fan control
 
 One SMC fan (`applesmc`) cools both D700s and the CPU; the GPUs' own `pwm1` drives nothing.
-`fancurve.service` (`scripts/fancurve.service`, running `scripts/fancurve.sh` installed in `/usr/local/sbin`) keeps
-the fan at **2350 RPM or the live SMC maximum, whichever is higher, at every temperature** (`FAN_RPM` in the unit's
-environment changes the floor, `FAN_RPM=0` follows the SMC maximum alone). It reads `fan1_max` every two seconds and
-reasserts manual mode and the exact target if the SMC changes either.
+`fancurve.service` (`scripts/fancurve.service`, running `scripts/fancurve.sh` installed in `/usr/local/sbin`) runs
+the fan at **full speed while the GPUs work** and slower when the Mac is idle and cool. Full speed is 2350 RPM or the
+live SMC maximum, whichever is higher (`FAN_RPM` in the unit's environment changes the 2350, `FAN_RPM=0` follows the
+SMC maximum alone). Every two seconds it:
+
+- counts the GPUs as working when a compute ring's fence counter (`/sys/kernel/debug/dri/N/amdgpu_fence_info`) advanced
+  since the last poll, or a GPU's DPM level is held at `high` (the engine holds it while work arrives); then it runs
+  at full speed, and keeps it for 120 s after the last work, so the fan does not cycle between the turns of a chat;
+- otherwise sets the speed from the hottest GPU edge temperature and the CPU package temperature (coretemp): 1200 RPM
+  up to 50 °C GPU and 60 °C CPU, full speed from 65 °C GPU or 80 °C CPU, linear in between;
+- rises at once and falls at most 100 RPM per poll;
+- treats a temperature it cannot read as hot (full speed), and runs at full speed when it finds no amdgpu GPU or no
+  coretemp sensor.
+
+It reads `fan1_max` on every poll and reasserts manual mode and the exact target if the SMC changes either. The idle
+speed never goes below the SMC's minimum (`fan1_min`, 790 RPM).
 
 Linux 7.3 moved the fan files. Before 7.3 they are in `/sys/devices/platform/applesmc.768/`, with manual mode as
 `fan1_manual` (1 manual, 0 automatic) and the target as `fan1_output`. From 7.3 they are hwmon attributes in
@@ -134,7 +146,8 @@ Two transient maximum-read failures may retain the last valid limit; the third f
 to automatic SMC and exits for systemd to retry. At startup, an unavailable/invalid limit has no fallback.
 Malformed limits, control/target read errors, or failed readback also return control to the SMC.
 `systemctl stop fancurve` returns automatic SMC control. `INTERVAL` may be set to 1–10 seconds;
-`SMC_PATH` is an optional sysfs path override used by local tests.
+`SMC_PATH`, `DRM_PATH`, `DRI_DEBUG_PATH` and `HWMON_PATH` are optional sysfs path overrides used by local tests
+(`scripts/test-fancurve.py`).
 
 ## Port lights
 

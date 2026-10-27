@@ -1,5 +1,5 @@
 [Unit]
-Description=Keep the Mac Pro main fan at 2350 rpm or the live SMC maximum, whichever is higher
+Description=Mac Pro main fan: full speed while the GPUs work, slower when idle and cool
 # The fan files are in this directory before Linux 7.3 and under its hwmon/ from 7.3 (fancurve.sh handles both).
 ConditionPathExists=/sys/devices/platform/applesmc.768
 
