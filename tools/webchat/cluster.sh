@@ -68,7 +68,7 @@ while True:
     time.sleep(10)
 PY
     W=(); for t in $(cat "$S/tickets"); do W+=(--wrap "${t%%=*}=gpuq run ${t#*=} --"); done
-    extra=(--mtp)   # speculative decoding for both: the same replies, 31 against 23 tok/s on Flash-Next, 52 against 41 on the 27B
+    extra=(--mtp)   # speculative decoding for both: the same replies; about 27 against 21 tok/s on Flash-Next chat text, 52 against 41 on the 27B
     # Demo only, not the published recipe: the 27B with the most context the D700s hold in VRAM (204,800 tokens at
     # 17 KB per token per GPU: 5,669 MiB each, decode as fast as at 8K; 262,144 spilled past VRAM).
     [ "$recipe" = 4-qwen27b ] && python3 - "$C/deploy/recipes.toml" <<'PY'
