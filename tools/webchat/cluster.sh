@@ -2,8 +2,8 @@
 # Start or switch the model the demo serves, from the cluster's first Mac (incite), under gpuq leases. Uses the
 # launcher and inventory in ~/trashcan-exp/cluster (deploy/trashcan-cluster, cluster.toml); server.py's POST /api/switch runs it.
 #
-#   cluster.sh up RECIPE    stop what runs, lease RECIPE's Macs, start it: 6-flashnext (six Macs) or 4-qwen27b (four,
-#                           with MTP)
+#   cluster.sh up RECIPE    stop what runs, lease RECIPE's Macs, start it with MTP: 6-flashnext (six Macs) or
+#                           4-qwen27b (four)
 #   cluster.sh down         stop it and release the leases
 #   cluster.sh status       the launcher's status; cluster.sh current prints the running recipe
 set -uo pipefail
@@ -68,7 +68,7 @@ while True:
     time.sleep(10)
 PY
     W=(); for t in $(cat "$S/tickets"); do W+=(--wrap "${t%%=*}=gpuq run ${t#*=} --"); done
-    extra=(); [ "$recipe" = 4-qwen27b ] && extra=(--mtp)
+    extra=(--mtp)   # speculative decoding for both: the same replies, 31 against 23 tok/s on Flash-Next, 52 against 41 on the 27B
     # Demo only, not the published recipe: the 27B with the most context the D700s hold in VRAM (204,800 tokens at
     # 17 KB per token per GPU: 5,669 MiB each, decode as fast as at 8K; 262,144 spilled past VRAM).
     [ "$recipe" = 4-qwen27b ] && python3 - "$C/deploy/recipes.toml" <<'PY'
