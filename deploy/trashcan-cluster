@@ -356,6 +356,7 @@ class Proc:
     def __init__(self, role, node, argv, port, kind):
         self.role, self.node, self.argv, self.port, self.kind = role, node, argv, port, kind
         self.ssh = None  # attached ssh process
+        self.cpu_latency = False  # hold a 0 us CPU latency request for this process (see command())
 
     def as_dict(self, run):
         return {"role": self.role, "node": self.node.name, "port": self.port, "kind": self.kind,
@@ -433,7 +434,10 @@ def plan(cfg, recipe, nodes, a):
         nodes[:] = order
     else:
         die(f"recipe {recipe}: unknown kind {kind}")
-    procs.append(Proc("driver", nodes[0], driver_args, cfg.ports["serve"], "serve"))
+    driver = Proc("driver", nodes[0], driver_args, cfg.ports["serve"], "serve")
+    # MTP drafts on the driver's CPU between GPU steps: without the request each round waits for idle cores to wake.
+    driver.cpu_latency = bool(mtp and r.get("mtp_cpu_latency", False))
+    procs.append(driver)
     return procs
 
 
@@ -653,9 +657,10 @@ class Run:
         argv = [p.node.path(x) for x in p.argv]
         inner = f"echo $$ > {self.dir}/{p.role}.pid; exec {shlex.quote(binary)} {shlex.join(argv)}"
         cmd = ["bash", "-c", inner]
-        if str(cfg.cpu_latency_us) == "0":
+        if str(cfg.cpu_latency_us) == "0" or p.cpu_latency:
             # Holds a 0 us CPU latency request for the process's lifetime only (busy-polls idle cores; docs/qwen.md).
-            cmd = ["sudo", "-n", "python3", f"{cfg.workspace}/scripts/latency-run.py", *cmd]
+            # Relative to the workspace (the body below cds there; a "~" workspace is not expanded inside the argv).
+            cmd = ["sudo", "-n", "python3", "scripts/latency-run.py", *cmd]
         cmd = [*self.prefix(p.node), *cmd]
         env = " ".join(self.a.env or [])
         body = f"cd {cfg.workspace} && mkdir -p {self.dir} && exec env {env} {shlex.join(cmd)} >> {self.dir}/{p.role}.log 2>&1"

@@ -85,7 +85,8 @@ deploy/trashcan-cluster run 6-flashnext            # start; Ctrl-C stops everyth
 ```
 
 `--nodes A,B,...` picks the nodes (the first is the driver; default: the first nodes of the inventory).
-`--mtp` adds speculative decoding; `6-flashnext` has it by default (`--no-mtp` turns it off).
+`--mtp` adds speculative decoding; `6-flashnext` has it by default (`--no-mtp` turns it off) and then holds a 0 µs
+CPU latency request for the driver, which drafts on its CPU (`mtp_cpu_latency`; about 55 W more on that Mac).
 
 `preflight` checks every node of the recipe and fails on any of:
 

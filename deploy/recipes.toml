@@ -5,7 +5,8 @@
 # kind: single (one Mac), tp2 (two Macs, tensor parallel), tp4 (four Macs, tensor parallel over the ring 0-1, 0-2,
 # 1-3, 2-3 or a full mesh), chain (Flash-Next pipeline along the cables). {MODEL} is a model's path from
 # manifest.toml under the inventory's models directory. `--mtp` adds driver_mtp/node_mtp (speculative decoding);
-# mtp_default = true does so unless `--no-mtp` is given.
+# mtp_default = true does so unless `--no-mtp` is given; mtp_cpu_latency = true then holds a 0 us CPU latency
+# request for the driver (inventory cpu_latency_us = "0" holds one for every process).
 # No 3- or 5-Mac recipe: those counts have not been qualified.
 
 [recipe.1-gemma]
@@ -64,8 +65,12 @@ node = ["qwen4", "node", "{flashnext-1}", "--gpus", "0,1"]
 driver = ["serve", "{flashnext-1}", "--port", "{serve_port}", "--head-split", "12", "--context", "114688",
           "--kv", "q8", "--batch", "128", "--ngram", "disk"]
 driver_mtp = ["--mtp", "{flashnext-mtp}"]
-# MTP by default: the same reply for a seed with or without it, 31.3 against 22.6 tok/s in chat (docs/qwen4.md).
+# MTP by default: the same reply for a seed with or without it (docs/qwen4.md).
 mtp_default = true
+# With MTP, a 0 us CPU latency request for the driver, which drafts on its CPU: through the server 26.7 against 23.9
+# tok/s on chat text, 30.4 against 27.0 on a CSV (results/qwen4/serve-mtp-latency-20261028); about 55 W more on that
+# Mac while it waits for requests.
+mtp_cpu_latency = true
 # Flash-Next's decode graphs rely on RADV's barrier behaviour in this Mesa version (docs/qwen4.md).
 mesa_strict = true
 load_deadline_s = 600
