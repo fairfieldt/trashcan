@@ -1,0 +1,26 @@
+sparse v0.6.5-rc1-21-g84ec0658, x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0
+== thunderbolt-stream-hopid on tb/next = a93a8e320000 ("thunderbolt: stream: Make read return framing error to the userspace")
+applied 1 patch(es): a6feb43c2778 
+also applies to torvalds/master (8a36f53fd5ec)
+also applies to tb/fixes (96a8479804e3)
+config out-main: --enable CONFIGFS_FS --module USB4 --module USB4_CONFIGFS --module USB4_STREAM
+  CONFIG_CONFIGFS_FS=y
+  CONFIG_USB4=m
+  CONFIG_USB4_CONFIGFS=m
+  CONFIG_USB4_STREAM=m
+build main-base: ok, 0 warning/error lines
+build main-patch1: ok, 0 warning/error lines
+new W=1/sparse warnings with the series (main): 0
+format-patch: 0001-thunderbolt-stream-Don-t-release-HopIDs-that-were-ne.patch 
+== checkpatch --strict
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 0 checks, 48 lines checked
+/home/fairfieldt.linux/a18/check/thunderbolt-stream-hopid/series/0001-thunderbolt-stream-Don-t-release-HopIDs-that-were-ne.patch has style problems, please review.
+== get_maintainer.pl
+Andreas Noever <andreas.noever@gmail.com> (maintainer:THUNDERBOLT DRIVER)
+Mika Westerberg <westeri@kernel.org> (maintainer:THUNDERBOLT DRIVER,blamed_fixes:1/1=100%)
+Yehezkel Bernat <YehezkelShB@gmail.com> (maintainer:THUNDERBOLT DRIVER)
+Alan Borzeszkowski <alan.borzeszkowski@linux.intel.com> (blamed_fixes:1/1=100%)
+linux-usb@vger.kernel.org (open list:THUNDERBOLT DRIVER)
+linux-kernel@vger.kernel.org (open list)
+base-commit a93a8e3200002f0c345fec4c340390e9a60aabc7

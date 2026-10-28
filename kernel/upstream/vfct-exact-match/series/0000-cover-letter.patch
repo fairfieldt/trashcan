@@ -1,6 +1,6 @@
-From 89817176177a3bf24ed101f3c82472acdf38107e Mon Sep 17 00:00:00 2001
+From 87cc0d01c70d78cd438e409a50d91efb81c2a38c Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
-Date: Mon, 26 Oct 2026 13:02:03 -0700
+Date: Tue, 27 Oct 2026 16:41:55 -0700
 Subject: [PATCH 0/2] drm/amdgpu, drm/radeon: Prefer exact bus match for VFCT
  images
 
@@ -56,7 +56,7 @@ Tom Fairfield (2):
  2 files changed, 93 insertions(+), 83 deletions(-)
 
 
-base-commit: 77f548b127c6de34ce271fa09ba270cb1ef9f2da
+base-commit: ba496bb837882eb1af58f41572fc289e46c77b8c
 -- 
 2.47.3
 

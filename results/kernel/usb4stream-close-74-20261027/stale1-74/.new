@@ -1,0 +1,1 @@
+{"step": "new", "mode": "block", "poll_open": ["ERR"], "bytes": 112, "eofs": 0, "events": ["data 112"], "write": "ok", "poll_after": ["ERR"], "bytes_after": 0, "eofs_after": 1000, "host": "alight"}

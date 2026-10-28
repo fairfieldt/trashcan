@@ -1,0 +1,8 @@
+[Tue Oct 27 17:00:55 2026] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 27 17:00:55 2026] thunderbolt 2-3: Linux incite
+[Tue Oct 27 17:06:05 2026] thunderbolt-net 2-3.0 thunderbolt1: ThunderboltIP login timed out
+[Tue Oct 27 17:08:46 2026] TCP: thunderbolt0: Driver has suspect GRO implementation, TCP performance may be compromised.
+[Tue Oct 27 17:17:44 2026] thunderbolt 0-3: failed request link state change, aborting
+[Tue Oct 27 17:17:45 2026] thunderbolt 0-3: failed request link state change, aborting
+[Tue Oct 27 17:17:46 2026] thunderbolt 0-3: failed request link state change, aborting
+[Tue Oct 27 17:17:47 2026] thunderbolt 0-3: failed request link state change, aborting

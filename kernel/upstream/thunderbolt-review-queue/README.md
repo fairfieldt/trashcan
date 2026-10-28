@@ -1,4 +1,4 @@
-# Thunderbolt review queue: local 0004, 0006, 0007 (not for sending as is)
+# Thunderbolt review queue: local 0004, 0006, 0007 (not for sending as is; all three resolved 2026-10-27)
 
 The lab kernel carries three Thunderbolt patches that are not in the two stream submissions
 (`../thunderbolt-stream-tx-e2e/`, `../thunderbolt-stream-hopid/`). Checked against mainline d135ab453a74 (2026-10-26,
@@ -9,8 +9,8 @@ are listed for a planned session instead.
 | Patch | Mainline today | Recommendation |
 |---|---|---|
 | 0007 no RX flush on close | **Superseded**: 20bea8ceeb6a ("thunderbolt: stream: Use polling with RX ring", 7.4) removed the RX `tb_ring_flush()` | Drop from the upstream queue; keep locally while on 7.3 |
-| 0006 I/O after CLOSE | **Conflicts** with 8d55710a8c43 ("Improve CLOSE handling on write side", 7.4); doesn't apply | Don't send; ask the subsystem about stale CLOSEs first |
-| 0004 thunderbolt_net throttling parameter | Applies; 128 us still hard-coded | Don't send as a module parameter; needs an API decision |
+| 0006 I/O after CLOSE | **Conflicts** with 8d55710a8c43 ("Improve CLOSE handling on write side", 7.4); doesn't apply | **Resolved 2026-10-27: not needed on 7.4** (the stale CLOSE no longer reaches the next session; `../thunderbolt-stream-close/`). Keep locally while on 7.3; ask about 7.3.y in the mail draft there |
+| 0004 thunderbolt_net throttling parameter | Applies; 128 us still hard-coded | **Replaced 2026-10-27** by `../thunderbolt-net-coalesce/` (ethtool coalescing, ready for review); keep 0004 locally until that is merged |
 
 ## 0007: close waits 500 ms for the RX ring
 

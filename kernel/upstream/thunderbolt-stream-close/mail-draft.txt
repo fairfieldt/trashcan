@@ -1,0 +1,56 @@
+To: Mika Westerberg <westeri@kernel.org>
+Cc: Andreas Noever <andreas.noever@gmail.com>, Yehezkel Bernat <YehezkelShB@gmail.com>,
+    Alan Borzeszkowski <alan.borzeszkowski@linux.intel.com>, linux-usb@vger.kernel.org
+Subject: thunderbolt: stream: a CLOSE read on 7.3 fails every later read and write (fine on 7.4)
+
+[DRAFT for Tom: read, correct and send yourself; nothing here has been sent. Evidence:
+ results/kernel/usb4stream-busypoll-20261014/ (7.3) and results/kernel/usb4stream-close-74-20261027/ (7.4).]
+
+Hi Mika,
+
+I use USB4STREAM between six Mac Pro 6,1s (Falcon Ridge, software
+connection manager), one stream per Thunderbolt 2 cable, opened and
+closed many times a day.  Two things to report, one question.
+
+1. On 7.3, since e120d14d03b3 ("thunderbolt: stream: Add support for busy
+   polling"), once a stream device has read a CLOSE every later read
+   returns end of file and every write fails with -ENXIO until the device
+   is closed.  On these hosts a CLOSE sent at the end of one session can
+   reach the other end's next session: the receiving controller holds a
+   frame until about three more arrive behind it, so a CLOSE written
+   while the other end is still open, or closing, can be delivered after
+   it has opened again.  The next session then fails at once.  Measured
+   on one cable, 20 back-to-back sessions: 9 reached their stream within
+   100 ms on 7.3-rc7, 192 of 200 with a local patch that restores 7.2's
+   behaviour (the closed check only where a blocking read or write would
+   otherwise wait).
+
+2. On the 7.4 merge window (mainline 8a36f53fd5ec) I can't reproduce it,
+   and the frame hold is gone: a single frame with nothing behind it
+   arrives at once (0.2-0.3 ms for two lone frames' round trip, 0.04-0.07
+   ms with busy_poll, against a 20 ms wait on 7.3).  With the RX ring
+   polled and the release consuming a CLOSE already in the ring, 500 of
+   500 sessions reached their stream within 100 ms, and 80 rounds of "a
+   CLOSE sent to an end that is open and not reading, then a new session
+   at both ends" all started clean (no EPOLLHUP, no end of file, data
+   read, write ok), with blocking and non-blocking I/O and busy_poll on
+   and off.  So I don't think 7.4 needs a change, and the CLOSE semantics
+   from 8d55710a8c43 work for me.
+
+Question: is the 7.3 behaviour worth fixing in 7.3.y?  I haven't
+bisected what removed the hold in 7.4; the RX ring polling (20bea8ceeb6a)
+and the tb_ring_poll() descriptor changes are the likely candidates, and
+they look too large for stable.  So it would be a 7.3-only patch along
+the lines of the one above, naming them.  If you'd take that, I'll send it; if 7.3 users of
+USB4STREAM are few enough that it isn't worth it, I'll keep it local
+until I move to 7.4.
+
+A separate observation from the same day, on 7.3-rc7: a host whose peer
+rebooted (the peer's firmware XDomain appeared, then "failed read
+XDomain properties", then two more disconnects over the next half hour)
+oopsed in tb_handle_hotplug() -> kobject_get() on the next disconnect
+and panicked.  I have the full log and will send a separate report once
+I can reproduce it on 7.4.
+
+Thanks,
+Tom

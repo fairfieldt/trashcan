@@ -1,0 +1,27 @@
+sparse v0.6.5-rc1-21-g84ec0658, x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0
+== thunderbolt-net-coalesce on netdev/main = 734bef548a96 ("Merge tag 'net-next-7.4' of git://git.kernel.org/pub/scm/linux/kernel/git/netdev/net-next")
+applied 1 patch(es): 67843e2a50b0 
+also applies to torvalds/master (8a36f53fd5ec)
+config out-main: --enable CONFIGFS_FS --module USB4 --module USB4_NET
+  CONFIG_CONFIGFS_FS=y
+  CONFIG_USB4=m
+  CONFIG_USB4_NET=m
+build main-base: ok, 0 warning/error lines
+build main-patch1: ok, 0 warning/error lines
+new W=1/sparse warnings with the series (main): 0
+format-patch: 0001-net-thunderbolt-Make-ring-interrupt-throttling-confi.patch 
+== checkpatch --strict
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 0 checks, 107 lines checked
+/home/fairfieldt.linux/a18/check/thunderbolt-net-coalesce/series/0001-net-thunderbolt-Make-ring-interrupt-throttling-confi.patch has style problems, please review.
+== get_maintainer.pl
+Mika Westerberg <westeri@kernel.org> (maintainer:THUNDERBOLT NETWORK DRIVER)
+Yehezkel Bernat <YehezkelShB@gmail.com> (maintainer:THUNDERBOLT NETWORK DRIVER)
+Andrew Lunn <andrew+netdev@lunn.ch> (maintainer:NETWORKING DRIVERS)
+"David S. Miller" <davem@davemloft.net> (maintainer:NETWORKING DRIVERS)
+Eric Dumazet <edumazet@kernel.org> (maintainer:NETWORKING DRIVERS)
+Jakub Kicinski <kuba@kernel.org> (maintainer:NETWORKING DRIVERS)
+Paolo Abeni <pabeni@redhat.com> (maintainer:NETWORKING DRIVERS)
+netdev@vger.kernel.org (open list:THUNDERBOLT NETWORK DRIVER)
+linux-kernel@vger.kernel.org (open list)
+base-commit 734bef548a96e8774d6eef5dfa2026c6edc4e80b

@@ -1,4 +1,4 @@
-From 89817176177a3bf24ed101f3c82472acdf38107e Mon Sep 17 00:00:00 2001
+From 87cc0d01c70d78cd438e409a50d91efb81c2a38c Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Mon, 5 Oct 2026 21:16:29 -0700
 Subject: [PATCH 2/2] drm/radeon: Prefer exact bus match when picking a VFCT

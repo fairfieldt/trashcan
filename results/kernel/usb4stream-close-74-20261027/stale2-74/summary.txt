@@ -1,0 +1,8 @@
+bp0 nb inflight: 5/5 pass
+bp0 nb alight: 5/5 pass
+bp0 block inflight: 5/5 pass
+bp0 block alight: 5/5 pass
+bp1 nb inflight: 5/5 pass
+bp1 nb alight: 5/5 pass
+bp1 block inflight: 5/5 pass
+bp1 block alight: 5/5 pass

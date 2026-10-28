@@ -1,4 +1,4 @@
-From a5e898b120f7c3ba827721fdf0c9304a921c899a Mon Sep 17 00:00:00 2001
+From 912355b682542cd73c350db2bbcbbb2afd6ddaf1 Mon Sep 17 00:00:00 2001
 From: Tom Fairfield <tom@fairfieldt.com>
 Date: Tue, 6 Oct 2026 16:28:04 -0700
 Subject: [PATCH] thunderbolt: stream: Don't use end-to-end flow control on the
@@ -36,10 +36,16 @@ Notes:
     this change; without it 0 of 10 stream opens succeeded and the
     controller had to be reset).  The same change has been in the 7.3-rc7
     kernels of six Mac Pro 6,1s since 14 October, which use USB4STREAM
-    links between each other daily.  It has not run on this base: stream.c
-    here has the RX polling, busy polling and CLOSE changes merged for 7.4,
-    which the tested kernels don't have.  On this base it builds with W=1
-    and adds no sparse warnings.
+    links between each other daily.  On 27 October it also ran on this
+    base: mainline 8a36f53fd5ec (the 7.4 merge window, with thunderbolt.git
+    next merged) on two of those Macs, one Thunderbolt 2 cable between
+    them.  With the patch, 500 of 500 back-to-back sessions (normal exits,
+    killed clients, server restarts; with and without busy_poll) reached
+    their stream within 100 ms, and 5 MiB transfers ran at 580-630 MB/s
+    each way.  With the same kernel and only this patch reverted in
+    thunderbolt_stream.ko, 0 of 7 sessions got any data across the stream
+    (each gave up after 60 s).
+    On this base it builds with W=1 and adds no sparse warnings.
     
     The patch applies to thunderbolt.git next and to mainline; it doesn't
     apply to the current fixes branch, which predates the RX polling change.

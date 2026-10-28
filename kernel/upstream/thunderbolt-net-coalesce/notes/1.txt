@@ -1,0 +1,16 @@
+Testing: two Mac Pro 6,1s (Falcon Ridge, software connection manager),
+one Thunderbolt 2 cable, mainline 8a36f53fd5ec plus this patch, both
+ends holding a 0 us CPU latency request.  sockperf ping-pong, 64 bytes,
+10 s: round trip p50 127.8 us at the default (128 us), 59.1 us after
+"ethtool -C thunderbolt0 rx-usecs 32 tx-usecs 32" on both ends and a
+reconnect; iperf3 one way, 10 s: 8.6-10.1 Gb/s at the default and
+7.9-9.7 Gb/s at 32 us.  Setting 128 us while connected kept 58.5 us
+until the next connection and gave 127.8 us after it; 20000 us is
+refused ("interval must be at most 16776 us").
+
+net-next is closed for the 7.4 merge window: send after v7.4-rc1, when it
+reopens.  It applies to net-next main and to mainline.
+
+How this was made: an AI coding assistant (Claude, in Claude Code) wrote
+the patch and this message from my measurements of the throttling
+interval; the hardware tests ran on my machines.

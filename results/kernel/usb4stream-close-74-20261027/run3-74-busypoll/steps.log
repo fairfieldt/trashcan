@@ -1,0 +1,8 @@
+[17:24:36] kernels 7.3.0-mw8a36f53+ / 7.3.0-mw8a36f53+; inflight /dev/tbstream0 <-> alight /dev/tbstream0, connect alight.tb1
+[17:24:36] busy_poll 1: /sys/kernel/config/thunderbolt/stream/1-3.1/trashcan/busy_poll=1 /sys/kernel/config/thunderbolt/stream/1-3.1/trashcan/busy_poll=1 
+[17:24:36] probe: a CLOSE planted at each end, then read there
+[17:24:39]   alight: 0 ends of file, write ok, 0 after it; inflight: 0 ends of file, write ok, 0 after it; 
+[17:24:39] churn: 200 sessions
+[17:25:15]   churn rc 0: {"churn":"c74","failed_epochs":0,"on_stream":200,"pass":true,"passed":200,"pattern":"nkns","sessions":200,"up_ms":{"max":57.030500999999994,"p50":11.297352,"p99":56.398454},"within_ms":100.0}
+[17:25:15] suite
+[17:25:18]   suite: 5 of 5 passed; server: 0 failed epochs, 50 exits; client: 0 failed epochs, 0 fallbacks

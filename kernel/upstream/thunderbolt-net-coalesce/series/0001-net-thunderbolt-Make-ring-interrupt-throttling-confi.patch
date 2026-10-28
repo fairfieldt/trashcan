@@ -1,0 +1,167 @@
+From 67843e2a50b06d36f544e16b5501a5b1d834ec9c Mon Sep 17 00:00:00 2001
+From: Tom Fairfield <tom@fairfieldt.com>
+Date: Tue, 27 Oct 2026 16:43:49 -0700
+Subject: [PATCH] net: thunderbolt: Make ring interrupt throttling configurable
+ with ethtool
+
+The Rx and Tx ring interrupts of a ThunderboltIP connection are throttled
+to one per 128 us (TBNET_THROTTLING), which is a good default for bulk
+throughput but caps how fast a small packet can make a round trip: on a
+Thunderbolt 2 (Falcon Ridge) link between two Mac Pro 6,1 hosts, the
+sockperf ping-pong round trip is 127.8 us at the default and 40.2 us
+with 32 us throttling, with the same one-way throughput (9.23 vs 9.21
+Gb/s).
+
+Expose the interval through ethtool interrupt coalescing (rx-usecs and
+tx-usecs) instead of a hard-coded value. The NHI only accepts a new
+interval while a ring is stopped, so the rings take the configured value
+when they are started, which happens when the connection to the remote
+host is established; a change made while the link is up is kept and
+used from the next connection on, and the driver says so through
+extack. The default is unchanged.
+---
+
+Notes:
+    Testing: two Mac Pro 6,1s (Falcon Ridge, software connection manager),
+    one Thunderbolt 2 cable, mainline 8a36f53fd5ec plus this patch, both
+    ends holding a 0 us CPU latency request.  sockperf ping-pong, 64 bytes,
+    10 s: round trip p50 127.8 us at the default (128 us), 59.1 us after
+    "ethtool -C thunderbolt0 rx-usecs 32 tx-usecs 32" on both ends and a
+    reconnect; iperf3 one way, 10 s: 8.6-10.1 Gb/s at the default and
+    7.9-9.7 Gb/s at 32 us.  Setting 128 us while connected kept 58.5 us
+    until the next connection and gave 127.8 us after it; 20000 us is
+    refused ("interval must be at most 16776 us").
+    
+    net-next is closed for the 7.4 merge window: send after v7.4-rc1, when it
+    reopens.  It applies to net-next main and to mainline.
+    
+    How this was made: an AI coding assistant (Claude, in Claude Code) wrote
+    the patch and this message from my measurements of the throttling
+    interval; the hardware tests ran on my machines.
+
+ drivers/net/thunderbolt/main.c | 63 ++++++++++++++++++++++++++++++++--
+ 1 file changed, 60 insertions(+), 3 deletions(-)
+
+diff --git a/drivers/net/thunderbolt/main.c b/drivers/net/thunderbolt/main.c
+index d9fb587a62c5..832e952d5dfe 100644
+--- a/drivers/net/thunderbolt/main.c
++++ b/drivers/net/thunderbolt/main.c
+@@ -35,6 +35,8 @@
+ #define TBNET_LOGIN_RETRIES	60
+ #define TBNET_LOGOUT_RETRIES	10
+ #define TBNET_THROTTLING	128000
++/* The ring interrupt throttling interval is 16 bits in 256 ns units */
++#define TBNET_COALESCE_MAX_USECS	(0xffff * 256 / 1000)
+ #define TBNET_E2E		BIT(0)
+ #define TBNET_MATCH_FRAGS_ID	BIT(1)
+ #define TBNET_64K_FRAMES	BIT(2)
+@@ -178,6 +180,10 @@ struct tbnet_ring {
+  * @frame_id: Frame ID use for next Tx packet
+  *            (if %TBNET_MATCH_FRAGS_ID is supported in both ends)
+  * @tx_ring: Software ring holding Tx frames
++ * @rx_coalesce_usecs: Rx ring interrupt throttling interval (in us), applied
++ *		       when the rings are started
++ * @tx_coalesce_usecs: Tx ring interrupt throttling interval (in us), applied
++ *		       when the rings are started
+  */
+ struct tbnet {
+ 	const struct tb_service *svc;
+@@ -201,6 +207,8 @@ struct tbnet {
+ 	struct tbnet_ring rx_ring;
+ 	atomic_t frame_id;
+ 	struct tbnet_ring tx_ring;
++	u32 rx_coalesce_usecs;
++	u32 tx_coalesce_usecs;
+ };
+ 
+ /* Network property directory UUID: c66189ca-1cce-4195-bdb8-49592e5f5a4f */
+@@ -668,6 +676,10 @@ static void tbnet_connected_work(struct work_struct *work)
+ 	 * the Rx ring before any incoming packets are allowed to
+ 	 * arrive.
+ 	 */
++	tb_ring_throttling(net->tx_ring.ring,
++			   READ_ONCE(net->tx_coalesce_usecs) * NSEC_PER_USEC);
++	tb_ring_throttling(net->rx_ring.ring,
++			   READ_ONCE(net->rx_coalesce_usecs) * NSEC_PER_USEC);
+ 	tb_ring_start(net->tx_ring.ring);
+ 	tb_ring_start(net->rx_ring.ring);
+ 
+@@ -984,9 +996,6 @@ static int tbnet_open(struct net_device *dev)
+ 	}
+ 	net->rx_ring.ring = ring;
+ 
+-	tb_ring_throttling(net->tx_ring.ring, TBNET_THROTTLING);
+-	tb_ring_throttling(net->rx_ring.ring, TBNET_THROTTLING);
+-
+ 	napi_enable(&net->napi);
+ 	start_login(net);
+ 
+@@ -1336,8 +1345,54 @@ static int tbnet_get_link_ksettings(struct net_device *dev,
+ 	return 0;
+ }
+ 
++static int tbnet_get_coalesce(struct net_device *dev,
++			      struct ethtool_coalesce *ec,
++			      struct kernel_ethtool_coalesce *kec,
++			      struct netlink_ext_ack *extack)
++{
++	const struct tbnet *net = netdev_priv(dev);
++
++	ec->rx_coalesce_usecs = READ_ONCE(net->rx_coalesce_usecs);
++	ec->tx_coalesce_usecs = READ_ONCE(net->tx_coalesce_usecs);
++
++	return 0;
++}
++
++/*
++ * The ring interrupt throttling interval can only be changed while the
++ * rings are stopped, so a new value takes effect the next time the rings
++ * are started, when the connection to the remote host is (re)established.
++ */
++static int tbnet_set_coalesce(struct net_device *dev,
++			      struct ethtool_coalesce *ec,
++			      struct kernel_ethtool_coalesce *kec,
++			      struct netlink_ext_ack *extack)
++{
++	struct tbnet *net = netdev_priv(dev);
++
++	if (ec->rx_coalesce_usecs > TBNET_COALESCE_MAX_USECS ||
++	    ec->tx_coalesce_usecs > TBNET_COALESCE_MAX_USECS) {
++		NL_SET_ERR_MSG_FMT_MOD(extack,
++				       "interval must be at most %d us",
++				       TBNET_COALESCE_MAX_USECS);
++		return -ERANGE;
++	}
++
++	WRITE_ONCE(net->rx_coalesce_usecs, ec->rx_coalesce_usecs);
++	WRITE_ONCE(net->tx_coalesce_usecs, ec->tx_coalesce_usecs);
++
++	if (netif_carrier_ok(dev))
++		NL_SET_ERR_MSG_MOD(extack,
++				   "new interval applies when the connection is re-established");
++
++	return 0;
++}
++
+ static const struct ethtool_ops tbnet_ethtool_ops = {
++	.supported_coalesce_params = ETHTOOL_COALESCE_USECS,
+ 	.get_link_ksettings = tbnet_get_link_ksettings,
++	.get_coalesce = tbnet_get_coalesce,
++	.set_coalesce = tbnet_set_coalesce,
+ };
+ 
+ static void tbnet_generate_mac(struct net_device *dev)
+@@ -1385,6 +1440,8 @@ static int tbnet_probe(struct tb_service *svc)
+ 	net->svc = svc;
+ 	net->dev = dev;
+ 	net->xd = xd;
++	net->rx_coalesce_usecs = TBNET_THROTTLING / NSEC_PER_USEC;
++	net->tx_coalesce_usecs = TBNET_THROTTLING / NSEC_PER_USEC;
+ 
+ 	tbnet_generate_mac(dev);
+ 
+
+base-commit: 734bef548a96e8774d6eef5dfa2026c6edc4e80b
+-- 
+2.47.3
+

@@ -1,0 +1,23 @@
+sparse v0.6.5-rc1-21-g84ec0658, x86_64-linux-gnu-gcc (Debian 14.2.0-19) 14.2.0
+== p2pdma-ivy-bridge-ep on pci/next = 17bb0e2f6c80 ("Merge tag 'pci-v7.4-changes' of git://git.kernel.org/pub/scm/linux/kernel/git/pci/pci")
+applied 1 patch(es): a36dc5003522 
+also applies to torvalds/master (8a36f53fd5ec)
+config out-main: --enable MEMORY_HOTPLUG --enable MEMORY_HOTREMOVE --enable ZONE_DEVICE --enable PCI_P2PDMA
+  CONFIG_MEMORY_HOTPLUG=y
+  CONFIG_MEMORY_HOTREMOVE=y
+  CONFIG_ZONE_DEVICE=y
+  CONFIG_PCI_P2PDMA=y
+build main-base: ok, 0 warning/error lines
+build main-patch1: ok, 0 warning/error lines
+new W=1/sparse warnings with the series (main): 0
+format-patch: 0001-PCI-P2PDMA-Add-Intel-Xeon-E5-v2-Ivy-Bridge-EP-to-all.patch 
+== checkpatch --strict
+ERROR:MISSING_SIGN_OFF: Missing Signed-off-by: line(s)
+total: 1 errors, 0 warnings, 0 checks, 8 lines checked
+/home/fairfieldt.linux/a18/check/p2pdma-ivy-bridge-ep/series/0001-PCI-P2PDMA-Add-Intel-Xeon-E5-v2-Ivy-Bridge-EP-to-all.patch has style problems, please review.
+== get_maintainer.pl
+Bjorn Helgaas <bhelgaas@google.com> (maintainer:PCI PEER-TO-PEER DMA (P2PDMA))
+Logan Gunthorpe <logang@deltatee.com> (maintainer:PCI PEER-TO-PEER DMA (P2PDMA))
+linux-pci@vger.kernel.org (open list:PCI PEER-TO-PEER DMA (P2PDMA))
+linux-kernel@vger.kernel.org (open list)
+base-commit 17bb0e2f6c8043f70a693a5f3797471cbed354c8

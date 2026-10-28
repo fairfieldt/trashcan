@@ -83,3 +83,9 @@ git send-email --to="Alex Deucher <alexander.deucher@amd.com>" --to="Christian K
 ```
 
 Mario Limonciello wrote the soft filter; Oz Tiram reported the pci=realloc case it was added for.
+
+## 2026-10-27
+
+`amd-staging-drm-next` moved to ba496bb83788; `check.conf` updated, the series applies unchanged, no new W=1/sparse
+warnings (`results/kernel/upstream-20261027/vfct-exact-match/`). On the 7.4 merge-window base (`7.3.0-mw8a36f53+`) on
+inflight and alight each D700 loaded its own VBIOS (113-C3861XA-028 at 02:00.0, 113-C3861XB-028 at 06:00.0).

@@ -1,0 +1,37 @@
+diff --git a/drivers/thunderbolt/stream.c b/drivers/thunderbolt/stream.c
+index 6976a1e82e82..9c154c4aa5fc 100644
+--- a/drivers/thunderbolt/stream.c
++++ b/drivers/thunderbolt/stream.c
+@@ -34,9 +34,7 @@
+  * the stream is opened. Typically the read side is opened first to make
+  * sure all the data will be received.
+  *
+- * End-to-end flow control is mandatory on the receive rings of both sides.
+- * Transmit rings do not use it: some host routers never return the
+- * credits, which stalls the ring.
++ * End-to-end flow control is mandatory on both sides.
+  *
+  * Data is sent to the other side as tunneled DATA packets. All the data
+  * is owned by the user and passed as-is from the writer to the reader.
+@@ -629,7 +627,7 @@ static void tbstream_dev_complete_rx(struct tbstream_dev *sdev)
+ static int tbstream_dev_start(struct tbstream_dev *sdev)
+ {
+ 	struct tb_xdomain *xd = tbstream_dev_xdomain(sdev);
+-	unsigned int flags = RING_FLAG_FRAME;
++	unsigned int flags = RING_FLAG_FRAME | RING_FLAG_E2E;
+ 	void (*start_poll)(void *) = NULL;
+ 	u16 sof_mask, eof_mask;
+ 	struct tb_ring *ring;
+@@ -653,9 +651,9 @@ static int tbstream_dev_start(struct tbstream_dev *sdev)
+ 	sof_mask = BIT(TBSTREAM_FRAME_START);
+ 	eof_mask = BIT(TBSTREAM_DATA) | BIT(TBSTREAM_CLOSE);
+ 
+-	ring = tb_ring_alloc_rx(xd->tb->nhi, -1, sdev->ring_size,
+-				flags | RING_FLAG_E2E, e2e_tx_hop, sof_mask,
+-				eof_mask, start_poll, sdev);
++	ring = tb_ring_alloc_rx(xd->tb->nhi, -1, sdev->ring_size, flags,
++				e2e_tx_hop, sof_mask, eof_mask, start_poll,
++				sdev);
+ 	if (!ring) {
+ 		ret = -ENOMEM;
+ 		goto err_free_tx_buffers;

@@ -1,0 +1,5 @@
+[Tue Oct 27 17:00:55 2026] thunderbolt 2-3: Linux incite
+[Tue Oct 27 17:06:05 2026] thunderbolt-net 2-3.0 thunderbolt1: ThunderboltIP login timed out
+[Tue Oct 27 17:08:46 2026] TCP: thunderbolt0: Driver has suspect GRO implementation, TCP performance may be compromised.
+[Tue Oct 27 17:15:07 2026] thunderbolt_stream: loading out-of-tree module taints kernel.
+[Tue Oct 27 17:15:07 2026] thunderbolt_stream: module verification failed: signature and/or required key missing - tainting kernel

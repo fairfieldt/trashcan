@@ -1,0 +1,6 @@
+netlink warning: thunderbolt_net: new interval applies when the connection is re-established
+rx-usecs:	32
+tx-usecs:	32
+netlink warning: thunderbolt_net: new interval applies when the connection is re-established
+rx-usecs:	32
+tx-usecs:	32

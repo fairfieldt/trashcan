@@ -1,0 +1,60 @@
+Oct 27 11:44:48.421362 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:49.445409 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:50.469468 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:51.493408 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:52.517463 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:53.541407 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:54.565463 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:55.593401 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:56.613473 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:57.637415 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:58.661474 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:44:59.685340 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:00.709460 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:01.733442 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:02.757472 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:03.781512 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:04.805476 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:05.829540 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:06.853477 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:07.877534 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:08.901519 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:09.925359 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:10.949472 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:11.973470 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:12.997478 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:14.021503 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:15.045474 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:16.069491 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:17.093336 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:18.117457 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:19.141442 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:20.165296 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:21.189446 incite kernel: thunderbolt 2-3: failed request link state change, aborting
+Oct 27 11:45:22.039089 incite kernel: ACPI: bus type thunderbolt unregistered
+Oct 27 11:45:22.169313 incite kernel: ACPI: bus type thunderbolt registered
+Oct 27 11:45:22.169405 incite kernel: thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+Oct 27 11:45:22.177308 incite kernel: thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+Oct 27 11:45:22.185324 incite kernel: thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+Oct 27 11:45:27.509352 incite kernel: thunderbolt 0000:5d:00.0: 0:4: failed to reach state TB_PORT_UP. Ignoring port...
+Oct 27 11:45:28.519351 incite kernel: thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+Oct 27 11:45:28.519976 incite kernel: thunderbolt 1-3: Linux enlight
+Oct 27 11:45:29.575978 incite kernel: thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+Oct 27 11:45:29.576475 incite kernel: thunderbolt 2-3: Linux inflight
+Oct 27 11:46:04.809574 incite kernel: ACPI: bus type thunderbolt unregistered
+Oct 27 11:46:04.941316 incite kernel: ACPI: bus type thunderbolt registered
+Oct 27 11:46:04.941420 incite kernel: thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+Oct 27 11:46:04.949310 incite kernel: thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+Oct 27 11:46:04.977302 incite kernel: thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+Oct 27 11:46:10.310984 incite kernel: thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+Oct 27 11:46:10.311665 incite kernel: thunderbolt 2-3: Linux inflight
+Oct 27 11:46:10.312260 incite kernel: thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+Oct 27 11:46:10.312862 incite kernel: thunderbolt 1-3: Linux enlight
+Oct 27 11:55:35.653327 incite kernel: clocksource: Watchdog remote CPU 17 read timed out
+Oct 27 14:28:22.905322 incite kernel: rfkill: input handler enabled
+Oct 27 14:28:25.389294 incite kernel: rfkill: input handler disabled
+Oct 27 16:58:22.869293 incite kernel: thunderbolt 2-3: host disconnected
+Oct 27 16:58:29.061338 incite kernel: thunderbolt 2-3: new host found, vendor=0xa27 device=0xa
+Oct 27 16:58:29.065642 incite kernel: thunderbolt 2-3: Apple, Inc. Macintosh
+Oct 27 16:59:05.029330 incite kernel: thunderbolt 2-3: failed read XDomain properties from 5ce665e8-023a-b858-9b96-7755786ae90a
+Oct 27 17:23:12.669374 incite kernel: thunderbolt 2-3: host disconnected

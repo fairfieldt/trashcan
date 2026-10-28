@@ -1,0 +1,561 @@
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:53918): stream up (1-3.1/trashcan /dev/tbstream0), epoch ddff3aec, 21.4 ms after the link started [17:02:26.693]
+link-test: 10.99.86.17:53918: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:53924): stream up (1-3.1/trashcan /dev/tbstream0), epoch a826dce3, 16.3 ms after the link started [17:02:29.247]
+link-test: 10.99.86.17:53924: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:53924: inflight (10.99.86.17:53924) closed the link without saying goodbye
+link inflight (10.99.86.17:53934): stream up (1-3.1/trashcan /dev/tbstream0), epoch 3899f41f, 4.9 ms after the link started [17:02:29.412]
+link-test: 10.99.86.17:53934: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:53942): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8cf22844, 7.5 ms after the link started [17:02:29.494]
+link-test: 10.99.86.17:53942: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145749.695 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:53960): stream up (1-3.1/trashcan /dev/tbstream0), epoch 66cdd154, 19.7 ms after the link started [17:02:29.826]
+link-test: 10.99.86.17:53960: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:53972): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7fe15abf, 15.4 ms after the link started [17:02:29.922]
+link-test: 10.99.86.17:53972: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:53972: inflight (10.99.86.17:53972) closed the link without saying goodbye
+link inflight (10.99.86.17:53976): stream up (1-3.1/trashcan /dev/tbstream0), epoch b7524391, 14.1 ms after the link started [17:02:30.121]
+link-test: 10.99.86.17:53976: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:53990): stream up (1-3.1/trashcan /dev/tbstream0), epoch 43e0220f, 19.1 ms after the link started [17:02:30.221]
+link-test: 10.99.86.17:53990: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145750.422 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:53994): stream up (1-3.1/trashcan /dev/tbstream0), epoch 64389f69, 53.0 ms after the link started [17:02:30.584]
+link-test: 10.99.86.17:53994: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:53998): stream up (1-3.1/trashcan /dev/tbstream0), epoch 462d0aeb, 7.9 ms after the link started [17:02:30.667]
+link-test: 10.99.86.17:53998: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:53998: inflight (10.99.86.17:53998) closed the link without saying goodbye
+link inflight (10.99.86.17:54014): stream up (1-3.1/trashcan /dev/tbstream0), epoch 790b3d45, 7.2 ms after the link started [17:02:30.921]
+link-test: 10.99.86.17:54014: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:54028): stream up (1-3.1/trashcan /dev/tbstream0), epoch 70689a08, 42.7 ms after the link started [17:02:31.056]
+link-test: 10.99.86.17:54028: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145751.257 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:54052): stream up (1-3.1/trashcan /dev/tbstream0), epoch 15fce0f2, 45.8 ms after the link started [17:02:31.413]
+link-test: 10.99.86.17:54052: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:54066): stream up (1-3.1/trashcan /dev/tbstream0), epoch 642d14e4, 19.4 ms after the link started [17:02:31.513]
+link-test: 10.99.86.17:54066: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:54066: inflight (10.99.86.17:54066) closed the link without saying goodbye
+link inflight (10.99.86.17:54076): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6cb8de56, 9.3 ms after the link started [17:02:31.760]
+link-test: 10.99.86.17:54076: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:54092): stream up (1-3.1/trashcan /dev/tbstream0), epoch 038dd56c, 23.1 ms after the link started [17:02:31.867]
+link-test: 10.99.86.17:54092: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145752.069 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60288): stream up (1-3.1/trashcan /dev/tbstream0), epoch 66019afb, 29.5 ms after the link started [17:02:32.208]
+link-test: 10.99.86.17:60288: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60304): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8c3c4f76, 52.9 ms after the link started [17:02:32.333]
+link-test: 10.99.86.17:60304: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60304: inflight (10.99.86.17:60304) closed the link without saying goodbye
+link inflight (10.99.86.17:60318): stream up (1-3.1/trashcan /dev/tbstream0), epoch 388aaa2d, 12.7 ms after the link started [17:02:32.402]
+link-test: 10.99.86.17:60318: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60334): stream up (1-3.1/trashcan /dev/tbstream0), epoch f2c25ef8, 10.5 ms after the link started [17:02:32.484]
+link-test: 10.99.86.17:60334: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145752.685 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60366): stream up (1-3.1/trashcan /dev/tbstream0), epoch c8a37032, 41.2 ms after the link started [17:02:32.837]
+link-test: 10.99.86.17:60366: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60372): stream up (1-3.1/trashcan /dev/tbstream0), epoch fc8d362d, 6.8 ms after the link started [17:02:32.922]
+link-test: 10.99.86.17:60372: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60372: inflight (10.99.86.17:60372) closed the link without saying goodbye
+link inflight (10.99.86.17:60388): stream up (1-3.1/trashcan /dev/tbstream0), epoch 69671733, 30.0 ms after the link started [17:02:33.012]
+link-test: 10.99.86.17:60388: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60398): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6660da2e, 13.6 ms after the link started [17:02:33.124]
+link-test: 10.99.86.17:60398: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145753.326 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60424): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7671a7a2, 18.8 ms after the link started [17:02:33.455]
+link-test: 10.99.86.17:60424: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60438): stream up (1-3.1/trashcan /dev/tbstream0), epoch b0e78403, 11.3 ms after the link started [17:02:33.545]
+link-test: 10.99.86.17:60438: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60438: inflight (10.99.86.17:60438) closed the link without saying goodbye
+link inflight (10.99.86.17:60440): stream up (1-3.1/trashcan /dev/tbstream0), epoch d9003f49, 10.7 ms after the link started [17:02:33.735]
+link-test: 10.99.86.17:60440: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60452): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8420f233, 12.6 ms after the link started [17:02:33.843]
+link-test: 10.99.86.17:60452: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145754.044 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60468): stream up (1-3.1/trashcan /dev/tbstream0), epoch 22442631, 8.0 ms after the link started [17:02:34.163]
+link-test: 10.99.86.17:60468: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60484): stream up (1-3.1/trashcan /dev/tbstream0), epoch ef67b1bd, 14.6 ms after the link started [17:02:34.257]
+link-test: 10.99.86.17:60484: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60484: inflight (10.99.86.17:60484) closed the link without saying goodbye
+link inflight (10.99.86.17:60494): stream up (1-3.1/trashcan /dev/tbstream0), epoch 94289607, 7.6 ms after the link started [17:02:34.497]
+link-test: 10.99.86.17:60494: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60504): stream up (1-3.1/trashcan /dev/tbstream0), epoch 176eb42a, 6.1 ms after the link started [17:02:34.583]
+link-test: 10.99.86.17:60504: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145754.784 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60524): stream up (1-3.1/trashcan /dev/tbstream0), epoch b1deff5f, 4.3 ms after the link started [17:02:34.897]
+link-test: 10.99.86.17:60524: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60538): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2b337c6c, 9.2 ms after the link started [17:02:34.984]
+link-test: 10.99.86.17:60538: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60538: inflight (10.99.86.17:60538) closed the link without saying goodbye
+link inflight (10.99.86.17:60554): stream up (1-3.1/trashcan /dev/tbstream0), epoch aa193275, 6.9 ms after the link started [17:02:35.121]
+link-test: 10.99.86.17:60554: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60570): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8b827d56, 33.1 ms after the link started [17:02:35.233]
+link-test: 10.99.86.17:60570: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145755.434 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60586): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0a3fe776, 13.5 ms after the link started [17:02:35.560]
+link-test: 10.99.86.17:60586: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60600): stream up (1-3.1/trashcan /dev/tbstream0), epoch c27d0a2f, 4.5 ms after the link started [17:02:35.651]
+link-test: 10.99.86.17:60600: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60600: inflight (10.99.86.17:60600) closed the link without saying goodbye
+link inflight (10.99.86.17:60608): stream up (1-3.1/trashcan /dev/tbstream0), epoch 25fcf302, 23.7 ms after the link started [17:02:35.878]
+link-test: 10.99.86.17:60608: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60618): stream up (1-3.1/trashcan /dev/tbstream0), epoch c023bfc7, 9.6 ms after the link started [17:02:35.972]
+link-test: 10.99.86.17:60618: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145756.173 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60630): stream up (1-3.1/trashcan /dev/tbstream0), epoch dc12e63f, 6.0 ms after the link started [17:02:36.290]
+link-test: 10.99.86.17:60630: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60632): stream up (1-3.1/trashcan /dev/tbstream0), epoch 02a91de8, 3.9 ms after the link started [17:02:36.384]
+link-test: 10.99.86.17:60632: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60632: inflight (10.99.86.17:60632) closed the link without saying goodbye
+link inflight (10.99.86.17:60636): stream up (1-3.1/trashcan /dev/tbstream0), epoch b6b2bb02, 5.0 ms after the link started [17:02:36.544]
+link-test: 10.99.86.17:60636: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60650): stream up (1-3.1/trashcan /dev/tbstream0), epoch 3a698836, 5.3 ms after the link started [17:02:36.623]
+link-test: 10.99.86.17:60650: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145756.824 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60666): stream up (1-3.1/trashcan /dev/tbstream0), epoch 03cd6d0a, 4.2 ms after the link started [17:02:36.938]
+link-test: 10.99.86.17:60666: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60672): stream up (1-3.1/trashcan /dev/tbstream0), epoch 541f5a4e, 14.2 ms after the link started [17:02:37.037]
+link-test: 10.99.86.17:60672: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60672: inflight (10.99.86.17:60672) closed the link without saying goodbye
+link inflight (10.99.86.17:60676): stream up (1-3.1/trashcan /dev/tbstream0), epoch 014c1be7, 5.6 ms after the link started [17:02:37.161]
+link-test: 10.99.86.17:60676: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60686): stream up (1-3.1/trashcan /dev/tbstream0), epoch f33bde5c, 9.4 ms after the link started [17:02:37.246]
+link-test: 10.99.86.17:60686: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145757.447 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60712): stream up (1-3.1/trashcan /dev/tbstream0), epoch d7f757fd, 30.2 ms after the link started [17:02:37.587]
+link-test: 10.99.86.17:60712: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60728): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9ff5dfad, 36.1 ms after the link started [17:02:37.715]
+link-test: 10.99.86.17:60728: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60728: inflight (10.99.86.17:60728) closed the link without saying goodbye
+link inflight (10.99.86.17:60744): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6b1ec351, 11.5 ms after the link started [17:02:37.811]
+link-test: 10.99.86.17:60744: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60754): stream up (1-3.1/trashcan /dev/tbstream0), epoch bfa59c95, 53.3 ms after the link started [17:02:37.941]
+link-test: 10.99.86.17:60754: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145758.143 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60780): stream up (1-3.1/trashcan /dev/tbstream0), epoch f3092ec5, 28.3 ms after the link started [17:02:38.281]
+link-test: 10.99.86.17:60780: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60784): stream up (1-3.1/trashcan /dev/tbstream0), epoch c579ef63, 22.7 ms after the link started [17:02:38.387]
+link-test: 10.99.86.17:60784: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60784: inflight (10.99.86.17:60784) closed the link without saying goodbye
+link inflight (10.99.86.17:60788): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0574edb2, 6.2 ms after the link started [17:02:38.593]
+link-test: 10.99.86.17:60788: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60794): stream up (1-3.1/trashcan /dev/tbstream0), epoch ee6da95d, 8.5 ms after the link started [17:02:38.677]
+link-test: 10.99.86.17:60794: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145758.878 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60816): stream up (1-3.1/trashcan /dev/tbstream0), epoch 89327d69, 8.0 ms after the link started [17:02:38.996]
+link-test: 10.99.86.17:60816: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60832): stream up (1-3.1/trashcan /dev/tbstream0), epoch fe1b6277, 25.3 ms after the link started [17:02:39.099]
+link-test: 10.99.86.17:60832: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60832: inflight (10.99.86.17:60832) closed the link without saying goodbye
+link inflight (10.99.86.17:60834): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7fe978d3, 24.0 ms after the link started [17:02:39.212]
+link-test: 10.99.86.17:60834: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60850): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8d8274e7, 4.1 ms after the link started [17:02:39.303]
+link-test: 10.99.86.17:60850: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145759.505 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60862): stream up (1-3.1/trashcan /dev/tbstream0), epoch c5bc8baa, 3.9 ms after the link started [17:02:39.619]
+link-test: 10.99.86.17:60862: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60878): stream up (1-3.1/trashcan /dev/tbstream0), epoch a2c739b8, 14.4 ms after the link started [17:02:39.715]
+link-test: 10.99.86.17:60878: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60878: inflight (10.99.86.17:60878) closed the link without saying goodbye
+link inflight (10.99.86.17:60880): stream up (1-3.1/trashcan /dev/tbstream0), epoch 98e255e1, 7.4 ms after the link started [17:02:39.842]
+link-test: 10.99.86.17:60880: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60886): stream up (1-3.1/trashcan /dev/tbstream0), epoch f86cc64b, 5.2 ms after the link started [17:02:39.927]
+link-test: 10.99.86.17:60886: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145760.128 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60906): stream up (1-3.1/trashcan /dev/tbstream0), epoch 997bcba1, 9.8 ms after the link started [17:02:40.247]
+link-test: 10.99.86.17:60906: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60912): stream up (1-3.1/trashcan /dev/tbstream0), epoch 14bed6fd, 37.7 ms after the link started [17:02:40.361]
+link-test: 10.99.86.17:60912: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60912: inflight (10.99.86.17:60912) closed the link without saying goodbye
+link inflight (10.99.86.17:60920): stream up (1-3.1/trashcan /dev/tbstream0), epoch f1f41489, 6.9 ms after the link started [17:02:40.431]
+link-test: 10.99.86.17:60920: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60934): stream up (1-3.1/trashcan /dev/tbstream0), epoch 26e36973, 9.5 ms after the link started [17:02:40.529]
+link-test: 10.99.86.17:60934: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145760.730 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60948): stream up (1-3.1/trashcan /dev/tbstream0), epoch 080e88c5, 19.9 ms after the link started [17:02:40.860]
+link-test: 10.99.86.17:60948: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60954): stream up (1-3.1/trashcan /dev/tbstream0), epoch 73a13e92, 9.9 ms after the link started [17:02:40.946]
+link-test: 10.99.86.17:60954: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:60954: inflight (10.99.86.17:60954) closed the link without saying goodbye
+link inflight (10.99.86.17:60966): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0654701d, 5.9 ms after the link started [17:02:41.080]
+link-test: 10.99.86.17:60966: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:60974): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8cc1c8d8, 8.0 ms after the link started [17:02:41.179]
+link-test: 10.99.86.17:60974: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145761.380 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:60994): stream up (1-3.1/trashcan /dev/tbstream0), epoch 593730b3, 12.2 ms after the link started [17:02:41.503]
+link-test: 10.99.86.17:60994: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:32774): stream up (1-3.1/trashcan /dev/tbstream0), epoch 24b66aae, 5.9 ms after the link started [17:02:41.594]
+link-test: 10.99.86.17:32774: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:32774: inflight (10.99.86.17:32774) closed the link without saying goodbye
+link inflight (10.99.86.17:32786): stream up (1-3.1/trashcan /dev/tbstream0), epoch cbb33a21, 10.2 ms after the link started [17:02:41.712]
+link-test: 10.99.86.17:32786: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:32800): stream up (1-3.1/trashcan /dev/tbstream0), epoch ddc6d19b, 6.8 ms after the link started [17:02:41.797]
+link-test: 10.99.86.17:32800: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145761.998 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:40920): stream up (1-3.1/trashcan /dev/tbstream0), epoch 293a3c36, 46.5 ms after the link started [17:02:42.154]
+link-test: 10.99.86.17:40920: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:40932): stream up (1-3.1/trashcan /dev/tbstream0), epoch 11f81252, 9.7 ms after the link started [17:02:42.241]
+link-test: 10.99.86.17:40932: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:40932: inflight (10.99.86.17:40932) closed the link without saying goodbye
+link inflight (10.99.86.17:40942): stream up (1-3.1/trashcan /dev/tbstream0), epoch 58df4298, 20.3 ms after the link started [17:02:42.419]
+link-test: 10.99.86.17:40942: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:40954): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6471d2bb, 23.3 ms after the link started [17:02:42.528]
+link-test: 10.99.86.17:40954: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145762.729 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:40982): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6f7762db, 15.5 ms after the link started [17:02:42.855]
+link-test: 10.99.86.17:40982: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:40988): stream up (1-3.1/trashcan /dev/tbstream0), epoch 73a97406, 20.8 ms after the link started [17:02:42.956]
+link-test: 10.99.86.17:40988: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:40988: inflight (10.99.86.17:40988) closed the link without saying goodbye
+link inflight (10.99.86.17:41004): stream up (1-3.1/trashcan /dev/tbstream0), epoch b81cb60a, 33.2 ms after the link started [17:02:43.227]
+link-test: 10.99.86.17:41004: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41010): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8289d112, 9.1 ms after the link started [17:02:43.316]
+link-test: 10.99.86.17:41010: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145763.517 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41030): stream up (1-3.1/trashcan /dev/tbstream0), epoch f216ed51, 12.6 ms after the link started [17:02:43.640]
+link-test: 10.99.86.17:41030: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41032): stream up (1-3.1/trashcan /dev/tbstream0), epoch f08d9181, 5.8 ms after the link started [17:02:43.717]
+link-test: 10.99.86.17:41032: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41032: inflight (10.99.86.17:41032) closed the link without saying goodbye
+link inflight (10.99.86.17:41044): stream up (1-3.1/trashcan /dev/tbstream0), epoch 4d0c9cf3, 30.7 ms after the link started [17:02:43.906]
+link-test: 10.99.86.17:41044: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41046): stream up (1-3.1/trashcan /dev/tbstream0), epoch 59ce7946, 4.5 ms after the link started [17:02:43.998]
+link-test: 10.99.86.17:41046: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145764.199 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41060): stream up (1-3.1/trashcan /dev/tbstream0), epoch 527630e5, 18.7 ms after the link started [17:02:44.330]
+link-test: 10.99.86.17:41060: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41066): stream up (1-3.1/trashcan /dev/tbstream0), epoch be8524fc, 4.9 ms after the link started [17:02:44.422]
+link-test: 10.99.86.17:41066: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41066: inflight (10.99.86.17:41066) closed the link without saying goodbye
+link inflight (10.99.86.17:41078): stream up (1-3.1/trashcan /dev/tbstream0), epoch 4a850f8f, 14.6 ms after the link started [17:02:44.669]
+link-test: 10.99.86.17:41078: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41088): stream up (1-3.1/trashcan /dev/tbstream0), epoch c456717c, 13.8 ms after the link started [17:02:44.752]
+link-test: 10.99.86.17:41088: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145764.954 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41110): stream up (1-3.1/trashcan /dev/tbstream0), epoch c68b9cdb, 9.2 ms after the link started [17:02:45.073]
+link-test: 10.99.86.17:41110: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41114): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0cae5cd0, 34.9 ms after the link started [17:02:45.187]
+link-test: 10.99.86.17:41114: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41114: inflight (10.99.86.17:41114) closed the link without saying goodbye
+link inflight (10.99.86.17:41130): stream up (1-3.1/trashcan /dev/tbstream0), epoch 99c69642, 15.8 ms after the link started [17:02:45.311]
+link-test: 10.99.86.17:41130: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41146): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0f1dc4b8, 16.6 ms after the link started [17:02:45.403]
+link-test: 10.99.86.17:41146: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145765.605 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41160): stream up (1-3.1/trashcan /dev/tbstream0), epoch b50d02df, 8.4 ms after the link started [17:02:45.724]
+link-test: 10.99.86.17:41160: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41176): stream up (1-3.1/trashcan /dev/tbstream0), epoch 30061559, 5.2 ms after the link started [17:02:45.809]
+link-test: 10.99.86.17:41176: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41176: inflight (10.99.86.17:41176) closed the link without saying goodbye
+link inflight (10.99.86.17:41180): stream up (1-3.1/trashcan /dev/tbstream0), epoch 5ab921e4, 8.5 ms after the link started [17:02:45.879]
+link-test: 10.99.86.17:41180: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41190): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7bbd17d1, 6.7 ms after the link started [17:02:45.965]
+link-test: 10.99.86.17:41190: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145766.166 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41216): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2cec8ae9, 15.6 ms after the link started [17:02:46.292]
+link-test: 10.99.86.17:41216: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41218): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7f3f335e, 4.0 ms after the link started [17:02:46.366]
+link-test: 10.99.86.17:41218: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41218: inflight (10.99.86.17:41218) closed the link without saying goodbye
+link inflight (10.99.86.17:41232): stream up (1-3.1/trashcan /dev/tbstream0), epoch 324d554b, 17.7 ms after the link started [17:02:46.552]
+link-test: 10.99.86.17:41232: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41238): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6b1e95b3, 13.0 ms after the link started [17:02:46.640]
+link-test: 10.99.86.17:41238: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145766.841 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41246): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8704408a, 9.2 ms after the link started [17:02:46.960]
+link-test: 10.99.86.17:41246: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41252): stream up (1-3.1/trashcan /dev/tbstream0), epoch e706a597, 5.8 ms after the link started [17:02:47.043]
+link-test: 10.99.86.17:41252: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41252: inflight (10.99.86.17:41252) closed the link without saying goodbye
+link inflight (10.99.86.17:41268): stream up (1-3.1/trashcan /dev/tbstream0), epoch d0ce55dc, 5.2 ms after the link started [17:02:47.255]
+link-test: 10.99.86.17:41268: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41276): stream up (1-3.1/trashcan /dev/tbstream0), epoch b1cc3b50, 8.0 ms after the link started [17:02:47.333]
+link-test: 10.99.86.17:41276: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145767.534 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41294): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2c6a67d1, 7.0 ms after the link started [17:02:47.650]
+link-test: 10.99.86.17:41294: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41296): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7e4942a6, 7.1 ms after the link started [17:02:47.745]
+link-test: 10.99.86.17:41296: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41296: inflight (10.99.86.17:41296) closed the link without saying goodbye
+link inflight (10.99.86.17:41300): stream up (1-3.1/trashcan /dev/tbstream0), epoch 02151a5b, 28.7 ms after the link started [17:02:47.867]
+link-test: 10.99.86.17:41300: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41310): stream up (1-3.1/trashcan /dev/tbstream0), epoch b018cecd, 5.8 ms after the link started [17:02:47.954]
+link-test: 10.99.86.17:41310: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145768.156 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41330): stream up (1-3.1/trashcan /dev/tbstream0), epoch 5ce8f4a6, 26.3 ms after the link started [17:02:48.292]
+link-test: 10.99.86.17:41330: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41342): stream up (1-3.1/trashcan /dev/tbstream0), epoch 7389af8d, 13.9 ms after the link started [17:02:48.381]
+link-test: 10.99.86.17:41342: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41342: inflight (10.99.86.17:41342) closed the link without saying goodbye
+link inflight (10.99.86.17:41350): stream up (1-3.1/trashcan /dev/tbstream0), epoch 529ce428, 6.3 ms after the link started [17:02:48.625]
+link-test: 10.99.86.17:41350: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41360): stream up (1-3.1/trashcan /dev/tbstream0), epoch 43052ce6, 9.7 ms after the link started [17:02:48.708]
+link-test: 10.99.86.17:41360: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145768.909 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41370): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9b391bb0, 3.9 ms after the link started [17:02:49.024]
+link-test: 10.99.86.17:41370: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41382): stream up (1-3.1/trashcan /dev/tbstream0), epoch e96554f6, 15.5 ms after the link started [17:02:49.111]
+link-test: 10.99.86.17:41382: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41382: inflight (10.99.86.17:41382) closed the link without saying goodbye
+link inflight (10.99.86.17:41388): stream up (1-3.1/trashcan /dev/tbstream0), epoch 8e7226a2, 5.5 ms after the link started [17:02:49.246]
+link-test: 10.99.86.17:41388: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41392): stream up (1-3.1/trashcan /dev/tbstream0), epoch b7c19141, 4.7 ms after the link started [17:02:49.333]
+link-test: 10.99.86.17:41392: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145769.534 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41416): stream up (1-3.1/trashcan /dev/tbstream0), epoch 5a82c0bf, 16.8 ms after the link started [17:02:49.662]
+link-test: 10.99.86.17:41416: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41428): stream up (1-3.1/trashcan /dev/tbstream0), epoch c04f6c9a, 10.1 ms after the link started [17:02:49.756]
+link-test: 10.99.86.17:41428: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41428: inflight (10.99.86.17:41428) closed the link without saying goodbye
+link inflight (10.99.86.17:41432): stream up (1-3.1/trashcan /dev/tbstream0), epoch 5652c7e0, 20.1 ms after the link started [17:02:50.021]
+link-test: 10.99.86.17:41432: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41444): stream up (1-3.1/trashcan /dev/tbstream0), epoch dea2772f, 5.0 ms after the link started [17:02:50.101]
+link-test: 10.99.86.17:41444: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145770.302 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41462): stream up (1-3.1/trashcan /dev/tbstream0), epoch 669afb03, 41.0 ms after the link started [17:02:50.455]
+link-test: 10.99.86.17:41462: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41468): stream up (1-3.1/trashcan /dev/tbstream0), epoch e747139a, 22.7 ms after the link started [17:02:50.551]
+link-test: 10.99.86.17:41468: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41468: inflight (10.99.86.17:41468) closed the link without saying goodbye
+link inflight (10.99.86.17:41470): stream up (1-3.1/trashcan /dev/tbstream0), epoch f65a7c55, 5.2 ms after the link started [17:02:50.652]
+link-test: 10.99.86.17:41470: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41478): stream up (1-3.1/trashcan /dev/tbstream0), epoch a22a9154, 22.9 ms after the link started [17:02:50.749]
+link-test: 10.99.86.17:41478: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145770.950 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41500): stream up (1-3.1/trashcan /dev/tbstream0), epoch b6a4a89d, 4.1 ms after the link started [17:02:51.064]
+link-test: 10.99.86.17:41500: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41506): stream up (1-3.1/trashcan /dev/tbstream0), epoch e65824bb, 29.6 ms after the link started [17:02:51.169]
+link-test: 10.99.86.17:41506: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41506: inflight (10.99.86.17:41506) closed the link without saying goodbye
+link inflight (10.99.86.17:41518): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0b8bf2c8, 32.8 ms after the link started [17:02:51.406]
+link-test: 10.99.86.17:41518: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41530): stream up (1-3.1/trashcan /dev/tbstream0), epoch 177aa2e8, 6.5 ms after the link started [17:02:51.496]
+link-test: 10.99.86.17:41530: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145771.698 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:41540): stream up (1-3.1/trashcan /dev/tbstream0), epoch 783bb727, 14.4 ms after the link started [17:02:51.822]
+link-test: 10.99.86.17:41540: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:41542): stream up (1-3.1/trashcan /dev/tbstream0), epoch f8710898, 24.7 ms after the link started [17:02:51.920]
+link-test: 10.99.86.17:41542: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:41542: inflight (10.99.86.17:41542) closed the link without saying goodbye
+link inflight (10.99.86.17:51542): stream up (1-3.1/trashcan /dev/tbstream0), epoch 440503da, 14.3 ms after the link started [17:02:52.167]
+link-test: 10.99.86.17:51542: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51554): stream up (1-3.1/trashcan /dev/tbstream0), epoch b057e1f3, 10.0 ms after the link started [17:02:52.260]
+link-test: 10.99.86.17:51554: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145772.462 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51580): stream up (1-3.1/trashcan /dev/tbstream0), epoch f23c090c, 21.9 ms after the link started [17:02:52.593]
+link-test: 10.99.86.17:51580: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51588): stream up (1-3.1/trashcan /dev/tbstream0), epoch e55c710d, 10.2 ms after the link started [17:02:52.681]
+link-test: 10.99.86.17:51588: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51588: inflight (10.99.86.17:51588) closed the link without saying goodbye
+link inflight (10.99.86.17:51590): stream up (1-3.1/trashcan /dev/tbstream0), epoch 1785f3de, 4.7 ms after the link started [17:02:52.858]
+link-test: 10.99.86.17:51590: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51602): stream up (1-3.1/trashcan /dev/tbstream0), epoch c3823bc5, 11.2 ms after the link started [17:02:52.942]
+link-test: 10.99.86.17:51602: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145773.144 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51622): stream up (1-3.1/trashcan /dev/tbstream0), epoch abd5e38a, 31.2 ms after the link started [17:02:53.285]
+link-test: 10.99.86.17:51622: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51626): stream up (1-3.1/trashcan /dev/tbstream0), epoch a6f38b96, 10.1 ms after the link started [17:02:53.376]
+link-test: 10.99.86.17:51626: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51626: inflight (10.99.86.17:51626) closed the link without saying goodbye
+link inflight (10.99.86.17:51638): stream up (1-3.1/trashcan /dev/tbstream0), epoch 028c4b15, 8.9 ms after the link started [17:02:53.550]
+link-test: 10.99.86.17:51638: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51652): stream up (1-3.1/trashcan /dev/tbstream0), epoch 87568a7c, 9.5 ms after the link started [17:02:53.644]
+link-test: 10.99.86.17:51652: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145773.845 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51680): stream up (1-3.1/trashcan /dev/tbstream0), epoch 375a8bb3, 3.9 ms after the link started [17:02:53.961]
+link-test: 10.99.86.17:51680: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51688): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9541b459, 5.6 ms after the link started [17:02:54.037]
+link-test: 10.99.86.17:51688: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51688: inflight (10.99.86.17:51688) closed the link without saying goodbye
+link inflight (10.99.86.17:51690): stream up (1-3.1/trashcan /dev/tbstream0), epoch d558626a, 10.3 ms after the link started [17:02:54.184]
+link-test: 10.99.86.17:51690: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51694): stream up (1-3.1/trashcan /dev/tbstream0), epoch c9515d0c, 17.1 ms after the link started [17:02:54.268]
+link-test: 10.99.86.17:51694: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145774.470 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51714): stream up (1-3.1/trashcan /dev/tbstream0), epoch df47c3a3, 24.0 ms after the link started [17:02:54.603]
+link-test: 10.99.86.17:51714: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51726): stream up (1-3.1/trashcan /dev/tbstream0), epoch 581e728b, 35.6 ms after the link started [17:02:54.717]
+link-test: 10.99.86.17:51726: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51726: inflight (10.99.86.17:51726) closed the link without saying goodbye
+link inflight (10.99.86.17:51730): stream up (1-3.1/trashcan /dev/tbstream0), epoch e4ab8fde, 4.8 ms after the link started [17:02:54.829]
+link-test: 10.99.86.17:51730: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51732): stream up (1-3.1/trashcan /dev/tbstream0), epoch 91cb10f4, 4.1 ms after the link started [17:02:54.904]
+link-test: 10.99.86.17:51732: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145775.105 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51758): stream up (1-3.1/trashcan /dev/tbstream0), epoch 19196a2a, 8.2 ms after the link started [17:02:55.224]
+link-test: 10.99.86.17:51758: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51764): stream up (1-3.1/trashcan /dev/tbstream0), epoch ab610012, 4.6 ms after the link started [17:02:55.302]
+link-test: 10.99.86.17:51764: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51764: inflight (10.99.86.17:51764) closed the link without saying goodbye
+link inflight (10.99.86.17:51772): stream up (1-3.1/trashcan /dev/tbstream0), epoch a8d366a2, 13.2 ms after the link started [17:02:55.517]
+link-test: 10.99.86.17:51772: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51784): stream up (1-3.1/trashcan /dev/tbstream0), epoch bdac3452, 12.1 ms after the link started [17:02:55.615]
+link-test: 10.99.86.17:51784: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145775.817 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51800): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0581ea67, 4.0 ms after the link started [17:02:55.931]
+link-test: 10.99.86.17:51800: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51816): stream up (1-3.1/trashcan /dev/tbstream0), epoch bb266474, 6.9 ms after the link started [17:02:56.010]
+link-test: 10.99.86.17:51816: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51816: inflight (10.99.86.17:51816) closed the link without saying goodbye
+link inflight (10.99.86.17:51820): stream up (1-3.1/trashcan /dev/tbstream0), epoch fe7d186a, 5.5 ms after the link started [17:02:56.236]
+link-test: 10.99.86.17:51820: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51828): stream up (1-3.1/trashcan /dev/tbstream0), epoch f4cb8ae8, 9.0 ms after the link started [17:02:56.319]
+link-test: 10.99.86.17:51828: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145776.520 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51848): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2d7ab4cc, 16.5 ms after the link started [17:02:56.644]
+link-test: 10.99.86.17:51848: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51858): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9875b2a5, 10.1 ms after the link started [17:02:56.749]
+link-test: 10.99.86.17:51858: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51858: inflight (10.99.86.17:51858) closed the link without saying goodbye
+link inflight (10.99.86.17:51860): stream up (1-3.1/trashcan /dev/tbstream0), epoch 82617156, 4.5 ms after the link started [17:02:56.853]
+link-test: 10.99.86.17:51860: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51868): stream up (1-3.1/trashcan /dev/tbstream0), epoch eb09fc84, 17.7 ms after the link started [17:02:56.956]
+link-test: 10.99.86.17:51868: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145777.158 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51880): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6f7dfe9b, 13.8 ms after the link started [17:02:57.281]
+link-test: 10.99.86.17:51880: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51888): stream up (1-3.1/trashcan /dev/tbstream0), epoch 1e897fbe, 8.4 ms after the link started [17:02:57.366]
+link-test: 10.99.86.17:51888: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51888: inflight (10.99.86.17:51888) closed the link without saying goodbye
+link inflight (10.99.86.17:51896): stream up (1-3.1/trashcan /dev/tbstream0), epoch 4504e153, 8.0 ms after the link started [17:02:57.450]
+link-test: 10.99.86.17:51896: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51904): stream up (1-3.1/trashcan /dev/tbstream0), epoch 152c5d3b, 12.3 ms after the link started [17:02:57.547]
+link-test: 10.99.86.17:51904: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145777.748 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51926): stream up (1-3.1/trashcan /dev/tbstream0), epoch 14369fa2, 11.6 ms after the link started [17:02:57.871]
+link-test: 10.99.86.17:51926: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51940): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0f279159, 50.2 ms after the link started [17:02:57.997]
+link-test: 10.99.86.17:51940: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51940: inflight (10.99.86.17:51940) closed the link without saying goodbye
+link inflight (10.99.86.17:51956): stream up (1-3.1/trashcan /dev/tbstream0), epoch 01ef4bdf, 3.4 ms after the link started [17:02:58.153]
+link-test: 10.99.86.17:51956: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51968): stream up (1-3.1/trashcan /dev/tbstream0), epoch febdebbe, 17.1 ms after the link started [17:02:58.250]
+link-test: 10.99.86.17:51968: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145778.451 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:51982): stream up (1-3.1/trashcan /dev/tbstream0), epoch 1ede426a, 13.7 ms after the link started [17:02:58.574]
+link-test: 10.99.86.17:51982: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:51996): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9b859bd6, 5.9 ms after the link started [17:02:58.659]
+link-test: 10.99.86.17:51996: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:51996: inflight (10.99.86.17:51996) closed the link without saying goodbye
+link inflight (10.99.86.17:52006): stream up (1-3.1/trashcan /dev/tbstream0), epoch 472ffa76, 9.7 ms after the link started [17:02:58.889]
+link-test: 10.99.86.17:52006: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52016): stream up (1-3.1/trashcan /dev/tbstream0), epoch bbd7b529, 6.2 ms after the link started [17:02:58.973]
+link-test: 10.99.86.17:52016: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145779.174 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:52036): stream up (1-3.1/trashcan /dev/tbstream0), epoch de169270, 19.7 ms after the link started [17:02:59.304]
+link-test: 10.99.86.17:52036: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52040): stream up (1-3.1/trashcan /dev/tbstream0), epoch ef279704, 12.2 ms after the link started [17:02:59.389]
+link-test: 10.99.86.17:52040: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:52040: inflight (10.99.86.17:52040) closed the link without saying goodbye
+link inflight (10.99.86.17:52046): stream up (1-3.1/trashcan /dev/tbstream0), epoch f932d58f, 12.6 ms after the link started [17:02:59.626]
+link-test: 10.99.86.17:52046: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52060): stream up (1-3.1/trashcan /dev/tbstream0), epoch b1814777, 21.4 ms after the link started [17:02:59.724]
+link-test: 10.99.86.17:52060: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145779.925 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:52080): stream up (1-3.1/trashcan /dev/tbstream0), epoch 440c9913, 6.0 ms after the link started [17:03:00.041]
+link-test: 10.99.86.17:52080: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52084): stream up (1-3.1/trashcan /dev/tbstream0), epoch ab29183d, 17.6 ms after the link started [17:03:00.148]
+link-test: 10.99.86.17:52084: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:52084: inflight (10.99.86.17:52084) closed the link without saying goodbye
+link inflight (10.99.86.17:52100): stream up (1-3.1/trashcan /dev/tbstream0), epoch f7d1708f, 10.4 ms after the link started [17:03:00.335]
+link-test: 10.99.86.17:52100: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52102): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2510a11f, 3.5 ms after the link started [17:03:00.409]
+link-test: 10.99.86.17:52102: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145780.610 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:52124): stream up (1-3.1/trashcan /dev/tbstream0), epoch 2b6a46d5, 7.1 ms after the link started [17:03:00.730]
+link-test: 10.99.86.17:52124: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52138): stream up (1-3.1/trashcan /dev/tbstream0), epoch cc90b479, 4.7 ms after the link started [17:03:00.806]
+link-test: 10.99.86.17:52138: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:52138: inflight (10.99.86.17:52138) closed the link without saying goodbye
+link inflight (10.99.86.17:52146): stream up (1-3.1/trashcan /dev/tbstream0), epoch c1dddcf5, 29.1 ms after the link started [17:03:00.973]
+link-test: 10.99.86.17:52146: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52162): stream up (1-3.1/trashcan /dev/tbstream0), epoch 18e7f4da, 10.1 ms after the link started [17:03:01.064]
+link-test: 10.99.86.17:52162: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145781.265 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:52168): stream up (1-3.1/trashcan /dev/tbstream0), epoch 745cbcc3, 17.3 ms after the link started [17:03:01.392]
+link-test: 10.99.86.17:52168: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52182): stream up (1-3.1/trashcan /dev/tbstream0), epoch f15a38ab, 11.8 ms after the link started [17:03:01.488]
+link-test: 10.99.86.17:52182: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:52182: inflight (10.99.86.17:52182) closed the link without saying goodbye
+link inflight (10.99.86.17:52198): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9566b2ae, 15.2 ms after the link started [17:03:01.622]
+link-test: 10.99.86.17:52198: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:52202): stream up (1-3.1/trashcan /dev/tbstream0), epoch ce21d7e5, 14.2 ms after the link started [17:03:01.716]
+link-test: 10.99.86.17:52202: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145781.918 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:50338): stream up (1-3.1/trashcan /dev/tbstream0), epoch aeb97d37, 4.9 ms after the link started [17:03:02.032]
+link-test: 10.99.86.17:50338: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50352): stream up (1-3.1/trashcan /dev/tbstream0), epoch fdccd671, 7.1 ms after the link started [17:03:02.122]
+link-test: 10.99.86.17:50352: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:50352: inflight (10.99.86.17:50352) closed the link without saying goodbye
+link inflight (10.99.86.17:50366): stream up (1-3.1/trashcan /dev/tbstream0), epoch f666f23f, 7.2 ms after the link started [17:03:02.311]
+link-test: 10.99.86.17:50366: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50378): stream up (1-3.1/trashcan /dev/tbstream0), epoch 17d6294c, 12.8 ms after the link started [17:03:02.403]
+link-test: 10.99.86.17:50378: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145782.605 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:50396): stream up (1-3.1/trashcan /dev/tbstream0), epoch 43723a93, 51.2 ms after the link started [17:03:02.766]
+link-test: 10.99.86.17:50396: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50400): stream up (1-3.1/trashcan /dev/tbstream0), epoch 0882b0a1, 14.6 ms after the link started [17:03:02.877]
+link-test: 10.99.86.17:50400: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link-test: 10.99.86.17:50400: inflight (10.99.86.17:50400) closed the link without saying goodbye
+link inflight (10.99.86.17:50406): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9ae4234c, 7.0 ms after the link started [17:03:03.029]
+link-test: 10.99.86.17:50406: Test { mode: Pingpong, size: 64, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50420): stream up (1-3.1/trashcan /dev/tbstream0), epoch 27e1a377, 6.3 ms after the link started [17:03:03.109]
+link-test: 10.99.86.17:50420: Test { mode: Pingpong, size: 64, count: 100000000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.2 } over stream
+link-test: exiting at 1793145783.310 (fault injection)
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:50422): stream up (1-3.1/trashcan /dev/tbstream0), epoch 6f88a9f6, 8.3 ms after the link started [17:03:03.519]
+link-test: 10.99.86.17:50422: Test { mode: Pingpong, size: 64, count: 5000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50436): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9498a146, 14.4 ms after the link started [17:03:03.897]
+link-test: 10.99.86.17:50436: Test { mode: Pingpong, size: 20480, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50440): stream up (1-3.1/trashcan /dev/tbstream0), epoch 9e050686, 19.5 ms after the link started [17:03:04.306]
+link-test: 10.99.86.17:50440: Test { mode: Exchange, size: 40960, count: 2000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50452): stream up (1-3.1/trashcan /dev/tbstream0), epoch 3c2f8e4b, 11.8 ms after the link started [17:03:04.715]
+link-test: 10.99.86.17:50452: Test { mode: Bulk, size: 5242880, count: 20, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream
+link inflight (10.99.86.17:50458): stream up (1-3.1/trashcan /dev/tbstream0), epoch a213ed46, 53.2 ms after the link started [17:03:05.284]
+link-test: 10.99.86.17:50458: Test { mode: Chain, size: 64, count: 1000, seconds: 60.0, seed: 1, server_drops_stream: 0.0, server_exits: 0.0 } over stream

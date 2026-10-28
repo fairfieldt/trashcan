@@ -8,8 +8,8 @@ answering config reads until the NHI is reset; thunderbolt_net hit the same fail
 This was 1/2 of the earlier `usb4stream-falcon-ridge` draft. It is now a submission of its own so that the
 hardware-tested fix doesn't wait for the HopID fix (`../thunderbolt-stream-hopid/`), which has no hardware run.
 
-**Status: ready for maintainer review.** A fix (`Fixes: 6db21d817b43`, v7.2); can go to Mika's fixes branch once it
-is on v7.4-rc1.
+**Status: ready for maintainer review, hardware-tested on its base (2026-10-27).** A fix (`Fixes: 6db21d817b43`,
+v7.2); can go to Mika's fixes branch once it is on v7.4-rc1.
 
 ## Base
 
@@ -67,3 +67,8 @@ git send-email --to="Mika Westerberg <westeri@kernel.org>" --to=linux-usb@vger.k
 
 Optionally also `--cc="Fan Ye <fy15309206903@gmail.com>"` (author of the thunderbolt_net revert 1881f2efbf7f the
 patch follows).
+- inflight + alight, mainline 8a36f53fd5ec (7.4 merge window, thunderbolt `next` merged) as `7.3.0-mw8a36f53+`,
+  2026-10-27 (`results/kernel/usb4stream-close-74-20261027/`): with the patch 500/500 churn sessions within 100 ms
+  (busy_poll 0 and 1) and the link-test suite 5/5 three times; with only this patch reverted in
+  `thunderbolt_stream.ko`, 0 of 7 sessions got any data across the stream (`noe2e/`). Checks rerun 2026-10-27
+  (`results/kernel/upstream-20261027/thunderbolt-stream-tx-e2e/`), notes updated with this run.

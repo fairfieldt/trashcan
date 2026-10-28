@@ -1,0 +1,2 @@
+link-test: serving on 0.0.0.0:7075
+link inflight (10.99.86.17:40448): stream epoch ba4c4fa2 not opened (the other side gave the stream up; 84 ms into the epoch: device open at 23 ms, first record at never, 28 probes and 112 frames sent, 0 records and 0 ends of file read, ours not read by the other side; 1 of its reports since 50 ms after our first frame showed none of ours read; 6 reports from it (of ours read 0, written to us 0); longest pause of this side 2 ms) [17:18:01.516]

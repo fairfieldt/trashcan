@@ -1,0 +1,40 @@
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: [drm] PCIE GART of 1024M enabled (table at 0x000000F40FE00000).
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: [drm] Internal thermal controller with fan control
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: [drm] si dpm initialized
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: [drm] Found UVD firmware Version: 64.0 Family ID: 13
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: [drm] Display Core v3.2.401 initialized on DCE 6.0
+[Tue Oct 27 16:58:54 2026] snd_hda_intel 0000:06:00.1: bound 0000:06:00.0 (ops amdgpu_dm_audio_component_bind_ops [amdgpu])
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: [drm] UVD initialized successfully.
+[Tue Oct 27 16:58:54 2026] amdgpu 0000:06:00.0: SE 2, SH per SE 2, CU per SH 8, active_cu_number 32
+[Tue Oct 27 16:58:55 2026] vga_switcheroo: enabled
+[Tue Oct 27 16:58:55 2026] amdgpu 0000:06:00.0: Runtime PM not available
+[Tue Oct 27 16:58:55 2026] [drm] Initialized amdgpu 3.65.0 for 0000:06:00.0 on minor 1
+[Tue Oct 27 16:58:55 2026] amdgpu 0000:06:00.0: [drm] Cannot find any crtc or sizes
+[Tue Oct 27 16:58:55 2026] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 27 16:58:55 2026] thunderbolt 2-3: Linux incite
+[Tue Oct 27 16:58:55 2026] thunderbolt_net: unknown parameter 'throttling' ignored
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: local port 6666
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: local IP unset
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: interface name 'enp12s0'
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: local ethernet address 'ff:ff:ff:ff:ff:ff'
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: remote port 6666
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: remote IPv4 address 192.168.0.212
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: remote ethernet address 1c:1d:d3:e1:c5:3b
+[Tue Oct 27 16:58:56 2026] netconsole: netconsole: local IP 192.168.0.155
+[Tue Oct 27 16:58:56 2026] printk: console [netcon0] enabled
+[Tue Oct 27 16:58:56 2026] netconsole: network logging started
+[Tue Oct 27 16:58:56 2026] thunderbolt 2-3: failed to send properties changed notification
+[Tue Oct 27 17:00:37 2026] thunderbolt 1-3: failed to send properties changed notification
+[Tue Oct 27 17:00:37 2026] ACPI: bus type thunderbolt unregistered
+[Tue Oct 27 17:00:37 2026] pcieport 0000:15:00.0: pciehp: Slot(0): Link Down/Up ignored
+[Tue Oct 27 17:00:37 2026] pcieport 0000:5c:00.0: pciehp: Slot(0-1): Link Down/Up ignored
+[Tue Oct 27 17:00:37 2026] pcieport 0000:a3:00.0: pciehp: Slot(0-2): Link Down/Up ignored
+[Tue Oct 27 17:00:41 2026] ACPI: bus type thunderbolt registered
+[Tue Oct 27 17:00:41 2026] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[Tue Oct 27 17:00:41 2026] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[Tue Oct 27 17:00:41 2026] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[Tue Oct 27 17:00:42 2026] thunderbolt_net: unknown parameter 'throttling' ignored
+[Tue Oct 27 17:00:47 2026] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 27 17:00:47 2026] thunderbolt 1-3: Linux alight
+[Tue Oct 27 17:00:55 2026] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+[Tue Oct 27 17:00:55 2026] thunderbolt 2-3: Linux incite

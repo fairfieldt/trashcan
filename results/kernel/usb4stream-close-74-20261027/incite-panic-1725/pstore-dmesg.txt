@@ -1,0 +1,1499 @@
+#### /var/lib/systemd/pstore/1793147156/001/dmesg.txt
+Oops#1 Part15
+<3>[ 2401.417911] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2402.441960] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2403.466010] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2404.490073] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2405.514107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2406.538102] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2407.562260] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2408.586196] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2409.610345] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2410.634379] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2411.658478] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2412.682533] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2413.706596] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2414.730652] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2415.754767] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2416.778764] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2417.802817] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2418.826748] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2419.850887] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2420.874918] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2421.898907] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part14
+<3>[ 2422.923098] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2423.947149] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2424.971105] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2425.995092] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2427.019107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2428.043382] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2429.067418] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2430.091451] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2431.115517] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2432.139445] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2433.163656] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2434.187563] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2435.211739] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2436.235778] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2437.259822] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2438.283944] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2439.307994] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2440.331902] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2441.355967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2442.379990] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2443.404083] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part13
+<3>[ 2444.428264] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2445.452297] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2446.476333] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2447.500224] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2448.524425] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2449.548510] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2450.572600] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2451.596663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2452.620618] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2453.644651] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2454.668817] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2455.692814] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2456.716910] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2457.744955] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2458.765015] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2459.789000] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2460.813014] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2461.837077] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2462.861160] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2463.885264] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2464.909244] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part12
+<3>[ 2465.933385] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2466.957452] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2467.981518] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2469.005594] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2470.029605] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2471.053693] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2472.077719] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2473.101789] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2474.125826] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2475.149873] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2476.173949] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2477.197975] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2478.221928] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2479.246027] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2480.270035] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2481.294096] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2482.318182] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2483.342311] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2484.366367] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2485.390352] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2486.414363] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part11
+<3>[ 2487.438499] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2488.462552] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2489.486596] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2490.510678] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2491.534732] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2492.558776] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2493.582873] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2494.606887] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2495.630907] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2496.654983] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2497.678950] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2498.702961] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2499.727144] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2500.751115] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2501.775121] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2502.799302] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2503.823361] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2504.847442] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2505.871463] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2506.895517] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2507.919541] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part10
+<3>[ 2508.943642] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2509.967684] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2510.991737] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2512.015786] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2513.039731] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2514.063886] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2515.087839] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2516.112009] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2517.139944] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2518.159971] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2519.184050] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2520.208107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2521.232171] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2522.256204] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2523.280383] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2524.304375] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2525.328488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2526.352510] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2527.376374] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2528.400505] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2529.424555] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part9
+<3>[ 2530.448737] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2531.472767] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2532.496792] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2533.520825] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2534.544910] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2535.568967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2536.593027] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2537.617036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2538.641107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2539.665078] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2540.689134] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2541.713269] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2542.737336] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2543.761385] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2544.785454] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2545.809480] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2546.833363] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2547.857622] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2548.885430] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2549.905680] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2550.933536] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part8
+<3>[ 2551.953771] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2552.977615] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2554.001897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2555.025742] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2556.049987] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2557.073837] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2558.098070] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2559.121939] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2560.146111] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2561.170052] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2562.194181] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2563.218278] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2564.242410] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2565.266379] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2566.290309] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2567.314574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2568.338620] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2569.362685] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2570.386651] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2571.410660] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2572.434779] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part7
+<3>[ 2573.458798] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2574.482834] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2575.506931] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2576.534810] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2577.555083] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2578.579080] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2579.603022] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2580.627015] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2581.651088] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2582.675199] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2583.699300] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2584.723411] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2585.747452] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2586.771438] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2587.795502] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2588.823401] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2589.843645] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2590.867480] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2591.891653] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2592.919552] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2593.939811] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part6
+<3>[ 2594.963939] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2595.987899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2597.015746] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2598.035914] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2599.063858] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2600.083974] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2601.108110] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2602.131982] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2603.156089] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2604.180198] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2605.204339] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2606.228367] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2607.252369] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2608.276353] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2609.304354] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2610.324579] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2611.348598] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2612.372546] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2613.396696] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2614.420693] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2615.444765] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part5
+<3>[ 2616.468759] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2617.492942] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2618.516963] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2619.540995] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2620.565044] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2621.589117] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2622.613157] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2623.637302] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2624.661300] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2625.685131] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2626.709383] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2627.733365] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2628.757487] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2629.781544] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2630.805514] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2631.829594] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2632.853682] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2633.877721] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2634.901770] thunderbolt 2-3: failed request link state change, aborting
+<6>[ 2635.755091] ACPI: bus type thunderbolt unregistered
+<6>[ 2635.882972] ACPI: bus type thunderbolt registered
+<4>[ 2635.883653] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+Oops#1 Part4
+<4>[ 2635.892061] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+<4>[ 2635.901213] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+<4>[ 2641.221716] thunderbolt 0000:5d:00.0: 0:4: failed to reach state TB_PORT_UP. Ignoring port...
+<6>[ 2642.230330] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2642.230346] thunderbolt 1-3: Linux enlight
+<6>[ 2643.286386] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2643.286403] thunderbolt 2-3: Linux inflight
+<6>[ 2678.527612] ACPI: bus type thunderbolt unregistered
+<6>[ 2678.658283] ACPI: bus type thunderbolt registered
+<4>[ 2678.659014] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+<4>[ 2678.665591] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+<4>[ 2678.692114] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+<6>[ 2684.024320] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2684.024340] thunderbolt 2-3: Linux inflight
+<6>[ 2684.024389] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2684.024405] thunderbolt 1-3: Linux enlight
+<6>[ 3249.389222] clocksource: Watchdog remote CPU 17 read timed out
+<7>[12417.083879] rfkill: input handler enabled
+<7>[12419.570211] rfkill: input handler disabled
+<6>[21417.458847] thunderbolt 2-3: host disconnected
+<6>[21423.651692] thunderbolt 2-3: new host found, vendor=0xa27 device=0xa
+<6>[21423.651712] thunderbolt 2-3: Apple, Inc. Macintosh
+<3>[21459.620809] thunderbolt 2-3: failed read XDomain properties from 5ce665e8-023a-b858-9b96-7755786ae90a
+Oops#1 Part3
+<6>[22907.327296] thunderbolt 2-3: host disconnected
+<6>[23070.755520] ------------[ cut here ]------------
+<4>[23070.755553] Oops: general protection fault, probably for non-canonical address 0x8e67d01124bc0000: 0000 [#1] SMP PTI
+<4>[23070.755566] CPU: 22 UID: 0 PID: 365162 Comm: kworker/u96:2 Tainted: G        W  OE       7.3.0-rc7-p2p #1p2p+ps9c9a5449 PREEMPT(lazy) 
+<4>[23070.755577] Tainted: [W]=WARN, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+<4>[23070.755580] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+<4>[23070.755585] Workqueue: thunderbolt2 tb_handle_hotplug [thunderbolt]
+<4>[23070.755663] RIP: 0010:string+0x48/0xf0
+<4>[23070.755675] Code: 3b 45 89 d1 45 31 c0 49 01 f9 66 45 85 d2 75 1a eb 1f 48 39 f7 73 02 88 07 48 83 c7 01 41 83 c0 01 48 83 c2 01 4c 39 cf 74 07 <0f> b6 02 84 c0 75 e1 48 89 f2 44 89 c6 e9 66 df ff ff 48 c7 c0 0e
+<4>[23070.755681] RSP: 0018:ffffcf94e51efab8 EFLAGS: 00010086
+<4>[23070.755687] RAX: 8e67d01124bbf000 RBX: ffffffffa85fa276 RCX: ffffffffffff0a00
+<4>[23070.755692] RDX: 8e67d01124bc0000 RSI: ffffcf94e51efbd8 RDI: ffffcf94e51efbdc
+<4>[23070.755695] RBP: ffffcf94e51efb30 R08: 0000000000000000 R09: ffffcf95e51efbdb
+<4>[23070.755700] R10: 00000000ffffffff R11: 0000000000000000 R12: ffffffffa85fa276
+<4>[23070.755704] R13: 0000000000000405 R14: ffffcf94e51efbdc R15: 0000000000000405
+<4>[23070.755708] FS:  0000000000000000(0000) GS:ffff8a63d69c2000(0000) knlGS:0000000000000000
+<4>[23070.755714] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+<4>[23070.755718] CR2: 00007f4816e9a55c CR3: 0000000eacc22005 CR4: 00000000001726f0
+<4>[23070.755723] Call Trace:
+Oops#1 Part2
+<4>[23070.755729]  <TASK>
+<4>[23070.755733]  vsnprintf+0x201/0x660
+<4>[23070.755747]  vprintk_store+0x1bf/0x640
+<4>[23070.755757]  ? prb_read_valid+0x1b/0x30
+<4>[23070.755766]  vprintk_emit+0xc2/0x350
+<4>[23070.755775]  ? kobject_get+0x3c/0x70
+<4>[23070.755783]  __report_bug.cold+0x6c/0xb2
+<4>[23070.755794]  ? kobject_get+0x42/0x70
+<4>[23070.755800]  report_bug_entry+0x2e/0x80
+<4>[23070.755808]  handle_bug+0x1e7/0x300
+<4>[23070.755817]  exc_invalid_op+0x17/0x70
+<4>[23070.755824]  asm_exc_invalid_op+0x1a/0x20
+<4>[23070.755831] RIP: 0010:kobject_get+0x42/0x70
+<4>[23070.755838] Code: 01 00 00 00 f0 0f c1 43 38 85 c0 74 37 8d 50 01 09 c2 78 1d 48 89 d8 5b c3 cc cc cc cc 48 8d 3d 84 d3 ca 00 48 8b 33 48 89 da <67> 48 0f b9 3a eb ca be 01 00 00 00 e8 2d ee 99 ff 48 89 d8 5b c3
+<4>[23070.755844] RSP: 0018:ffffcf94e51efe00 EFLAGS: 00010246
+<4>[23070.755849] RAX: 0000000000000000 RBX: ffff8a5490044000 RCX: ffff8a546104c320
+<4>[23070.755853] RDX: ffff8a5490044000 RSI: 8e67d01124bc0000 RDI: ffffffffa8ab6ab0
+<4>[23070.755857] RBP: ffff8a5466fdb000 R08: 0000000000000003 R09: ffff8a54625b0388
+<4>[23070.755861] R10: ffff8a5614bf26b8 R11: fefefefefefefeff R12: ffff8a5449f4f800
+<4>[23070.755865] R13: ffff8a546104c258 R14: ffff8a5442e2a310 R15: ffff8a5490044000
+<4>[23070.755873]  tb_handle_hotplug+0x30b/0x8c0 [thunderbolt]
+<4>[23070.755929]  process_one_work+0x1cb/0x3c0
+<4>[23070.755937]  worker_thread+0x1af/0x320
+<4>[23070.755944]  ? __pfx_worker_thread+0x10/0x10
+<4>[23070.755951]  kthread+0xe5/0x120
+<4>[23070.755958]  ? __pfx_kthread+0x10/0x10
+<4>[23070.755966]  ret_from_fork+0x2bc/0x350
+<4>[23070.755973]  ? __pfx_kthread+0x10/0x10
+<4>[23070.755979]  ret_from_fork_asm+0x1a/0x30
+Oops#1 Part1
+<4>[23070.755991]  </TASK>
+<4>[23070.755994] Modules linked in: tcp_diag inet_diag thunderbolt_stream thunderbolt_net thunderbolt sd_mod scsi_mod scsi_common netconsole snd_seq_dummy snd_hrtimer snd_seq snd_seq_device xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables sunrpc qrtr rfcomm algif_hash algif_skcipher af_alg bnep b43 cordic binfmt_misc mac80211 nls_ascii nls_cp437 vfat fat cfg80211 intel_rapl_msr intel_rapl_common sb_edac x86_pkg_temp_thermal intel_powerclamp coretemp ssb snd_hda_codec_cs420x kvm_intel snd_hda_codec_generic btusb snd_hda_codec_atihdmi mmc_core snd_hda_codec_hdmi btmtk btrtl btbcm btintel snd_hda_intel pcmcia joydev kvm snd_hda_codec pcmcia_core libarc4 bluetooth snd_hda_core irqbypass aesni_intel snd_intel_dspcfg gf128mul snd_intel_sdw_acpi snd_hwdep rapl intel_cstate snd_pcm mei_me ecdh_generic applesmc(OE) intel_uncore snd_timer rfkill bcma pcspkr mei snd soundcore apple_gmux apple_mfi_fastcharge evdev msr i2c_dev
+<4>[23070.756151]  parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid hid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_client_lib drm_kms_helper xhci_pci ehci_pci iTCO_wdt intel_pmc_bxt xhci_hcd ehci_hcd nvme drm watchdog at24 tg3 nvme_core usbcore libphy i2c_i801 nvme_keyring i2c_smbus ioatdma lpc_ich nvme_auth mdio_bus dca configfs usb_common button [last unloaded: thunderbolt]
+<4>[23070.756255] ---[ end trace 0000000000000000 ]---
+#### /var/lib/systemd/pstore/1793147157/001/dmesg.txt
+Oops#1 Part17
+<3>[ 2358.407445] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2359.431509] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2360.455549] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2361.479491] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2362.503600] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2363.527738] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2364.551765] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2365.575825] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2366.599871] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2367.623881] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2368.648029] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2369.672087] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2370.696037] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2371.720126] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2372.744221] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2373.768275] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2374.792392] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2375.816430] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2376.840448] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2377.864589] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2378.888599] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part16
+<3>[ 2379.912650] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2380.936742] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2381.960759] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2382.984862] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2384.008937] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2385.032972] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2386.057036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2387.080931] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2388.109012] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2389.129159] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2390.153164] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2391.177368] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2392.201345] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2393.225450] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2394.249503] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2395.273556] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2396.297633] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2397.321687] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2398.345713] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2399.369609] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2400.393697] thunderbolt 2-3: failed request link state change, aborting
+#### /var/lib/systemd/pstore/1793147158/001/dmesg.txt
+Oops#1 Part35
+<3>[ 1971.312784] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1972.336807] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1973.360850] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1974.384900] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1975.408920] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1976.432981] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1977.457001] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1978.481127] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1979.504985] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1980.529150] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1981.553173] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1982.577222] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1983.601162] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1984.625261] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1985.649285] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1986.673251] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1987.697276] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1988.721349] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1989.745250] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1990.769391] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1991.793417] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part34
+<3>[ 1992.817447] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1993.841483] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1994.865488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1995.889504] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1996.913412] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1997.937576] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1998.961534] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 1999.985630] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2001.009603] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2002.033574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2003.057699] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2004.081713] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2005.105766] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2006.129693] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2007.153733] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2008.177663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2009.201670] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2010.225612] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2011.249845] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2012.273899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2013.297925] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part33
+<3>[ 2014.321754] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2015.345921] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2016.369907] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2017.393940] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2018.417898] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2019.441918] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2020.465903] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2021.489985] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2022.513981] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2023.538115] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2024.562150] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2025.586156] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2026.610164] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2027.634252] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2028.658191] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2029.682240] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2030.706288] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2031.730321] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2032.754328] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2033.778216] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2034.802395] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part32
+<3>[ 2035.826388] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2036.850381] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2037.874453] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2038.898485] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2039.922519] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2040.946468] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2041.970511] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2042.994586] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2044.018612] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2045.042777] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2046.066649] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2047.090536] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2048.114700] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2049.138571] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2050.162739] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2051.190545] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2052.210785] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2053.238629] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2054.258787] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2055.286699] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2056.306887] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part31
+<3>[ 2057.330692] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2058.354898] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2059.382891] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2060.402974] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2061.430935] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2062.450927] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2063.478871] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2064.499088] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2065.526939] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2066.547211] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2067.575184] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2068.595121] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2069.619398] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2070.643531] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2071.667577] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2072.691530] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2073.715593] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2074.739867] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2075.767921] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2076.787915] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2077.812139] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part30
+<3>[ 2078.836124] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2079.860203] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2080.884359] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2081.908457] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2082.932501] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2083.956488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2084.980700] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2086.004839] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2087.028801] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2088.056895] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2089.076990] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2090.101035] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2091.125157] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2092.153091] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2093.173347] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2094.197433] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2095.221521] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2096.245592] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2097.269679] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2098.293765] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2099.317838] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part29
+<3>[ 2100.341798] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2101.365828] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2102.389971] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2103.414115] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2104.438213] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2105.462321] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2106.486424] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2107.510420] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2108.534539] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2109.558652] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2110.582713] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2111.606704] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2112.630878] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2113.654961] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2114.678916] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2115.703007] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2116.727172] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2117.751292] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2118.775206] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2119.799337] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2120.823503] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part28
+<3>[ 2121.847543] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2122.871662] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2123.895689] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2124.919822] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2125.943899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2126.967977] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2127.991938] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2129.016112] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2130.040202] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2131.064286] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2132.088364] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2133.112454] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2134.136524] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2135.160508] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2136.184626] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2137.208754] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2138.232612] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2139.256911] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2140.284897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2141.304972] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2142.329093] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part27
+<3>[ 2143.353036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2144.377260] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2145.401370] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2146.425408] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2147.449476] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2148.473518] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2149.497657] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2150.521747] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2151.545669] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2152.569897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2153.593938] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2154.617883] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2155.641996] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2156.666018] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2157.690285] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2158.714342] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2159.738410] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2160.762484] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2161.786515] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2162.810646] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2163.834693] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part26
+<3>[ 2164.858712] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2165.882880] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2166.906858] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2167.930839] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2168.955007] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2169.979140] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2171.003226] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2172.027170] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2173.051345] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2174.075457] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2175.099537] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2176.123618] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2177.147627] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2178.171692] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2179.195720] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2180.219837] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2181.243960] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2182.268007] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2183.292044] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2184.316091] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2185.340199] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part25
+<3>[ 2186.364163] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2187.388362] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2188.412463] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2189.436499] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2190.460643] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2191.484663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2192.508719] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2193.532844] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2194.556920] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2195.580752] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2196.604834] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2197.629021] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2198.653172] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2199.677264] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2200.701263] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2201.725415] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2202.749497] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2203.773553] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2204.797586] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2205.821663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2206.845722] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part24
+<3>[ 2207.869755] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2208.893919] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2209.917937] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2210.941977] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2211.966082] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2212.990211] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2214.014258] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2215.038343] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2216.062422] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2217.086478] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2218.110478] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2219.134581] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2220.158675] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2221.182770] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2222.206750] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2223.230906] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2224.254924] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2225.278972] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2226.302946] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2227.327165] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2228.351078] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part23
+<3>[ 2229.375144] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2230.399325] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2231.423397] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2232.447447] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2233.471576] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2234.495592] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2235.519571] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2236.543791] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2237.567798] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2238.591907] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2239.615899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2240.639947] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2241.664011] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2242.688082] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2243.712229] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2244.736266] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2245.760355] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2246.784417] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2247.808541] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2248.832514] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2249.856681] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part22
+<3>[ 2250.880618] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2251.904773] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2252.928811] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2253.952951] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2254.976968] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2256.001008] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2257.024995] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2258.049169] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2259.073257] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2260.097167] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2261.121323] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2262.145504] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2263.169485] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2264.193557] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2265.217630] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2266.241712] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2267.265813] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2268.289888] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2269.313880] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2270.337929] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2271.361915] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part21
+<3>[ 2272.385990] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2273.410031] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2274.434211] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2275.458344] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2276.482409] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2277.506423] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2278.530546] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2279.554603] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2280.578670] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2281.602677] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2282.626667] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2283.650870] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2284.674929] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2285.698967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2286.722913] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2287.747120] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2288.771042] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2289.795233] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2290.819325] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2291.843332] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2292.867437] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part20
+<3>[ 2293.891455] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2294.915498] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2295.939574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2296.963695] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2297.987813] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2299.011813] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2300.035802] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2301.059967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2302.083940] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2303.108069] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2304.131918] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2305.156061] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2306.180036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2307.204298] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2308.228159] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2309.252488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2310.276305] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2311.300544] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2312.324427] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2313.348665] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2314.372544] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part19
+<3>[ 2315.396863] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2316.420820] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2317.444925] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2318.468942] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2319.492983] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2320.517073] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2321.540965] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2322.565227] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2323.589368] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2324.613155] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2325.637413] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2326.661443] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2327.685557] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2328.713489] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2329.733679] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2330.757710] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2331.781820] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2332.805666] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2333.829903] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2334.853969] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2335.878045] thunderbolt 2-3: failed request link state change, aborting
+Oops#1 Part18
+<3>[ 2336.902050] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2337.926101] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2338.950243] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2339.974344] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2341.002435] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2342.022475] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2343.046537] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2344.070576] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2345.094622] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2346.118574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2347.142767] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2348.166732] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2349.190879] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2350.214897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2351.239031] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2352.262963] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2353.287078] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2354.311090] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2355.335099] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2356.359304] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2357.383273] thunderbolt 2-3: failed request link state change, aborting
+#### /var/lib/systemd/pstore/1793147158/002/dmesg.txt
+Panic#2 Part20
+<3>[ 2315.396863] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2316.420820] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2317.444925] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2318.468942] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2319.492983] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2320.517073] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2321.540965] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2322.565227] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2323.589368] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2324.613155] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2325.637413] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2326.661443] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2327.685557] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2328.713489] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2329.733679] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2330.757710] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2331.781820] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2332.805666] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2333.829903] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2334.853969] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2335.878045] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part19
+<3>[ 2336.902050] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2337.926101] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2338.950243] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2339.974344] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2341.002435] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2342.022475] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2343.046537] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2344.070576] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2345.094622] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2346.118574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2347.142767] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2348.166732] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2349.190879] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2350.214897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2351.239031] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2352.262963] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2353.287078] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2354.311090] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2355.335099] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2356.359304] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2357.383273] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part18
+<3>[ 2358.407445] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2359.431509] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2360.455549] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2361.479491] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2362.503600] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2363.527738] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2364.551765] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2365.575825] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2366.599871] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2367.623881] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2368.648029] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2369.672087] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2370.696037] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2371.720126] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2372.744221] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2373.768275] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2374.792392] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2375.816430] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2376.840448] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2377.864589] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2378.888599] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part17
+<3>[ 2379.912650] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2380.936742] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2381.960759] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2382.984862] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2384.008937] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2385.032972] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2386.057036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2387.080931] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2388.109012] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2389.129159] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2390.153164] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2391.177368] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2392.201345] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2393.225450] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2394.249503] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2395.273556] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2396.297633] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2397.321687] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2398.345713] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2399.369609] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2400.393697] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part16
+<3>[ 2401.417911] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2402.441960] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2403.466010] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2404.490073] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2405.514107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2406.538102] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2407.562260] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2408.586196] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2409.610345] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2410.634379] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2411.658478] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2412.682533] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2413.706596] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2414.730652] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2415.754767] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2416.778764] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2417.802817] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2418.826748] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2419.850887] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2420.874918] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2421.898907] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part15
+<3>[ 2422.923098] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2423.947149] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2424.971105] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2425.995092] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2427.019107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2428.043382] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2429.067418] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2430.091451] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2431.115517] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2432.139445] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2433.163656] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2434.187563] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2435.211739] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2436.235778] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2437.259822] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2438.283944] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2439.307994] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2440.331902] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2441.355967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2442.379990] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2443.404083] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part14
+<3>[ 2444.428264] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2445.452297] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2446.476333] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2447.500224] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2448.524425] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2449.548510] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2450.572600] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2451.596663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2452.620618] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2453.644651] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2454.668817] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2455.692814] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2456.716910] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2457.744955] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2458.765015] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2459.789000] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2460.813014] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2461.837077] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2462.861160] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2463.885264] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2464.909244] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part13
+<3>[ 2465.933385] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2466.957452] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2467.981518] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2469.005594] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2470.029605] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2471.053693] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2472.077719] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2473.101789] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2474.125826] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2475.149873] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2476.173949] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2477.197975] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2478.221928] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2479.246027] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2480.270035] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2481.294096] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2482.318182] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2483.342311] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2484.366367] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2485.390352] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2486.414363] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part12
+<3>[ 2487.438499] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2488.462552] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2489.486596] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2490.510678] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2491.534732] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2492.558776] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2493.582873] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2494.606887] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2495.630907] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2496.654983] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2497.678950] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2498.702961] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2499.727144] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2500.751115] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2501.775121] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2502.799302] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2503.823361] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2504.847442] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2505.871463] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2506.895517] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2507.919541] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part11
+<3>[ 2508.943642] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2509.967684] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2510.991737] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2512.015786] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2513.039731] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2514.063886] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2515.087839] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2516.112009] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2517.139944] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2518.159971] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2519.184050] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2520.208107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2521.232171] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2522.256204] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2523.280383] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2524.304375] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2525.328488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2526.352510] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2527.376374] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2528.400505] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2529.424555] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part10
+<3>[ 2530.448737] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2531.472767] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2532.496792] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2533.520825] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2534.544910] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2535.568967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2536.593027] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2537.617036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2538.641107] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2539.665078] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2540.689134] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2541.713269] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2542.737336] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2543.761385] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2544.785454] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2545.809480] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2546.833363] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2547.857622] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2548.885430] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2549.905680] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2550.933536] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part9
+<3>[ 2551.953771] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2552.977615] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2554.001897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2555.025742] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2556.049987] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2557.073837] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2558.098070] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2559.121939] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2560.146111] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2561.170052] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2562.194181] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2563.218278] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2564.242410] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2565.266379] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2566.290309] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2567.314574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2568.338620] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2569.362685] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2570.386651] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2571.410660] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2572.434779] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part8
+<3>[ 2573.458798] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2574.482834] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2575.506931] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2576.534810] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2577.555083] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2578.579080] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2579.603022] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2580.627015] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2581.651088] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2582.675199] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2583.699300] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2584.723411] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2585.747452] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2586.771438] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2587.795502] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2588.823401] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2589.843645] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2590.867480] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2591.891653] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2592.919552] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2593.939811] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part7
+<3>[ 2594.963939] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2595.987899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2597.015746] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2598.035914] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2599.063858] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2600.083974] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2601.108110] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2602.131982] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2603.156089] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2604.180198] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2605.204339] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2606.228367] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2607.252369] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2608.276353] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2609.304354] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2610.324579] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2611.348598] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2612.372546] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2613.396696] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2614.420693] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2615.444765] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part6
+<3>[ 2616.468759] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2617.492942] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2618.516963] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2619.540995] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2620.565044] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2621.589117] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2622.613157] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2623.637302] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2624.661300] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2625.685131] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2626.709383] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2627.733365] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2628.757487] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2629.781544] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2630.805514] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2631.829594] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2632.853682] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2633.877721] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2634.901770] thunderbolt 2-3: failed request link state change, aborting
+<6>[ 2635.755091] ACPI: bus type thunderbolt unregistered
+<6>[ 2635.882972] ACPI: bus type thunderbolt registered
+<4>[ 2635.883653] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+Panic#2 Part5
+<4>[ 2635.892061] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+<4>[ 2635.901213] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+<4>[ 2641.221716] thunderbolt 0000:5d:00.0: 0:4: failed to reach state TB_PORT_UP. Ignoring port...
+<6>[ 2642.230330] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2642.230346] thunderbolt 1-3: Linux enlight
+<6>[ 2643.286386] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2643.286403] thunderbolt 2-3: Linux inflight
+<6>[ 2678.527612] ACPI: bus type thunderbolt unregistered
+<6>[ 2678.658283] ACPI: bus type thunderbolt registered
+<4>[ 2678.659014] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+<4>[ 2678.665591] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+<4>[ 2678.692114] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+<6>[ 2684.024320] thunderbolt 2-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2684.024340] thunderbolt 2-3: Linux inflight
+<6>[ 2684.024389] thunderbolt 1-3: new host found, vendor=0x1d6b device=0x4
+<6>[ 2684.024405] thunderbolt 1-3: Linux enlight
+<6>[ 3249.389222] clocksource: Watchdog remote CPU 17 read timed out
+<7>[12417.083879] rfkill: input handler enabled
+<7>[12419.570211] rfkill: input handler disabled
+<6>[21417.458847] thunderbolt 2-3: host disconnected
+<6>[21423.651692] thunderbolt 2-3: new host found, vendor=0xa27 device=0xa
+<6>[21423.651712] thunderbolt 2-3: Apple, Inc. Macintosh
+<3>[21459.620809] thunderbolt 2-3: failed read XDomain properties from 5ce665e8-023a-b858-9b96-7755786ae90a
+Panic#2 Part4
+<6>[22907.327296] thunderbolt 2-3: host disconnected
+<6>[23070.755520] ------------[ cut here ]------------
+<4>[23070.755553] Oops: general protection fault, probably for non-canonical address 0x8e67d01124bc0000: 0000 [#1] SMP PTI
+<4>[23070.755566] CPU: 22 UID: 0 PID: 365162 Comm: kworker/u96:2 Tainted: G        W  OE       7.3.0-rc7-p2p #1p2p+ps9c9a5449 PREEMPT(lazy) 
+<4>[23070.755577] Tainted: [W]=WARN, [O]=OOT_MODULE, [E]=UNSIGNED_MODULE
+<4>[23070.755580] Hardware name: Apple Inc. MacPro6,1/Mac-F60DEB81FF30ACF6, BIOS 481.0.0.0.0 10/07/2023
+<4>[23070.755585] Workqueue: thunderbolt2 tb_handle_hotplug [thunderbolt]
+<4>[23070.755663] RIP: 0010:string+0x48/0xf0
+<4>[23070.755675] Code: 3b 45 89 d1 45 31 c0 49 01 f9 66 45 85 d2 75 1a eb 1f 48 39 f7 73 02 88 07 48 83 c7 01 41 83 c0 01 48 83 c2 01 4c 39 cf 74 07 <0f> b6 02 84 c0 75 e1 48 89 f2 44 89 c6 e9 66 df ff ff 48 c7 c0 0e
+<4>[23070.755681] RSP: 0018:ffffcf94e51efab8 EFLAGS: 00010086
+<4>[23070.755687] RAX: 8e67d01124bbf000 RBX: ffffffffa85fa276 RCX: ffffffffffff0a00
+<4>[23070.755692] RDX: 8e67d01124bc0000 RSI: ffffcf94e51efbd8 RDI: ffffcf94e51efbdc
+<4>[23070.755695] RBP: ffffcf94e51efb30 R08: 0000000000000000 R09: ffffcf95e51efbdb
+<4>[23070.755700] R10: 00000000ffffffff R11: 0000000000000000 R12: ffffffffa85fa276
+<4>[23070.755704] R13: 0000000000000405 R14: ffffcf94e51efbdc R15: 0000000000000405
+<4>[23070.755708] FS:  0000000000000000(0000) GS:ffff8a63d69c2000(0000) knlGS:0000000000000000
+<4>[23070.755714] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+<4>[23070.755718] CR2: 00007f4816e9a55c CR3: 0000000eacc22005 CR4: 00000000001726f0
+Panic#2 Part3
+<4>[23070.755723] Call Trace:
+<4>[23070.755729]  <TASK>
+<4>[23070.755733]  vsnprintf+0x201/0x660
+<4>[23070.755747]  vprintk_store+0x1bf/0x640
+<4>[23070.755757]  ? prb_read_valid+0x1b/0x30
+<4>[23070.755766]  vprintk_emit+0xc2/0x350
+<4>[23070.755775]  ? kobject_get+0x3c/0x70
+<4>[23070.755783]  __report_bug.cold+0x6c/0xb2
+<4>[23070.755794]  ? kobject_get+0x42/0x70
+<4>[23070.755800]  report_bug_entry+0x2e/0x80
+<4>[23070.755808]  handle_bug+0x1e7/0x300
+<4>[23070.755817]  exc_invalid_op+0x17/0x70
+<4>[23070.755824]  asm_exc_invalid_op+0x1a/0x20
+<4>[23070.755831] RIP: 0010:kobject_get+0x42/0x70
+<4>[23070.755838] Code: 01 00 00 00 f0 0f c1 43 38 85 c0 74 37 8d 50 01 09 c2 78 1d 48 89 d8 5b c3 cc cc cc cc 48 8d 3d 84 d3 ca 00 48 8b 33 48 89 da <67> 48 0f b9 3a eb ca be 01 00 00 00 e8 2d ee 99 ff 48 89 d8 5b c3
+<4>[23070.755844] RSP: 0018:ffffcf94e51efe00 EFLAGS: 00010246
+<4>[23070.755849] RAX: 0000000000000000 RBX: ffff8a5490044000 RCX: ffff8a546104c320
+<4>[23070.755853] RDX: ffff8a5490044000 RSI: 8e67d01124bc0000 RDI: ffffffffa8ab6ab0
+<4>[23070.755857] RBP: ffff8a5466fdb000 R08: 0000000000000003 R09: ffff8a54625b0388
+<4>[23070.755861] R10: ffff8a5614bf26b8 R11: fefefefefefefeff R12: ffff8a5449f4f800
+<4>[23070.755865] R13: ffff8a546104c258 R14: ffff8a5442e2a310 R15: ffff8a5490044000
+<4>[23070.755873]  tb_handle_hotplug+0x30b/0x8c0 [thunderbolt]
+<4>[23070.755929]  process_one_work+0x1cb/0x3c0
+<4>[23070.755937]  worker_thread+0x1af/0x320
+<4>[23070.755944]  ? __pfx_worker_thread+0x10/0x10
+<4>[23070.755951]  kthread+0xe5/0x120
+<4>[23070.755958]  ? __pfx_kthread+0x10/0x10
+<4>[23070.755966]  ret_from_fork+0x2bc/0x350
+<4>[23070.755973]  ? __pfx_kthread+0x10/0x10
+Panic#2 Part2
+<4>[23070.755979]  ret_from_fork_asm+0x1a/0x30
+<4>[23070.755991]  </TASK>
+<4>[23070.755994] Modules linked in: tcp_diag inet_diag thunderbolt_stream thunderbolt_net thunderbolt sd_mod scsi_mod scsi_common netconsole snd_seq_dummy snd_hrtimer snd_seq snd_seq_device xt_connmark xt_conntrack xt_MASQUERADE xt_tcpudp xt_mark nft_compat x_tables nft_chain_nat nf_nat nf_conntrack nf_defrag_ipv6 nf_defrag_ipv4 tun nf_tables sunrpc qrtr rfcomm algif_hash algif_skcipher af_alg bnep b43 cordic binfmt_misc mac80211 nls_ascii nls_cp437 vfat fat cfg80211 intel_rapl_msr intel_rapl_common sb_edac x86_pkg_temp_thermal intel_powerclamp coretemp ssb snd_hda_codec_cs420x kvm_intel snd_hda_codec_generic btusb snd_hda_codec_atihdmi mmc_core snd_hda_codec_hdmi btmtk btrtl btbcm btintel snd_hda_intel pcmcia joydev kvm snd_hda_codec pcmcia_core libarc4 bluetooth snd_hda_core irqbypass aesni_intel snd_intel_dspcfg gf128mul snd_intel_sdw_acpi snd_hwdep rapl intel_cstate snd_pcm mei_me ecdh_generic applesmc(OE) intel_uncore snd_timer rfkill bcma pcspkr mei snd soundcore apple_gmux apple_mfi_fastcharge evdev msr i2c_dev
+<4>[23070.756151]  parport_pc ppdev lp parport efi_pstore efivarfs autofs4 ext4 mbcache jbd2 amdgpu hid_generic usbhid hid drm_buddy amdxcp drm_panel_backlight_quirks gpu_sched crc16 radeon dm_mod drm_ttm_helper ttm video wmi drm_exec i2c_algo_bit drm_suballoc_helper drm_display_helper cec rc_core drm_client_lib drm_kms_helper xhci_pci ehci_pci iTCO_wdt intel_pmc_bxt xhci_hcd ehci_hcd nvme drm watchdog at24 tg3 nvme_core usbcore libphy i2c_i801 nvme_keyring i2c_smbus ioatdma lpc_ich nvme_auth mdio_bus dca configfs usb_common button [last unloaded: thunderbolt]
+Panic#2 Part1
+<4>[23070.756255] ---[ end trace 0000000000000000 ]---
+<4>[23073.093129] RIP: 0010:string+0x48/0xf0
+<4>[23073.093149] Code: 3b 45 89 d1 45 31 c0 49 01 f9 66 45 85 d2 75 1a eb 1f 48 39 f7 73 02 88 07 48 83 c7 01 41 83 c0 01 48 83 c2 01 4c 39 cf 74 07 <0f> b6 02 84 c0 75 e1 48 89 f2 44 89 c6 e9 66 df ff ff 48 c7 c0 0e
+<4>[23073.093154] RSP: 0018:ffffcf94e51efab8 EFLAGS: 00010086
+<4>[23073.093158] RAX: 8e67d01124bbf000 RBX: ffffffffa85fa276 RCX: ffffffffffff0a00
+<4>[23073.093160] RDX: 8e67d01124bc0000 RSI: ffffcf94e51efbd8 RDI: ffffcf94e51efbdc
+<4>[23073.093162] RBP: ffffcf94e51efb30 R08: 0000000000000000 R09: ffffcf95e51efbdb
+<4>[23073.093165] R10: 00000000ffffffff R11: 0000000000000000 R12: ffffffffa85fa276
+<4>[23073.093167] R13: 0000000000000405 R14: ffffcf94e51efbdc R15: 0000000000000405
+<4>[23073.093170] FS:  0000000000000000(0000) GS:ffff8a63d69c2000(0000) knlGS:0000000000000000
+<4>[23073.093173] CS:  0010 DS: 0000 ES: 0000 CR0: 0000000080050033
+<4>[23073.093175] CR2: 00007f4816e9a55c CR3: 0000000eacc22006 CR4: 00000000001726f0
+<0>[23073.093179] Kernel panic - not syncing: Fatal exception
+<0>[23073.093273] Kernel Offset: 0x25e00000 from 0xffffffff81000000 (relocation range: 0xffffffff80000000-0xffffffffbfffffff)
+#### /var/lib/systemd/pstore/1793147159/002/dmesg.txt
+Panic#2 Part34
+<3>[ 2014.321754] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2015.345921] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2016.369907] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2017.393940] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2018.417898] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2019.441918] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2020.465903] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2021.489985] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2022.513981] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2023.538115] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2024.562150] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2025.586156] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2026.610164] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2027.634252] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2028.658191] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2029.682240] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2030.706288] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2031.730321] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2032.754328] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2033.778216] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2034.802395] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part33
+<3>[ 2035.826388] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2036.850381] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2037.874453] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2038.898485] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2039.922519] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2040.946468] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2041.970511] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2042.994586] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2044.018612] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2045.042777] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2046.066649] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2047.090536] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2048.114700] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2049.138571] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2050.162739] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2051.190545] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2052.210785] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2053.238629] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2054.258787] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2055.286699] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2056.306887] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part32
+<3>[ 2057.330692] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2058.354898] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2059.382891] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2060.402974] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2061.430935] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2062.450927] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2063.478871] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2064.499088] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2065.526939] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2066.547211] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2067.575184] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2068.595121] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2069.619398] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2070.643531] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2071.667577] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2072.691530] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2073.715593] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2074.739867] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2075.767921] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2076.787915] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2077.812139] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part31
+<3>[ 2078.836124] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2079.860203] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2080.884359] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2081.908457] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2082.932501] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2083.956488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2084.980700] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2086.004839] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2087.028801] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2088.056895] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2089.076990] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2090.101035] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2091.125157] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2092.153091] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2093.173347] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2094.197433] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2095.221521] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2096.245592] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2097.269679] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2098.293765] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2099.317838] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part30
+<3>[ 2100.341798] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2101.365828] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2102.389971] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2103.414115] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2104.438213] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2105.462321] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2106.486424] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2107.510420] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2108.534539] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2109.558652] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2110.582713] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2111.606704] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2112.630878] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2113.654961] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2114.678916] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2115.703007] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2116.727172] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2117.751292] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2118.775206] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2119.799337] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2120.823503] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part29
+<3>[ 2121.847543] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2122.871662] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2123.895689] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2124.919822] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2125.943899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2126.967977] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2127.991938] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2129.016112] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2130.040202] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2131.064286] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2132.088364] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2133.112454] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2134.136524] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2135.160508] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2136.184626] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2137.208754] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2138.232612] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2139.256911] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2140.284897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2141.304972] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2142.329093] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part28
+<3>[ 2143.353036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2144.377260] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2145.401370] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2146.425408] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2147.449476] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2148.473518] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2149.497657] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2150.521747] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2151.545669] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2152.569897] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2153.593938] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2154.617883] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2155.641996] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2156.666018] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2157.690285] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2158.714342] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2159.738410] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2160.762484] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2161.786515] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2162.810646] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2163.834693] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part27
+<3>[ 2164.858712] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2165.882880] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2166.906858] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2167.930839] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2168.955007] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2169.979140] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2171.003226] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2172.027170] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2173.051345] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2174.075457] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2175.099537] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2176.123618] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2177.147627] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2178.171692] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2179.195720] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2180.219837] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2181.243960] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2182.268007] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2183.292044] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2184.316091] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2185.340199] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part26
+<3>[ 2186.364163] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2187.388362] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2188.412463] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2189.436499] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2190.460643] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2191.484663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2192.508719] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2193.532844] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2194.556920] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2195.580752] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2196.604834] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2197.629021] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2198.653172] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2199.677264] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2200.701263] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2201.725415] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2202.749497] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2203.773553] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2204.797586] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2205.821663] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2206.845722] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part25
+<3>[ 2207.869755] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2208.893919] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2209.917937] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2210.941977] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2211.966082] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2212.990211] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2214.014258] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2215.038343] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2216.062422] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2217.086478] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2218.110478] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2219.134581] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2220.158675] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2221.182770] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2222.206750] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2223.230906] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2224.254924] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2225.278972] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2226.302946] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2227.327165] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2228.351078] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part24
+<3>[ 2229.375144] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2230.399325] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2231.423397] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2232.447447] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2233.471576] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2234.495592] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2235.519571] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2236.543791] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2237.567798] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2238.591907] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2239.615899] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2240.639947] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2241.664011] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2242.688082] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2243.712229] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2244.736266] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2245.760355] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2246.784417] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2247.808541] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2248.832514] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2249.856681] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part23
+<3>[ 2250.880618] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2251.904773] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2252.928811] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2253.952951] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2254.976968] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2256.001008] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2257.024995] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2258.049169] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2259.073257] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2260.097167] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2261.121323] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2262.145504] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2263.169485] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2264.193557] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2265.217630] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2266.241712] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2267.265813] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2268.289888] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2269.313880] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2270.337929] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2271.361915] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part22
+<3>[ 2272.385990] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2273.410031] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2274.434211] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2275.458344] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2276.482409] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2277.506423] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2278.530546] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2279.554603] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2280.578670] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2281.602677] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2282.626667] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2283.650870] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2284.674929] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2285.698967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2286.722913] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2287.747120] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2288.771042] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2289.795233] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2290.819325] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2291.843332] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2292.867437] thunderbolt 2-3: failed request link state change, aborting
+Panic#2 Part21
+<3>[ 2293.891455] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2294.915498] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2295.939574] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2296.963695] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2297.987813] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2299.011813] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2300.035802] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2301.059967] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2302.083940] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2303.108069] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2304.131918] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2305.156061] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2306.180036] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2307.204298] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2308.228159] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2309.252488] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2310.276305] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2311.300544] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2312.324427] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2313.348665] thunderbolt 2-3: failed request link state change, aborting
+<3>[ 2314.372544] thunderbolt 2-3: failed request link state change, aborting
