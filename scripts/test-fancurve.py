@@ -4,7 +4,8 @@ layouts: before Linux 7.3 (fan files in the device directory, fan1_manual 1/0, f
 attributes in hwmon/hwmon0, pwm1_enable 1 manual / 2 automatic, fan1_target). Records and actions use the old names
 and the old 1/0 for manual mode; the mocks translate them to the layout under test. GPUs (drm/cardN with an amdgpu
 driver link, temperature and DPM level), their debugfs fence files and coretemp are files under the test's root; an
-action key with a slash writes (or with None removes) that file relative to the root."""
+action key with a slash writes (or with None removes, or with {'link': TARGET} symlinks) that file relative to the
+root."""
 import json
 import os
 from pathlib import Path
@@ -50,6 +51,7 @@ for key,value in action.items():
  if key=='stop':continue
  path=root.parent/key if '/' in key else fan/names[key]
  if value is None:path.unlink(missing_ok=True)
+ elif isinstance(value,dict):path.symlink_to(value['link'])
  else:path.write_text((to_new.get(str(value),str(value)) if key=='fan1_manual' else str(value))+'\n')
 if action.get('stop'):os.kill(os.getppid(),signal.SIGTERM)
 else:time.sleep(.01)
@@ -253,6 +255,22 @@ class FanPolicyTest(unittest.TestCase):
         result, rows = self.run_policy(actions)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual([r['fan1_output'] for r in rows], ['1200', '1200', '1200'])
+
+    def test_gpus_bound_after_start_are_found(self):
+        # At boot the service can start before amdgpu binds the GPUs: their files exist, the driver link not yet.
+        self.sensors()
+        for i in (0, 1):
+            (self.root / f'drm/card{i}/device/driver').unlink()
+        link = {'link': '../../../bus/pci/drivers/amdgpu'}
+        actions = [{}, {'drm/card0/device/driver': link, 'drm/card1/device/driver': link}] + [{}] * 13 + [{'stop': True}]
+        result, rows = self.run_policy(actions)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('no amdgpu GPU yet', result.stderr)
+        self.assertIn('found 2 amdgpu GPU(s) and the CPU sensor', result.stdout)
+        out = [int(r['fan1_output']) for r in rows]
+        self.assertEqual(out[:3], [2360, 2360, 2260])   # full speed until found, then down in steps
+        self.assertEqual(out[-1], 1200)
+        self.assertNotIn('(work;', result.stdout)        # finding the GPUs is not GPU work
 
     def test_dpm_level_high_counts_as_work(self):
         self.sensors(level='high', debugfs=False)

@@ -65,22 +65,29 @@ minimum=$(read_rpm "$fan/fan1_min") || fail 'cannot read a valid SMC minimum'
 (( minimum > 0 )) || fail 'invalid SMC minimum'
 
 # The amdgpu GPUs (cardN whose driver is amdgpu), with their temperature, DPM level and fence files, and the CPU
-# package temperature (coretemp's temp1). Found once; a file that disappears later reads as hot.
-gpu_temps=() gpu_levels=() gpu_fences=()
-for card in "$drm"/card*; do
-    [[ ${card##*/} =~ ^card([0-9]+)$ ]] || continue
-    [[ $(readlink "$card/device/driver" 2>/dev/null) == */amdgpu ]] || continue
-    temps=("$card"/device/hwmon/hwmon*/temp1_input)
-    gpu_temps+=("${temps[0]}")
-    gpu_levels+=("$card/device/power_dpm_force_performance_level")
-    gpu_fences+=("$dri/${BASH_REMATCH[1]}/amdgpu_fence_info")
-done
-cpu_temp=
-for h in "$hwmon"/hwmon*; do
-    [[ $(cat "$h/name" 2>/dev/null) == coretemp ]] && cpu_temp=$h/temp1_input && break
-done
-(( ${#gpu_temps[@]} > 0 )) || echo 'no amdgpu GPU found: the fan stays at full speed' >&2
-[[ -n $cpu_temp ]] || echo 'no coretemp sensor found: the fan stays at full speed' >&2
+# package temperature (coretemp's temp1). At boot this service can start before amdgpu has bound the GPUs (5 s against
+# 12-18 s on the Macs), so while either is missing they are looked for again on every poll, at full speed meanwhile.
+# Once found, a file that disappears later reads as hot.
+discover() {
+    gpu_temps=() gpu_levels=() gpu_fences=() cpu_temp=
+    local card temps h
+    for card in "$drm"/card*; do
+        [[ ${card##*/} =~ ^card([0-9]+)$ ]] || continue
+        [[ $(readlink "$card/device/driver" 2>/dev/null) == */amdgpu ]] || continue
+        temps=("$card"/device/hwmon/hwmon*/temp1_input)
+        gpu_temps+=("${temps[0]}")
+        gpu_levels+=("$card/device/power_dpm_force_performance_level")
+        gpu_fences+=("$dri/${BASH_REMATCH[1]}/amdgpu_fence_info")
+    done
+    for h in "$hwmon"/hwmon*; do
+        [[ $(cat "$h/name" 2>/dev/null) == coretemp ]] && cpu_temp=$h/temp1_input && break
+    done
+    return 0
+}
+found() { (( ${#gpu_temps[@]} > 0 )) && [[ -n $cpu_temp ]]; }
+discover
+(( ${#gpu_temps[@]} > 0 )) || echo 'no amdgpu GPU yet: full speed until one appears' >&2
+[[ -n $cpu_temp ]] || echo 'no coretemp sensor yet: full speed until it appears' >&2
 
 # The sum of the compute rings' last signaled fences over all GPUs (`--- ring N (comp_...) ---`, as the port lights
 # count them); it changes whenever a GPU finishes a compute job. trashcan's work is compute; a desktop drawing on a GPU
@@ -152,6 +159,13 @@ while :; do
     full=$(( maximum > FAN_RPM ? maximum : FAN_RPM ))
     idle=$(( IDLE_RPM > minimum ? IDLE_RPM : minimum ))
     (( idle < full )) || idle=$full
+    if ! found; then
+        discover
+        if found; then
+            echo "found ${#gpu_temps[@]} amdgpu GPU(s) and the CPU sensor"
+            last_fences=$(fences)
+        fi
+    fi
     check_work
     if (( busy )); then quiet=0; else quiet=$((quiet + 1)); fi
     if (( quiet * INTERVAL < HOLD )); then
