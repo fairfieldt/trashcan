@@ -1,0 +1,29 @@
+no run recorded
+stopped
+preflight 6-flashnext on incite, inflight, alight, indite, invite, enlight (model files are hashed once per node and cached; the first time takes minutes)
+preflight 6-flashnext: OK (0 problems, 0 warnings)
+run 20261028-125116-6-flashnext: logs on the nodes in ~/trashcan-exp/a16/runs/20261028-125116-6-flashnext
+start stage5 on enlight
+stage5 on enlight listening on 7071 after 1 s
+start stage4 on invite
+stage4 on invite listening on 7071 after 2 s
+start stage3 on indite
+stage3 on indite listening on 7071 after 2 s
+start stage2 on alight
+stage2 on alight listening on 7071 after 3 s
+start stage1 on inflight
+stage1 on inflight listening on 7071 after 3 s
+start driver on incite
+driver on incite ready on 127.0.0.1:8000 after 11 s
+6-flashnext ready after 22 s
+smoke: status completed, 0.53 s, usage {'input_tokens': 24, 'input_tokens_details': {'cache_write_tokens': 0, 'cached_tokens': 0}, 'output_tokens': 2, 'output_tokens_details': {'reasoning_tokens': 0}, 'total_tokens': 26}, answer 'Paris': PASS (want 'Paris')
+driver VRAM in use: 0000:02:00.0 5904 MiB, 0000:06:00.0 5984 MiB
+stopped driver on incite
+stopped stage5 on enlight
+stopped stage4 on invite
+stopped stage3 on indite
+stopped stage2 on alight
+stopped stage1 on inflight
+incite: /sys/class/drm/card0/device/power_dpm_force_performance_level: restored auto
+/sys/class/drm/card1/device/power_dpm_force_performance_level: restored auto
+logs in /home/fairfieldt/trashcan-exp/cluster/state/logs/20261028-125116-6-flashnext

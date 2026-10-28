@@ -1,0 +1,83 @@
+== A1 (mtp_cpu_latency=false, latency holders: 0)
+temperature=default: 821 tokens, prefill 0.45 s, 23.6 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.40 s, 27.0 tok/s, text cab5b86b2aa4
+temperature=default: 821 tokens, prefill 0.38 s, 23.9 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.40 s, 27.0 tok/s, text cab5b86b2aa4
+== B1 (mtp_cpu_latency=true, latency holders: 3)
+temperature=default: 821 tokens, prefill 0.43 s, 26.6 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.36 s, 30.3 tok/s, text cab5b86b2aa4
+temperature=default: 821 tokens, prefill 0.35 s, 26.7 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.35 s, 30.6 tok/s, text cab5b86b2aa4
+== B2 (mtp_cpu_latency=true, latency holders: 3)
+temperature=default: 821 tokens, prefill 0.43 s, 26.5 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.36 s, 30.3 tok/s, text cab5b86b2aa4
+temperature=default: 821 tokens, prefill 0.35 s, 26.5 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.35 s, 30.2 tok/s, text cab5b86b2aa4
+== A2 (mtp_cpu_latency=false, latency holders: 0)
+temperature=default: 821 tokens, prefill 0.45 s, 23.7 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.41 s, 26.8 tok/s, text cab5b86b2aa4
+temperature=default: 821 tokens, prefill 0.41 s, 23.9 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.37 s, 27.1 tok/s, text cab5b86b2aa4
+== P (mtp_cpu_latency=true, latency holders: 0)
+temperature=default: 821 tokens, prefill 0.33 s, 21.2 tok/s, text 6cbff1b199d6
+temperature=0: 395 tokens, prefill 0.34 s, 21.2 tok/s, text cab5b86b2aa4
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/demo-check-20261028/ab.py", line 26, in <module>
+    out = usage['output_tokens']
+          ~~~~~^^^^^^^^^^^^^^^^^
+TypeError: 'NoneType' object is not subscriptable
+Traceback (most recent call last):
+  File "/usr/lib/python3.13/urllib/request.py", line 1319, in do_open
+    h.request(req.get_method(), req.selector, req.data, headers,
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+              encode_chunked=req.has_header('Transfer-encoding'))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/http/client.py", line 1367, in request
+    self._send_request(method, url, body, headers, encode_chunked)
+    ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/http/client.py", line 1413, in _send_request
+    self.endheaders(body, encode_chunked=encode_chunked)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/http/client.py", line 1362, in endheaders
+    self._send_output(message_body, encode_chunked=encode_chunked)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/http/client.py", line 1122, in _send_output
+    self.send(msg)
+    ~~~~~~~~~^^^^^
+  File "/usr/lib/python3.13/http/client.py", line 1066, in send
+    self.connect()
+    ~~~~~~~~~~~~^^
+  File "/usr/lib/python3.13/http/client.py", line 1032, in connect
+    self.sock = self._create_connection(
+                ~~~~~~~~~~~~~~~~~~~~~~~^
+        (self.host,self.port), self.timeout, self.source_address)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/socket.py", line 864, in create_connection
+    raise exceptions[0]
+  File "/usr/lib/python3.13/socket.py", line 849, in create_connection
+    sock.connect(sa)
+    ~~~~~~~~~~~~^^^^
+ConnectionRefusedError: [Errno 111] Connection refused
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/fairfieldt/trashcan-exp/demo-check-20261028/ab.py", line 13, in <module>
+    with urllib.request.urlopen(req, timeout=300) as r:
+         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 189, in urlopen
+    return opener.open(url, data, timeout)
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 489, in open
+    response = self._open(req, data)
+  File "/usr/lib/python3.13/urllib/request.py", line 506, in _open
+    result = self._call_chain(self.handle_open, protocol, protocol +
+                              '_open', req)
+  File "/usr/lib/python3.13/urllib/request.py", line 466, in _call_chain
+    result = func(*args)
+  File "/usr/lib/python3.13/urllib/request.py", line 1348, in http_open
+    return self.do_open(http.client.HTTPConnection, req)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/urllib/request.py", line 1322, in do_open
+    raise URLError(err)
+urllib.error.URLError: <urlopen error [Errno 111] Connection refused>
