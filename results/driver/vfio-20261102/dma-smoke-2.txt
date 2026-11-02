@@ -1,0 +1,5 @@
+before     DMA_STATUS 0x44c83d57 RB_CNTL 0x00000014 L1_TLB_CNTL 0x00000018 AGP bot/top/base 0x3ffff/0x0/0x0
+ok   DMA engine wrote VRAM (packet consumed: true, value 0xdeadbeef)
+ok   DMA engine wrote host memory at IOVA 0x100000 through the AGP aperture (L1 TLB as left: 0x18; packet consumed: true, value 0x600d0018)
+sent       a write to unmapped IOVA 0xf0000000 (packet consumed: true); the kernel log should show a DMAR fault for it
+after      DMA_STATUS 0x44c83d57 RB_CNTL 0x00000014 (stopped, MC registers restored)

@@ -1,0 +1,60 @@
+driver     vfio-pci
+group 51   0000:02:00.0 vfio-pci
+group 51   0000:02:00.1 (no driver)
+vfio       9 regions, 5 irq indices, MSI vectors 1, INTx 1, reset Bus, DMA mappings available 65535
+bus reset  would also reset 0000:02:00.0 (group 51)
+bus reset  would also reset 0000:02:00.1 (group 51)
+device     0000:02:00.0 1002:6798 subsystem 106b:0128 rev 00 class 030000
+ok   Tahiti XT
+command    0x0003 (memory on, bus master off)
+BAR0       0x8000000c size 256 MiB rwm
+BAR2       0xa0700004 size 256 KiB rwm
+BAR4       0x00003001 size 256 B rw-
+ROM size 0 B ---
+config size 4 KiB rw-
+caps       vendor@0x48 PM@0x50 PCIe@0x58 MSI@0xa0
+ext caps   0xb@0x100 0x1@0x150 0xf@0x2b0 0x13@0x2c0
+link       gen 3 x16
+VFCT       bus 02 dev 00.0 1002:6798 0000:0000 64 KiB 113-C3861XA-028
+VFCT       bus 06 dev 00.0 1002:6798 0000:0000 64 KiB 113-C3861XB-028
+VFCT       bus 00 dev 00.0 0000:0000 0000:0000 0 KiB (invalid: no 55 AA ROM signature)
+ok   VBIOS from VFCT: 113-C3861XA-028
+CONFIG_MEMSIZE                   0x150A 0x00001800
+CONFIG_APER_SIZE                 0x150C 0x00000100
+MC_VM_FB_LOCATION                0x0809 0xf57ff400
+MC_VM_FB_OFFSET                  0x081A 0x00000000
+MC_VM_AGP_TOP                    0x080A 0x00000000
+MC_VM_AGP_BOT                    0x080B 0x0003ffff
+MC_VM_AGP_BASE                   0x080C 0x00000000
+MC_VM_SYSTEM_APERTURE_LOW_ADDR   0x080D 0x0f400000
+MC_VM_SYSTEM_APERTURE_HIGH_ADDR  0x080E 0x0f57ffff
+VM_L2_CNTL                       0x0500 0x000b8600
+VM_CONTEXT0_CNTL                 0x0504 0x00000000
+MC_ARB_RAMCFG                    0x09D8 0x00000262
+MC_SHARED_CHMAP                  0x0801 0x00007210
+MC_SEQ_SUP_CNTL                  0x0A32 0x0f000001
+GRBM_STATUS                      0x2004 0x00003028
+GRBM_STATUS2                     0x2002 0x00000100
+SRBM_STATUS                      0x0394 0x200000c0
+SRBM_STATUS2                     0x0393 0x00000000
+CP_STAT                          0x21A0 0x00000000
+CP_ME_CNTL                       0x21B6 0x15000000
+RLC_CNTL                         0x30C0 0x00000000
+IH_RB_CNTL                       0x0F80 0x0001011c
+DMA_STATUS_REG                   0x340D 0x44c83d57
+GB_ADDR_CONFIG                   0x263E 0x10000000
+CC_GC_SHADER_ARRAY_CONFIG        0x226F 0xff000000
+BIOS_SCRATCH_0                   0x05C9 0x00000000
+BIOS_SCRATCH_7                   0x05D0 0x00000000
+BIF_FB_EN                        0x1524 0x00000003
+HDP_HOST_PATH_CNTL               0x0B00 0x0fa00029
+SCRATCH_REG0                     0x2140 0xdeadbeef
+VRAM       6144 MiB at MC 0xf400000000
+ok   CONFIG_MEMSIZE is 6 GiB (the VBIOS has set up the memory controller)
+ok   MC_VM_FB_LOCATION spans CONFIG_MEMSIZE
+IOVA       0x100000-0xfedfffff 0xfef00000-0xffffffffff (page sizes 0x40201000)
+ok   DMA buffer of 4 KiB mapped at IOVA 0x100000
+ok   DMA buffer of 2 MiB mapped at IOVA 0x200000
+ok   DMA buffer of 64 MiB mapped at IOVA 0x200000
+ok   unmapped IOVA reused (0x100000)
+info BAR0 (2 MiB) mapped for peer DMA at IOVA 0x200000
