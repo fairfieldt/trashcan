@@ -1,0 +1,9 @@
+[package]
+name = "gpud-platform"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Platform interface of the userspace GPU driver: PCI config space, MMIO, DMA/IOVA, interrupts; VFIO backend"
+
+[dependencies]
+libc = "0.2"

@@ -13,6 +13,7 @@
 
 # rust
 /target/
+/driver/target/
 /lights/build/
 /tools/dump-activations/dump
 

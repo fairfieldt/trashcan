@@ -1,0 +1,8 @@
+# The userspace GPU driver is its own workspace: it builds apart from the engine, and the Linux code it will
+# import keeps its own license (driver/README.md).
+[workspace]
+members = ["platform", "gpud"]
+resolver = "2"
+
+[profile.release]
+debug = "line-tables-only"
