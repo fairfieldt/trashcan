@@ -5,6 +5,8 @@
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
 mod dma_smoke;
+#[cfg(target_os = "linux")]
+mod hw;
 mod probe;
 mod si;
 
@@ -40,6 +42,15 @@ enum Command {
         /// PCI address, e.g. 0000:02:00.0
         address: String,
     },
+    /// Bring the GPU up with Linux's SI code (memory controller, GART, interrupts, GFX and DMA rings) and run the
+    /// ring and IB tests.
+    Init {
+        /// PCI address, e.g. 0000:02:00.0
+        address: String,
+        /// Directory holding amdgpu/tahiti_*.bin.
+        #[arg(long, default_value = "/lib/firmware")]
+        firmware_dir: String,
+    },
 }
 
 fn main() -> Result<()> {
@@ -53,6 +64,7 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
+        Command::Init { address, firmware_dir } => run_init(&address, &firmware_dir),
         Command::DmaSmoke { address } => {
             let failed = run_dma_smoke(&address)?;
             if failed > 0 {
@@ -62,6 +74,34 @@ fn main() -> Result<()> {
             Ok(())
         }
     }
+}
+
+#[cfg(target_os = "linux")]
+fn run_init(address: &str, firmware_dir: &str) -> Result<()> {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let (container, dev) = gpud_platform::vfio::open(address.parse()?, 1 << 20..1 << 40)?;
+    let device = hw::Device::create(Arc::new(dev), Arc::new(container), firmware_dir)?;
+    let t0 = Instant::now();
+    device.init()?;
+    println!("init: {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0);
+    let failed = device.ib_tests(Duration::from_secs(1));
+    for r in device.rings() {
+        println!("ring {:<12} {}", r.name, if r.ready { "ready" } else { "not ready" });
+    }
+    std::thread::sleep(Duration::from_millis(100));
+    println!("interrupts: {}", device.interrupts.load(std::sync::atomic::Ordering::Relaxed));
+    drop(device);
+    if failed > 0 {
+        anyhow::bail!("{failed} IB tests failed");
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "linux"))]
+fn run_init(_: &str, _: &str) -> Result<()> {
+    anyhow::bail!("gpud init needs Linux (VFIO)")
 }
 
 #[cfg(target_os = "linux")]
