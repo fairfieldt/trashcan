@@ -9,6 +9,7 @@ description = "Userspace AMDGPU driver server for the Mac Pro 6,1's FirePro D700
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 gpud-platform = { path = "../platform" }
+libc = "0.2"
 
 [build-dependencies]
 cc = "1"

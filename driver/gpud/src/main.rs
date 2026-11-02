@@ -8,6 +8,10 @@ mod dma_smoke;
 #[cfg(target_os = "linux")]
 mod hw;
 mod probe;
+#[cfg(target_os = "linux")]
+mod proto;
+#[cfg(target_os = "linux")]
+mod serve;
 mod si;
 
 use anyhow::Result;
@@ -42,6 +46,15 @@ enum Command {
         /// PCI address, e.g. 0000:02:00.0
         address: String,
     },
+    /// Bring the GPU up and serve clients (RADV through libgpud_drm.so) on a Unix socket.
+    Serve {
+        /// PCI address, e.g. 0000:02:00.0
+        address: String,
+        #[arg(long, default_value = "/lib/firmware")]
+        firmware_dir: String,
+        #[arg(long, default_value = "/run/gpud/gpud.sock")]
+        socket: String,
+    },
     /// Bring the GPU up with Linux's SI code (memory controller, GART, interrupts, GFX and DMA rings) and run the
     /// ring and IB tests.
     Init {
@@ -65,6 +78,7 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Init { address, firmware_dir } => run_init(&address, &firmware_dir),
+        Command::Serve { address, firmware_dir, socket } => run_serve(&address, &firmware_dir, &socket),
         Command::DmaSmoke { address } => {
             let failed = run_dma_smoke(&address)?;
             if failed > 0 {
@@ -97,6 +111,19 @@ fn run_init(address: &str, firmware_dir: &str) -> Result<()> {
         anyhow::bail!("{failed} IB tests failed");
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn run_serve(address: &str, firmware_dir: &str, socket: &str) -> Result<()> {
+    use std::sync::Arc;
+
+    let (container, dev) = gpud_platform::vfio::open(address.parse()?, 1 << 20..1 << 40)?;
+    serve::run(Arc::new(dev), Arc::new(container), firmware_dir, socket)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn run_serve(_: &str, _: &str, _: &str) -> Result<()> {
+    anyhow::bail!("gpud serve needs Linux (VFIO)")
 }
 
 #[cfg(not(target_os = "linux"))]

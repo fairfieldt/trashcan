@@ -5,14 +5,21 @@ through an IOMMU and serves the inference engine. Linux is the development harne
 the same driver can later run on a small microkernel with only the platform backend replaced. The engine in
 `engine/` stays the reference implementation, unchanged, running on Linux's amdgpu.
 
-Status (milestone 1): `gpud` owns one GPU through VFIO and has checked config space, the VBIOS, registers, VRAM,
-IOMMU mappings, MSI routing, and a write by the GPU's own DMA engine into host memory through the IOMMU. No engine
-beyond that one write has run yet; there is no command submission. The plan for it is `docs/plan.md`.
+Status: Linux's Southern Islands code (driver/linux, unmodified) runs in `gpud` on a small compatibility layer
+(driver/shim) and brings the GPU up: memory controller and GART, interrupts, the GFX, two compute and two DMA rings,
+all passing their ring and IB tests. `gpud serve` gives clients their own GPU VM, buffers and submission; with
+`libgpud_drm.so` preloaded, an unmodified Mesa RADV runs on it (vulkaninfo, and `vkcompute`'s kernels on host and
+device memory give exact results). Clocks stay at the boot level until SI DPM is ported, so memory-bound kernels run
+about as fast as amdgpu at its lowest power state. The plan is `docs/plan.md`.
 
 | Path | What |
 |---|---|
 | `platform/` | `gpud-platform` (Rust): the platform interface (PCI config space, MMIO, DMA/IOVA, interrupts), the VFIO backend, an in-memory mock, VBIOS lookup in ACPI VFCT |
-| `gpud/` | `gpud` (Rust): `gpud probe` and `gpud dma-smoke` |
+| `gpud/` | `gpud` (Rust): `probe`, `dma-smoke`, `init` (bring-up and ring tests), `serve` (the driver server) |
+| `linux/` | Linux 7.3-rc7's SI amdgpu files, unmodified (`PROVENANCE.md`) |
+| `shim/` | The kernel API and amdgpu core they run on (C), and the client protocol (`gpud_proto.h`) |
+| `client/` | `libgpud_drm.so` (RADV and libdrm onto gpud, loaded with `LD_PRELOAD`) and `drminfo` |
+| `vkcompute/` | Vulkan compute checks, run the same way on gpud and on amdgpu |
 | `docs/vfio.md` | How a D700 is handed to VFIO on a Mac Pro 6,1, and what the host needs |
 | `docs/linux-deps.md` | Measured dependency audit of Linux 7.3's SI amdgpu code |
 | `docs/plan.md` | Architecture and the plan to command submission and beyond |
@@ -26,7 +33,13 @@ Linux only (`cargo build --release --target x86_64-unknown-linux-gnu`). On the M
 ```bash
 sudo ./gpud probe 0000:02:00.0              # --read-only skips the VRAM test and the MSI route
 sudo ./gpud dma-smoke 0000:02:00.0
+sudo ./gpud init 0000:02:00.0               # bring-up, ring and IB tests, then shut the engines down
+sudo ./gpud serve 0000:02:00.0 &            # the server, on /run/gpud/gpud.sock
+LD_PRELOAD=$PWD/libgpud_drm.so vulkaninfo --summary
+LD_PRELOAD=$PWD/libgpud_drm.so ./vkcompute
 ```
+
+`client/build.sh` builds `libgpud_drm.so` and `drminfo` (in the cross-compiling VM).
 
 ## Licenses
 

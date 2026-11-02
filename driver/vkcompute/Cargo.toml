@@ -1,0 +1,10 @@
+[package]
+name = "vkcompute"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Vulkan compute checks for a GPU behind gpud or amdgpu: kernels on host and device memory, checked on the CPU"
+
+[dependencies]
+anyhow = "1.0.104"
+ash = { version = "0.38.0", features = ["loaded"] }

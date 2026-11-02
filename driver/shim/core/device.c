@@ -15,6 +15,7 @@
 #include "gmc/gmc_6_0_sh_mask.h"
 #include "oss/oss_1_0_sh_mask.h"
 #include <gpud_core.h>
+#include "amd_pcie.h"
 #include <linux/pci.h>
 
 extern const struct gpud_platform *lkpi_platform;
@@ -279,6 +280,11 @@ static bool gpud_runs(const struct amdgpu_ip_block *b)
 
 extern int gpud_mem_scratch_init(struct amdgpu_device *adev);
 extern int gpud_ib_pool_init(struct amdgpu_device *adev);
+void gpud_vram_init(struct amdgpu_device *adev, u64 start);
+
+/* Clients get VRAM above 64 MiB (below it: the VBIOS and gpud's kernel objects); host memory up to 32 GiB. */
+u64 gpud_client_vram_start = 64ULL << 20;
+u64 gpud_gtt_size = 32ULL << 30;
 
 static int hw_init_block(struct amdgpu_ip_block *b)
 {
@@ -383,6 +389,7 @@ int gpud_device_init(struct amdgpu_device *adev)
 		}
 		b->status.late_initialized = true;
 	}
+	gpud_vram_init(adev, gpud_client_vram_start);
 	adev->accel_working = !failed;
 	return failed;
 }
@@ -432,6 +439,19 @@ struct amdgpu_device *gpud_device_create(const struct gpud_platform *platform, c
 	adev->family = AMDGPU_FAMILY_SI;
 	adev->usec_timeout = AMDGPU_MAX_USEC_TIMEOUT;
 	adev->gfx_timeout = adev->compute_timeout = adev->sdma_timeout = 2000;
+	/*
+	 * amdgpu reads these from the VBIOS (atombios FirmwareInfo, amdgpu_device_get_pcie_info); gpud doesn't parse
+	 * the VBIOS yet, so they are amdgpu's values for this card (results/driver/gpud-*: drminfo on the native
+	 * D700): a 27 MHz reference clock, 850 MHz engine and 1370 MHz memory clocks at the top DPM level, PCIe gen 3
+	 * x16 for chip and platform.
+	 */
+	adev->clock.spll.reference_freq = 2700;
+	adev->clock.default_sclk = 85000;
+	adev->clock.default_mclk = 137000;
+	adev->pm.pcie_gen_mask = CAIL_PCIE_LINK_SPEED_SUPPORT_GEN1 | CAIL_PCIE_LINK_SPEED_SUPPORT_GEN2 |
+				 CAIL_PCIE_LINK_SPEED_SUPPORT_GEN3 | CAIL_ASIC_PCIE_LINK_SPEED_SUPPORT_GEN1 |
+				 CAIL_ASIC_PCIE_LINK_SPEED_SUPPORT_GEN2 | CAIL_ASIC_PCIE_LINK_SPEED_SUPPORT_GEN3;
+	adev->pm.pcie_mlw_mask = CAIL_PCIE_LINK_WIDTH_SUPPORT_X16 | CAIL_ASIC_PCIE_LINK_WIDTH_SUPPORT_X16;
 	adev->accel_working = false;
 	mutex_init(&adev->srbm_mutex);
 	mutex_init(&adev->grbm_idx_mutex);

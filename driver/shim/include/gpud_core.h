@@ -49,6 +49,35 @@ int gpud_device_ib_tests(struct amdgpu_device *adev, long timeout_ms);
 int gpud_irq_process(struct amdgpu_device *adev);
 void gpud_device_fini(struct amdgpu_device *adev);
 
+/* ---- clients ---- */
+struct gpud_vm;
+struct drm_amdgpu_info;
+
+struct gpud_ib {
+	uint64_t va;	  /* in the client's VM */
+	uint32_t size_dw;
+	uint32_t flags;	  /* AMDGPU_IB_FLAG_* */
+};
+
+/* A client address space on VMID vmid (1-15). */
+struct gpud_vm *gpud_vm_create(struct amdgpu_device *adev, unsigned vmid);
+/* Maps [va, va+size) to a VRAM offset, or to an IOVA when pte_flags has AMDGPU_PTE_SYSTEM. */
+int gpud_vm_map(struct gpud_vm *vm, uint64_t va, uint64_t size, uint64_t addr, uint64_t pte_flags);
+int gpud_vm_unmap(struct gpud_vm *vm, uint64_t va, uint64_t size);
+/* Client VRAM (offsets from the start of VRAM, above gpud's kernel objects). */
+int gpud_vram_alloc(struct amdgpu_device *adev, uint64_t size, uint64_t align, uint64_t *offset);
+void gpud_vram_free(struct amdgpu_device *adev, uint64_t offset, uint64_t size);
+/* The ring index for a DRM IP type (AMDGPU_HW_IP_*) and ring, or -EINVAL. */
+int gpud_ring_for(struct amdgpu_device *adev, uint32_t ip_type, uint32_t ring);
+/* Runs IBs on a ring in a VM (or without one); the fence's sequence number goes to *seq. */
+int gpud_submit(struct amdgpu_device *adev, int ring, struct gpud_vm *vm, const struct gpud_ib *ibs, unsigned n,
+		uint64_t *seq);
+/* 0 once ring has completed seq, -ETIME after timeout_ns (negative: no limit). */
+int gpud_fence_wait(struct amdgpu_device *adev, int ring, uint64_t seq, int64_t timeout_ns);
+uint64_t gpud_fence_read(struct amdgpu_device *adev, int ring);
+/* An AMDGPU_INFO query, answered into out (size bytes). */
+int gpud_info(struct amdgpu_device *adev, const struct drm_amdgpu_info *query, void *out, uint32_t size);
+
 /* Rings by index, for status and submission. */
 int gpud_ring_count(struct amdgpu_device *adev);
 const char *gpud_ring_name(struct amdgpu_device *adev, int ring);

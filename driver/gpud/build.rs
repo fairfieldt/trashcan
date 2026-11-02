@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 const IMPORTED: &[&str] = &["si", "gmc_v6_0", "gfx_v6_0", "si_ih", "si_dma", "amdgpu_ih", "amdgpu_wb"];
-const CORE: &[&str] = &["lkpi", "device", "mem", "ring"];
+const CORE: &[&str] = &["lkpi", "device", "mem", "ring", "vm", "info"];
 
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").unwrap() != "linux" {
