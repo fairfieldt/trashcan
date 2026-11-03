@@ -11,7 +11,7 @@ Fixes:
 
 Validation: host ACPI, PMM and Ethernet tests; four-CPU QEMU native/Linux boot; QEMU Unix and OpenSSH suite. The Unix suite was rebuilt after the channel changes, before the final mprotect validation change. No physical hardware was tested.
 
-Additional fixes: remove undisclosed handles after a channel read output fault; validate native and Linux ELF ranges and header arithmetic before allocation, and copy segments without a large temporary buffer; handle truncated HTTP bodies and multiline server events in chat; bound aggregate vectored-write allocations; handle the SSH test completion race; skip zero-length user copies before touching pointers; reject overflowing ancillary-message offsets and overflowing mapping lengths and oversized memfd truncation; reject unaligned mprotect and fixed mappings at address zero.
+Additional fixes: reject oversized CPU indices and clean up failed thread creation; remove undisclosed handles after a channel read output fault; validate native and Linux ELF ranges and header arithmetic before allocation, and copy segments without a large temporary buffer; handle truncated HTTP bodies and multiline server events in chat; bound aggregate vectored-write allocations; handle the SSH test completion race; skip zero-length user copies before touching pointers; reject overflowing ancillary-message offsets and overflowing mapping lengths and oversized memfd truncation; reject unaligned mprotect and fixed mappings at address zero.
 
 Run `KERNEL_FEATURES=audit-test PROFILE=release SMP=4 MEM=2G ./run-qemu.sh` for page-table allocation failure injection. It checks partial mapping rollback, mprotect rollback and a subsequent successful retry.
 

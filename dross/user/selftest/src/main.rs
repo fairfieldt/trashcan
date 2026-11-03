@@ -167,6 +167,7 @@ fn run_all(b: &Bootstrap) -> i32 {
     elf[104..112].copy_from_slice(&(1u64 << 36).to_le_bytes());
     let oversized = sys::spawn(image, "bad-elf", None, u64::MAX) == Err(Error::BadElf);
     t.check("malformed ELF ranges", wrap && bad_offset && oversized, "");
+    t.check("oversized spawn CPU rejected", sys::spawn(image, "bad-elf", None, 1u64 << 32) == Err(Error::InvalidArgs), "");
     // Linux PIE PT_PHDR arithmetic and the fallback address must not wrap either.
     elf[16..18].copy_from_slice(&3u16.to_le_bytes());
     elf[64..68].copy_from_slice(&6u32.to_le_bytes());
@@ -182,6 +183,16 @@ fn run_all(b: &Bootstrap) -> i32 {
     t.check("malformed Linux ELF headers", phdr_wrap && phdr_underflow, "");
     sys::vm_unmap(addr, 8192).unwrap();
     sys::close(image).unwrap();
+
+    struct DropCount(Arc<AtomicU64>);
+    impl Drop for DropCount { fn drop(&mut self) { self.0.fetch_add(1, Ordering::Relaxed); } }
+    let drops = Arc::new(AtomicU64::new(0));
+    let mut failed = true;
+    for _ in 0..64 {
+        let token = DropCount(drops.clone());
+        failed &= thread::spawn(1u64 << 32, move || drop(token)) == Err(Error::InvalidArgs);
+    }
+    t.check("failed thread creation cleanup", failed && drops.load(Ordering::Relaxed) == 64, "");
 
     // A channel carries bytes and a handle; the handle works on the other side.
     let (x, y) = sys::channel_create().unwrap();

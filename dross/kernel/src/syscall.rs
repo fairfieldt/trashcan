@@ -151,7 +151,7 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             sched::exit_current()
         }
         sys::THREAD_CREATE => {
-            let cpu = if a[3] == u64::MAX { sched::pick_cpu() } else { a[3] as u32 };
+            let cpu = if a[3] == u64::MAX { sched::pick_cpu() } else { u32::try_from(a[3]).map_err(|_| Error::InvalidArgs)? };
             if cpu >= crate::smp::online() {
                 return Err(Error::InvalidArgs);
             }
@@ -238,7 +238,7 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             };
             let name = copy_in(&p, a[1], a[2].min(64))?;
             let name = core::str::from_utf8(&name).map_err(|_| Error::InvalidArgs)?;
-            let cpu = if a[4] == u64::MAX { sched::pick_cpu() } else { a[4] as u32 };
+            let cpu = if a[4] == u64::MAX { sched::pick_cpu() } else { u32::try_from(a[4]).map_err(|_| Error::InvalidArgs)? };
             if cpu >= crate::smp::online() {
                 return Err(Error::InvalidArgs);
             }
