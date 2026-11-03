@@ -75,6 +75,15 @@ version = "0.1.0"
 dependencies = [
  "dross-abi",
  "dross-rt",
+ "gpud-platform",
+]
+
+[[package]]
+name = "gpud-platform"
+version = "0.1.0"
+dependencies = [
+ "dross-abi",
+ "dross-rt",
 ]
 
 [[package]]

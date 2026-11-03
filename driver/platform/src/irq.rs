@@ -1,5 +1,7 @@
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::Result;
-use std::time::Duration;
+use core::time::Duration;
 
 /// A notification raised by a device interrupt (an eventfd on Linux, a notification object on a microkernel).
 pub struct IrqEvent {

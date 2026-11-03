@@ -7,6 +7,8 @@
 //! an exact bus/device/function match: on a Mac Pro 6,1 the two D700s carry different images (113-C3861XA and
 //! 113-C3861XB), and handing both cards the first image is the bug kernel patch 0001 fixes.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::{Error, PciAddress, Result};
 
 /// One image in the VFCT table.

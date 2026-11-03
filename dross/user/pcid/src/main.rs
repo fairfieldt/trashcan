@@ -326,7 +326,27 @@ impl Pcid {
                 self.functions[i].irqs.push(irq);
                 Ok((0, Vec::new()))
             }
+            op::DISABLE_IRQS => {
+                let i = self.owned(r.bdf, client)?;
+                self.disable_irqs(i);
+                Ok((0, Vec::new()))
+            }
             _ => Err(Error::BadSyscall),
+        }
+    }
+
+    fn disable_irqs(&mut self, i: usize) {
+        let bdf = self.functions[i].info.bdf;
+        if let Some(c) = self.functions[i].msi_cap {
+            let ctl = self.read(bdf, c + 2, 2);
+            self.write(bdf, c + 2, 2, ctl & !1);
+        }
+        if let Some(c) = self.functions[i].msix_cap {
+            let ctl = self.read(bdf, c + 2, 2);
+            self.write(bdf, c + 2, 2, ctl & !(1 << 15));
+        }
+        for h in self.functions[i].irqs.drain(..) {
+            let _ = sys::close(h);
         }
     }
 
@@ -339,19 +359,11 @@ impl Pcid {
             let bdf = self.functions[i].info.bdf;
             let cmd = self.read(bdf, 4, 2);
             self.write(bdf, 4, 2, cmd & !4);
-            if let Some(c) = self.functions[i].msi_cap {
-                let ctl = self.read(bdf, c + 2, 2);
-                self.write(bdf, c + 2, 2, ctl & !1);
+            self.disable_irqs(i);
+            if let Some(d) = self.functions[i].domain.take() {
+                let _ = sys::close(d);
             }
-            if let Some(c) = self.functions[i].msix_cap {
-                let ctl = self.read(bdf, c + 2, 2);
-                self.write(bdf, c + 2, 2, ctl & !(1 << 15));
-            }
-            let f = &mut self.functions[i];
-            for h in f.irqs.drain(..).chain(f.domain.take()) {
-                let _ = sys::close(h);
-            }
-            f.owner = None;
+            self.functions[i].owner = None;
             println!("{} released", pci::bdf_string(bdf));
         }
     }

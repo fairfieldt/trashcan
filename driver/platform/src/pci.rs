@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::{Error, IrqEvent, Mmio, Result};
-use std::fmt;
-use std::str::FromStr;
+use core::fmt;
+use core::str::FromStr;
 
 /// Segment (domain), bus, device and function of a PCI function.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

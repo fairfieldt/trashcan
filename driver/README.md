@@ -16,7 +16,7 @@ both (40.5 tok/s against amdgpu's 50.5). The plan is `docs/plan.md`.
 
 | Path | What |
 |---|---|
-| `platform/` | `gpud-platform` (Rust): the platform interface (PCI config space, MMIO, DMA/IOVA, interrupts), the VFIO backend, an in-memory mock, VBIOS lookup in ACPI VFCT |
+| `platform/` | `gpud-platform` (Rust): the platform interface (PCI config space, MMIO, DMA/IOVA, interrupts), the VFIO backend, an in-memory mock, VBIOS lookup in ACPI VFCT; without `std`, a backend for dross (`../dross`) |
 | `gpud/` | `gpud` (Rust): `probe`, `dma-smoke`, `init` (bring-up and ring tests), `serve` (the driver server) |
 | `linux/` | Linux 7.3-rc7's SI amdgpu files, unmodified (`PROVENANCE.md`) |
 | `shim/` | The kernel API and amdgpu core they run on (C), and the client protocol (`gpud_proto.h`) |

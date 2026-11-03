@@ -12,3 +12,4 @@ bench = false
 [dependencies]
 dross-rt = { path = "../rt" }
 dross-abi = { path = "../../abi" }
+gpud-platform = { path = "../../../driver/platform", default-features = false, features = ["dross"] }

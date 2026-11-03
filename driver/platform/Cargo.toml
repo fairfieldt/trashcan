@@ -3,7 +3,16 @@ name = "gpud-platform"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-description = "Platform interface of the userspace GPU driver: PCI config space, MMIO, DMA/IOVA, interrupts; VFIO backend"
+description = "Platform interface of the userspace GPU driver: PCI config space, MMIO, DMA/IOVA, interrupts; VFIO and dross backends"
+
+[features]
+default = ["std"]
+# The VFIO backend (Linux) and the mock.
+std = ["dep:libc"]
+# The dross backend (no std).
+dross = ["dep:dross-rt", "dep:dross-abi"]
 
 [dependencies]
-libc = "0.2"
+libc = { version = "0.2", optional = true }
+dross-rt = { path = "../../dross/user/rt", default-features = false, optional = true }
+dross-abi = { path = "../../dross/abi", optional = true }

@@ -23,8 +23,9 @@ usbd drives USB keyboards and mice on an xHCI controller.
 | `user/init/` | The first process: holds the root resources and starts the rest |
 | `user/selftest/` | Checks the kernel from user space at every boot |
 | `user/pcid/` | Owns PCI config space; gives drivers their functions (filtered config access, BARs, a DMA domain each, MSIs) |
-| `user/rt/src/pci.rs` | The driver side: pcid's protocol and the platform interface (`Device`, `Mmio`, `DmaSpace`, `IrqEvent`), shaped like `gpud-platform` |
-| `user/edutest/` | A driver for QEMU's `edu` test device: the driver path end to end |
+| `user/rt/src/pci.rs` | The driver side: pcid's protocol and a small platform interface (`Device`, `Mmio`, `DmaSpace`, `IrqEvent`) |
+| `../driver/platform/src/dross.rs` | The dross backend of `gpud-platform` (feature `dross`, no `std`): the interface gpud, tbd and ethd use on Linux |
+| `user/edutest/` | A driver for QEMU's `edu` test device, written against `gpud-platform` as gpud is: the driver path end to end |
 | `user/usbd/` | xHCI driver for USB keyboards and mice (HID boot protocol) on root ports: logs keys and mouse movement |
 
 ## What the kernel does at boot
@@ -127,4 +128,10 @@ usbd's limits: devices must be on a root port (no hubs: Apple keyboards with a b
 protocol only, and it has run only on QEMU's xHCI. On the Mac Pro the rear ports are on a Fresco Logic FL1100
 (1b73:1100, MSI); low-speed devices and the FL1100's quirks are untested.
 
-Next: a dross backend for `gpud-platform` so the existing drivers can run on it.
+`gpud-platform` builds without `std` now (its VFIO backend and mock need the `std` feature, which stays the
+default) and has a dross backend. What it doesn't do yet: resets (pcid has none), the expansion ROM, mapping
+memory by address into a DMA domain (`map_external`; peer BARs will come from pcid as memory objects), and
+counting interrupts (a notification reports one however often it fired).
+
+Next: gpud, tbd and ethd themselves are `std` programs (threads, files, sockets, the C shim on libc); they need
+a `std` for dross before they run on it. That is the POSIX layer in the plan above.

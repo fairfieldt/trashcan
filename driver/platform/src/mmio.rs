@@ -1,4 +1,6 @@
-use std::ptr::NonNull;
+#[allow(unused_imports)]
+use crate::prelude::*;
+use core::ptr::NonNull;
 
 /// A mapped device memory region (a BAR), accessed with volatile loads and stores.
 ///

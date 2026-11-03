@@ -9,21 +9,36 @@
 //!   ([`DmaBuffer`]).
 //!
 //! The interface names hardware operations, never Linux objects: no file descriptors, paths or sysfs in its
-//! signatures. On Linux the backend is VFIO ([`vfio`], type1 IOMMU); a microkernel backend implements the same
-//! traits over its capabilities (config access from a PCI service, device frames mapped into the server's address
-//! space, an IOMMU domain fed with frames the server owns, MSIs bound to notification objects). [`mock`] implements
-//! them in memory for tests.
+//! signatures. On Linux the backend is VFIO (`vfio`, type1 IOMMU); on dross, the trashcan microkernel, it is
+//! `dross` (feature `dross`, without `std`): config access through pcid, BARs as memory objects mapped into the
+//! driver, the function's own IOMMU domain fed with memory objects the driver owns, MSIs bound to notifications.
+//! `mock` implements them in memory for tests. Everything but `vfio` and `mock` builds without `std`.
+
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+mod prelude {
+    pub use alloc::boxed::Box;
+    pub use alloc::format;
+    pub use alloc::string::{String, ToString};
+    pub use alloc::vec;
+    pub use alloc::vec::Vec;
+}
 
 pub mod dma;
 pub mod error;
 pub mod iova;
 pub mod irq;
 pub mod mmio;
+#[cfg(feature = "std")]
 pub mod mock;
 pub mod pci;
 pub mod vbios;
-#[cfg(target_os = "linux")]
+#[cfg(all(feature = "std", target_os = "linux"))]
 pub mod vfio;
+#[cfg(feature = "dross")]
+pub mod dross;
 
 pub use dma::{DmaAccess, DmaBuffer, DmaSpace};
 pub use error::{Error, Result};

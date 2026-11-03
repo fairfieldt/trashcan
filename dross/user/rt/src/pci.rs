@@ -2,6 +2,7 @@
 //! follow `gpud-platform` (driver/platform): a `Device` gives config space, BAR mappings (`Mmio`) and MSIs
 //! (`IrqEvent`); a `DmaSpace` gives memory at device addresses (`DmaBuffer`) in the device's own IOMMU domain.
 
+use alloc::sync::Arc;
 use alloc::vec::Vec;
 use dross_abi::{dma, vm, Error};
 
@@ -16,7 +17,9 @@ pub mod op {
     pub const CONFIG_WRITE: u32 = 5;
     pub const MAP_BAR: u32 = 6;
     pub const DOMAIN: u32 = 7;
+    /// a: bits, b: CPU (`u64::MAX`: any), c: MSI-X vector index (ignored for MSI); one notification handle.
     pub const MSI: u32 = 8;
+    pub const DISABLE_IRQS: u32 = 9;
 }
 
 pub const REQUEST_LEN: usize = 32;
@@ -131,21 +134,24 @@ pub fn bdf_string(bdf: u16) -> alloc::string::String {
     alloc::format!("{:02x}:{:02x}.{}", bdf >> 8, bdf >> 3 & 0x1f, bdf & 7)
 }
 
-/// A connection to pcid.
+/// A connection to pcid; clones share it (requests are serialized).
+#[derive(Clone)]
 pub struct Pci {
-    ch: Handle,
+    ch: Arc<crate::Lock<Handle>>,
 }
 
 impl Pci {
     pub fn new(ch: Handle) -> Pci {
-        Pci { ch }
+        Pci { ch: Arc::new(crate::Lock::new(ch)) }
     }
 
     fn call(&self, r: Request, send: &[Handle]) -> sys::Result<(Vec<u8>, Vec<Handle>)> {
-        sys::channel_write(self.ch, &r.encode(), send)?;
         let mut buf = alloc::vec![0u8; 64 * 1024];
         let mut hs = [Handle(0); 4];
-        let (n, nh) = sys::channel_read(self.ch, &mut buf, &mut hs, crate::FOREVER)?;
+        let (n, nh) = self.ch.with(|&mut ch| {
+            sys::channel_write(ch, &r.encode(), send)?;
+            sys::channel_read(ch, &mut buf, &mut hs, crate::FOREVER)
+        })?;
         if n < 16 {
             return Err(Error::InvalidArgs);
         }
@@ -179,20 +185,20 @@ impl Pci {
     }
 
     /// Takes ownership of a function: nobody else can open it until this connection closes.
-    pub fn open(&self, bdf: u16) -> sys::Result<Device<'_>> {
+    pub fn open(&self, bdf: u16) -> sys::Result<Device> {
         let (r, _) = self.call(Request { op: op::OPEN, bdf: bdf as u32, ..Default::default() }, &[])?;
         let info = Info::decode(&r[16..]).ok_or(Error::InvalidArgs)?;
-        Ok(Device { pci: self, info })
+        Ok(Device { pci: self.clone(), info })
     }
 }
 
 /// One PCI function owned by this driver.
-pub struct Device<'a> {
-    pci: &'a Pci,
+pub struct Device {
+    pci: Pci,
     pub info: Info,
 }
 
-impl Device<'_> {
+impl Device {
     pub fn bdf(&self) -> u16 {
         self.info.bdf
     }
@@ -228,11 +234,22 @@ impl Device<'_> {
         Ok(DmaSpace { domain: *hs.first().ok_or(Error::InvalidArgs)?, next: DmaSpace::FIRST })
     }
 
-    /// Programs the device's MSI to signal `bits` on `notification` (which stays the driver's).
+    /// Programs the device's MSI (or MSI-X vector 0) to signal `bits` on `notification` (which stays the
+    /// driver's).
     pub fn enable_msi(&self, notification: Handle, bits: u64) -> sys::Result<IrqEvent> {
+        self.enable_vector(notification, bits, 0)
+    }
+
+    /// MSI-X vector `index` (MSI if the function has no MSI-X: then only index 0).
+    pub fn enable_vector(&self, notification: Handle, bits: u64, index: u32) -> sys::Result<IrqEvent> {
         let n = sys::dup(notification, dross_abi::rights::ALL)?;
-        let (_, hs) = self.pci.call(Request { op: op::MSI, bdf: self.info.bdf as u32, a: bits, b: u64::MAX, c: 0 }, &[n])?;
+        let (_, hs) = self.pci.call(Request { op: op::MSI, bdf: self.info.bdf as u32, a: bits, b: u64::MAX, c: index as u64 }, &[n])?;
         Ok(IrqEvent { notification, bits, irq: *hs.first().ok_or(Error::InvalidArgs)? })
+    }
+
+    /// Turns MSI and MSI-X off; the vectors are freed.
+    pub fn disable_irqs(&self) -> sys::Result<()> {
+        self.pci.call(Request { op: op::DISABLE_IRQS, bdf: self.info.bdf as u32, ..Default::default() }, &[]).map(|_| ())
     }
 }
 
@@ -271,6 +288,9 @@ impl Mmio {
     pub fn len(&self) -> usize {
         self.len
     }
+    pub fn as_ptr(&self) -> *mut u8 {
+        self.base as *mut u8
+    }
 }
 
 /// A device's view of memory.
@@ -281,23 +301,30 @@ pub struct DmaSpace {
 
 impl DmaSpace {
     /// IOVAs start above 1 MiB (a zero or tiny device address is more often a bug than a buffer).
-    const FIRST: u64 = 1 << 20;
+    pub const FIRST: u64 = 1 << 20;
 
-    /// Pinned, zeroed memory mapped for the CPU and at a fresh device address.
+    /// Pinned, zeroed memory mapped for the CPU and at a fresh device address, readable and writable by the
+    /// device.
     pub fn alloc(&mut self, size: usize) -> sys::Result<DmaBuffer> {
+        self.alloc_with(size, dma::READ | dma::WRITE)
+    }
+
+    /// As `alloc`, with the device's access (`dross_abi::dma` flags).
+    pub fn alloc_with(&mut self, size: usize, access: u64) -> sys::Result<DmaBuffer> {
         let size = (size as u64).next_multiple_of(4096);
         let mem = sys::mem_create(size, 0)?;
         let ptr = sys::vm_map(mem, 0, size, 0, vm::READ | vm::WRITE)?;
         let align = if size >= 2 << 20 { 2 << 20 } else { 4096 };
         let iova = self.next.next_multiple_of(align);
-        sys::dma_map(self.domain, mem, 0, size, iova, dma::READ | dma::WRITE)?;
+        sys::dma_map(self.domain, mem, 0, size, iova, access)?;
         self.next = iova + size + 4096;
-        Ok(DmaBuffer { mem, ptr, iova, len: size as usize })
+        Ok(DmaBuffer { mem, domain: self.domain, ptr, iova, len: size as usize })
     }
 }
 
 pub struct DmaBuffer {
     pub mem: Handle,
+    pub domain: Handle,
     pub ptr: u64,
     pub iova: u64,
     pub len: usize,

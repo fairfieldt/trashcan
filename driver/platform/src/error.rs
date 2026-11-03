@@ -1,4 +1,6 @@
-use std::fmt;
+#[allow(unused_imports)]
+use crate::prelude::*;
+use core::fmt;
 
 #[derive(Debug)]
 pub enum Error {
@@ -18,9 +20,10 @@ pub enum Error {
     Timeout,
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 impl Error {
+    #[cfg(feature = "std")]
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub(crate) fn last_os(op: &'static str) -> Self {
         Error::Os { op, errno: std::io::Error::last_os_error().raw_os_error().unwrap_or(0) }
@@ -30,7 +33,10 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "std")]
             Error::Os { op, errno } => write!(f, "{op}: {}", std::io::Error::from_raw_os_error(*errno)),
+            #[cfg(not(feature = "std"))]
+            Error::Os { op, errno } => write!(f, "{op}: error {errno}"),
             Error::Unsupported(s) => write!(f, "unsupported: {s}"),
             Error::Invalid(s) => write!(f, "invalid: {s}"),
             Error::NotFound(s) => write!(f, "not found: {s}"),
@@ -40,4 +46,4 @@ impl fmt::Display for Error {
     }
 }
 
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}

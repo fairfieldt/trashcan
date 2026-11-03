@@ -1,7 +1,9 @@
 //! Device address (IOVA) allocation: first fit over the usable ranges, freed ranges merge with their neighbours.
 
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::{Error, Result};
-use std::ops::Range;
+use core::ops::Range;
 
 pub struct IovaAllocator {
     // Free ranges, sorted by start and never touching each other.

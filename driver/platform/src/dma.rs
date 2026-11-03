@@ -1,6 +1,8 @@
+#[allow(unused_imports)]
+use crate::prelude::*;
 use crate::Result;
-use std::ops::Range;
-use std::ptr::NonNull;
+use core::ops::Range;
+use core::ptr::NonNull;
 
 /// Mappings of this size or more start on a multiple of it in the device address space (IOMMU superpages, and
 /// GPU page table fragments later).
@@ -94,13 +96,13 @@ impl DmaBuffer {
     /// # Safety
     /// The device must not access the buffer while the slice lives.
     pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
-        unsafe { std::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
+        unsafe { core::slice::from_raw_parts_mut(self.ptr.as_ptr(), self.len) }
     }
 
     /// # Safety
     /// The device must not write the buffer while the slice lives.
     pub unsafe fn as_slice(&self) -> &[u8] {
-        unsafe { std::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
+        unsafe { core::slice::from_raw_parts(self.ptr.as_ptr(), self.len) }
     }
 }
 
