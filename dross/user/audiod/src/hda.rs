@@ -583,17 +583,43 @@ impl Hda {
                     println!("stream error status={status:#x}");
                     return Err(Error::NoResources);
                 }
+                let position = self.mmio.read32(s + 4) as usize;
+                let now = sys::clock();
                 if status & 4 != 0 {
                     self.completions += 1;
-                    let position = self.mmio.read32(s + 4) as usize;
                     w8(&self.mmio, s + 3, 4);
-                    if position >= length + drain {
-                        return Ok((length / 4) as u32);
-                    }
+                    println!(
+                        "stream IOC position={} target={} elapsed={}us",
+                        position,
+                        length + drain,
+                        (now - started) / 1000
+                    );
                 }
-                self.irq.wait(deadline)?;
-                if sys::clock() >= deadline {
+                // HDA 1.0a 3.3.36: output BCIS marks descriptor data fetched
+                // into the FIFO, not all data transmitted on the link. The
+                // final IOC can precede this LPIB boundary. The silent guard
+                // has no IOC; recheck on a bounded timer as well as interrupts.
+                // Failure evidence: results/dross/enlight-audio-20261103.
+                if now >= deadline {
                     return Err(Error::TimedOut);
+                }
+                if position > length + SILENCE_BYTES {
+                    return Err(Error::NoResources);
+                }
+                if position >= length + drain {
+                    println!(
+                        "link drained position={} target={} bcis={} elapsed={}us",
+                        position,
+                        length + drain,
+                        status & 4 != 0,
+                        (now - started) / 1000
+                    );
+                    return Ok((length / 4) as u32);
+                }
+                let recheck = now.saturating_add(1_000_000).min(deadline);
+                match self.irq.wait(recheck) {
+                    Ok(_) | Err(Error::TimedOut) => {}
+                    Err(error) => return Err(error),
                 }
             }
         })();
