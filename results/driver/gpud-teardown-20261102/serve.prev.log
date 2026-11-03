@@ -1,0 +1,60 @@
+[info] ip block 0: si_common v1.0.0
+[info] ip block 1: gmc_v6_0 v6.0.0
+[info] ip block 2: si_ih v1.0.0
+[info] ip block 3: gfx_v6_0 v6.0.0
+[info] ip block 4: si_dma v1.0.0
+[info] ip block 5: dropped v0.0.0
+[info] ip block 6: dropped v0.0.0
+[info] ip block 7: dropped v0.0.0
+[info] ip block 8: dropped v0.0.0
+[debug] quiesce: CP_ME_CNTL 0 RLC_CNTL 0x1 DMA_GFX_RB_CNTL 0x1017 0x1017 IH_RB_CNTL 0x1011d GRBM_STATUS 0xa0003028
+[debug] quiesce: RLC_CNTL 0x1 RLC_STAT 0x7 RLC_CGCG_CGLS_CTRL 0x20003c RLC_CGTT_MGCG_OVERRIDE 0xffffffc0 CGTS_SM_CTRL_REG 0x96940200 CP_INT_CNTL_RING0 0x180000
+[info] stopped engines a previous owner left running: GRBM_STATUS 0xa0003028 SRBM_STATUS 0x200006c0 CP_STAT 0x800082e2
+[debug] hw_init si_common
+[info] vm size is 256 GB, 2 levels, block size is 10-bit, fragment size is 9-bit
+[debug] 
+[info] firmware /lib/firmware/amdgpu/tahiti_mc.bin: 31776 bytes
+[info] VRAM: 6144M 0x000000F400000000 - 0x000000F57FFFFFFF (6144M used)
+[info] GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+[info] 6144M of VRAM, 256M CPU-visible, kernel objects in 16M-64M
+[info] GART: 262144 GPU pages, dummy page at IOVA 0x100000
+[debug] hw_init gmc_v6_0
+[warning] Wait for MC idle timedout !
+[warning] Wait for MC idle timedout !
+[info] PCIE GART of 1024M enabled (table at 0x000000F401000000).
+[debug] 
+[info] firmware /lib/firmware/amdgpu/tahiti_pfp.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_me.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_ce.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_rlc.bin: 8448 bytes
+[info] ring gfx: 16 KiB at 0x18000
+[info] ring comp_1.0.0: 8 KiB at 0x1c000
+[info] ring comp_1.1.1: 8 KiB at 0x1e000
+[info] ring sdma0: 8 KiB at 0x20000
+[info] ring sdma1: 8 KiB at 0x22000
+[debug] GFX soft reset: GRBM_STATUS 0xa0003028 GRBM_STATUS2 0x100 SRBM_STATUS 0x200006c0 GMCON_DEBUG 0
+[debug] GFX soft reset: GRBM
+[debug] GFX soft reset: SRBM
+[info] GFX soft reset: GRBM_STATUS 0x3028, CP_STAT 0
+[debug] after soft reset: RLC_CNTL 0 RLC_STAT 0x6 RLC_CGCG_CGLS_CTRL 0x20003f RLC_CGTT_MGCG_OVERRIDE 0xfffffffc CGTS_SM_CTRL_REG 0x96940200 CP_INT_CNTL_RING0 0x180000
+[debug] hw_init si_ih
+[debug] hw_init gfx_v6_0
+[debug] amdgpu_ih_process: rptr 0, wptr 0
+[info] ring test on gfx succeeded
+[info] ring test on comp_1.0.0 succeeded
+[info] ring test on comp_1.1.1 succeeded
+[debug] hw_init si_dma
+[info] ring test on sdma0 succeeded
+[info] ring test on sdma1 succeeded
+[debug] gated: RLC_CNTL 0x1 RLC_STAT 0x7 RLC_CGCG_CGLS_CTRL 0x20003c RLC_CGTT_MGCG_OVERRIDE 0xffffffc0 CGTS_SM_CTRL_REG 0x96940200 CP_INT_CNTL_RING0 0x180000
+[info] IB test on gfx succeeded in 24 us
+[info] IB test on comp_1.0.0 succeeded in 22 us
+[info] IB test on comp_1.1.1 succeeded in 22 us
+[info] IB test on sdma0 succeeded in 21 us
+[info] IB test on sdma1 succeeded in 21 us
+[info] gpud serving 0000:02:00.0 on /run/gpud/gpud.sock
+[info] VM 1: 65536 directory entries at 0xf401203000, 8 KiB tables
+[info] client connected: VMID 1
+[info] client on VMID 1 gone
+[info] VM 1: 65536 directory entries at 0xf4013b7000, 8 KiB tables
+[info] client connected: VMID 1

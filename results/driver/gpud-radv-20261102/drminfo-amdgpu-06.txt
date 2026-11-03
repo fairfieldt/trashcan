@@ -1,0 +1,28 @@
+version 0: amdgpu 3.64.0
+accel_working 0: 1
+dev_info 0: device_id 0x6798 chip_rev 1 external_rev 5 pci_rev 0 family 110 se 2 sh_per_se 2
+  gpu_counter_freq 27000 max_engine_clock 850000 max_memory_clock 1370000 min 300000/150000
+  cu_active 32 cu_ao_mask 0xffffffff rb_mask 0xff num_rb 8 hw_contexts 8 ids_flags 0x10
+  va 0x10000-0x3fffbf0000 align 4096 high 0-0 pte_frag 2097152 gart_page 4096 ce_ram 32768
+  vram_type 5 width 384 wave 0 vgprs 256 cu_per_sh 8 tcc 12 gs_vgt 0 gs_prim 0 max_gs_waves 32
+  pcie gen 3 lanes 16 tcc_disabled 0 double_offchip 0
+  cu_bitmap ff ff 0 0 ff ff 0 0 0 0 0 0 0 0 0 0
+vram_gtt 0: vram 6429085696 vis 263458816 gtt 33697484800
+memory 0: vram 6442450944/6429085696 max 4821814272 vis 268435456/263458816 gtt 33701441536/33697484800 max 25273113600
+hw_ip 0 0: version 6.0 caps 0 rings 0x1 align 32/32 count(0) 1
+hw_ip 1 0: version 6.0 caps 0 rings 0x3 align 32/32 count(0) 1
+hw_ip 2 0: version 1.0 caps 0 rings 0x3 align 256/4 count(0) 2
+fw 4 0: ver 0x91 feature 29
+fw 5 0: ver 0x54 feature 29
+fw 6 0: ver 0x3d feature 29
+fw 7 0: ver 0xd feature 1
+fw 8 0: ver 0 feature 0
+fw 11 0: ver 0 feature 0
+fw 2 0: ver 0x40000d00 feature 0
+fw 1 0: ver 0 feature 0
+mmr 0x263d 0: 0
+mmr 0xa0d4 0: 0x2a001260
+mmr 0x263e 0: 0x12011003
+mmr 0x9d8 0: 0x262
+tile_modes 0: 360292 360a92 361292 122a92 28a 21a92 31292 22112 4 288 361290 351290 301a90 289 321291 311291 301a91 302a91 28d 302aa1 302a9d 131291 121291 31291 21a91 22111 22111 22111 22111 22111 12911 0
+timestamp 0: 99948561706

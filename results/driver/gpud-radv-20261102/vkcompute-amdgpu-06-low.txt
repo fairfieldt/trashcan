@@ -1,0 +1,3 @@
+ok   c = a * b + i on 4194304 floats in host-visible memory (73.61 ms)
+ok   the same on device-local buffers, uploaded and read back (141.59 ms)
+ok   20 copies of 256 MiB in VRAM: 584.55 ms on the GPU (18.4 GB/s read+write), 585.23 ms wall

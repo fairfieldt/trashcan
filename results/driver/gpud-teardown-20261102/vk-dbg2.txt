@@ -1,0 +1,113 @@
+gpud_drm: connected: VMID 1, buffer file /proc/self/fd/1000 (32 GiB)
+gpud_drm: ioctl nr 0 -> 0
+gpud_drm: ioctl nr 0 -> 0
+gpud_drm: ioctl nr 0 -> 0
+gpud_drm: ioctl nr 0 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0xc -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> -22
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0x45 -> 0
+gpud_drm: ioctl nr 0xc -> 0
+gpud_drm: ioctl nr 0xc -> -22
+gpud_drm: ioctl nr 0x45 -> -22
+gpud_drm: ioctl nr 0xbf -> 0
+gpud_drm: ioctl nr 0xc3 -> 0
+gpud_drm: ioctl nr 0xc -> 0
+gpud_drm: ioctl nr 0xc0 -> 0
+device     AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) at 0000:02:00.0
+device     llvmpipe (LLVM 19.1.7, 256 bits) at 0000:00:00.0
+gpud_drm: ioctl nr 0x42 -> 0
+gpud_drm: BO 1: 4096 bytes, domains 0x2 flags 0x81 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: BO 2: 81920 bytes, domains 0x6 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 3: 81920 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 4: 4096 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x9 -> 0
+queue      family 0 (GRAPHICS | COMPUTE | TRANSFER | SPARSE_BINDING)
+gpud_drm: BO 5: 16777216 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 6: 16777216 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 7: 16777216 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 8: 262144 bytes, domains 0x6 flags 0x80 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 9: 4096 bytes, domains 0x6 flags 0x80 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 10: 81920 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: ioctl nr 0xbf -> 0
+gpud_drm: BO 11: 81920 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 12: 81920 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: BO 13: 81920 bytes, domains 0x2 flags 0x85 -> GTT
+gpud_drm: ioctl nr 0x40 -> 0
+gpud_drm: ioctl nr 0x48 -> 0
+gpud_drm: ioctl nr 0x41 -> 0
+gpud_drm: ioctl nr 0xbf -> 0
+gpud_drm: CS ip 0 ring 0: 3 IBs, 0 deps -> fence 0x7
+gpud_drm: ioctl nr 0x44 -> 0
+gpud_drm: ioctl nr 0xc3 -> -62
+Error: A wait operation has not completed in the specified time

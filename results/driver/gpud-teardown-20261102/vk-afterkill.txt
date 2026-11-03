@@ -1,0 +1,6 @@
+device     AMD Radeon R9 200 / HD 7900 Series (RADV TAHITI) at 0000:02:00.0
+device     llvmpipe (LLVM 19.1.7, 256 bits) at 0000:00:00.0
+queue      family 0 (GRAPHICS | COMPUTE | TRANSFER | SPARSE_BINDING)
+ok   c = a * b + i on 4194304 floats in host-visible memory (7.96 ms)
+ok   the same on device-local buffers, uploaded and read back (19.30 ms)
+ok   20 copies of 256 MiB in VRAM: 686.32 ms on the GPU (15.6 GB/s read+write), 700.83 ms wall

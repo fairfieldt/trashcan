@@ -1,0 +1,89 @@
+[info] ip block 0: si_common v1.0.0
+[info] ip block 1: gmc_v6_0 v6.0.0
+[info] ip block 2: si_ih v1.0.0
+[info] ip block 3: gfx_v6_0 v6.0.0
+[info] ip block 4: si_dma v1.0.0
+[info] ip block 5: dropped v0.0.0
+[info] ip block 6: dropped v0.0.0
+[info] ip block 7: dropped v0.0.0
+[info] ip block 8: dropped v0.0.0
+[info] vm size is 256 GB, 2 levels, block size is 10-bit, fragment size is 9-bit
+[info] firmware /lib/firmware/amdgpu/tahiti_mc.bin: 31776 bytes
+[info] VRAM: 6144M 0x000000F400000000 - 0x000000F57FFFFFFF (6144M used)
+[info] GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+[info] 6144M of VRAM, 256M CPU-visible, kernel objects in 16M-64M
+[info] GART: 262144 GPU pages, dummy page at IOVA 0x100000
+[info] PCIE GART of 1024M enabled (table at 0x000000F401000000).
+[info] firmware /lib/firmware/amdgpu/tahiti_pfp.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_me.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_ce.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_rlc.bin: 8448 bytes
+[info] ring gfx: 16 KiB at 0x18000
+[info] ring comp_1.0.0: 8 KiB at 0x1c000
+[info] ring comp_1.1.1: 8 KiB at 0x1e000
+[info] ring sdma0: 8 KiB at 0x20000
+[info] ring sdma1: 8 KiB at 0x22000
+[error] ring gfx test failed (-110)
+[error] hw_init of gfx_v6_0 failed: -110
+[warning]   GRBM_STATUS                  0xa0003028
+[warning]   GRBM_STATUS2                 0x00000100
+[warning]   SRBM_STATUS                  0x200000c0
+[warning]   CP_STAT                      0x84038243
+[warning]   CP_BUSY_STAT                 0x00420182
+[warning]   CP_STALLED_STAT1             0x00000c00
+[warning]   CP_STALLED_STAT2             0x00010000
+[warning]   CP_ME_CNTL                   0000000000
+[warning]   CP_ME_HEADER_DUMP            0000000000
+[warning]   CP_PFP_HEADER_DUMP           0000000000
+[warning]   CP_RB0_BASE                  0x00000180
+[warning]   CP_RB0_CNTL                  0x0000090b
+[warning]   CP_RB0_RPTR                  0000000000
+[warning]   CP_RB0_WPTR                  0x00000600
+[warning]   CP_RB0_RPTR_ADDR             0x00000040
+[warning]   RLC_CNTL                     0x00000001
+[warning]   RLC_STAT                     0x00000007
+[warning]   SCRATCH_REG0                 0xcafedead
+[warning]   VM_L2_CNTL                   0x000b8603
+[warning]   MC_VM_MX_L1_TLB_CNTL         0x0000055b
+[warning]   VM_CONTEXT0_CNTL             0x00000011
+[warning]   VM_CONTEXT0_PT_BASE          0x0f401000
+[warning]   VM_CONTEXT0_PT_START         0000000000
+[warning]   VM_CONTEXT0_PT_END           0x0003ffff
+[warning]   VM_CONTEXT0_FAULT_DEFAULT    0x00000100
+[warning]   VM_CONTEXT1_FAULT_STATUS     0000000000
+[warning]   VM_CONTEXT1_FAULT_ADDR       0000000000
+[warning]   MC_VM_SYS_APERTURE_DEFAULT   0x0f401200
+[warning]   MC_VM_FB_LOCATION            0xf57ff400
+[warning]   MC_VM_AGP_BOT                0x0003ffff
+[warning]   MC_VM_AGP_TOP                0000000000
+[warning]   DMA0_STATUS                  0x44c83d57
+[warning]   DMA0_RB_CNTL                 0x00001016
+[warning]   DMA0_RB_RPTR                 0x00000040
+[warning]   DMA0_RB_WPTR                 0x00000040
+[warning]   CP_RB_VMID                   0000000000
+[warning]   CP_RB1_BASE                  0x000001c0
+[warning]   CP_RB1_CNTL                  0x0000090a
+[warning]   CP_RB1_RPTR                  0000000000
+[warning]   CP_RB1_WPTR                  0000000000
+[warning]   CP_RB2_BASE                  0x000001e0
+[warning]   CP_RB2_CNTL                  0x0000090a
+[warning]   CP_RB2_RPTR                  0000000000
+[warning]   CP_RB2_WPTR                  0000000000
+[warning]   CP_ROQ_RB_STAT               0x0038003d
+[warning]   CP_MEQ_STAT                  0x00740076
+[warning]   CP_CE_HEADER_DUMP            0xf5010000
+[warning]   CP_INT_STAT_DEBUG            0x05180000
+[warning]   CP_COHER_STATUS              0000000000
+[warning]   ring gfx        gpu 0x18000 wptr 1536 rptr(wb) 0 fence(wb) 0 ready 0 GART PTE 0x11e067
+[warning]     c0054400 00000001 00000000 00000007 00010000 00000000 00000000 c0021100
+[warning]   ring comp_1.0.0 gpu 0x1c000 wptr 0 rptr(wb) 0 fence(wb) 0 ready 0 GART PTE 0x122067
+[warning]     80000000 80000000 80000000 80000000 80000000 80000000 80000000 80000000
+[warning]   ring comp_1.1.1 gpu 0x1e000 wptr 0 rptr(wb) 0 fence(wb) 0 ready 0 GART PTE 0x124067
+[warning]     80000000 80000000 80000000 80000000 80000000 80000000 80000000 80000000
+[warning]   ring sdma0      gpu 0x20000 wptr 0 rptr(wb) 0 fence(wb) 0 ready 0 GART PTE 0x126067
+[warning]     f0000000 f0000000 f0000000 f0000000 f0000000 f0000000 f0000000 f0000000
+[warning]   ring sdma1      gpu 0x22000 wptr 0 rptr(wb) 0 fence(wb) 0 ready 0 GART PTE 0x128067
+[warning]     f0000000 f0000000 f0000000 f0000000 f0000000 f0000000 f0000000 f0000000
+[info] ring test on sdma0 succeeded
+[info] ring test on sdma1 succeeded
+Error: device init failed: -110

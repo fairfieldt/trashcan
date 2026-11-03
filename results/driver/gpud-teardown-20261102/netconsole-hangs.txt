@@ -1,0 +1,107 @@
+# crash 1 (gpud init after a SIGTERM'd serve; old binary)
+2026-11-02T15:26:34.960 192.168.0.82 [ 4916.269055] vfio-pci 0000:02:00.0: Invalid PCI ROM header signature: expecting 0xaa55, got 0x0000
+2026-11-02T15:26:35.298 192.168.0.82 [ 4916.608650] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.298 192.168.0.82 [ 4916.608668] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.298 192.168.0.82 [ 4916.608673] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:26:35.298 192.168.0.82 [ 4916.608678] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:26:35.473 192.168.0.82 [ 4916.643672] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:26:35.473 192.168.0.82 [ 4916.643702] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:26:35.473 192.168.0.82 [ 4916.643711] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.473 192.168.0.82 [ 4916.643721] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.473 192.168.0.82 [ 4916.643726] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:26:35.490 192.168.0.82 [ 4916.643731] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:26:35.490 192.168.0.82 [ 4916.678665] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.696156] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.696167] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.696182] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.696190] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.713671] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.748651] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.748676] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.748683] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.748691] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.766163] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.766170] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:26:35.491 192.168.0.82 [ 4916.783672] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:26:35.525 192.168.0.82 [ 4916.801244] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:26:35.525 192.168.0.82 [ 4916.801258] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.525 192.168.0.82 [ 4916.818690] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.526 192.168.0.82 [ 4916.836160] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:26:35.543 192.168.0.82 [ 4916.836167] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:26:35.560 192.168.0.82 [ 4916.853680] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:26:35.578 192.168.0.82 [ 4916.871202] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:26:35.595 192.168.0.82 [ 4916.888662] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.595 192.168.0.82 [ 4916.888672] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.596 192.168.0.82 [ 4916.888675] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:26:35.596 192.168.0.82 [ 4916.888679] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:26:35.613 192.168.0.82 [ 4916.906189] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:26:35.630 192.168.0.82 [ 4916.923688] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:26:35.648 192.168.0.82 [ 4916.941170] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:26:35.648 192.168.0.82 [ 4916.941180] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:26:35.648 192.168.0.82 [ 4916.941184] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+
+# crash 2 (gpud init from a fresh boot, quiesce and soft reset)
+2026-11-02T15:30:46.705 192.168.0.82 [   35.298509] vfio-pci 0000:02:00.0: Invalid PCI ROM header signature: expecting 0xaa55, got 0x0000
+2026-11-02T15:30:47.105 192.168.0.82 [   35.700655] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.106 192.168.0.82 [   35.700674] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.106 192.168.0.82 [   35.700677] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:30:47.106 192.168.0.82 [   35.700681] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:30:47.175 192.168.0.82 [   35.735676] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:30:47.193 192.168.0.82 [   35.770645] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:30:47.193 192.168.0.82 [   35.770652] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.193 192.168.0.82 [   35.770659] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.193 192.168.0.82 [   35.770662] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:30:47.193 192.168.0.82 [   35.770664] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:30:47.193 192.168.0.82 [   35.788161] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:30:47.228 192.168.0.82 [   35.805657] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:30:47.228 192.168.0.82 [   35.805663] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.228 192.168.0.82 [   35.805669] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.228 192.168.0.82 [   35.805672] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:30:47.228 192.168.0.82 [   35.805674] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:30:47.245 192.168.0.82 [   35.823152] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:30:47.245 192.168.0.82 [   35.823175] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:30:47.263 192.168.0.82 [   35.840646] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.263 192.168.0.82 [   35.840652] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.263 192.168.0.82 [   35.840654] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:30:47.263 192.168.0.82 [   35.840656] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:30:47.263 192.168.0.82 [   35.840669] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:30:47.281 192.168.0.82 [   35.858160] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:30:47.281 192.168.0.82 [   35.858168] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.281 192.168.0.82 [   35.858176] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.298 192.168.0.82 [   35.875649] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:30:47.298 192.168.0.82 [   35.875654] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:30:47.298 192.168.0.82 [   35.875671] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:30:47.315 192.168.0.82 [   35.893159] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893166] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893174] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893178] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893183] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893199] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893217] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893221] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893231] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:30:47.316 192.168.0.82 [   35.893233] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+
+# the same hang with GPUD_KMSG step markers and the lost-device guard (machine stayed up)
+2026-11-02T15:42:14.394 192.168.0.82 [   32.374002] gpud: [info] IB test on gfx succeeded in 26 us
+2026-11-02T15:42:14.394 192.168.0.82 [   32.374042] gpud: [info] IB test on comp_1.0.0 succeeded in 22 us
+2026-11-02T15:42:14.394 192.168.0.82 [   32.374081] gpud: [info] IB test on comp_1.1.1 succeeded in 22 us
+2026-11-02T15:42:14.394 192.168.0.82 [   32.374121] gpud: [info] IB test on sdma0 succeeded in 22 us
+2026-11-02T15:42:14.541 192.168.0.82 [   32.374160] gpud: [info] IB test on sdma1 succeeded in 21 us
+2026-11-02T15:42:14.615 192.168.0.82 [   32.522384] gpud: [debug] shutdown
+2026-11-02T15:42:14.615 192.168.0.82 [   32.582543] gpud: [debug] hw_fini si_dma
+2026-11-02T15:42:14.615 192.168.0.82 [   32.582566] gpud: [debug] hw_fini gfx_v6_0
+2026-11-02T15:42:14.615 192.168.0.82 [   32.598454] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:42:14.633 192.168.0.82 [   32.598489] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:42:14.633 192.168.0.82 [   32.598492] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:42:14.633 192.168.0.82 [   32.598495] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:42:14.633 192.168.0.82 [   32.598580] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:42:14.633 192.168.0.82 [   32.598606] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:42:14.633 192.168.0.82 [   32.598618] pcieport 0000:00:02.0: pciehp: Slot(3-3): Power fault
+2026-11-02T15:42:14.633 192.168.0.82 [   32.615941] pcieport 0000:00:02.0: AER: Uncorrectable (Non-Fatal) Error message received from 0000:00:02.0
+2026-11-02T15:42:14.633 192.168.0.82 [   32.615952] pcieport 0000:00:02.0: PCIe Bus Error: severity=Uncorrectable (Non-Fatal)
+2026-11-02T15:42:14.633 192.168.0.82 [   32.615955] pcieport 0000:00:02.0:   device [8086:0e04] error status/mask=00004000/00000000
+2026-11-02T15:42:14.633 192.168.0.82 [   32.615959] pcieport 0000:00:02.0:   [14] CmpltTO           | Requester   | Transaction Layer (First)
+2026-11-02T15:42:14.633 192.168.0.82 [   32.615997] pci 0000:02:00.1: AER: can't recover (no error_detected callback)
+2026-11-02T15:42:14.633 192.168.0.82 [   32.616014] pcieport 0000:00:02.0: AER: device recovery failed
+2026-11-02T15:46:24.812 192.168.0.82 [   32.616042] gpud: [error] device lost: register 0xa00f and CONFIG_MEMSIZE read all ones; no further MMIO

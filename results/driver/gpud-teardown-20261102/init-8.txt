@@ -1,0 +1,61 @@
+[debug] opened
+[debug] created
+[debug] quiesce: CP_ME_CNTL 0x15000000 RLC_CNTL 0 DMA_GFX_RB_CNTL 0x1016 0x1016 IH_RB_CNTL 0x1011c GRBM_STATUS 0x3028
+[info] ip block 0: si_common v1.0.0
+[info] ip block 1: gmc_v6_0 v6.0.0
+[info] ip block 2: si_ih v1.0.0
+[info] ip block 3: gfx_v6_0 v6.0.0
+[info] ip block 4: si_dma v1.0.0
+[info] ip block 5: dropped v0.0.0
+[info] ip block 6: dropped v0.0.0
+[info] ip block 7: dropped v0.0.0
+[info] ip block 8: dropped v0.0.0
+[debug] hw_init si_common
+[info] vm size is 256 GB, 2 levels, block size is 10-bit, fragment size is 9-bit
+[debug] 
+[info] firmware /lib/firmware/amdgpu/tahiti_mc.bin: 31776 bytes
+[info] VRAM: 6144M 0x000000F400000000 - 0x000000F57FFFFFFF (6144M used)
+[info] GART: 1024M 0x0000000000000000 - 0x000000003FFFFFFF
+[info] 6144M of VRAM, 256M CPU-visible, kernel objects in 16M-64M
+[info] GART: 262144 GPU pages, dummy page at IOVA 0x100000
+[debug] hw_init gmc_v6_0
+[info] PCIE GART of 1024M enabled (table at 0x000000F401000000).
+[debug] 
+[info] firmware /lib/firmware/amdgpu/tahiti_pfp.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_me.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_ce.bin: 8832 bytes
+[info] firmware /lib/firmware/amdgpu/tahiti_rlc.bin: 8448 bytes
+[info] ring gfx: 16 KiB at 0x18000
+[info] ring comp_1.0.0: 8 KiB at 0x1c000
+[info] ring comp_1.1.1: 8 KiB at 0x1e000
+[info] ring sdma0: 8 KiB at 0x20000
+[info] ring sdma1: 8 KiB at 0x22000
+[debug] GFX soft reset: GRBM_STATUS 0x3028 GRBM_STATUS2 0x100 SRBM_STATUS 0x200000c0 GMCON_DEBUG 0
+[debug] GFX soft reset: GRBM
+[debug] GFX soft reset: SRBM
+[info] GFX soft reset: GRBM_STATUS 0x3028, CP_STAT 0
+[debug] hw_init si_ih
+[debug] hw_init gfx_v6_0
+[debug] amdgpu_ih_process: rptr 0, wptr 0
+[info] ring test on gfx succeeded
+[info] ring test on comp_1.0.0 succeeded
+[info] ring test on comp_1.1.1 succeeded
+[debug] hw_init si_dma
+[info] ring test on sdma0 succeeded
+[info] ring test on sdma1 succeeded
+init: 159 ms
+[info] IB test on gfx succeeded in 26 us
+[info] IB test on comp_1.0.0 succeeded in 22 us
+[info] IB test on comp_1.1.1 succeeded in 22 us
+[info] IB test on sdma0 succeeded in 22 us
+[info] IB test on sdma1 succeeded in 21 us
+ring gfx          ready
+ring comp_1.0.0   ready
+ring comp_1.1.1   ready
+ring sdma0        ready
+ring sdma1        ready
+interrupts: 1
+[debug] shutdown
+[debug] hw_fini si_dma
+[debug] hw_fini gfx_v6_0
+[error] device lost: register 0xa00f and CONFIG_MEMSIZE read all ones; no further MMIO

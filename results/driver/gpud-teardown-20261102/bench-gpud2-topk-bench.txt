@@ -1,0 +1,9 @@
+{"batch":1,"flags":0,"gpu":0,"iterations":20,"milliseconds":0.07691111081771851,"pass":true,"top_k":1}
+{"batch":1,"flags":0,"gpu":0,"iterations":20,"milliseconds":0.17814074006118774,"pass":true,"top_k":8}
+{"batch":1,"flags":0,"gpu":0,"iterations":20,"milliseconds":0.9869629591979981,"pass":true,"top_k":64}
+{"batch":1,"flags":1,"gpu":0,"iterations":20,"milliseconds":0.07830370340499879,"pass":true,"top_k":1}
+{"batch":1,"flags":1,"gpu":0,"iterations":20,"milliseconds":0.17975555486984254,"pass":true,"top_k":8}
+{"batch":1,"flags":1,"gpu":0,"iterations":20,"milliseconds":0.9865777740142823,"pass":true,"top_k":64}
+{"batch":1,"flags":3,"gpu":0,"iterations":20,"milliseconds":0.07870370340347291,"pass":true,"top_k":1}
+{"batch":1,"flags":3,"gpu":0,"iterations":20,"milliseconds":0.18071111042175295,"pass":true,"top_k":8}
+{"batch":1,"flags":3,"gpu":0,"iterations":20,"milliseconds":0.9878148110466004,"pass":true,"top_k":64}
