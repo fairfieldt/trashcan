@@ -11,7 +11,13 @@
 //! - an fd kept open while the XDomain connection goes away and comes back stays valid but carries nothing.
 //!
 //! `tblink` (nodes/macpro) creates the stream `trashcan` with HopIDs 15/15 on every link to another node.
+//!
+//! With tbd (driver/tbd, the userspace Thunderbolt driver) owning a controller instead, its links are TAP interfaces:
+//! tbd says which peer each one leads to in `/run/tbd/net/IFACE`, and offers the stream's rings on
+//! `/run/tbd/PEER.trashcan.ring`. Opening that runs the stream's rings in this process (`tbd_client::Stream`), with
+//! the same read and write behaviour as the device, and closing it sends the CLOSE.
 use std::{
+    collections::BTreeMap,
     fs::{File, OpenOptions},
     io::{self, IoSlice, Read, Write},
     net::SocketAddr,
@@ -143,17 +149,88 @@ impl Sysfs {
     }
 }
 
+/// Where tbd keeps its sockets and status files.
+pub const TBD_DIR: &str = "/run/tbd";
+
+impl Sysfs {
+    /// The tbd stream of the link behind `iface` (a tbd TAP interface), or why there is none.
+    pub fn of_tbd(iface: &str) -> Result<Found, String> {
+        let kv = |p: &Path| -> Option<BTreeMap<String, String>> {
+            let s = std::fs::read_to_string(p).ok()?;
+            Some(s.lines().filter_map(|l| l.split_once('=')).map(|(k, v)| (k.to_owned(), v.trim().to_owned())).collect())
+        };
+        let net = kv(&Path::new(TBD_DIR).join("net").join(iface)).ok_or("not a tbd interface")?;
+        let peer = net.get("peer").ok_or("tbd names no peer")?;
+        let info_path = Path::new(TBD_DIR).join(format!("{peer}.{STREAM_NAME}.info"));
+        let info = kv(&info_path).ok_or_else(|| format!("no tbd stream {peer}.{STREAM_NAME} (tbd run --stream {STREAM_NAME}:15:15)"))?;
+        let path = Path::new(TBD_DIR).join(format!("{peer}.{STREAM_NAME}.ring"));
+        if !path.exists() {
+            return Err(format!("{} is missing", path.display()));
+        }
+        Ok(Found {
+            label: format!("tbd {peer}.{STREAM_NAME}.ring"),
+            path: path.to_string_lossy().into_owned(),
+            ring: info.get("ring").and_then(|r| r.parse().ok()).unwrap_or(256),
+            local: info.get("local").cloned().unwrap_or_default(),
+            peer: info.get("peer").cloned().unwrap_or_default(),
+        })
+    }
+}
+
 impl Streams for Sysfs {
     fn find(&self, local: &SocketAddr) -> Result<Found, String> {
         match interface_of(&local.ip()) {
             Some(iface) if iface.starts_with("thunderbolt") => Self::of_interface(&iface).map_err(|why| format!("{iface}: {why}")),
+            Some(iface) if Path::new(TBD_DIR).join("net").join(&iface).exists() => {
+                Self::of_tbd(&iface).map_err(|why| format!("{iface}: {why}"))
+            }
             _ => Err(String::new()),
         }
     }
 
     fn open(&self, found: &Found) -> io::Result<Box<dyn Frames>> {
+        if found.path.ends_with(".ring") {
+            return open_tbd(Path::new(&found.path));
+        }
         Ok(Box::new(open_device(Path::new(&found.path))?))
     }
+}
+
+/// A stream whose rings tbd handed to this process.
+#[cfg(target_os = "linux")]
+pub struct TbdStream(tbd_client::Stream);
+
+#[cfg(target_os = "linux")]
+impl Frames for TbdStream {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.0.read(buf)
+    }
+    fn writev(&mut self, bufs: &[IoSlice]) -> io::Result<usize> {
+        self.0.writev(bufs)
+    }
+    fn fd(&self) -> Option<i32> {
+        Some(self.0.fd())
+    }
+}
+
+/// Takes over a tbd stream (one process at a time: tbd turns others away at once) and drops what it already holds.
+#[cfg(target_os = "linux")]
+pub fn open_tbd(path: &Path) -> io::Result<Box<dyn Frames>> {
+    let s = tbd_client::Stream::connect(path).map_err(|e| {
+        if e.to_string().contains("in use") {
+            io::Error::new(io::ErrorKind::AddrInUse, format!("{} is in use by another process", path.display()))
+        } else {
+            e
+        }
+    })?;
+    let mut d = TbdStream(s);
+    drain(&mut d);
+    Ok(Box::new(d))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn open_tbd(path: &Path) -> io::Result<Box<dyn Frames>> {
+    Err(io::Error::new(io::ErrorKind::Unsupported, format!("{}: tbd streams need Linux", path.display())))
 }
 
 /// Open a stream device for this process alone (an exclusive `flock`: a second process on the same cable is told
