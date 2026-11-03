@@ -140,8 +140,14 @@ static struct {
 
 void gpud_vram_init(struct amdgpu_device *adev, u64 start)
 {
+	extern u64 gpud_fw_vram_offset, gpud_fw_vram_size;
+	u64 end = adev->gmc.real_vram_size;
+
+	/* The VBIOS's reserved VRAM sits at the top (amdgpu_atombios_allocate_fb_scratch). */
+	if (gpud_fw_vram_size && gpud_fw_vram_offset >= start && gpud_fw_vram_offset < end)
+		end = gpud_fw_vram_offset;
 	vram.r[0].start = start;
-	vram.r[0].end = adev->gmc.real_vram_size;
+	vram.r[0].end = end;
 	vram.n = 1;
 }
 

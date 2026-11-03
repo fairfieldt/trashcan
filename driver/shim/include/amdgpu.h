@@ -455,15 +455,36 @@ struct amdgpu_clock {
 	uint32_t dp_extclk;
 	uint32_t max_pixel_clock;
 };
+struct atom_context;
+struct card_info;
 struct amdgpu_mode_info {
+	struct atom_context *atom_context;
+	struct card_info *atom_card_info;
+	bool mode_config_initialized;
 	int num_crtc;
 	int num_hpd;
 	int num_dig;
+	/* firmware flags */
+	u32 firmware_flags;
 };
-struct amdgpu_pm {
-	uint32_t pcie_gen_mask;
-	uint32_t pcie_mlw_mask;
-	bool dpm_enabled;
+#define AMDGPU_MAX_I2C_BUS 16
+struct amdgpu_i2c_chan;
+#include "amdgpu_mode.h"
+#include <drm/drm_fixed.h>
+
+/* Power management: Linux's own headers (kgd_pp_interface.h, dm_pp_interface.h, pm/inc/amdgpu_dpm.h). */
+#include "kgd_pp_interface.h"
+#include "dm_pp_interface.h"
+#include "amdgpu_dpm.h"
+struct amd_powerplay {
+	void *pp_handle;
+	const struct amd_pm_funcs *pp_funcs;
+};
+enum amdgpu_thermal_irq {
+	AMDGPU_THERMAL_IRQ_LOW_TO_HIGH = 0,
+	AMDGPU_THERMAL_IRQ_HIGH_TO_LOW,
+
+	AMDGPU_THERMAL_IRQ_LAST
 };
 struct amdgpu_mman {
 	struct { int dummy; } gtt_mgr;
@@ -520,6 +541,10 @@ struct amdgpu_asic_funcs {
 #define amdgpu_asic_invalidate_hdp(adev, r) \
 	((adev)->asic_funcs->invalidate_hdp ? (adev)->asic_funcs->invalidate_hdp((adev), (r)) : (void)0)
 #define amdgpu_asic_need_reset_on_init(adev) (adev)->asic_funcs->need_reset_on_init((adev))
+#define amdgpu_asic_set_uvd_clocks(adev, v, d) (adev)->asic_funcs->set_uvd_clocks((adev), (v), (d))
+#define amdgpu_asic_set_vce_clocks(adev, ev, ec) (adev)->asic_funcs->set_vce_clocks((adev), (ev), (ec))
+#define amdgpu_get_pcie_lanes(adev) (adev)->asic_funcs->get_pcie_lanes((adev))
+#define amdgpu_set_pcie_lanes(adev, l) (adev)->asic_funcs->set_pcie_lanes((adev), (l))
 
 /* ---- the device ---- */
 struct amdgpu_device {
@@ -541,6 +566,10 @@ struct amdgpu_device {
 	struct mutex grbm_idx_mutex;
 	uint8_t *bios;
 	uint32_t bios_size;
+	uint32_t bios_scratch_reg_offset;
+	bool is_atom_fw;
+	bool dc_enabled;
+	struct amdgpu_i2c_chan *i2c_bus[AMDGPU_MAX_I2C_BUS];
 	resource_size_t rmmio_base;
 	resource_size_t rmmio_size;
 	void __iomem *rmmio;
@@ -561,6 +590,7 @@ struct amdgpu_device {
 	struct amdgpu_ring *rings[AMDGPU_MAX_RINGS];
 	bool ib_pool_ready;
 	struct amdgpu_irq irq;
+	struct amd_powerplay powerplay;
 	struct amdgpu_pm pm;
 	u64 cg_flags;
 	u32 pg_flags;
@@ -583,6 +613,22 @@ struct amdgpu_device {
 	void *gpud;
 };
 static inline struct drm_device *adev_to_drm(struct amdgpu_device *adev) { return &adev->ddev; }
+static inline struct amdgpu_device *drm_to_adev(struct drm_device *ddev) { return container_of(ddev, struct amdgpu_device, ddev); }
+
+/* ---- VRAM the firmware uses (amdgpu_ttm.h): kept out of gpud's client VRAM ---- */
+enum amdgpu_resv_region_id {
+	AMDGPU_RESV_STOLEN_VGA,
+	AMDGPU_RESV_STOLEN_EXTENDED,
+	AMDGPU_RESV_STOLEN_RESERVED,
+	AMDGPU_RESV_FW,
+	AMDGPU_RESV_FW_EXTEND,
+	AMDGPU_RESV_FW_VRAM_USAGE,
+	AMDGPU_RESV_DRV_VRAM_USAGE,
+	AMDGPU_RESV_MEM_TRAIN,
+	AMDGPU_RESV_MAX
+};
+void amdgpu_ttm_init_vram_resv(struct amdgpu_device *adev, enum amdgpu_resv_region_id id, uint64_t offset,
+			       uint64_t size, bool needs_cpu_map);
 
 /* ---- registers ---- */
 #define RREG32_NO_KIQ(reg) amdgpu_device_rreg(adev, (reg), AMDGPU_REGS_NO_KIQ)

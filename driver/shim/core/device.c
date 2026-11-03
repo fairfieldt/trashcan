@@ -8,6 +8,8 @@
 #include <unistd.h>
 #include "amdgpu.h"
 #include "gpud_dropped_ip.h"
+#include "amdgpu_atombios.h"
+#include "sislands_smc.h"
 #include "si.h"
 #include "gca/gfx_6_0_d.h"
 #include "gmc/gmc_6_0_d.h"
@@ -148,7 +150,6 @@ void amdgpu_device_pci_config_reset(struct amdgpu_device *adev) { dev_warn(adev-
 int amdgpu_device_resize_fb_bar(struct amdgpu_device *adev) { (void)adev; return 0; }
 uint32_t amdgpu_get_soft_full_reset_mask(struct amdgpu_ring *ring) { (void)ring; return 0; }
 bool amdgpu_read_bios(struct amdgpu_device *adev) { (void)adev; return false; }
-void amdgpu_atombios_scratch_regs_engine_hung(struct amdgpu_device *adev, bool hung) { (void)adev; (void)hung; }
 int amdgpu_gtt_mgr_recover(void *mgr) { (void)mgr; return 0; }
 void amdgpu_gem_force_release(struct amdgpu_device *adev) { (void)adev; }
 void amdgpu_vmid_reset_all(struct amdgpu_device *adev) { (void)adev; }
@@ -178,7 +179,6 @@ const struct amdgpu_ip_block_version dm_ip_block = { .type = AMD_IP_BLOCK_TYPE_D
 const struct amdgpu_ip_block_version amdgpu_vkms_ip_block = { .type = AMD_IP_BLOCK_TYPE_DCE, .funcs = &dropped_ip_funcs };
 const struct amdgpu_ip_block_version uvd_v3_1_ip_block = { .type = AMD_IP_BLOCK_TYPE_UVD, .funcs = &dropped_ip_funcs };
 const struct amdgpu_ip_block_version vce_v1_0_ip_block = { .type = AMD_IP_BLOCK_TYPE_VCE, .funcs = &dropped_ip_funcs };
-const struct amdgpu_ip_block_version si_smu_ip_block = { .type = AMD_IP_BLOCK_TYPE_SMC, .funcs = &dropped_ip_funcs };
 
 int amdgpu_device_ip_block_add(struct amdgpu_device *adev, const struct amdgpu_ip_block_version *v)
 {
@@ -387,6 +387,47 @@ static void gpud_quiesce(struct amdgpu_device *adev)
 		 RREG32(mmGRBM_STATUS), RREG32(mmSRBM_STATUS), RREG32(mmCP_STAT));
 }
 
+/* Linux 7.3 amdgpu_ip.c (si_dpm gates the video blocks through these; gpud runs none, so they find nothing) */
+int amdgpu_device_ip_set_clockgating_state(struct amdgpu_device *adev, enum amd_ip_block_type block_type,
+					   enum amd_clockgating_state state)
+{
+	int i, r = 0;
+
+	for (i = 0; i < adev->num_ip_blocks; i++) {
+		if (!adev->ip_blocks[i].status.valid)
+			continue;
+		if (adev->ip_blocks[i].version->type != block_type)
+			continue;
+		if (!adev->ip_blocks[i].version->funcs->set_clockgating_state)
+			continue;
+		r = adev->ip_blocks[i].version->funcs->set_clockgating_state(&adev->ip_blocks[i], state);
+		if (r)
+			dev_err(adev->dev, "set_clockgating_state of IP block <%s> failed %d\n",
+				adev->ip_blocks[i].version->funcs->name, r);
+	}
+	return r;
+}
+
+int amdgpu_device_ip_set_powergating_state(struct amdgpu_device *adev, enum amd_ip_block_type block_type,
+					   enum amd_powergating_state state)
+{
+	int i, r = 0;
+
+	for (i = 0; i < adev->num_ip_blocks; i++) {
+		if (!adev->ip_blocks[i].status.valid)
+			continue;
+		if (adev->ip_blocks[i].version->type != block_type)
+			continue;
+		if (!adev->ip_blocks[i].version->funcs->set_powergating_state)
+			continue;
+		r = adev->ip_blocks[i].version->funcs->set_powergating_state(&adev->ip_blocks[i], state);
+		if (r)
+			dev_err(adev->dev, "set_powergating_state of IP block <%s> failed %d\n",
+				adev->ip_blocks[i].version->funcs->name, r);
+	}
+	return r;
+}
+
 static bool gpud_runs(const struct amdgpu_ip_block *b)
 {
 	switch (b->version->type) {
@@ -396,6 +437,9 @@ static bool gpud_runs(const struct amdgpu_ip_block *b)
 	case AMD_IP_BLOCK_TYPE_GFX:
 	case AMD_IP_BLOCK_TYPE_SDMA:
 		return true;
+	case AMD_IP_BLOCK_TYPE_SMC:
+		/* si_dpm needs the VBIOS's power tables */
+		return b->adev->mode_info.atom_context && amdgpu_dpm;
 	default:
 		return false;
 	}
@@ -425,6 +469,33 @@ static int hw_init_block(struct amdgpu_ip_block *b)
 	return r;
 }
 
+/*
+ * A previous owner that died with DPM on left the SMC running, and si_dpm will not start over a running SMC. It is
+ * stopped as amdgpu's teardown stops it (si_dpm's hw_fini: boot clocks, default settings, SMC halted) before
+ * anything reprograms the memory controller, which the SMC may still be switching clocks under. That needs si_dpm's
+ * software state, so its sw_init runs here, ahead of the other blocks'.
+ */
+static int gpud_stop_smc(struct amdgpu_device *adev)
+{
+	struct amdgpu_ip_block *smc = amdgpu_device_ip_get_ip_block(adev, AMD_IP_BLOCK_TYPE_SMC);
+	int r;
+
+	if (!smc || !smc->status.valid || !amdgpu_si_is_smc_running(adev))
+		return 0;
+	r = smc->version->funcs->sw_init(smc);
+	if (r) {
+		dev_err(adev->dev, "sw_init of %s failed: %d\n", smc->version->funcs->name, r);
+		return r;
+	}
+	smc->status.sw = true;
+	adev->pm.dpm_enabled = true;
+	smc->version->funcs->hw_fini(smc);
+	adev->pm.dpm_enabled = false;
+	dev_info(adev->dev, "stopped the SMC a previous owner left running (SMC %s)\n",
+		 amdgpu_si_is_smc_running(adev) ? "still running" : "halted");
+	return amdgpu_si_is_smc_running(adev) ? -EBUSY : 0;
+}
+
 /* amdgpu_device_ip_early_init + amdgpu_device_ip_init + amdgpu_device_ip_late_init for the blocks gpud runs. */
 int gpud_device_init(struct amdgpu_device *adev)
 {
@@ -447,12 +518,31 @@ int gpud_device_init(struct amdgpu_device *adev)
 			return r;
 		}
 		b->status.valid = true;
+		/* amdgpu_device_ip_early_init: the VBIOS's interpreter right after the common block */
+		if (b->version->type == AMD_IP_BLOCK_TYPE_COMMON && adev->bios) {
+			r = amdgpu_atombios_init(adev);
+			if (r) {
+				dev_err(adev->dev, "amdgpu_atombios_init failed: %d\n", r);
+				return r;
+			}
+		}
+	}
+	/* amdgpu_device_init: clocks and PLL limits from the VBIOS's FirmwareInfo */
+	if (adev->mode_info.atom_context) {
+		r = amdgpu_atombios_get_clock_info(adev);
+		if (r)
+			return r;
+		dev_info(adev->dev, "VBIOS clocks: reference %u0 kHz, default engine %u0 kHz, memory %u0 kHz\n",
+			 adev->clock.spll.reference_freq, adev->clock.default_sclk, adev->clock.default_mclk);
 	}
 
+	r = gpud_stop_smc(adev);
+	if (r)
+		return r;
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		struct amdgpu_ip_block *b = &adev->ip_blocks[i];
 
-		if (!b->status.valid)
+		if (!b->status.valid || b->status.sw)
 			continue;
 		r = b->version->funcs->sw_init ? b->version->funcs->sw_init(b) : 0;
 		if (r) {
@@ -580,6 +670,7 @@ struct amdgpu_device *gpud_device_create(const struct gpud_platform *platform, c
 	 * D700): a 27 MHz reference clock, 850 MHz engine and 1370 MHz memory clocks at the top DPM level, PCIe gen 3
 	 * x16 for chip and platform.
 	 */
+	/* amdgpu_atombios_get_clock_info replaces them when there is a VBIOS. */
 	adev->clock.spll.reference_freq = 2700;
 	adev->clock.default_sclk = 85000;
 	adev->clock.default_mclk = 137000;
@@ -588,6 +679,13 @@ struct amdgpu_device *gpud_device_create(const struct gpud_platform *platform, c
 				 CAIL_ASIC_PCIE_LINK_SPEED_SUPPORT_GEN2 | CAIL_ASIC_PCIE_LINK_SPEED_SUPPORT_GEN3;
 	adev->pm.pcie_mlw_mask = CAIL_PCIE_LINK_WIDTH_SUPPORT_X16 | CAIL_ASIC_PCIE_LINK_WIDTH_SUPPORT_X16;
 	adev->accel_working = false;
+	adev->bios = (uint8_t *)info->bios;
+	adev->bios_size = info->bios_size;
+	/* amdgpu_device_init: AC power on a desktop; GPUD_DPM=0 is amdgpu.dpm=0 */
+	adev->pm.ac_power = true;
+	if (getenv("GPUD_DPM"))
+		amdgpu_dpm = atoi(getenv("GPUD_DPM"));
+	mutex_init(&adev->pm.mutex);
 	mutex_init(&adev->srbm_mutex);
 	mutex_init(&adev->grbm_idx_mutex);
 	mutex_init(&adev->gfx.gpu_clock_mutex);

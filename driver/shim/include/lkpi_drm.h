@@ -91,4 +91,6 @@ struct drm_suballoc { u64 soffset; u64 eoffset; void *manager; };
 struct drm_suballoc_manager { int dummy; };
 static inline u64 drm_suballoc_soffset(struct drm_suballoc *sa) { return sa->soffset; }
 
+static inline bool drm_can_sleep(void) { return true; }
+
 #endif

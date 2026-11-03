@@ -2,12 +2,15 @@
 
 Unmodified copies from Linux 7.3-rc7 (commit 24a19b953e2a, "Linux 7.3-rc7"; kernel.org cgit snapshot
 `linux-7.3-rc7.tar.gz`, sha256 f789fc0d7b3713b6be23284f2a9c35bf41fb86785b24cfcc506c20d8ff712523), at their
-upstream paths. Every file keeps its license text: AMD's MIT-style permission notice, or for the two DRM uapi headers
-`GPL-2.0 WITH Linux-syscall-note` / MIT as marked. Local changes: none. gpud's replacements for what these files
+upstream paths. Every file keeps its license text: AMD's MIT-style permission notice (Red Hat's, the same text, for
+`atom-types.h` and `drm_fixed.h`), or for the two DRM uapi headers `GPL-2.0 WITH Linux-syscall-note` / MIT as marked. Local changes: none. gpud's replacements for what these files
 call (amdgpu.h, the core, the kernel API) are in `driver/shim/`.
 
 | File | sha256 |
 |---|---|
+| `drivers/gpu/drm/amd/amdgpu/ObjectID.h` | 8f5a5dc001686ddae347332547f8767b83f33981a953877b95fabd8ca1313d4a |
+| `drivers/gpu/drm/amd/amdgpu/amdgpu_atombios.c` | 2e944f506c8c01c6b5897932e92e83a4b46bff1c0a351bc2372e80bf97d41926 |
+| `drivers/gpu/drm/amd/amdgpu/amdgpu_atombios.h` | 0247ad297df56603ece4e6a15a4687beb8ba694bdb0e6a04128b6f5109676163 |
 | `drivers/gpu/drm/amd/amdgpu/amdgpu_gart.h` | a85ed422b1cc0eabde14ef930a41e7c4970fc520e7a0f9f0ee2e7f5990442919 |
 | `drivers/gpu/drm/amd/amdgpu/amdgpu_ih.c` | 12214cfc8de6c600cabe49f79778a4a2ecd232a2aaf861da3622ed80b8deb97b |
 | `drivers/gpu/drm/amd/amdgpu/amdgpu_ih.h` | a40a0310c00c69adaf0c845c2917294c02cea65aafc7f3e51f66680593d5a3fc |
@@ -21,24 +24,27 @@ call (amdgpu.h, the core, the kernel API) are in `driver/shim/`.
 | `drivers/gpu/drm/amd/amdgpu/amdgpu_video_codecs.h` | afa67007f660ea6f75d419457d97c393628e4134c17738fd926f98e7590a2070 |
 | `drivers/gpu/drm/amd/amdgpu/amdgpu_wb.c` | 40fa170ddd174c021f634f1648011e2f686043db23cd30241de13fd3f0489ec9 |
 | `drivers/gpu/drm/amd/amdgpu/amdgpu_wb.h` | ba403dd6faf725d75c84d8be0891376c1364898719ce30b22d647bf581b1ac0d |
+| `drivers/gpu/drm/amd/amdgpu/atom.c` | 9192e4ed967f433ee78ae61e6f75b7ed80f82038d69bac3c9085f9537fdc61a4 |
+| `drivers/gpu/drm/amd/amdgpu/atom.h` | f67723a000d98959c73c14a269afd22033a7425ec712129a14c4ab27fb5103fa |
 | `drivers/gpu/drm/amd/amdgpu/clearstate_defs.h` | 70eb9f9a57d2cacb2ee2d7b9f17485384019ac03c845ce4bea941acdae137285 |
 | `drivers/gpu/drm/amd/amdgpu/clearstate_si.h` | 013698552542f8f7203c36ca644e5c89da4911f33fa1d5996c53d94e9a4db4b9 |
 | `drivers/gpu/drm/amd/amdgpu/gfx_v6_0.c` | bfb3a74f91154a1fadb351cb38d3667a6912a4733b054aa33e56e19483cad281 |
 | `drivers/gpu/drm/amd/amdgpu/gfx_v6_0.h` | 7b22c133eb8ac10721e904c09d54c2a379798d7b9e2fa555cbb6b7de640cdef2 |
 | `drivers/gpu/drm/amd/amdgpu/gmc_v6_0.c` | 0ee5b23b9d796cfc51e1a5bca6719f0579c4dc4c08ad6cba4d374d874bc76a7b |
 | `drivers/gpu/drm/amd/amdgpu/gmc_v6_0.h` | 10a90a8b0dd86a4c3de74db5ae07d492c258d2bb0e0de7c61910d1cc82b26882 |
+| `drivers/gpu/drm/amd/amdgpu/si.c` | 08c3adf1f27360149ee151cbf494b00d220b56e6ab33aee5a14f5d5c6cd76f26 |
+| `drivers/gpu/drm/amd/amdgpu/si.h` | 2a01716f59255598a43e53aa91d9ee97a5bbe3cc7e6355397c49da1a100a31ec |
 | `drivers/gpu/drm/amd/amdgpu/si_dma.c` | 546c7e512f76d50557e8b81641c208378cdf4dd8942b05ad5f290f1e403dac65 |
 | `drivers/gpu/drm/amd/amdgpu/si_dma.h` | a8284c2724250dd3267fd5c0f67a1ab3d7cd693315dd24a9261fc0fa2eb467f9 |
 | `drivers/gpu/drm/amd/amdgpu/si_enums.h` | 5cba5181f355382430bc1cdf8b103f073efc644144a4890875b6c1b5488aa80f |
 | `drivers/gpu/drm/amd/amdgpu/si_ih.c` | 274db49ab02c3101c16bbf994cea386c944d712b2e018caccec1273a65b5eb68 |
 | `drivers/gpu/drm/amd/amdgpu/si_ih.h` | 9aadff9731fd5621024daa7f5dafda889747b45326ed154aef4b620f6b14de56 |
-| `drivers/gpu/drm/amd/amdgpu/si.c` | 08c3adf1f27360149ee151cbf494b00d220b56e6ab33aee5a14f5d5c6cd76f26 |
-| `drivers/gpu/drm/amd/amdgpu/si.h` | 2a01716f59255598a43e53aa91d9ee97a5bbe3cc7e6355397c49da1a100a31ec |
 | `drivers/gpu/drm/amd/amdgpu/sid.h` | dd03da7ad3a67f92a6a4e28b8236f6706b39c33c0f1fdaec5951b17e1b8f25a5 |
 | `drivers/gpu/drm/amd/include/amd_pcie.h` | 29fe4042b597af13e02eb6f86f823b6a2f4fc113aee11a699ca260a5873aa0f6 |
 | `drivers/gpu/drm/amd/include/amd_shared.h` | 8d139d5ca40b769594fb26c8df3decff11f17384113382459366f17e1104511f |
 | `drivers/gpu/drm/amd/include/asic_reg/bif/bif_3_0_d.h` | 0e6bee413f88c97be438f4f18c8f07a5dbb8e8039979c4c1607f461e866202d4 |
 | `drivers/gpu/drm/amd/include/asic_reg/bif/bif_3_0_sh_mask.h` | cab80a88defb3359627eb78f607d3bfd978d1179c30333227702df433c22833d |
+| `drivers/gpu/drm/amd/include/asic_reg/bif/bif_4_1_d.h` | c8c235b4db9d570668d25c00e114dba3d7875e3838e747b9fa076642cfbe8237 |
 | `drivers/gpu/drm/amd/include/asic_reg/dce/dce_6_0_d.h` | 8e0e829fa89c434d05a998376251f90a2005b4fec298c6cd5efbdf1e09f5f208 |
 | `drivers/gpu/drm/amd/include/asic_reg/dce/dce_6_0_sh_mask.h` | eb0a59f8b0fbc9cc44e1f3959265d594213ce02fabca0c2e0b6d4d6f614c1b49 |
 | `drivers/gpu/drm/amd/include/asic_reg/gca/gfx_6_0_d.h` | 8a237c3dc570df593679b5bcb191a5670f7386bc125d8fbb9b5d149cb26320ad |
@@ -51,10 +57,30 @@ call (amdgpu.h, the core, the kernel API) are in `driver/shim/`.
 | `drivers/gpu/drm/amd/include/asic_reg/smu/smu_6_0_d.h` | 37145e723f3a1a47a9ef1747886e1dfc57ab489223ad372ebfee6c7d5a08c22c |
 | `drivers/gpu/drm/amd/include/asic_reg/smu/smu_6_0_sh_mask.h` | e1cd222baf465efe1e620e09b741e5bfc7a397a51c48ff338d0cba2e2de17f78 |
 | `drivers/gpu/drm/amd/include/asic_reg/uvd/uvd_4_0_d.h` | 066d676702485335d5926e80c130984c99a75c025ed16934108624783e86000f |
+| `drivers/gpu/drm/amd/include/atom-bits.h` | d885526a0ebf5f47c4a0daadf3a0c9c6f3281b46d88cc857a98c01e893df6301 |
+| `drivers/gpu/drm/amd/include/atom-names.h` | e197bec3d065d70d7a9d4955ae4cceb5988f0a3ebc36646352d8539659176b61 |
+| `drivers/gpu/drm/amd/include/atom-types.h` | ca242c70b270fa2fe3e182dce87e7838fe909c44ec8ddefd0df546b1f851e223 |
 | `drivers/gpu/drm/amd/include/atombios.h` | 2f543d5518d0a2bfd3a20c0220faac6edf1f1023279c952d503edffc02667dc0 |
-| `drivers/gpu/drm/amd/include/soc_v1_0_ih_clientid.h` | 38e89c9097bc580feb143ec44e293b0ccb30bfbdc81bcea9841a7295698bae15 |
+| `drivers/gpu/drm/amd/include/atomfirmware.h` | b389f8aed3dc383b9a3273bb7ea2c46234c48febe1e00d35405821ae2d6fee97 |
+| `drivers/gpu/drm/amd/include/atomfirmwareid.h` | 9e6bd22e466b4b0d608a61ffb9a424c1b8fcf8b9430fefa2b8671ef356387817 |
+| `drivers/gpu/drm/amd/include/dm_pp_interface.h` | e42241735b6b2dc06c0ec7565720a47a9ead041ef6fcb4401d31e59551ab8734 |
+| `drivers/gpu/drm/amd/include/kgd_pp_interface.h` | 1a9f13c25a0973e2e076edae8d1bd7fa4aa6e6a541a5fbec509a8b19c54ef333 |
+| `drivers/gpu/drm/amd/include/pptable.h` | a3f907e51ad17ce79300ddb7498c0813e929f3fd1afad0817a558d83c3e4be90 |
 | `drivers/gpu/drm/amd/include/soc15_ih_clientid.h` | 9797586db00d3d6e0b080032a40b94e266f4290816164d2638602fbf12541ecd |
+| `drivers/gpu/drm/amd/include/soc_v1_0_ih_clientid.h` | 38e89c9097bc580feb143ec44e293b0ccb30bfbdc81bcea9841a7295698bae15 |
+| `drivers/gpu/drm/amd/pm/inc/amdgpu_dpm.h` | 55289b7aea323b7693c841713d0eff0499dd1559f09b2c91cf7a85ee4818ea71 |
+| `drivers/gpu/drm/amd/pm/inc/amdgpu_dpm_internal.h` | b5b43ad4a30afe886526d3d408b9c909116448536a280f2b9d944bee292624b3 |
+| `drivers/gpu/drm/amd/pm/inc/amdgpu_pm.h` | c84443315d6e87330f9042079fb0df36050c4e56e819f9f227a1fc41a38fba96 |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/legacy_dpm.c` | 8573c267244fa62bf0805ed0d72035ad5a59a4373d9c5da8c0ca7848c508fc31 |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/legacy_dpm.h` | cccc43f00e42a879e3f1537de6e0e2e1d2d69446469c3de657449029a6644731 |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/ppsmc.h` | 6e8be4bbb44da550c5b556949ee5f7f319898b9198822d4f012e05dab34b8306 |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/r600_dpm.h` | a036bba650a4fd4092ac1572d2f8bb80d7cc3e22f62f46aad0bfd80a0b5ecfcd |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/si_dpm.c` | f07f187018dcd62cafa8ce1a58eb1d87f686bce73f5eb2289d27caa53601a4dc |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/si_dpm.h` | 20a9b8c6c378bd844dfa6295b2e79a454ab0a7d4d81537403cd74f43b7839d30 |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/si_smc.c` | bd2c1658f7f2dcdaba57d89d60291d38f47499bc56d902bc6276814e08b92196 |
+| `drivers/gpu/drm/amd/pm/legacy-dpm/sislands_smc.h` | 0079ac26296bcdc960c46f7ebdc256d871d7ff9ea0cde33cfc99f46614bae048 |
 | `include/drm/amd_asic_type.h` | cea577df48a684246ef00d887350d42b9fa5048b9135ae5e8e93dc9eb94a7809 |
+| `include/drm/drm_fixed.h` | b823afbb825492e228c581f60210696dac32ef50c43be3b9d1a3a69041fc0a6d |
 | `include/uapi/drm/amdgpu_drm.h` | ac7f6dae44b224f34591152123fbf2047d3486c35d39f3eb818a96ea47a6462a |
-| `include/uapi/drm/drm_mode.h` | cfa0f3dff969178ec1f30abcb2072feb1a0b9f3aabb55580f3b08a77fd13e1e8 |
 | `include/uapi/drm/drm.h` | 51fb1105a52c2085e6bdf4d6a3be347dfe8097d2375d8720d63106cc59f3fb6b |
+| `include/uapi/drm/drm_mode.h` | cfa0f3dff969178ec1f30abcb2072feb1a0b9f3aabb55580f3b08a77fd13e1e8 |

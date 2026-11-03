@@ -654,3 +654,4 @@ void amdgpu_ucode_release(const struct firmware **fw)
 void amdgpu_ucode_print_mc_hdr(const struct common_firmware_header *hdr) { (void)hdr; }
 void amdgpu_ucode_print_gfx_hdr(const struct common_firmware_header *hdr) { (void)hdr; }
 void amdgpu_ucode_print_rlc_hdr(const struct common_firmware_header *hdr) { (void)hdr; }
+void amdgpu_ucode_print_smc_hdr(const struct common_firmware_header *hdr) { (void)hdr; }

@@ -151,6 +151,8 @@ typedef size_t __kernel_size_t;
 #define DIV_ROUND_CLOSEST(x, d) (((x) + ((d) / 2)) / (d))
 #define div_u64(n, d) ((u64)(n) / (u32)(d))
 #define div64_u64(n, d) ((u64)(n) / (u64)(d))
+#define div64_s64(n, d) ((s64)(n) / (s64)(d))
+static inline u64 div64_u64_rem(u64 n, u64 d, u64 *rem) { *rem = n % d; return n / d; }
 #define do_div(n, base) ({ u32 _rem = (u64)(n) % (base); (n) = (u64)(n) / (base); _rem; })
 #define ALIGN(x, a) (((x) + ((__typeof__(x))(a) - 1)) & ~((__typeof__(x))(a) - 1))
 #define ALIGN_DOWN(x, a) ((x) & ~((__typeof__(x))(a) - 1))
@@ -224,6 +226,8 @@ static inline unsigned long rounddown_pow_of_two(unsigned long n) { return 1UL <
 #define le64_to_cpu(x) ((u64)(x))
 #define le32_to_cpup(p) (*(const u32 *)(p))
 #define le16_to_cpup(p) (*(const u16 *)(p))
+#define be16_to_cpu(x) __builtin_bswap16(x)
+#define cpu_to_be16(x) __builtin_bswap16(x)
 #define be32_to_cpu(x) __builtin_bswap32(x)
 #define cpu_to_be32(x) __builtin_bswap32(x)
 #define get_unaligned_le16(p) ({ u16 _v; memcpy(&_v, (p), 2); _v; })
@@ -329,7 +333,11 @@ static inline void *kmemdup(const void *src, size_t n, gfp_t f) { void *p = kmal
 #define vmalloc(n) malloc(n)
 #define vzalloc(n) calloc(1, (n))
 #define vfree(p) free(p)
-#define kzalloc_obj(x, f) kzalloc(sizeof(x), (f))
+/* slab.h's typed allocators: kzalloc_obj(TYPE_OR_VAR[, gfp]) and the array forms */
+#define kmalloc_obj(P, ...) ((typeof(P) *)kmalloc(sizeof(typeof(P)), 0))
+#define kzalloc_obj(P, ...) ((typeof(P) *)kzalloc(sizeof(typeof(P)), 0))
+#define kmalloc_objs(P, n, ...) ((typeof(P) *)kmalloc_array((n), sizeof(typeof(P)), 0))
+#define kzalloc_objs(P, n, ...) ((typeof(P) *)kcalloc((n), sizeof(typeof(P)), 0))
 #define kfree_sensitive kfree
 static inline void memset32(u32 *s, u32 v, size_t n) { while (n--) *s++ = v; }
 static inline void memset64(u64 *s, u64 v, size_t n) { while (n--) *s++ = v; }
@@ -655,5 +663,53 @@ typedef int irqreturn_t;
 #define DECLARE_HASHTABLE(name, bits) struct hlist_head name[1 << (bits)]
 #define __stringify_1(x) #x
 #define __stringify(x) __stringify_1(x)
+
+/* ---- string_helpers.h ---- */
+static inline const char *str_yes_no(bool v) { return v ? "yes" : "no"; }
+static inline const char *str_enable_disable(bool v) { return v ? "enable" : "disable"; }
+static inline const char *str_enabled_disabled(bool v) { return v ? "enabled" : "disabled"; }
+static inline const char *str_on_off(bool v) { return v ? "on" : "off"; }
+
+/* ---- sysfs: attribute types for code that declares attributes; gpud registers none ---- */
+typedef unsigned short umode_t;
+struct attribute {
+	const char *name;
+	umode_t mode;
+};
+struct device_attribute {
+	struct attribute attr;
+	ssize_t (*show)(struct device *dev, struct device_attribute *attr, char *buf);
+	ssize_t (*store)(struct device *dev, struct device_attribute *attr, const char *buf, size_t count);
+};
+#define DEVICE_ATTR(_name, _mode, _show, _store) \
+	struct device_attribute dev_attr_##_name = { .attr = { .name = #_name, .mode = (_mode) }, .show = (_show), .store = (_store) }
+struct attribute_group {
+	const char *name;
+	umode_t (*is_visible)(struct kobject *kobj, struct attribute *attr, int index);
+	struct attribute **attrs;
+};
+static inline struct device *kobj_to_dev(struct kobject *kobj) { (void)kobj; return NULL; }
+static inline void *dev_get_drvdata(const struct device *dev) { (void)dev; return NULL; }
+static inline int devm_device_add_group(struct device *dev, const struct attribute_group *grp) { (void)dev; (void)grp; return 0; }
+
+/* ---- i2c: the types power management embeds; gpud registers no i2c buses ---- */
+struct i2c_algorithm;
+struct i2c_adapter {
+	const struct i2c_algorithm *algo;
+	void *algo_data;
+	char name[48];
+};
+struct i2c_client;
+struct i2c_board_info {
+	char type[20];
+	unsigned short flags;
+	unsigned short addr;
+};
+static inline struct i2c_client *i2c_new_client_device(struct i2c_adapter *adap, const struct i2c_board_info *info)
+{
+	(void)adap;
+	(void)info;
+	return NULL;
+}
 
 #endif

@@ -38,6 +38,8 @@ struct gpud_device_info {
 	uint8_t revision;
 	uint8_t bus, devfn;
 	const char *firmware_dir; /* holds amdgpu/tahiti_*.bin */
+	const uint8_t *bios;	  /* the VBIOS image (ACPI VFCT), or NULL: then no power management */
+	size_t bios_size;
 };
 
 struct amdgpu_device *gpud_device_create(const struct gpud_platform *platform, const struct gpud_device_info *info);

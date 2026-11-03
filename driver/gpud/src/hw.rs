@@ -41,6 +41,8 @@ struct GpudDeviceInfo {
     bus: u8,
     devfn: u8,
     firmware_dir: *const c_char,
+    bios: *const u8,
+    bios_size: usize,
 }
 
 unsafe extern "C" {
@@ -144,6 +146,22 @@ extern "C" fn cb_config_write(ctx: *mut c_void, offset: c_int, size: c_int, valu
     }
 }
 
+/// The GPU's VBIOS: its image in the ACPI VFCT table, chosen by exact PCI address and ID as amdgpu does. Power
+/// management (clock and voltage tables, the SMC's settings) comes from it; without it gpud runs at boot clocks.
+fn vbios(pci: &dyn PciDevice) -> Option<Vec<u8>> {
+    use gpud_platform::vbios::{vfct_images, vfct_select};
+    let table = std::fs::read("/sys/firmware/acpi/tables/VFCT").ok()?;
+    let images = vfct_images(&table).ok()?;
+    let (vendor, device) = (pci.config_u16(0).ok()?, pci.config_u16(2).ok()?);
+    match vfct_select(&images, pci.address(), vendor, device) {
+        Ok(img) => Some(img.image.to_vec()),
+        Err(e) => {
+            log("warning", &format!("no VBIOS: {e}"));
+            None
+        }
+    }
+}
+
 struct AdevPtr(*mut AmdgpuDevice);
 // SAFETY: the C core serializes its own state; the interrupt thread only calls gpud_irq_process.
 unsafe impl Send for AdevPtr {}
@@ -160,6 +178,7 @@ pub struct Device {
     _mmio: Mmio,
     _vram: Mmio,
     _firmware_dir: CString,
+    _vbios: Option<Vec<u8>>,
 }
 
 pub struct RingStatus {
@@ -183,6 +202,7 @@ impl Device {
         });
         let addr = pci.address();
         let firmware_dir = CString::new(firmware_dir)?;
+        let vbios = vbios(&*pci);
         let info = Box::new(GpudDeviceInfo {
             mmio: mmio.as_ptr().cast(),
             mmio_size: mmio.len(),
@@ -197,6 +217,8 @@ impl Device {
             bus: addr.bus,
             devfn: addr.device << 3 | addr.function,
             firmware_dir: firmware_dir.as_ptr(),
+            bios: vbios.as_ref().map_or(std::ptr::null(), |v| v.as_ptr()),
+            bios_size: vbios.as_ref().map_or(0, |v| v.len()),
         });
         // SAFETY: platform and info live in the returned Device as long as adev does.
         let adev = unsafe { gpud_device_create(&*platform, &*info) };
@@ -237,6 +259,7 @@ impl Device {
             _mmio: mmio,
             _vram: vram,
             _firmware_dir: firmware_dir,
+            _vbios: vbios,
         })
     }
 

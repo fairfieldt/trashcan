@@ -9,8 +9,9 @@ Status: Linux's Southern Islands code (driver/linux, unmodified) runs in `gpud` 
 (driver/shim) and brings the GPU up: memory controller and GART, interrupts, the GFX, two compute and two DMA rings,
 all passing their ring and IB tests. `gpud serve` gives clients their own GPU VM, buffers and submission; with
 `libgpud_drm.so` preloaded, an unmodified Mesa RADV runs on it, and so does the engine: Qwen3.5-9B (Q4_0) on one D700
-gives activations bit-identical to amdgpu's and the same chat text. Clocks stay at the boot level until SI DPM is
-ported, so it decodes at 2.1 tok/s against amdgpu's 24.7. The plan is `docs/plan.md`.
+gives activations bit-identical to amdgpu's and the same chat text. Linux's SI power management runs too (the VBIOS
+interpreter, si_dpm and the SMC firmware), so clocks follow load as under amdgpu: 204 GB/s VRAM copies, and Qwen
+decodes at 20.7 tok/s against amdgpu's 24.7. The plan is `docs/plan.md`.
 
 | Path | What |
 |---|---|
