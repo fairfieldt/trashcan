@@ -3,7 +3,7 @@
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::arch::global_asm;
-use dross_abi::{rights, sys, vm, Error, MSG_BYTES, MSG_HANDLES};
+use dross_abi::{dma, rights, sys, vm, Error, MSG_BYTES, MSG_HANDLES};
 
 use crate::interrupts::Frame;
 use crate::iommu::Domain;
@@ -222,6 +222,12 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             Ok(p.handles.lock().insert(Entry { object: Object::Memory(m), rights: r }) as u64)
         }
         sys::SPAWN => {
+            let name = copy_in(&p, a[1], a[2].min(64))?;
+            let name = core::str::from_utf8(&name).map_err(|_| Error::InvalidArgs)?;
+            let cpu = if a[4] == u64::MAX { sched::pick_cpu() } else { u32::try_from(a[4]).map_err(|_| Error::InvalidArgs)? };
+            if cpu >= crate::smp::online() {
+                return Err(Error::InvalidArgs);
+            }
             let (image, boot) = {
                 let mut t = p.handles.lock();
                 let image = get_obj!(t, a[0] as u32, Memory, rights::READ)?;
@@ -230,19 +236,19 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
                     if e.rights & rights::TRANSFER == 0 {
                         return Err(Error::AccessDenied);
                     }
-                    Some(t.remove(a[3] as u32)?)
+                    Some(t.reserve_transfer(a[3] as u32)?)
                 } else {
                     None
                 };
                 (image, boot)
             };
-            let name = copy_in(&p, a[1], a[2].min(64))?;
-            let name = core::str::from_utf8(&name).map_err(|_| Error::InvalidArgs)?;
-            let cpu = if a[4] == u64::MAX { sched::pick_cpu() } else { u32::try_from(a[4]).map_err(|_| Error::InvalidArgs)? };
-            if cpu >= crate::smp::online() {
-                return Err(Error::InvalidArgs);
+            let child = process::spawn(name, &image, cpu, boot.as_ref().map(|(entry, _)| entry.clone()));
+            if let Some((boot, token)) = boot {
+                let restore = if child.is_err() { Some(boot) } else { drop(boot); None };
+                let left = p.handles.lock().finish_transfer(a[3] as u32, token, restore);
+                drop(left);
             }
-            let child = process::spawn(name, &image, cpu, boot)?;
+            let child = child?;
             Ok(insert(&p, Object::Process(child)))
         }
         sys::PROCESS_WAIT => {
@@ -361,7 +367,7 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             let n = get_obj!(t, a[1] as u32, Notification, rights::SIGNAL)?;
             drop(t);
             r.check(Kind::Irq, 0, 1)?;
-            let cpu = if a[3] == u64::MAX { sched::pick_cpu() } else { a[3] as u32 };
+            let cpu = if a[3] == u64::MAX { sched::pick_cpu() } else { u32::try_from(a[3]).map_err(|_| Error::InvalidArgs)? };
             let irq = Interrupt::msi(cpu, n, a[2])?;
             let mut out = [0u8; 12];
             out[..8].copy_from_slice(&irq.msi_address.to_le_bytes());
@@ -383,12 +389,18 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             let r = get_obj!(t, a[1] as u32, Resource, 0)?;
             drop(t);
             r.check(Kind::Iommu, 0, 1)?;
-            d.attach(a[2] as u16).map(|_| 0)
+            let bdf = u16::try_from(a[2]).map_err(|_| Error::InvalidArgs)?;
+            d.attach(bdf).map(|_| 0)
         }
         sys::DMA_MAP => {
             let t = p.handles.lock();
             let d = get_obj!(t, a[0] as u32, Domain, rights::MAP)?;
-            let m = get_obj!(t, a[1] as u32, Memory, rights::MAP)?;
+            let e = t.get(a[1] as u32)?;
+            let Object::Memory(m) = &e.object else { return Err(Error::WrongType) };
+            if e.rights & rights::MAP == 0 || (a[5] & dma::WRITE != 0 && (e.rights & rights::WRITE == 0 || !m.writable())) {
+                return Err(Error::AccessDenied);
+            }
+            let m = m.clone();
             drop(t);
             d.map(m, a[2], a[3], a[4], a[5]).map(|_| 0)
         }
@@ -397,6 +409,8 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             d.unmap(a[1], a[2]).map(|_| 0)
         }
         sys::SPAWN_LINUX => {
+            let argv = copy_in(&p, a[1], a[2].min(64 << 10))?;
+            let envp = copy_in(&p, a[3], a[4].min(64 << 10))?;
             let (image, boot) = {
                 let mut t = p.handles.lock();
                 let image = get_obj!(t, a[0] as u32, Memory, rights::READ)?;
@@ -404,15 +418,19 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
                     if t.get(a[5] as u32)?.rights & rights::TRANSFER == 0 {
                         return Err(Error::AccessDenied);
                     }
-                    Some(t.remove(a[5] as u32)?)
+                    Some(t.reserve_transfer(a[5] as u32)?)
                 } else {
                     None
                 };
                 (image, boot)
             };
-            let argv = copy_in(&p, a[1], a[2].min(64 << 10))?;
-            let envp = copy_in(&p, a[3], a[4].min(64 << 10))?;
-            let child = crate::linux::spawn(&image, &argv, &envp, boot)?;
+            let child = crate::linux::spawn(&image, &argv, &envp, boot.as_ref().map(|(entry, _)| entry.clone()));
+            if let Some((boot, token)) = boot {
+                let restore = if child.is_err() { Some(boot) } else { drop(boot); None };
+                let left = p.handles.lock().finish_transfer(a[5] as u32, token, restore);
+                drop(left);
+            }
+            let child = child?;
             Ok(insert(&p, Object::Process(child)))
         }
         sys::HANDLE_FD => {

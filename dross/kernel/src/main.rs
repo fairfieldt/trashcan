@@ -63,6 +63,8 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
     paging::init_kernel_space();
     #[cfg(feature = "audit-test")]
     paging::audit_test();
+    #[cfg(feature = "audit-test")]
+    object::audit_test();
     iommu::init(&acpi);
     firmware::power_on_after_power_loss(&acpi);
 

@@ -44,43 +44,87 @@ impl Entry {
 }
 
 pub struct HandleTable {
-    slots: Vec<Option<Entry>>,
+    slots: Vec<Slot>,
+    next_transfer: u64,
 }
+
+enum Slot { Empty, Occupied(Entry), Reserved(u64) }
 
 impl HandleTable {
     pub fn new() -> Self {
         // Slot 0 is never a handle.
-        HandleTable { slots: alloc::vec![None] }
+        HandleTable { slots: alloc::vec![Slot::Empty], next_transfer: 0 }
     }
 
     pub fn insert(&mut self, e: Entry) -> u32 {
-        if let Some(i) = self.slots.iter().skip(1).position(|s| s.is_none()) {
-            self.slots[i + 1] = Some(e);
+        if let Some(i) = self.slots.iter().skip(1).position(|s| matches!(s, Slot::Empty)) {
+            self.slots[i + 1] = Slot::Occupied(e);
             return (i + 1) as u32;
         }
-        self.slots.push(Some(e));
+        self.slots.push(Slot::Occupied(e));
         (self.slots.len() - 1) as u32
     }
 
     pub fn get(&self, h: u32) -> Result<&Entry, Error> {
-        self.slots.get(h as usize).and_then(|s| s.as_ref()).ok_or(Error::BadHandle)
+        match self.slots.get(h as usize) { Some(Slot::Occupied(e)) => Ok(e), _ => Err(Error::BadHandle) }
     }
 
     pub fn remove(&mut self, h: u32) -> Result<Entry, Error> {
-        self.slots.get_mut(h as usize).and_then(|s| s.take()).ok_or(Error::BadHandle)
+        let slot = self.slots.get_mut(h as usize).ok_or(Error::BadHandle)?;
+        if !matches!(slot, Slot::Occupied(_)) { return Err(Error::BadHandle); }
+        match core::mem::replace(slot, Slot::Empty) { Slot::Occupied(e) => Ok(e), _ => unreachable!() }
     }
 
     /// Restore a removed handle while the table lock has remained held.
     pub fn restore(&mut self, h: u32, e: Entry) {
         let slot = &mut self.slots[h as usize];
-        assert!(slot.is_none());
-        *slot = Some(e);
+        assert!(matches!(slot, Slot::Empty));
+        *slot = Slot::Occupied(e);
+    }
+
+    /// Keep a moved handle's number unavailable while a fallible spawn runs.
+    pub fn reserve_transfer(&mut self, h: u32) -> Result<(Entry, u64), Error> {
+        let slot = self.slots.get_mut(h as usize).ok_or(Error::BadHandle)?;
+        if !matches!(slot, Slot::Occupied(_)) { return Err(Error::BadHandle); }
+        self.next_transfer = self.next_transfer.checked_add(1).ok_or(Error::NoResources)?;
+        let token = self.next_transfer;
+        match core::mem::replace(slot, Slot::Reserved(token)) { Slot::Occupied(e) => Ok((e, token)), _ => unreachable!() }
+    }
+
+    /// Restore on failure, or release the reserved number on success. Process exit can cancel it.
+    pub fn finish_transfer(&mut self, h: u32, token: u64, entry: Option<Entry>) -> Option<Entry> {
+        let Some(slot) = self.slots.get_mut(h as usize) else { return entry };
+        if matches!(&*slot, Slot::Reserved(id) if *id == token) {
+            *slot = entry.map_or(Slot::Empty, Slot::Occupied);
+            None
+        } else { entry }
     }
 
     /// Drops every handle (process exit); returns them so they are dropped outside the table's lock.
     pub fn clear(&mut self) -> Vec<Entry> {
-        self.slots.drain(..).flatten().collect()
+        self.slots.drain(1..).filter_map(|s| match s { Slot::Occupied(e) => Some(e), _ => None }).collect()
     }
+}
+
+#[cfg(feature = "audit-test")]
+pub fn audit_test() {
+    let mut t = HandleTable::new();
+    let entry = || Entry::new(Object::Notification(Arc::new(Notification::new())));
+    let h = t.insert(entry());
+    let (old, token) = t.reserve_transfer(h).unwrap();
+    let next = t.insert(entry());
+    assert_ne!(h, next);
+    assert!(t.finish_transfer(h, token, Some(old)).is_none());
+    assert!(t.get(h).is_ok());
+    let (old, old_token) = t.reserve_transfer(h).unwrap();
+    drop(t.clear());
+    assert_eq!(t.insert(entry()), h);
+    let (current, current_token) = t.reserve_transfer(h).unwrap();
+    assert!(t.finish_transfer(h, old_token, Some(old)).is_some());
+    assert!(t.get(h).is_err());
+    assert!(t.finish_transfer(h, current_token, Some(current)).is_none());
+    assert!(t.get(h).is_ok());
+    crate::println!("handles: transfer reservation tests passed");
 }
 
 /// Gets the object of handle `h` if it is of the wanted kind and the handle has `need` rights.

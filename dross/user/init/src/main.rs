@@ -96,7 +96,9 @@ fn main(boot: Handle) -> i32 {
 
     if let Some(img) = b.handle("module/selftest") {
         let com1 = sys::resource_sub(ioport, 0x3f8, 8).unwrap();
-        let bb = Builder::default().handle("module/selftest", sys::dup(img, rights::ALL).unwrap()).handle("resource/com1", com1);
+        let bb = Builder::default().handle("module/selftest", sys::dup(img, rights::ALL).unwrap()).handle("resource/com1", com1)
+            .handle("resource/iommu", sys::dup(b.handle("resource/iommu").unwrap(), rights::ALL).unwrap())
+            .handle("resource/irq", sys::dup(b.handle("resource/irq").unwrap(), rights::ALL).unwrap());
         let p = bootstrap::spawn(img, "selftest", bb, 0).expect("spawn selftest");
         let code = sys::process_wait(p, dross_rt::FOREVER);
         println!("selftest exited with {code:?}");

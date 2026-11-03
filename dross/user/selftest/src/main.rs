@@ -8,7 +8,7 @@ extern crate alloc;
 
 use alloc::sync::Arc;
 use core::sync::atomic::{AtomicU64, Ordering};
-use dross_abi::{rights, vm, Error};
+use dross_abi::{dma, rights, vm, Error};
 use dross_rt::bootstrap::{self, Bootstrap, Builder};
 use dross_rt::{println, sys, thread, Handle, FOREVER};
 
@@ -142,6 +142,31 @@ fn run_all(b: &Bootstrap) -> i32 {
     let unmapped = sys::vm_unmap(a, 64 << 10).is_ok() && sys::vm_unmap(a, 64 << 10) == Err(Error::NotFound);
     t.check("memory", same && unmapped, "");
 
+    if let Some(iommu) = b.handle("resource/iommu") {
+        if let Ok(domain) = sys::dma_domain_create(iommu) {
+            let status: i64;
+            // SAFETY: deliberately supplies a BDF wider than the native ABI permits.
+            unsafe {
+                core::arch::asm!("syscall", inlateout("rax") dross_abi::sys::DMA_ATTACH as i64 => status,
+                    in("rdi") domain.0 as u64, in("rsi") iommu.0 as u64, inlateout("rdx") (1u64 << 16) => _,
+                    in("r10") 0u64, in("r8") 0u64, in("r9") 0u64, out("rcx") _, out("r11") _, options(nostack));
+            }
+            t.check("oversized DMA device rejected", status == Error::InvalidArgs as i64, "");
+            let readonly = sys::dup(m, rights::ALL & !rights::WRITE).unwrap();
+            let denied = sys::dma_map(domain, readonly, 0, 4096, 0x100000, dma::WRITE) == Err(Error::AccessDenied)
+                && sys::dma_map(domain, me, 0, 4096, 0x100000, dma::WRITE) == Err(Error::AccessDenied);
+            let readable = sys::dma_map(domain, readonly, 0, 4096, 0x100000, dma::READ).is_ok()
+                && sys::dma_unmap(domain, 0x100000, 4096).is_ok();
+            t.check("DMA respects memory write rights", denied && readable, "");
+            sys::close(readonly).unwrap(); sys::close(domain).unwrap();
+        }
+    }
+    if let Some(irq) = b.handle("resource/irq") {
+        let notification = sys::notify_create().unwrap();
+        t.check("oversized interrupt CPU rejected", sys::irq_msi(irq, notification, 1, 1u64 << 32) == Err(Error::InvalidArgs), "");
+        sys::close(notification).unwrap();
+    }
+
     // Malformed ELF segment ranges must not overflow or allocate from their claimed file size.
     let image = sys::mem_create(8192, 0).unwrap();
     let addr = sys::vm_map(image, 0, 8192, 0, vm::READ | vm::WRITE).unwrap();
@@ -167,7 +192,16 @@ fn run_all(b: &Bootstrap) -> i32 {
     elf[104..112].copy_from_slice(&(1u64 << 36).to_le_bytes());
     let oversized = sys::spawn(image, "bad-elf", None, u64::MAX) == Err(Error::BadElf);
     t.check("malformed ELF ranges", wrap && bad_offset && oversized, "");
-    t.check("oversized spawn CPU rejected", sys::spawn(image, "bad-elf", None, 1u64 << 32) == Err(Error::InvalidArgs), "");
+    let boot = sys::notify_create().unwrap();
+    let bad_cpu = sys::spawn(image, "bad-elf", Some(boot), 1u64 << 32) == Err(Error::InvalidArgs);
+    let kept_boot = sys::notify_signal(boot, 1).is_ok() && sys::notify_wait(boot, 0) == Ok(1);
+    t.check("oversized spawn CPU rejected", bad_cpu && kept_boot, "");
+    let bad_image = sys::spawn(image, "bad-elf", Some(boot), u64::MAX) == Err(Error::BadElf);
+    let restored = sys::notify_signal(boot, 2).is_ok() && sys::notify_wait(boot, 0) == Ok(2);
+    let bad_linux = sys::spawn_linux(image, &["bad-elf"], &[], Some(boot)) == Err(Error::BadElf);
+    let restored_linux = sys::notify_signal(boot, 4).is_ok() && sys::notify_wait(boot, 0) == Ok(4);
+    t.check("failed spawn preserves bootstrap", bad_image && restored && bad_linux && restored_linux, "");
+    sys::close(boot).unwrap();
     // Linux PIE PT_PHDR arithmetic and the fallback address must not wrap either.
     elf[16..18].copy_from_slice(&3u16.to_le_bytes());
     elf[64..68].copy_from_slice(&6u32.to_le_bytes());
