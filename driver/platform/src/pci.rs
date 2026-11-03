@@ -102,6 +102,12 @@ pub trait PciDevice: Send + Sync {
     /// Routes the function's MSI (vector 0) to a notification.
     fn enable_msi(&self) -> Result<IrqEvent>;
 
+    /// Routes MSI-X vectors 0..count, each to a notification of its own.
+    fn enable_msix(&self, count: u32) -> Result<Vec<IrqEvent>> {
+        let _ = count;
+        Err(Error::Unsupported(format!("{}: MSI-X", self.address())))
+    }
+
     /// Stops delivering the function's interrupts.
     fn disable_irqs(&self) -> Result<()>;
 

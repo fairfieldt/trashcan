@@ -50,6 +50,7 @@ pub const VFIO_PCI_BAR0_REGION_INDEX: u32 = 0;
 pub const VFIO_PCI_ROM_REGION_INDEX: u32 = 6;
 pub const VFIO_PCI_CONFIG_REGION_INDEX: u32 = 7;
 pub const VFIO_PCI_MSI_IRQ_INDEX: u32 = 1;
+pub const VFIO_PCI_MSIX_IRQ_INDEX: u32 = 2;
 
 #[repr(C)]
 #[derive(Default)]

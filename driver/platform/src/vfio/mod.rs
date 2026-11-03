@@ -522,14 +522,55 @@ impl PciDevice for Device {
         Ok(IrqEvent::new(Box::new(EventFd(efd))))
     }
 
+    fn enable_msix(&self, count: u32) -> Result<Vec<IrqEvent>> {
+        let have = self.irq_count(VFIO_PCI_MSIX_IRQ_INDEX)?;
+        if have < count {
+            return Err(Error::Unsupported(format!("{} has {have} MSI-X vectors, {count} asked for", self.address)));
+        }
+        let mut fds = Vec::with_capacity(count as usize);
+        for _ in 0..count {
+            // SAFETY: plain eventfd creation.
+            let efd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
+            if efd < 0 {
+                return Err(Error::last_os("eventfd"));
+            }
+            // SAFETY: a fresh descriptor.
+            fds.push(unsafe { OwnedFd::from_raw_fd(efd) });
+        }
+        // struct vfio_irq_set followed by one eventfd per vector.
+        let mut buf: Vec<u32> = vec![
+            20 + 4 * count,
+            VFIO_IRQ_SET_DATA_EVENTFD | VFIO_IRQ_SET_ACTION_TRIGGER,
+            VFIO_PCI_MSIX_IRQ_INDEX,
+            0,
+            count,
+        ];
+        buf.extend(fds.iter().map(|f| f.as_raw_fd() as u32));
+        // The kernel reads the whole buffer from its first dword.
+        ioctl_ptr(self.fd.as_raw_fd(), VFIO_DEVICE_SET_IRQS, &mut buf[0], "VFIO_DEVICE_SET_IRQS")?;
+        Ok(fds.into_iter().map(|f| IrqEvent::new(Box::new(EventFd(f)))).collect())
+    }
+
+    /// Stops MSI and MSI-X delivery; fails only if neither was on.
     fn disable_irqs(&self) -> Result<()> {
-        let mut set = vfio_irq_set_one {
-            argsz: 20, // no data
-            flags: VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER,
-            index: VFIO_PCI_MSI_IRQ_INDEX,
-            ..Default::default()
-        };
-        ioctl_ptr(self.fd.as_raw_fd(), VFIO_DEVICE_SET_IRQS, &mut set, "VFIO_DEVICE_SET_IRQS").map(|_| ())
+        let mut result = Err(Error::Unsupported(format!("{} has no MSI or MSI-X", self.address)));
+        for index in [VFIO_PCI_MSI_IRQ_INDEX, VFIO_PCI_MSIX_IRQ_INDEX] {
+            if self.irq_count(index).unwrap_or(0) == 0 {
+                continue;
+            }
+            let mut set = vfio_irq_set_one {
+                argsz: 20, // no data
+                flags: VFIO_IRQ_SET_DATA_NONE | VFIO_IRQ_SET_ACTION_TRIGGER,
+                index,
+                ..Default::default()
+            };
+            match ioctl_ptr(self.fd.as_raw_fd(), VFIO_DEVICE_SET_IRQS, &mut set, "VFIO_DEVICE_SET_IRQS") {
+                Ok(_) => result = Ok(()),
+                Err(e) if result.is_err() => result = Err(e),
+                Err(_) => {}
+            }
+        }
+        result
     }
 
     fn reset_capability(&self) -> ResetCapability {
