@@ -131,8 +131,8 @@ fn is_event(f: &Frame) -> bool {
 
 impl Domain {
     /// Takes over the router behind `nhi`: control channel up, router enumerated with plug events on.
-    pub fn start(nhi: Arc<Nhi>, irq: gpud_platform::IrqEvent, config: Config) -> Result<Arc<Domain>> {
-        nhi.spawn_irq_thread(irq);
+    pub fn start(nhi: Arc<Nhi>, irqs: Irqs, config: Config) -> Result<Arc<Domain>> {
+        irqs.attach(&nhi);
         let (ctl, events) = Ctl::start(&nhi, is_event)?;
         let router = Router::open(ctl.clone(), 0).context("host router")?;
         println!(
@@ -160,10 +160,6 @@ impl Domain {
         let c = d.clone();
         std::thread::Builder::new().name("tbd-cm".into()).spawn(move || c.cm_loop(plug_rx))?;
         Ok(d)
-    }
-
-    pub fn peers(&self) -> Vec<Arc<Peer>> {
-        self.peers.lock().unwrap().values().cloned().collect()
     }
 
     fn peer_by_route(&self, route: u64) -> Option<Arc<Peer>> {
@@ -780,9 +776,25 @@ impl Domain {
     }
 }
 
-/// Opens the NHI at `addr` through VFIO and returns it with its MSI.
+/// The NHI's interrupts: a vector per ring (MSI-X), or one MSI for all of them.
+pub enum Irqs {
+    Msix(Vec<gpud_platform::IrqEvent>),
+    Msi(gpud_platform::IrqEvent),
+}
+
+impl Irqs {
+    pub fn attach(self, nhi: &Arc<Nhi>) {
+        match self {
+            Irqs::Msix(v) => nhi.use_msix(v),
+            Irqs::Msi(e) => nhi.spawn_irq_thread(e),
+        }
+    }
+}
+
+/// Opens the NHI at `addr` through VFIO and returns it with its interrupts (MSI-X if the platform routes it,
+/// else MSI; `TBD_MSI=1` forces MSI).
 #[cfg(target_os = "linux")]
-pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, gpud_platform::IrqEvent, Box<dyn std::any::Any>)> {
+pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>)> {
     use gpud_platform::pci::{COMMAND_BUS_MASTER, COMMAND_MEMORY, CONFIG_COMMAND, CONFIG_DEVICE_ID, CONFIG_VENDOR_ID};
     use gpud_platform::{PciDevice, Region};
     let (container, dev) = gpud_platform::vfio::open(addr.parse()?, 1 << 20..1 << 40)?;
@@ -793,6 +805,13 @@ pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, gpud_platform::IrqEvent, Box<dy
     let mmio = dev.map(Region::Bar(0))?;
     let dma: Arc<dyn gpud_platform::DmaSpace> = Arc::new(container);
     let nhi = Nhi::new(mmio, dma, nhi::is_falcon_ridge(vendor, device))?;
-    let irq = dev.enable_msi()?;
-    Ok((nhi, irq, Box::new(dev)))
+    let msix = if std::env::var_os("TBD_MSI").is_some() { Err(gpud_platform::Error::Unsupported("TBD_MSI".into())) } else { dev.enable_msix(16) };
+    let irqs = match msix {
+        Ok(v) => Irqs::Msix(v),
+        Err(e) => {
+            eprintln!("tbd: no MSI-X ({e}), one MSI for all rings");
+            Irqs::Msi(dev.enable_msi()?)
+        }
+    };
+    Ok((nhi, irqs, Box::new(dev)))
 }

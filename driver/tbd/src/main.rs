@@ -152,9 +152,14 @@ struct RunArgs {
 fn probe(address: &str) -> Result<()> {
     use crate::ctl::Ctl;
     use crate::switch::Router;
-    let (nhi, irq, _dev) = domain::open_nhi(address)?;
-    println!("NHI {address}: {} paths, REG_CAPS {:#x}", nhi.hop_count, nhi.mmio().read32(nhi::REG_CAPS));
-    nhi.spawn_irq_thread(irq);
+    let (nhi, irqs, _dev) = domain::open_nhi(address)?;
+    println!(
+        "NHI {address}: {} paths, REG_CAPS {:#x}, {}",
+        nhi.hop_count,
+        nhi.mmio().read32(nhi::REG_CAPS),
+        if matches!(irqs, domain::Irqs::Msix(_)) { "MSI-X" } else { "MSI" }
+    );
+    irqs.attach(&nhi);
     let (ctl, events) = Ctl::start(&nhi, |f| matches!(f.pdf, ctl::PDF_EVENT | ctl::PDF_XDOMAIN_REQ))?;
     std::thread::spawn(move || {
         for e in events {
@@ -266,8 +271,8 @@ fn run(a: RunArgs) -> Result<()> {
     let streams = a.streams.iter().map(|s| parse_stream(s, &a)).collect::<Result<Vec<_>>>()?;
     let network = (a.net != "none").then(|| net::NetConfig { ifname: a.net.clone(), mtu: a.mtu, e2e: true, busy_poll: a.busy_poll });
     let config = domain::Config { hostname, network, streams, bounce: !a.no_bounce, bonding: !a.no_bonding };
-    let (nhi, irq, _dev) = domain::open_nhi(&a.address)?;
-    let d = domain::Domain::start(nhi.clone(), irq, config)?;
+    let (nhi, irqs, _dev) = domain::open_nhi(&a.address)?;
+    let d = domain::Domain::start(nhi.clone(), irqs, config)?;
     while !STOP.load(Ordering::Relaxed) {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }

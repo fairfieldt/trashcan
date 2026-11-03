@@ -17,7 +17,12 @@ pub const REG_TX_OPTIONS_BASE: usize = 0x19800;
 pub const REG_RX_OPTIONS_BASE: usize = 0x29800;
 pub const REG_RING_NOTIFY_BASE: usize = 0x37800;
 pub const REG_RING_INTERRUPT_BASE: usize = 0x38200;
+pub const REG_INT_THROTTLING_RATE: usize = 0x38c00;
+pub const REG_INT_VEC_ALLOC_BASE: usize = 0x38c40;
 pub const REG_CAPS: usize = 0x39640;
+pub const REG_DMA_MISC: usize = 0x39864;
+/// Intel NHIs clear a ring's interrupt status when its MSI-X fires.
+const DMA_MISC_INT_AUTO_CLEAR: u32 = 1 << 2;
 
 const RING_FLAG_E2E_FLOW_CONTROL: u32 = 1 << 28;
 const RING_FLAG_RAW: u32 = 1 << 30;
@@ -76,8 +81,10 @@ pub struct Nhi {
     quirk_e2e: bool,
     /// Serializes read-modify-write of the interrupt enable registers, and the ring allocation tables.
     lock: Mutex<Alloc>,
-    /// Per ring: interrupts seen (TX 0..hop_count, then RX).
+    /// Per ring: interrupts seen (TX 0..hop_count, then RX), when one MSI serves every ring.
     waiters: Vec<Waiter>,
+    /// MSI-X: the free vectors, each with its notification. Empty with MSI.
+    vectors: Mutex<Vec<(u32, IrqEvent)>>,
 }
 
 struct Alloc {
@@ -102,6 +109,7 @@ impl Nhi {
             quirk_e2e: falcon_ridge,
             lock: Mutex::new(Alloc { tx: vec![false; n], rx: vec![false; n], int_enable: vec![0; (31 + 2 * n) / 32] }),
             waiters: (0..2 * n).map(|_| Waiter { count: Mutex::new(0), cv: Condvar::new() }).collect(),
+            vectors: Mutex::new(Vec::new()),
         });
         for i in 0..n as u32 {
             nhi.stop_hw(Kind::Tx, i);
@@ -177,6 +185,29 @@ impl Nhi {
             let w = &self.waiters[bit];
             *w.count.lock().unwrap() += 1;
             w.cv.notify_all();
+        }
+    }
+
+    /// MSI-X: each ring with interrupts takes a vector of its own and waits on its notification directly
+    /// (`ring_interrupt_active` with `ring->irq`), instead of an interrupt thread passing the MSI on.
+    pub fn use_msix(&self, vectors: Vec<IrqEvent>) {
+        let misc = self.mmio.read32(REG_DMA_MISC);
+        self.mmio.write32(REG_DMA_MISC, misc | DMA_MISC_INT_AUTO_CLEAR);
+        let mut v = self.vectors.lock().unwrap();
+        v.extend(vectors.into_iter().enumerate().map(|(i, e)| (i as u32, e)));
+        v.reverse();
+    }
+
+    /// Points a ring's interrupt at an MSI-X vector (`REG_INT_VEC_ALLOC`, four bits per ring), without throttling.
+    fn route_vector(&self, kind: Kind, hop: u32, vector: Option<u32>) {
+        let _g = self.lock.lock().unwrap();
+        let idx = self.interrupt_index(kind, hop);
+        let reg = REG_INT_VEC_ALLOC_BASE + idx / 8 * 4;
+        let shift = (idx % 8) * 4;
+        let v = self.mmio.read32(reg) & !(0xf << shift);
+        self.mmio.write32(reg, v | (vector.unwrap_or(0) & 0xf) << shift);
+        if let Some(vec) = vector {
+            self.mmio.write32(REG_INT_THROTTLING_RATE + vec as usize * 4, 0);
         }
     }
 
@@ -269,7 +300,14 @@ impl Nhi {
             interrupt: cfg.interrupt,
             seen: 0,
             e2e_tx_hop: 0,
+            vector: None,
         };
+        if cfg.interrupt {
+            ring.vector = self.vectors.lock().unwrap().pop();
+            if let Some((v, _)) = &ring.vector {
+                self.route_vector(kind, hop, Some(*v));
+            }
+        }
         // tb_ring_start.
         let d = Self::desc_base(kind, hop);
         let o = Self::options_base(kind, hop);
@@ -328,6 +366,8 @@ pub struct Ring {
     seen: u64,
     /// RX with E2E: the TX HopID its credits go to.
     pub e2e_tx_hop: u32,
+    /// MSI-X: this ring's vector and notification.
+    vector: Option<(u32, IrqEvent)>,
 }
 
 /// A completed RX frame: where its data is and what the NHI reported.
@@ -481,6 +521,14 @@ impl Ring {
             std::thread::yield_now();
             return;
         }
+        if let Some((_, irq)) = &self.vector {
+            self.nhi.set_interrupt(self.kind, self.hop, true);
+            if !self.has_work(k) {
+                let _ = irq.wait(Some(timeout));
+            }
+            self.nhi.set_interrupt(self.kind, self.hop, false);
+            return;
+        }
         let w = self.nhi.waiter(self.kind, self.hop);
         let g = w.count.lock().unwrap();
         self.seen = *g;
@@ -502,6 +550,10 @@ impl Drop for Ring {
             self.nhi.set_interrupt(self.kind, self.hop, false);
         }
         self.nhi.stop_hw(self.kind, self.hop);
+        if let Some(v) = self.vector.take() {
+            self.nhi.route_vector(self.kind, self.hop, None);
+            self.nhi.vectors.lock().unwrap().push(v);
+        }
         self.nhi.free_hop(self.kind, self.hop);
     }
 }

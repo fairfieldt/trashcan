@@ -119,12 +119,8 @@ impl Tap {
         }
     }
 
-    /// A frame, with an empty virtio-net header (no offload: checksums are complete, nothing to segment).
-    pub fn write(&self, frame: &[u8]) -> io::Result<()> {
-        self.write_parts(&[frame])
-    }
-
-    /// A frame from several pieces (the payloads of the ThunderboltIP frames it came in).
+    /// A frame from several pieces (the payloads of the ThunderboltIP frames it came in), behind an empty
+    /// virtio-net header (no offload: checksums are complete, nothing to segment).
     pub fn write_parts(&self, parts: &[&[u8]]) -> io::Result<()> {
         use std::os::fd::AsRawFd;
         let hdr = [0u8; VNET_HDR];
@@ -144,10 +140,6 @@ impl Tap {
     }
 
     pub fn read(&self, _: &mut [u8], _: Duration) -> io::Result<usize> {
-        Err(io::ErrorKind::Unsupported.into())
-    }
-
-    pub fn write(&self, _: &[u8]) -> io::Result<()> {
         Err(io::ErrorKind::Unsupported.into())
     }
 
