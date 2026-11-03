@@ -305,11 +305,16 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             };
             let (nb, nh) = (m.bytes.len(), m.handles.len());
             copy_out(&p, a[1], &m.bytes)?;
-            let hs: Vec<u8> = {
-                let mut t = p.handles.lock();
-                m.handles.into_iter().flat_map(|e| t.insert(e).to_le_bytes()).collect()
-            };
-            copy_out(&p, a[3], &hs)?;
+            let mut t = p.handles.lock();
+            let ids: Vec<u32> = m.handles.into_iter().map(|e| t.insert(e)).collect();
+            let hs: Vec<u8> = ids.iter().flat_map(|id| id.to_le_bytes()).collect();
+            if let Err(e) = copy_out(&p, a[3], &hs) {
+                // No caller can observe or reuse these slots while the table is locked.
+                let removed: Vec<Entry> = ids.into_iter().map(|id| t.remove(id).unwrap()).collect();
+                drop(t);
+                drop(removed);
+                return Err(e);
+            }
             Ok(nb as u64 | (nh as u64) << 32)
         }
         sys::CHANNEL_BIND => {

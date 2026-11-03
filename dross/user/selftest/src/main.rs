@@ -142,6 +142,47 @@ fn run_all(b: &Bootstrap) -> i32 {
     let unmapped = sys::vm_unmap(a, 64 << 10).is_ok() && sys::vm_unmap(a, 64 << 10) == Err(Error::NotFound);
     t.check("memory", same && unmapped, "");
 
+    // Malformed ELF segment ranges must not overflow or allocate from their claimed file size.
+    let image = sys::mem_create(8192, 0).unwrap();
+    let addr = sys::vm_map(image, 0, 8192, 0, vm::READ | vm::WRITE).unwrap();
+    // SAFETY: this mapping covers two writable pages for the whole test.
+    let elf = unsafe { core::slice::from_raw_parts_mut(addr as *mut u8, 8192) };
+    elf[..4].copy_from_slice(b"\x7fELF");
+    elf[4] = 2; elf[5] = 1;
+    elf[16..18].copy_from_slice(&2u16.to_le_bytes());
+    elf[18..20].copy_from_slice(&0x3eu16.to_le_bytes());
+    elf[32..40].copy_from_slice(&64u64.to_le_bytes());
+    elf[54..56].copy_from_slice(&56u16.to_le_bytes());
+    elf[56..58].copy_from_slice(&1u16.to_le_bytes());
+    elf[64..68].copy_from_slice(&1u32.to_le_bytes());
+    elf[80..88].copy_from_slice(&(u64::MAX - 2047).to_le_bytes());
+    elf[104..112].copy_from_slice(&1u64.to_le_bytes());
+    let wrap = sys::spawn(image, "bad-elf", None, u64::MAX) == Err(Error::BadElf);
+    elf[80..88].copy_from_slice(&0x400000u64.to_le_bytes());
+    elf[72..80].copy_from_slice(&u64::MAX.to_le_bytes());
+    elf[96..104].copy_from_slice(&1u64.to_le_bytes());
+    let bad_offset = sys::spawn(image, "bad-elf", None, u64::MAX) == Err(Error::BadElf);
+    elf[72..80].copy_from_slice(&0u64.to_le_bytes());
+    elf[96..104].copy_from_slice(&(1u64 << 36).to_le_bytes());
+    elf[104..112].copy_from_slice(&(1u64 << 36).to_le_bytes());
+    let oversized = sys::spawn(image, "bad-elf", None, u64::MAX) == Err(Error::BadElf);
+    t.check("malformed ELF ranges", wrap && bad_offset && oversized, "");
+    // Linux PIE PT_PHDR arithmetic and the fallback address must not wrap either.
+    elf[16..18].copy_from_slice(&3u16.to_le_bytes());
+    elf[64..68].copy_from_slice(&6u32.to_le_bytes());
+    elf[80..88].copy_from_slice(&u64::MAX.to_le_bytes());
+    let phdr_wrap = sys::spawn_linux(image, &["bad-elf"], &[], None) == Err(Error::BadElf);
+    elf[16..18].copy_from_slice(&2u16.to_le_bytes());
+    elf[64..68].copy_from_slice(&1u32.to_le_bytes());
+    elf[72..80].copy_from_slice(&8192u64.to_le_bytes());
+    elf[80..88].copy_from_slice(&4096u64.to_le_bytes());
+    elf[96..104].copy_from_slice(&0u64.to_le_bytes());
+    elf[104..112].copy_from_slice(&4096u64.to_le_bytes());
+    let phdr_underflow = sys::spawn_linux(image, &["bad-elf"], &[], None) == Err(Error::BadElf);
+    t.check("malformed Linux ELF headers", phdr_wrap && phdr_underflow, "");
+    sys::vm_unmap(addr, 8192).unwrap();
+    sys::close(image).unwrap();
+
     // A channel carries bytes and a handle; the handle works on the other side.
     let (x, y) = sys::channel_create().unwrap();
     let n = sys::notify_create().unwrap();
@@ -165,6 +206,22 @@ fn run_all(b: &Bootstrap) -> i32 {
     t.check("failed transfer preserves handles", failed && restored, "");
     sys::close(first).unwrap();
     sys::close(second).unwrap();
+
+    let (send, recv) = sys::channel_create().unwrap();
+    let original = sys::notify_create().unwrap();
+    let transferred = sys::dup(original, rights::ALL).unwrap();
+    sys::channel_write(send, &[], &[transferred]).unwrap();
+    let status: i64;
+    // SAFETY: deliberately passes an unmapped handle-output pointer to test error cleanup.
+    unsafe {
+        core::arch::asm!("syscall", inlateout("rax") dross_abi::sys::CHANNEL_READ as i64 => status,
+            in("rdi") recv.0 as u64, in("rsi") 0u64, inlateout("rdx") 0u64 => _,
+            in("r10") 0u64, in("r8") 1u64, in("r9") 0u64,
+            out("rcx") _, out("r11") _, options(nostack));
+    }
+    t.check("channel read invalid handle output", status == Error::InvalidArgs as i64
+        && sys::notify_signal(transferred, 1) == Err(Error::BadHandle), "");
+    sys::close(send).unwrap(); sys::close(recv).unwrap(); sys::close(original).unwrap();
 
     // Race a sender transferring a handle with the peer closing on another CPU.
     if cpus > 1 {

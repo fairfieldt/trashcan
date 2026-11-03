@@ -66,7 +66,8 @@ fn map_image(p: &Process, image: &Memory, pie_base: u64) -> Result<Image, Error>
     let mut interp = None;
     for i in 0..phnum {
         let mut ph = [0u8; 56];
-        image.read(phoff + i * phentsize, &mut ph).map_err(|_| Error::BadElf)?;
+        let phaddr = phoff.checked_add(i * phentsize).ok_or(Error::BadElf)?;
+        image.read(phaddr, &mut ph).map_err(|_| Error::BadElf)?;
         let ty = u32_at(&ph, 0);
         let (flags, offset, vaddr, filesz, memsz) = (u32_at(&ph, 4), u64_at(&ph, 8), u64_at(&ph, 16), u64_at(&ph, 32), u64_at(&ph, 40));
         if ty == 3 {
@@ -79,7 +80,7 @@ fn map_image(p: &Process, image: &Memory, pie_base: u64) -> Result<Image, Error>
             interp = Some(String::from(core::str::from_utf8(path).map_err(|_| Error::BadElf)?));
         }
         if ty == 6 {
-            phdr_addr = base + vaddr;
+            phdr_addr = base.checked_add(vaddr).ok_or(Error::BadElf)?;
         }
         if ty != 1 || memsz == 0 {
             continue;
@@ -94,9 +95,7 @@ fn map_image(p: &Process, image: &Memory, pie_base: u64) -> Result<Image, Error>
             return Err(Error::BadElf);
         }
         let seg = Memory::anonymous(end - start, false, false)?;
-        let mut buf = alloc::vec![0u8; filesz as usize];
-        image.read(offset, &mut buf).map_err(|_| Error::BadElf)?;
-        seg.write(va - start, &buf)?;
+        seg.copy_from(va - start, image, offset, filesz).map_err(|_| Error::BadElf)?;
         let mut f = vm::READ;
         if flags & 2 != 0 {
             f |= vm::WRITE;
@@ -108,7 +107,7 @@ fn map_image(p: &Process, image: &Memory, pie_base: u64) -> Result<Image, Error>
     }
     if phdr_addr == 0 {
         let (v, off) = first_load.ok_or(Error::BadElf)?;
-        phdr_addr = base + v - off + phoff;
+        phdr_addr = base.checked_add(v).and_then(|x| x.checked_sub(off)).and_then(|x| x.checked_add(phoff)).ok_or(Error::BadElf)?;
     }
     let entry = base.checked_add(u64_at(&hdr, 24)).filter(|entry| *entry < USER_TOP && *entry >= 4096).ok_or(Error::BadElf)?;
     Ok(Image { base, entry, phdr: phdr_addr, phent: phentsize, phnum, interp })

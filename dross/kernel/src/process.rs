@@ -137,20 +137,20 @@ pub fn spawn(name: &str, image: &Memory, cpu: u32, bootstrap: Option<Entry>) -> 
     let p = Process::new(name);
     for i in 0..phnum {
         let mut ph = [0u8; 56];
-        image.read(phoff + i * phentsize, &mut ph).map_err(|_| Error::BadElf)?;
+        let phaddr = phoff.checked_add(i * phentsize).ok_or(Error::BadElf)?;
+        image.read(phaddr, &mut ph).map_err(|_| Error::BadElf)?;
         if u32_at(&ph, 0) != 1 {
             continue;
         }
         let (flags, offset, vaddr, filesz, memsz) = (u32_at(&ph, 4), u64_at(&ph, 8), u64_at(&ph, 16), u64_at(&ph, 32), u64_at(&ph, 40));
         let start = vaddr & !0xfff;
-        let end = vaddr.checked_add(memsz).ok_or(Error::BadElf)?.next_multiple_of(4096);
-        if filesz > memsz || end > USER_TOP || start == 0 {
+        let end = vaddr.checked_add(memsz).and_then(|v| v.checked_add(4095)).ok_or(Error::BadElf)? & !4095;
+        if filesz > memsz || end > USER_TOP || start == 0 || end <= start
+            || offset.checked_add(filesz).is_none_or(|end| end > image.size()) {
             return Err(Error::BadElf);
         }
         let seg = Memory::anonymous(end - start, false, false)?;
-        let mut buf = alloc::vec![0u8; filesz as usize];
-        image.read(offset, &mut buf).map_err(|_| Error::BadElf)?;
-        seg.write(vaddr - start, &buf)?;
+        seg.copy_from(vaddr - start, image, offset, filesz).map_err(|_| Error::BadElf)?;
         let mut f = vm::READ;
         if flags & 2 != 0 {
             f |= vm::WRITE;
