@@ -159,6 +159,7 @@ Validated on 2026-11-02 using Zig 0.14.1 and QEMU 11.1.0 TCG, in release builds
 with both `SMP=4` and `SMP=1`. Each run passed 36 guest checks, the native terminal
 bridge, and the complete host OpenSSH suite. The OETH codec's two host tests passed.
 The native Unix programs and musl terminal bridge passed Clippy with warnings denied.
+With dynamic linking (2026-11-03, `SMP=4` and `SMP=1`) the guest runs 39 checks.
 
 The regular kernel personality also passed its existing native self-test (18 checks),
 POSIX test (19 checks), edu DMA and USB checks with:
