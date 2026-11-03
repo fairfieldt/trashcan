@@ -5,16 +5,16 @@ clients get typed objects and explicit ownership. Other languages use the same
 versioned messages and transferred handles. Netstack3 supplies the protocol
 engine; Oscar defines service access, object lifetimes and resource policy.
 
-The first service interface covers IPv4 TCP. IPv6, datagrams, resolution and
-administration have separate interfaces below; unsupported operations return an
-explicit error. The Linux/POSIX adapter uses the same engine and translates its
+The service provides IPv4 and IPv6 TCP and UDP, plus a separate DNS forwarding
+resolver for A and AAAA records. Administration remains a separate future
+interface. The Linux/POSIX adapter retains its IPv4 TCP contract and translates
 descriptor, address and error conventions at the compatibility boundary.
 
 ## Objects and authority
 
 | Object | Authority |
 |---|---|
-| Network | Create connections or listeners within its delegated network realm and grant |
+| Network | Create connections, listeners or datagram sockets within its delegated realm and grant |
 | TcpConnection | Use one TCP connection and observe its state |
 | TcpListener | Accept connections on one bound address |
 | DatagramSocket | Send and receive complete datagrams within its grant |
@@ -26,7 +26,9 @@ A process name, user ID or known service name does not itself grant access.
 Administration and raw-packet access require separate capabilities. Drivers own
 PCI, interrupts and DMA; the network service receives an Ethernet channel.
 
-The initial factory grants connect, listen, or both. These are service permissions
+Connect, listen and datagrams have independent factory grants. The existing
+combined factory keeps its connect/listen grant; datagrams require explicit
+authority. These are service permissions
 checked on that factory connection. Kernel READ and WRITE rights on its transport
 channel describe message access; they do not authorize every networking operation.
 An accepted connection grants access to that connection, not the listener or its
@@ -141,8 +143,8 @@ TCP sessions or safely replay their writes.
 Addresses are values, not POSIX structures. The wire encoding has an explicit
 family, numeric port, scope and address bytes, independent of Rust layout or C
 padding. IPv6 scope identifies an interface inside the delegated realm; it does
-not grant interface authority. Decoding IPv6 does not imply the current service
-supports IPv6 operations.
+not grant interface authority. Decoding an address does not mean it is assigned,
+routable or within a capability's policy.
 
 Networking errors describe refused, reset, unreachable, timed out, closed,
 address in use, unsupported and resource-limit outcomes. Transport/protocol
@@ -150,19 +152,78 @@ failure is reported separately from a networking result. Native clients do not
 interpret Linux errno numbers. INFO observes addresses, connection state,
 readiness and latched errors without consuming buffered data.
 
-## Datagrams and resolution
+## IPv6 configuration
 
-A datagram socket preserves packet boundaries and returns the peer address with
-each receive. It must report truncation explicitly. Its send result means local
-acceptance, with no delivery promise. Datagram size, receive queue and peer policy
-are bounded independently of TCP. UDP is a subsequent service protocol rather
-than a success stub in the TCP implementation.
+IPv4 and IPv6 use the same connection and datagram object contracts. Each socket
+has one address family; IPv4-mapped IPv6 addresses and application multicast
+sockets are unsupported. Loopback includes `::1` and the configured local global
+address. Ethernet learns neighbors through NDP and checks new addresses with
+Duplicate Address Detection. Ethernet IPv6 requires an MTU of at least 1,280.
 
-A Resolver accepts a bounded name and returns address records with their lifetimes
-and a defined ordering. Resolution has its own deadline and cancellation rules.
-Connecting to a hostname composes resolution and connection with one overall
-deadline. The resolver's network access is delegated explicitly; a resolver
-capability does not automatically grant an application raw DNS or other sockets.
+A supervisor supplies an optional static global address, prefix and gateway.
+The service derives a link-local address and configures `::1`. It does not learn
+global addresses or default routes from router advertisements. Link loss keeps
+loopback available; returning links restart DAD. Scoped link-local endpoints
+name interface 1 (Ethernet); ordinary global and loopback endpoints use scope 0.
+Received packets report their actual owning interface, including local delivery.
+
+## Datagram sockets
+
+`Network::open_datagram(local, rights, deadline)` creates a UDP socket bound to
+one local endpoint. Port zero selects a port. A DatagramSocket preserves complete
+packet boundaries. Each receive returns one packet with sender, local destination,
+interface, original length, copied bytes and a truncation flag. An empty packet
+is data. A maximum copy length of zero consumes a packet and returns its metadata;
+it does not mean EOF.
+
+A send accepts the whole packet or returns an error. Success means local
+acceptance and makes no delivery promise. A zero-byte successful send transmits
+an empty packet. Payloads larger than the supported path MTU return
+MessageTooLarge. IP fragmentation and jumbo frames are not enabled. The receive
+queue holds at most 16 packets and 32 KiB; excess incoming packets are dropped.
+UDP, TCP, listener reservations and closing connections share the 32-socket
+admission budget.
+
+Datagrams use the same one-shot observers and absolute deadlines as TCP.
+`receive_wait` waits for readable/error state; `receive` and `send_to` are
+nonblocking protocol operations. Closing the last control endpoint retires the
+socket immediately. The engine also implements connected-peer filtering; the
+first public datagram protocol uses explicit destinations on each send.
+
+## DNS resolver jobs
+
+A Resolver capability grants name lookup through a configured recursive server.
+It does not grant raw sockets, arbitrary upstream selection or network
+administration. The supervisor must supply the server address explicitly.
+
+`lookup(name, kind, rights, deadline)` immediately returns a query capability.
+The kind is A or AAAA. `collect` returns WouldBlock while pending, then an address
+set or a defined terminal error. `lookup_wait` is the synchronous helper using
+the same overall deadline. Query objects support INFO and the common one-shot
+observer protocol. At most eight queries, including retained terminal results,
+may exist. A query's active lifetime is at most ten seconds and never exceeds its
+original deadline.
+
+Cancellation retires network I/O before acknowledgment and leaves an inspectable
+Canceled query until its capability closes. Packets accepted before cancellation
+cannot be recalled. Closing a query cancels it and releases its retained result.
+Repeated collection does not restart work or refresh a record's lifetime.
+
+Names are ASCII labels with optional trailing dots; callers supply IDNA names in
+their ASCII form. There are no search suffixes or ambient resolver files. Results
+contain up to 16 addresses, a fixed monotonic expiry and remaining TTL. CNAME
+following is bounded to eight links; expiry is the minimum absolute expiry across
+the chain and answer set. There is no shared answer cache in this version.
+
+The resolver validates source address/port, transaction ID, question, class and
+type. It understands compressed names, ignores unrelated UDP responses, retries
+lost queries and uses length-prefixed TCP after a truncated UDP reply. Responses
+are bounded to 16 KiB and 64 resource records. NXDOMAIN, no data, temporary server
+failure, resource exhaustion, timeout and malformed TCP responses are distinct
+outcomes. It forwards to the trusted configured server and does not validate
+DNSSEC itself. Protocol details follow [RFC 1035](https://www.rfc-editor.org/rfc/rfc1035),
+[IPv6 DNS records](https://www.rfc-editor.org/rfc/rfc3596), and
+[DNS over TCP](https://www.rfc-editor.org/rfc/rfc7766).
 
 TLS belongs above a TCP connection and can be supplied by a separate library or
 service. Certificate validation, peer identity and authenticated shutdown have

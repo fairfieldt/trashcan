@@ -69,7 +69,8 @@ impl Nic {
         mmio.write32(0x410, 10 | 8 << 10 | 6 << 20);
         fence(Ordering::SeqCst);
         mmio.write32(0x400, 2 | 8 | 0x10 << 4 | 0x40 << 12);
-        mmio.write32(0x100, 2 | (1 << 15) | (1 << 26));
+        // NDP and DAD require Ethernet multicast, including solicited-node groups.
+        mmio.write32(0x100, 2 | (1 << 4) | (1 << 15) | (1 << 26));
         dross_rt::println!("e1000 ready {:02x?} status {:#x}", mac, mmio.read32(8));
         Self {
             mmio,

@@ -23,7 +23,8 @@ use core::sync::atomic::{AtomicU64, Ordering};
 
 pub const CONNECT: u32 = 1;
 pub const LISTEN: u32 = 2;
-pub const NETWORK_RIGHTS: u32 = CONNECT | LISTEN;
+pub const DATAGRAM: u32 = 4;
+pub const NETWORK_RIGHTS: u32 = CONNECT | LISTEN | DATAGRAM;
 pub mod stream_rights {
     pub const READ: u32 = 1;
     pub const WRITE: u32 = 2;
@@ -49,6 +50,9 @@ pub mod signals {
     pub const ERROR: u32 = 32;
     pub const STREAM: u32 = READABLE | WRITABLE | CONNECTED | PEER_CLOSED | ERROR;
     pub const LISTENER: u32 = ACCEPTABLE | PEER_CLOSED | ERROR;
+    pub const DATAGRAM: u32 = READABLE | WRITABLE | PEER_CLOSED | ERROR;
+    pub const COMPLETE: u32 = 64;
+    pub const QUERY: u32 = COMPLETE | PEER_CLOSED | ERROR;
 }
 pub const MAX_INLINE: usize = MAX_NETWORK_BYTES;
 pub const MAX_BACKLOG: u32 = 4;
@@ -118,6 +122,7 @@ fn rights_mask(protocol: u32) -> Result<u32, ProtocolError> {
         PROTOCOL_NETWORK => Ok(NETWORK_RIGHTS),
         PROTOCOL_TCP_STREAM => Ok(stream_rights::ALL),
         PROTOCOL_TCP_LISTENER => Ok(listener_rights::ALL),
+        PROTOCOL_DATAGRAM_SOCKET | PROTOCOL_RESOLVE_QUERY => Ok(15),
         _ => Err(ProtocolError::Unsupported),
     }
 }
@@ -125,6 +130,8 @@ fn signal_mask(protocol: u32) -> Result<u32, ProtocolError> {
     match protocol {
         PROTOCOL_TCP_STREAM => Ok(signals::STREAM),
         PROTOCOL_TCP_LISTENER => Ok(signals::LISTENER),
+        PROTOCOL_DATAGRAM_SOCKET => Ok(signals::DATAGRAM),
+        PROTOCOL_RESOLVE_QUERY => Ok(signals::QUERY),
         _ => Err(ProtocolError::Unsupported),
     }
 }
@@ -363,6 +370,54 @@ pub fn decode_request(bytes: &[u8], handles: usize) -> Result<WireRequest<'_>, P
     })
 }
 
+/// Shared INFO and one-shot observer requests for UDP and resolver jobs.
+pub(crate) fn decode_request_as(
+    bytes: &[u8],
+    handles: usize,
+    protocol: u32,
+) -> Result<WireRequest<'_>, ProtocolError> {
+    let f = Frame::parse(bytes, handles)?;
+    if !f.header.supported(protocol, 1) || f.header.kind != KIND_REQUEST {
+        return Err(ProtocolError::Unsupported);
+    }
+    if f.body.len() < 8 {
+        return Err(ProtocolError::Malformed);
+    }
+    let b = &f.body[8..];
+    let mut expected = 0;
+    let operation = match f.header.ordinal {
+        4 if b.is_empty() => Operation::Info,
+        5 if b.len() == 16 && get32(b, 4) == 0 => {
+            let mask = get32(b, 0);
+            if mask == 0 || mask & !signal_mask(protocol)? != 0 {
+                return Err(ProtocolError::Malformed);
+            }
+            expected = 1;
+            Operation::Observe {
+                mask,
+                key: get64(b, 8),
+            }
+        }
+        6 if b.len() == 16 && get64(b, 0) != 0 && get64(b, 8) != 0 => Operation::Rearm {
+            subscription: get64(b, 0),
+            revision: get64(b, 8),
+        },
+        7 if b.len() == 8 && get64(b, 0) != 0 => Operation::Cancel {
+            subscription: get64(b, 0),
+        },
+        4..=7 => return Err(ProtocolError::Malformed),
+        _ => return Err(ProtocolError::Unsupported),
+    };
+    if handles != expected {
+        return Err(ProtocolError::Malformed);
+    }
+    Ok(WireRequest {
+        header: f.header,
+        deadline: Deadline::at_monotonic_ns(get64(f.body, 0)),
+        operation,
+    })
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Info {
     pub rights: u32,
@@ -373,6 +428,15 @@ pub struct Info {
     pub peer: Option<Endpoint>,
 }
 pub fn encode_info(protocol: u32, info: Info) -> Result<[u8; 80], ProtocolError> {
+    if ![
+        PROTOCOL_TCP_STREAM,
+        PROTOCOL_TCP_LISTENER,
+        PROTOCOL_DATAGRAM_SOCKET,
+    ]
+    .contains(&protocol)
+    {
+        return Err(ProtocolError::Unsupported);
+    }
     valid_rights(info.rights, rights_mask(protocol)?)?;
     if info.signals & !signal_mask(protocol)? != 0
         || info.revision == 0
@@ -442,7 +506,7 @@ pub struct Readiness {
 pub fn encode_event(event: Readiness) -> Result<[u8; 64], ProtocolError> {
     if event.subscription == 0
         || event.revision == 0
-        || event.signals & !(signals::STREAM | signals::LISTENER) != 0
+        || event.signals & !(signals::STREAM | signals::LISTENER | signals::QUERY) != 0
         || !status_valid(event.error)
         || (event.error != 0) != (event.signals & signals::ERROR != 0)
     {
@@ -597,6 +661,7 @@ pub enum NetworkError {
     Protocol(ProtocolError),
     /// Native service STATUS_LIMIT: bounded admission/resource exhaustion.
     NoResources,
+    MessageTooLarge,
     WouldBlock,
     Denied,
     Unsupported,
@@ -619,6 +684,7 @@ impl From<ProtocolError> for NetworkError {
 pub fn status_error(status: i32) -> NetworkError {
     match status {
         STATUS_LIMIT => NetworkError::NoResources,
+        STATUS_MESSAGE_TOO_LARGE => NetworkError::MessageTooLarge,
         STATUS_WOULD_BLOCK => NetworkError::WouldBlock,
         STATUS_DENIED => NetworkError::Denied,
         STATUS_UNSUPPORTED => NetworkError::Unsupported,
@@ -635,7 +701,7 @@ pub fn status_error(status: i32) -> NetworkError {
 }
 // After CONNECT admission, a later unsent control RPC cannot establish that
 // the overall connection attempt was never submitted to the network.
-fn admitted_error(error: NetworkError) -> NetworkError {
+pub(crate) fn admitted_error(error: NetworkError) -> NetworkError {
     match error {
         NetworkError::NotSent(error) => NetworkError::OutcomeUnknown(error),
         other => other,
@@ -643,14 +709,14 @@ fn admitted_error(error: NetworkError) -> NetworkError {
 }
 static NEXT_COOKIE: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug)]
-struct Rpc {
+pub(crate) struct Rpc {
     endpoint: Option<OwnedHandle>,
     protocol: u32,
     next: u64,
     cookie: u64,
 }
 impl Rpc {
-    fn new(endpoint: OwnedHandle, protocol: u32) -> Result<Self, NetworkError> {
+    pub(crate) fn new(endpoint: OwnedHandle, protocol: u32) -> Result<Self, NetworkError> {
         let cookie = NEXT_COOKIE
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |v| v.checked_add(1))
             .map_err(|_| NetworkError::Protocol(ProtocolError::Limit))?;
@@ -661,17 +727,17 @@ impl Rpc {
             cookie,
         })
     }
-    fn retired(&self) -> bool {
+    pub(crate) fn retired(&self) -> bool {
         self.endpoint.is_none()
     }
-    fn retire(&mut self) {
+    pub(crate) fn retire(&mut self) {
         self.endpoint.take();
     }
-    fn invalid<T>(&mut self, error: ProtocolError) -> Result<T, NetworkError> {
+    pub(crate) fn invalid<T>(&mut self, error: ProtocolError) -> Result<T, NetworkError> {
         self.retire();
         Err(NetworkError::InvalidReply(error))
     }
-    fn call(
+    pub(crate) fn call(
         &mut self,
         ordinal: u32,
         parts: &[&[u8]],
@@ -768,14 +834,14 @@ impl Rpc {
         }
         Ok(reply)
     }
-    fn simple(&mut self, ordinal: u32, deadline: Deadline) -> Result<(), NetworkError> {
+    pub(crate) fn simple(&mut self, ordinal: u32, deadline: Deadline) -> Result<(), NetworkError> {
         let m = self.call(ordinal, &[], None, deadline)?;
         if m.bytes().len() != 36 || m.handle_count() != 0 {
             return self.invalid(ProtocolError::Malformed);
         }
         Ok(())
     }
-    fn info(&mut self, deadline: Deadline) -> Result<Info, NetworkError> {
+    pub(crate) fn info(&mut self, deadline: Deadline) -> Result<Info, NetworkError> {
         let m = self.call(4, &[], None, deadline)?;
         if m.handle_count() != 0 {
             return self.invalid(ProtocolError::Malformed);
@@ -785,7 +851,7 @@ impl Rpc {
             Err(error) => self.invalid(error),
         }
     }
-    fn observe(
+    pub(crate) fn observe(
         &mut self,
         mask: u32,
         key: u64,
@@ -821,7 +887,11 @@ impl Rpc {
             dequeued: false,
         })
     }
-    fn rearm(&mut self, watch: &mut Observation, deadline: Deadline) -> Result<(), NetworkError> {
+    pub(crate) fn rearm(
+        &mut self,
+        watch: &mut Observation,
+        deadline: Deadline,
+    ) -> Result<(), NetworkError> {
         if watch.source != self.cookie || !watch.dequeued || watch.receiver.is_none() {
             return Err(NetworkError::NotSent(Error::InvalidArgs));
         }
@@ -835,7 +905,11 @@ impl Rpc {
         watch.dequeued = false;
         Ok(())
     }
-    fn cancel(&mut self, watch: &mut Observation, deadline: Deadline) -> Result<(), NetworkError> {
+    pub(crate) fn cancel(
+        &mut self,
+        watch: &mut Observation,
+        deadline: Deadline,
+    ) -> Result<(), NetworkError> {
         if watch.source != self.cookie || watch.receiver.is_none() {
             return Err(NetworkError::NotSent(Error::InvalidArgs));
         }
@@ -858,7 +932,7 @@ pub struct NetworkInfo {
 /// previously used connection in a new client, which would reuse request IDs.
 #[derive(Debug)]
 pub struct Network {
-    rpc: Rpc,
+    pub(crate) rpc: Rpc,
 }
 #[derive(Debug)]
 pub struct TcpStream {
@@ -1268,7 +1342,7 @@ pub struct Observation {
     source: u64,
     protocol: u32,
     last_revision: u64,
-    dequeued: bool,
+    pub(crate) dequeued: bool,
 }
 impl Observation {
     pub fn id(&self) -> u64 {

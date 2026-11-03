@@ -6,7 +6,7 @@ use dross_rt::{
     owned::{self, EventQueue, Message, OwnedHandle},
     sys,
 };
-use oscar_netstack3_engine::{Endpoint, Engine, Error as NetError, SocketId};
+use oscar_netstack3_engine::{Engine, Error as NetError, IpEndpoint, SocketId};
 
 pub const MAX_CONNECTIONS: usize = 32;
 pub const CHANNEL_RIGHTS: u32 = dross_abi::rights::READ
@@ -24,13 +24,14 @@ pub enum Role {
     Legacy(Phase),
     Stream { rights: u32 },
     Listener { rights: u32, accepted: u32 },
+    Datagram { rights: u32 },
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Snapshot {
     pub signals: u32,
     pub error: i32,
-    pub local: Option<Endpoint>,
-    pub peer: Option<Endpoint>,
+    pub local: Option<IpEndpoint>,
+    pub peer: Option<IpEndpoint>,
 }
 pub struct Connection {
     pub endpoint: OwnedHandle,
@@ -111,7 +112,7 @@ impl Connection {
             if readiness.writable {
                 signals |= 2
             }
-            if readiness.connected {
+            if readiness.connected && !matches!(self.role, Role::Datagram { .. }) {
                 signals |= 4
             }
         }
@@ -124,8 +125,8 @@ impl Connection {
         let snapshot = Snapshot {
             signals,
             error: self.error.map(crate::native::status).unwrap_or(0),
-            local: engine.local_addr(self.socket).ok(),
-            peer: engine.peer_addr(self.socket).ok(),
+            local: engine.local_addr_ip(self.socket).ok(),
+            peer: engine.peer_addr_ip(self.socket).ok(),
         };
         if snapshot != self.snapshot {
             self.snapshot = snapshot;
@@ -187,6 +188,9 @@ pub struct Daemon {
     pub engine: Engine,
     pub connections: Vec<Connection>,
     pub factories: Vec<Factory>,
+    pub resolver: Option<oscar_resolver::Resolver>,
+    pub resolver_factory: Option<Factory>,
+    pub queries: Vec<crate::query::Query>,
     pub next_observer: u64,
     pub processing: bool,
     // Last field: endpoint registrations drop before this owned queue.
@@ -235,6 +239,11 @@ fn ipv4(s: &str) -> Result<[u8; 4], Error> {
     }
     Ok(result)
 }
+fn ipv6(s: &str) -> Result<[u8; 16], Error> {
+    s.parse::<core::net::Ipv6Addr>()
+        .map(|ip| ip.octets())
+        .map_err(|_| Error::InvalidArgs)
+}
 pub fn run(boot: Handle) -> Result<(), Error> {
     let mut seed = Seed::read(boot)?;
     let ethernet = seed.take("ethernet").ok_or(Error::BadHandle)?;
@@ -272,20 +281,39 @@ pub fn run(boot: Handle) -> Result<(), Error> {
         sys::clock(),
     )
     .map_err(|_| Error::NoResources)?;
+    let address6 = seed.value("ip6").map(ipv6).transpose()?;
+    let prefix6 = seed
+        .value("prefix6")
+        .unwrap_or("64")
+        .parse::<u8>()
+        .map_err(|_| Error::InvalidArgs)?;
+    if prefix6 > 128 {
+        return Err(Error::InvalidArgs);
+    }
+    let gateway6 = seed.value("gateway6").map(ipv6).transpose()?;
+    engine
+        .configure_ipv6(oscar_netstack3_engine::Ipv6Config {
+            address: address6,
+            prefix: prefix6,
+            gateway: gateway6,
+        })
+        .map_err(|_| Error::InvalidArgs)?;
     engine.set_link(nic.info.link.up);
     let queue = EventQueue::create(128)?;
+    ipv6_startup(&mut engine, &mut nic, &queue)?;
     let mut connections = Vec::new();
     connections
         .try_reserve_exact(MAX_CONNECTIONS)
         .map_err(|_| Error::NoMemory)?;
     let mut factories = Vec::new();
     factories
-        .try_reserve_exact(3)
+        .try_reserve_exact(4)
         .map_err(|_| Error::NoMemory)?;
     for (name, rights) in [
         ("native/connect", 1),
         ("native/listen", 2),
         ("native/network", 3),
+        ("native/datagram", 4),
     ] {
         if let Some(endpoint) = seed.take(name) {
             let wait = crate::wait::Registration::new(
@@ -303,7 +331,60 @@ pub fn run(boot: Handle) -> Result<(), Error> {
             });
         }
     }
-    if legacy.is_none() && factories.is_empty() {
+    let resolver_endpoint = seed.take("native/resolver");
+    let resolver = if resolver_endpoint.is_some() {
+        let literal = seed.value("dns-server").ok_or(Error::InvalidArgs)?;
+        let port = seed
+            .value("dns-port")
+            .unwrap_or("53")
+            .parse::<u16>()
+            .map_err(|_| Error::InvalidArgs)?;
+        let scope = seed
+            .value("dns-scope")
+            .unwrap_or("0")
+            .parse::<u32>()
+            .map_err(|_| Error::InvalidArgs)?;
+        let server = if literal.contains(':') {
+            IpEndpoint::V6(oscar_netstack3_engine::Endpoint6 {
+                address: ipv6(literal)?,
+                port,
+                scope_id: scope,
+            })
+        } else {
+            if scope != 0 {
+                return Err(Error::InvalidArgs);
+            }
+            IpEndpoint::V4(oscar_netstack3_engine::Endpoint {
+                address: ipv4(literal)?,
+                port,
+            })
+        };
+        Some(oscar_resolver::Resolver::new(server).map_err(|_| Error::InvalidArgs)?)
+    } else {
+        None
+    };
+    let resolver_factory = resolver_endpoint
+        .map(|endpoint| {
+            let wait = crate::wait::Registration::new(
+                queue.as_handle().as_raw(),
+                endpoint.as_handle(),
+                dross_abi::event::READABLE | dross_abi::event::PEER_CLOSED,
+            )?;
+            Ok::<_, Error>(Factory {
+                endpoint,
+                rights: 1,
+                reply: None,
+                last_id: 0,
+                dead: false,
+                wait: Some(wait),
+            })
+        })
+        .transpose()?;
+    let mut queries = Vec::new();
+    queries
+        .try_reserve_exact(oscar_resolver::MAX_JOBS)
+        .map_err(|_| Error::NoMemory)?;
+    if legacy.is_none() && factories.is_empty() && resolver_factory.is_none() {
         return Err(Error::BadHandle);
     }
     if seed.remaining() != 0 {
@@ -314,6 +395,9 @@ pub fn run(boot: Handle) -> Result<(), Error> {
         engine,
         connections,
         factories,
+        resolver,
+        resolver_factory,
+        queries,
         next_observer: 1,
         processing: false,
         queue,
@@ -334,6 +418,7 @@ pub fn run(boot: Handle) -> Result<(), Error> {
     sys::channel_write(ready.as_handle().as_raw(), b"ready", &[])?;
     drop(ready);
     sys::log("netd: Netstack3 ready");
+    let mut reported_dad_failure = false;
     loop {
         let mut more = nic.service(&mut daemon.engine)?;
         let progress = daemon.engine.pump(sys::clock());
@@ -341,6 +426,9 @@ pub fn run(boot: Handle) -> Result<(), Error> {
             return Err(Error::NoResources);
         }
         more |= progress.more_work;
+        if let Some(resolver) = &mut daemon.resolver {
+            more |= resolver.pump(sys::clock(), &mut daemon.engine);
+        }
         if let Some(root) = legacy.as_ref() {
             for batch in 0..8 {
                 match owned::receive(root.as_handle(), Deadline::IMMEDIATE) {
@@ -360,6 +448,7 @@ pub fn run(boot: Handle) -> Result<(), Error> {
             }
         }
         crate::native::factories(&mut daemon)?;
+        crate::query::process(&mut daemon)?;
         let count = daemon.connections.len();
         for _ in 0..count {
             let mut c = daemon.connections.remove(0);
@@ -391,16 +480,34 @@ pub fn run(boot: Handle) -> Result<(), Error> {
             return Err(Error::NoResources);
         }
         more |= progress.more_work;
+        if let Some(resolver) = &mut daemon.resolver {
+            more |= resolver.pump(sys::clock(), &mut daemon.engine);
+        }
         more |= nic.service(&mut daemon.engine)?;
         for c in &mut daemon.connections {
             c.expire_connect(&mut daemon.engine, sys::clock());
             c.refresh(&mut daemon.engine);
             crate::native::notify(c);
         }
-        if legacy.is_none() && daemon.factories.is_empty() && daemon.connections.is_empty() {
+        crate::query::refresh_all(&mut daemon);
+        if daemon.engine.ipv6_dad_failed() && !reported_dad_failure {
+            sys::log("netd: IPv6 duplicate address detected; local and IPv4 service retained");
+            reported_dad_failure = true;
+        }
+        if legacy.is_none()
+            && daemon.factories.is_empty()
+            && daemon.connections.is_empty()
+            && daemon.resolver_factory.is_none()
+            && daemon.queries.is_empty()
+        {
             return Ok(());
         }
         let mut deadline = daemon.engine.next_deadline().unwrap_or(u64::MAX);
+        if let Some(resolver) = &daemon.resolver {
+            if let Some(d) = resolver.next_deadline() {
+                deadline = deadline.min(d);
+            }
+        }
         for c in &daemon.connections {
             if let Some(d) = c.connect_deadline {
                 deadline = deadline.min(d)
@@ -472,6 +579,7 @@ pub fn run(boot: Handle) -> Result<(), Error> {
                 c.observer.take();
             }
         }
+        failed_endpoint |= crate::query::wait(&mut daemon, delivered);
         if failed_endpoint {
             sys::yield_now();
             continue;
@@ -479,6 +587,44 @@ pub fn run(boot: Handle) -> Result<(), Error> {
         delivered = None;
         match daemon.queue.wait_until(Deadline::at_monotonic_ns(deadline)) {
             Ok(event) => delivered = Some(event.subscription),
+            Err(Error::TimedOut) => {}
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+// DAD runs before registering client endpoints, so waiting here cannot consume
+// and disarm a client's queued request event. Only real NIC/core deadlines wake.
+fn ipv6_startup(engine: &mut Engine, nic: &mut Ethernet, queue: &EventQueue) -> Result<(), Error> {
+    let deadline = sys::after_ms(5000);
+    let mut wait = None;
+    let mut delivered = None;
+    loop {
+        let mut more = nic.service(engine)?;
+        let p = engine.pump(sys::clock());
+        if p.failed {
+            return Err(Error::NoResources);
+        }
+        more |= p.more_work;
+        if engine.ipv6_dad_failed() {
+            sys::log("netd: IPv6 duplicate address detected during startup");
+            return Err(Error::InvalidArgs);
+        }
+        if engine.ipv6_ready() || !nic.info.link.up {
+            return Ok(());
+        }
+        if sys::clock() >= deadline {
+            return Err(Error::TimedOut);
+        }
+        if more {
+            sys::yield_now();
+            continue;
+        }
+        nic.wait(&mut wait, queue.as_handle().as_raw(), delivered)?;
+        delivered = None;
+        let wake = engine.next_deadline().unwrap_or(deadline).min(deadline);
+        match queue.wait_until(Deadline::at_monotonic_ns(wake)) {
+            Ok(e) => delivered = Some(e.subscription),
             Err(Error::TimedOut) => {}
             Err(e) => return Err(e),
         }

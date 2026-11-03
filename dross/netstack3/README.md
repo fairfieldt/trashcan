@@ -1,8 +1,9 @@
 # Netstack3 network service
 
 This standalone workspace packages a pinned Fuchsia Netstack3 core for Oscar.
-`engine/` supplies IPv4 TCP, learned ARP, routes, loopback, bounded socket
-admission and monotonic timers. `netd/` runs it as a native userspace service.
+`engine/` supplies IPv4/IPv6 TCP and UDP, learned ARP/NDP, routes, loopback,
+bounded socket admission and monotonic timers. `dns-wire/` validates DNS
+messages; `resolver/` forwards bounded A/AAAA jobs with retry and TCP fallback. `netd/` runs it as a native userspace service.
 The service replaces smoltcp and exposes both native network capabilities and
 Oscar's existing private Linux socket adapter. Drivers supply OETH frame channels;
 the service receives no PCI or system capability.
@@ -22,7 +23,8 @@ The script prepares pinned sources, uses this directory's toolchain and release
 profile, and stages `unix-netd` and `native-net-test` under the Unix workspace's
 native output directory. `../unix/build.sh` calls it automatically. The normal
 Unix/QEMU test image runs native capability tests before the Linux and SSH tests.
-UDP, IPv6, DHCP and DNS service APIs are not implemented yet.
+Native UDP, IPv6 and DNS are implemented. DHCP, router-advertisement address
+configuration, shared-memory I/O and administration remain future work.
 
 Run from this directory with Python 3.12+ and rustup:
 
@@ -94,7 +96,9 @@ and closing connections. A listener reserves one to four backlog slots. TCP
 buffers hold 32 KiB in each direction. Closing a pending connection aborts it;
 an established connection may drain for at most five seconds after its last
 control endpoint closes. Loopback aliases, frame queues, timer dispatch batches,
-deferred work and connection tracking are bounded. IPv4 fragments are rejected
+deferred work and connection tracking are bounded. The connection-tracking
+budget is 1,024 tuple entries per address family, up to 2,048 in dual-stack mode.
+IPv4 and IPv6 fragments are rejected
 before core processing; reassembly is outside the first service.
 
 These limits do not turn every upstream allocation into a fallible operation.

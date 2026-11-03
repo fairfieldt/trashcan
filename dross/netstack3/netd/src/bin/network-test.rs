@@ -2,6 +2,8 @@
 #![no_std]
 #![no_main]
 extern crate alloc;
+#[path = "../fixture.rs"]
+mod extended;
 #[allow(dead_code)]
 #[path = "../seed.rs"]
 mod seed;
@@ -25,11 +27,22 @@ dross_rt::main!(main);
 enum Failure {
     Network(NetworkError),
     Sys(Error),
+    Resolve(dross_rt::protocol::resolver::ResolveError),
     Check(&'static str),
 }
 impl From<NetworkError> for Failure {
     fn from(e: NetworkError) -> Self {
         Self::Network(e)
+    }
+}
+impl From<dross_rt::protocol::resolver::ResolveError> for Failure {
+    fn from(e: dross_rt::protocol::resolver::ResolveError) -> Self {
+        Self::Resolve(e)
+    }
+}
+impl From<network::WriteAllError> for Failure {
+    fn from(e: network::WriteAllError) -> Self {
+        Self::Network(e.error)
     }
 }
 impl From<Error> for Failure {
@@ -202,15 +215,46 @@ fn no_wait_observer(
 }
 fn run(boot: Handle) -> Result<(), Failure> {
     let mut seed = seed::Seed::read(boot)?;
+    if seed.value("mode") == Some("external") {
+        return extended::external(&mut seed);
+    }
     let connect_cap = seed.take("connect").ok_or(Error::BadHandle)?;
     // This alias has no concurrent reader. At the final raw-wire test the SDK
     // owner is dropped first, then a terminal high request ID avoids reuse.
     let raw_factory = connect_cap.try_duplicate(network::TRANSPORT_RIGHTS)?;
     let mut connect = Network::new(connect_cap)?;
     let mut listen = Network::new(seed.take("listen").ok_or(Error::BadHandle)?)?;
+    let mut datagram = Network::new(seed.take("datagram").ok_or(Error::BadHandle)?)?;
+    let mut resolver = dross_rt::protocol::resolver::Resolver::new(
+        seed.take("resolver").ok_or(Error::BadHandle)?,
+    )?;
+    let dns_ip = seed.value("dns-server").unwrap_or("127.0.0.1");
+    let dns_port = seed
+        .value("dns-port")
+        .unwrap_or("53053")
+        .parse::<u16>()
+        .map_err(|_| Error::InvalidArgs)?;
+    let dns_endpoint = if dns_ip.contains(':') {
+        Endpoint::v6(
+            dns_ip
+                .parse::<core::net::Ipv6Addr>()
+                .map_err(|_| Error::InvalidArgs)?
+                .octets(),
+            0,
+            dns_port,
+        )
+    } else {
+        Endpoint::v4(
+            dns_ip
+                .parse::<core::net::Ipv4Addr>()
+                .map_err(|_| Error::InvalidArgs)?
+                .octets(),
+            dns_port,
+        )
+    };
     check(seed.remaining() == 0, "explicit bootstrap grants only")?;
     drop(seed);
-    let deadline = Deadline::from_now(Duration::from_secs(20));
+    let deadline = Deadline::from_now(Duration::from_secs(35));
     let ci = connect.describe(deadline)?;
     let li = listen.describe(deadline)?;
     check(
@@ -237,12 +281,13 @@ fn run(boot: Handle) -> Result<(), Failure> {
         ),
         "listen cannot connect",
     )?;
-    check(
-        matches!(
-            connect.begin_connect(Endpoint::v6([0; 16], 0, 443), sr::ALL, deadline),
-            Err(NetworkError::Unsupported)
-        ),
-        "IPv6 explicitly unsupported",
+    extended::run(
+        &mut connect,
+        &mut listen,
+        &mut datagram,
+        &mut resolver,
+        dns_endpoint,
+        deadline,
     )?;
     let mut listener = listen.listen_tcp(
         Endpoint::v4([127, 0, 0, 1], 0),
@@ -427,6 +472,7 @@ fn main(boot: Handle) -> i32 {
         Err(error) => {
             let detail = match error {
                 Failure::Network(e) => alloc::format!("network {e:?}"),
+                Failure::Resolve(e) => alloc::format!("resolver {e:?}"),
                 Failure::Sys(e) => alloc::format!("syscall {e:?}"),
                 Failure::Check(name) => alloc::format!("check {name}"),
             };

@@ -10,6 +10,9 @@ netstack3_core = { path = "../target/manifests/netstack3_core" }
 netstack3_base = { path = "../target/manifests/netstack3_base" }
 netstack3_device = { path = "../target/manifests/netstack3_device" }
 netstack3_ip = { path = "../target/manifests/netstack3_ip" }
+netstack3_udp = { path = "../target/manifests/netstack3_udp" }
+netstack3_datagram = { path = "../target/manifests/netstack3_datagram" }
+either = { version = "=1.19.0", default-features = false }
 netstack3_tcp = { path = "../target/manifests/netstack3_tcp" }
 net_types = { path = "../target/manifests/net_types" }
 packet = { path = "../target/manifests/packet" }

@@ -1,4 +1,4 @@
-//! Bounded IPv4/TCP engine shared by native and compatibility service adapters.
+//! Bounded dual-stack TCP/UDP engine shared by native and compatibility service adapters.
 //! The caller supplies monotonic nanoseconds and bounded Ethernet frames. No RPC,
 //! Linux errno, NIC authority, or polling thread is part of this library.
 #![no_std]
@@ -9,8 +9,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::num::{NonZeroU16, NonZeroU64, NonZeroUsize};
 use net_types::ethernet::Mac;
-use net_types::ip::{AddrSubnet, IpAddress as _, Ipv4, Ipv4Addr, Mtu, Subnet};
-use net_types::{SpecifiedAddr, UnicastAddr, ZonedAddr};
+use net_types::ip::{AddrSubnet, IpAddress as _, Ipv4, Ipv4Addr, Ipv6, Ipv6Addr, Mtu, Subnet};
+use net_types::{AddrAndZone, SpecifiedAddr, UnicastAddr, ZonedAddr};
 use netstack3_base::{RngContext as _, TcpSocketState, WorkQueueReport};
 use netstack3_core::ip::IidSecret;
 use netstack3_core::socket::{IpSocketMatcher, ShutdownType, SocketCookieMatcher};
@@ -37,7 +37,60 @@ pub const BUFFER_BYTES: usize = 32 * 1024;
 const ABANDON_NS: u64 = 5_000_000_000;
 const TIMER_BATCH: usize = 64;
 const LOOPBACK_BATCH: usize = 8;
-type CoreSocket = TcpSocketId<Ipv4, WeakDeviceId<Bindings>, Bindings>;
+mod ipv6;
+mod udp;
+#[derive(Clone)]
+enum CoreSocket {
+    V4(TcpSocketId<Ipv4, WeakDeviceId<Bindings>, Bindings>),
+    V6(TcpSocketId<Ipv6, WeakDeviceId<Bindings>, Bindings>),
+}
+macro_rules! tcp {
+    ($this:expr, $core:expr, $method:ident($($arg:expr),* $(,)?)) => {
+        match $core {
+            CoreSocket::V4(id) => $this.api().tcp::<Ipv4>().$method(id, $($arg),*),
+            CoreSocket::V6(id) => $this.api().tcp::<Ipv6>().$method(id, $($arg),*),
+        }
+    };
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Family {
+    Ipv4,
+    Ipv6,
+}
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Endpoint6 {
+    pub address: [u8; 16],
+    pub port: u16,
+    pub scope_id: u32,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IpEndpoint {
+    V4(Endpoint),
+    V6(Endpoint6),
+}
+impl IpEndpoint {
+    pub fn family(self) -> Family {
+        match self {
+            Self::V4(_) => Family::Ipv4,
+            Self::V6(_) => Family::Ipv6,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub struct Ipv6Config {
+    pub address: Option<[u8; 16]>,
+    pub prefix: u8,
+    pub gateway: Option<[u8; 16]>,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DatagramRead {
+    pub copied: usize,
+    pub original_len: usize,
+    pub truncated: bool,
+    pub sender: IpEndpoint,
+    pub local: IpEndpoint,
+    pub interface: u32,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SocketId(u64);
@@ -69,6 +122,8 @@ pub enum Error {
     NotConnected,
     BrokenPipe,
     BadSocket,
+    MessageTooLarge,
+    Unsupported,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Shutdown {
@@ -104,7 +159,7 @@ struct Socket {
     extra: SocketExtra,
     buffers: Option<ClientBuffers>,
     mode: Mode,
-    remote: Option<Endpoint>,
+    remote: Option<IpEndpoint>,
     error: Option<Error>,
     send_closed: bool,
     receive_closed: bool,
@@ -117,6 +172,9 @@ pub struct Engine {
     ethernet: Option<EthernetDeviceId<Bindings>>,
     loopback: Option<LoopbackDeviceId<Bindings>>,
     sockets: Vec<Socket>,
+    datagrams: Vec<udp::DatagramSocket>,
+    ipv6: Option<Ipv6Config>,
+    link_local: [u8; 16],
     next_id: u64,
     config: Config,
     link: bool,
@@ -246,6 +304,9 @@ impl Engine {
             ethernet: Some(ethernet),
             loopback: Some(loopback),
             sockets,
+            datagrams: Vec::new(),
+            ipv6: None,
+            link_local: [0; 16],
             next_id: 1,
             config,
             link: true,
@@ -265,6 +326,7 @@ impl Engine {
     }
     fn accounted(&self) -> usize {
         self.sockets.len()
+            + self.datagrams.len()
             + self
                 .sockets
                 .iter()
@@ -283,7 +345,7 @@ impl Engine {
         extra: SocketExtra,
         buffers: Option<ClientBuffers>,
         mode: Mode,
-        remote: Option<Endpoint>,
+        remote: Option<IpEndpoint>,
     ) -> Result<SocketId, Error> {
         let id = SocketId(self.next_id);
         self.next_id = self.next_id.checked_add(1).ok_or(Error::NoResources)?;
@@ -302,14 +364,39 @@ impl Engine {
         Ok(id)
     }
     pub fn create(&mut self) -> Result<SocketId, Error> {
+        self.create_tcp(Family::Ipv4)
+    }
+    pub fn create_tcp(&mut self, family: Family) -> Result<SocketId, Error> {
+        if family == Family::Ipv6 && self.ipv6.is_none() {
+            return Err(Error::Unsupported);
+        }
         if self.accounted() >= MAX_SOCKETS || self.bindings.failed() {
             return Err(Error::NoResources);
         }
         let extra = SocketExtra::default();
-        let core = self.api().tcp::<Ipv4>().create(extra.clone());
+        let core = match family {
+            Family::Ipv4 => CoreSocket::V4(self.api().tcp::<Ipv4>().create(extra.clone())),
+            Family::Ipv6 => {
+                let c = self.api().tcp::<Ipv6>().create(extra.clone());
+                self.api()
+                    .tcp::<Ipv6>()
+                    .set_dual_stack_enabled(&c, false)
+                    .map_err(|_| Error::Invalid)?;
+                CoreSocket::V6(c)
+            }
+        };
         self.allocate(core, extra, None, Mode::New, None)
     }
     pub fn bind(&mut self, id: SocketId, address: Endpoint) -> Result<(), Error> {
+        self.bind_ip(id, IpEndpoint::V4(address))
+    }
+    pub fn bind_ip(&mut self, id: SocketId, address: IpEndpoint) -> Result<(), Error> {
+        if let IpEndpoint::V6(e) = address {
+            return self.bind6(id, e);
+        }
+        let IpEndpoint::V4(address) = address else {
+            unreachable!()
+        };
         let i = self.index(id)?;
         if self.sockets[i].mode != Mode::New {
             return Err(Error::WrongState);
@@ -318,7 +405,9 @@ impl Engine {
             return Err(Error::AddressUnavailable);
         }
         self.ensure_local_alias(address.address)?;
-        let core = self.sockets[i].core.clone();
+        let CoreSocket::V4(core) = self.sockets[i].core.clone() else {
+            return Err(Error::Invalid);
+        };
         let addr = SpecifiedAddr::new(Ipv4Addr::new(address.address)).map(ZonedAddr::Unzoned);
         self.api()
             .tcp::<Ipv4>()
@@ -331,7 +420,11 @@ impl Engine {
         let i = self.index(id)?;
         let backlog = backlog.clamp(1, MAX_BACKLOG);
         if self.sockets[i].mode == Mode::New {
-            self.bind(id, Endpoint::default())?;
+            let address = match self.sockets[i].core {
+                CoreSocket::V4(_) => IpEndpoint::V4(Endpoint::default()),
+                CoreSocket::V6(_) => IpEndpoint::V6(Endpoint6::default()),
+            };
+            self.bind_ip(id, address)?;
         }
         if self.sockets[i].mode != Mode::Bound {
             return Err(Error::WrongState);
@@ -340,17 +433,23 @@ impl Engine {
             return Err(Error::NoResources);
         }
         let core = self.sockets[i].core.clone();
-        self.api()
-            .tcp::<Ipv4>()
-            .listen(&core, NonZeroUsize::new(backlog).unwrap())
-            .map_err(|e| match e {
-                ListenError::ListenerExists => Error::AddressInUse,
-                _ => Error::WrongState,
-            })?;
+        tcp!(self, &core, listen(NonZeroUsize::new(backlog).unwrap())).map_err(|e| match e {
+            ListenError::ListenerExists => Error::AddressInUse,
+            _ => Error::WrongState,
+        })?;
         self.sockets[i].mode = Mode::Listening(backlog);
         Ok(())
     }
     pub fn connect(&mut self, id: SocketId, remote: Endpoint) -> Result<(), Error> {
+        self.connect_ip(id, IpEndpoint::V4(remote))
+    }
+    pub fn connect_ip(&mut self, id: SocketId, remote: IpEndpoint) -> Result<(), Error> {
+        if let IpEndpoint::V6(e) = remote {
+            return self.connect6(id, e);
+        }
+        let IpEndpoint::V4(remote) = remote else {
+            unreachable!()
+        };
         let i = self.index(id)?;
         if remote.port == 0 || remote.address == [0; 4] {
             return Err(Error::Invalid);
@@ -362,7 +461,7 @@ impl Engine {
             return Err(Error::WrongState);
         }
         if let Some(old) = self.sockets[i].remote {
-            if old != remote {
+            if old != IpEndpoint::V4(remote) {
                 return Err(Error::Invalid);
             }
         }
@@ -384,7 +483,9 @@ impl Engine {
                 },
             )?;
         }
-        let core = self.sockets[i].core.clone();
+        let CoreSocket::V4(core) = self.sockets[i].core.clone() else {
+            return Err(Error::Invalid);
+        };
         let result = self.api().tcp::<Ipv4>().connect(
             &core,
             Some(ZonedAddr::Unzoned(
@@ -392,7 +493,7 @@ impl Engine {
             )),
             NonZeroU16::new(remote.port).unwrap(),
         );
-        self.sockets[i].remote = Some(remote);
+        self.sockets[i].remote = Some(IpEndpoint::V4(remote));
         match result {
             Ok(()) | Err(ConnectError::Pending) => {
                 self.sockets[i].mode = Mode::Connecting;
@@ -411,6 +512,22 @@ impl Engine {
         }
     }
     pub fn accept(&mut self, id: SocketId) -> Result<(SocketId, Endpoint), Error> {
+        if !matches!(self.sockets[self.index(id)?].core, CoreSocket::V4(_)) {
+            return Err(Error::Invalid);
+        }
+        let (id, address) = self.accept_ip(id)?;
+        match address {
+            IpEndpoint::V4(e) => Ok((id, e)),
+            IpEndpoint::V6(_) => {
+                let _ = self.abort(id);
+                Err(Error::Invalid)
+            }
+        }
+    }
+    pub fn accept_ip(&mut self, id: SocketId) -> Result<(SocketId, IpEndpoint), Error> {
+        if matches!(self.sockets[self.index(id)?].core, CoreSocket::V6(_)) {
+            return self.accept6(id);
+        }
         let i = self.index(id)?;
         if !matches!(self.sockets[i].mode, Mode::Listening(_)) {
             return Err(Error::WrongState);
@@ -418,7 +535,9 @@ impl Engine {
         if self.accounted() >= MAX_SOCKETS {
             return Err(Error::NoResources);
         }
-        let core = self.sockets[i].core.clone();
+        let CoreSocket::V4(core) = self.sockets[i].core.clone() else {
+            unreachable!()
+        };
         let (child, peer, buffers) =
             self.api()
                 .tcp::<Ipv4>()
@@ -443,13 +562,13 @@ impl Engine {
             return Err(Error::NoRoute);
         }
         let child = self.allocate(
-            child,
+            CoreSocket::V4(child),
             SocketExtra::default(),
             Some(buffers),
             Mode::Connected,
-            Some(remote),
+            Some(IpEndpoint::V4(remote)),
         )?;
-        Ok((child, remote))
+        Ok((child, IpEndpoint::V4(remote)))
     }
     fn attach_buffers(&mut self, i: usize) {
         if self.sockets[i].buffers.is_none() {
@@ -458,12 +577,12 @@ impl Engine {
     }
     fn refresh(&mut self, i: usize) {
         let core = self.sockets[i].core.clone();
-        if let Some(error) = self.api().tcp::<Ipv4>().get_socket_error(&core) {
+        if let Some(error) = tcp!(self, &core, get_socket_error()) {
             if self.sockets[i].error.is_none() {
                 self.sockets[i].error = Some(connection_error(error));
             }
         }
-        let state = self.api().tcp::<Ipv4>().get_tcp_info(&core).state;
+        let state = tcp!(self, &core, get_tcp_info()).state;
         if self.sockets[i].mode == Mode::Connecting && connected(state) {
             self.sockets[i].mode = Mode::Connected;
             self.attach_buffers(i);
@@ -492,7 +611,7 @@ impl Engine {
             if count > 0 {
                 if !peek {
                     let core = self.sockets[i].core.clone();
-                    self.api().tcp::<Ipv4>().on_receive_buffer_read(&core);
+                    tcp!(self, &core, on_receive_buffer_read());
                 }
                 return Ok(count);
             }
@@ -501,7 +620,7 @@ impl Engine {
             return Err(error);
         }
         let core = self.sockets[i].core.clone();
-        let state = self.api().tcp::<Ipv4>().get_tcp_info(&core).state;
+        let state = tcp!(self, &core, get_tcp_info()).state;
         if eof(state) && matches!(self.sockets[i].mode, Mode::Connected) {
             Ok(0)
         } else if matches!(
@@ -529,18 +648,22 @@ impl Engine {
             return Ok(0);
         }
         let core = self.sockets[i].core.clone();
-        let count = self
-            .api()
-            .tcp::<Ipv4>()
-            .with_send_buffer(&core, |buffer| buffer.enqueue(source))
-            .ok_or(Error::BrokenPipe)?;
+        let count = tcp!(
+            self,
+            &core,
+            with_send_buffer(|buffer| buffer.enqueue(source))
+        )
+        .ok_or(Error::BrokenPipe)?;
         if count == 0 {
             return Err(Error::WouldBlock);
         }
-        self.api().tcp::<Ipv4>().do_send(&core);
+        tcp!(self, &core, do_send());
         Ok(count)
     }
     pub fn shutdown(&mut self, id: SocketId, direction: Shutdown) -> Result<(), Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_shutdown(id, direction);
+        }
         let i = self.index(id)?;
         self.refresh(i);
         if self.sockets[i].mode != Mode::Connected {
@@ -552,10 +675,7 @@ impl Engine {
             Shutdown::Write => ShutdownType::Send,
             Shutdown::Both => ShutdownType::SendAndReceive,
         };
-        self.api()
-            .tcp::<Ipv4>()
-            .shutdown(&core, operation)
-            .map_err(|_| Error::NotConnected)?;
+        tcp!(self, &core, shutdown(operation)).map_err(|_| Error::NotConnected)?;
         if matches!(direction, Shutdown::Read | Shutdown::Both) {
             self.sockets[i].receive_closed = true;
         }
@@ -565,6 +685,9 @@ impl Engine {
         Ok(())
     }
     pub fn readiness(&mut self, id: SocketId) -> Result<Readiness, Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_readiness(id);
+        }
         let i = self.index(id)?;
         self.refresh(i);
         let socket = &self.sockets[i];
@@ -578,16 +701,17 @@ impl Engine {
         }
         let buffered = socket.buffers.as_ref().map_or(0, ClientBuffers::readable);
         let core = socket.core.clone();
-        let state = self.api().tcp::<Ipv4>().get_tcp_info(&core).state;
-        let writable = self
-            .api()
-            .tcp::<Ipv4>()
-            .with_send_buffer(&core, |buffer| {
+        let state = tcp!(self, &core, get_tcp_info()).state;
+        let writable = tcp!(
+            self,
+            &core,
+            with_send_buffer(|buffer| {
                 use netstack3_tcp::Buffer as _;
                 let x = buffer.limits();
                 x.len < x.capacity
             })
-            .unwrap_or(false);
+        )
+        .unwrap_or(false);
         let socket = &self.sockets[i];
         let is_connected = socket.mode == Mode::Connected;
         Ok(Readiness {
@@ -601,35 +725,67 @@ impl Engine {
         })
     }
     pub fn local_addr(&mut self, id: SocketId) -> Result<Endpoint, Error> {
+        match self.local_addr_ip(id)? {
+            IpEndpoint::V4(e) => Ok(e),
+            _ => Err(Error::Invalid),
+        }
+    }
+    pub fn local_addr_ip(&mut self, id: SocketId) -> Result<IpEndpoint, Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_local_addr(id);
+        }
         let i = self.index(id)?;
-        let core = self.sockets[i].core.clone();
-        Ok(match self.api().tcp::<Ipv4>().get_info(&core) {
-            SocketInfo::Unbound(_) => Endpoint::default(),
-            SocketInfo::Bound(info) => Endpoint {
-                address: info.addr.map_or([0; 4], |ip| ip.addr().ipv4_bytes()),
-                port: info.port.get(),
+        let CoreSocket::V4(core) = self.sockets[i].core.clone() else {
+            return self.local_addr6(id).map(IpEndpoint::V6);
+        };
+        Ok(IpEndpoint::V4(
+            match self.api().tcp::<Ipv4>().get_info(&core) {
+                SocketInfo::Unbound(_) => Endpoint::default(),
+                SocketInfo::Bound(x) => Endpoint {
+                    address: x.addr.map_or([0; 4], |a| a.addr().ipv4_bytes()),
+                    port: x.port.get(),
+                },
+                SocketInfo::Connection(x) => Endpoint {
+                    address: x.local_addr.ip.addr().ipv4_bytes(),
+                    port: x.local_addr.port.get(),
+                },
             },
-            SocketInfo::Connection(info) => Endpoint {
-                address: info.local_addr.ip.addr().ipv4_bytes(),
-                port: info.local_addr.port.get(),
-            },
-        })
+        ))
     }
     pub fn peer_addr(&mut self, id: SocketId) -> Result<Endpoint, Error> {
-        let i = self.index(id)?;
-        self.sockets[i].remote.ok_or(Error::NotConnected)
+        match self.peer_addr_ip(id)? {
+            IpEndpoint::V4(e) => Ok(e),
+            _ => Err(Error::Invalid),
+        }
+    }
+    pub fn peer_addr_ip(&mut self, id: SocketId) -> Result<IpEndpoint, Error> {
+        if let Some(i) = self.udp_index(id) {
+            return self.datagrams[i].remote.ok_or(Error::NotConnected);
+        }
+        Ok(self.sockets[self.index(id)?]
+            .remote
+            .ok_or(Error::NotConnected)?)
     }
     pub fn peek_error(&mut self, id: SocketId) -> Result<Option<Error>, Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_error(id, false);
+        }
         let i = self.index(id)?;
         self.refresh(i);
         Ok(self.sockets[i].error)
     }
     pub fn take_error(&mut self, id: SocketId) -> Result<Option<Error>, Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_error(id, true);
+        }
         let i = self.index(id)?;
         self.refresh(i);
         Ok(self.sockets[i].error.take())
     }
     pub fn close(&mut self, id: SocketId) -> Result<(), Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_close(id);
+        }
         let i = self.index(id)?;
         if self.sockets[i].mode == Mode::Connecting {
             self.force(i);
@@ -644,41 +800,75 @@ impl Engine {
             return Ok(());
         }
         let core = self.sockets[i].core.clone();
-        let _ = self.api().tcp::<Ipv4>().shutdown(&core, ShutdownType::Send);
+        let _ = tcp!(self, &core, shutdown(ShutdownType::Send));
         self.sockets[i].send_closed = true;
         self.sockets[i].closing = Some(self.now.saturating_add(ABANDON_NS));
         Ok(())
     }
     pub fn abort(&mut self, id: SocketId) -> Result<(), Error> {
+        if self.udp_index(id).is_some() {
+            return self.udp_close(id);
+        }
         let i = self.index(id)?;
         self.force(i);
         self.remove(i);
         Ok(())
     }
     fn force(&mut self, i: usize) {
-        let cookie = self.sockets[i].core.socket_cookie().export_value();
-        self.api()
-            .tcp::<Ipv4>()
-            .disconnect_bound(&IpSocketMatcher::<()>::Cookie(SocketCookieMatcher {
-                cookie,
-                invert: false,
-            }));
+        let core = self.sockets[i].core.clone();
+        let cookie = match &core {
+            CoreSocket::V4(c) => c.socket_cookie().export_value(),
+            CoreSocket::V6(c) => c.socket_cookie().export_value(),
+        };
+        let matcher = IpSocketMatcher::<()>::Cookie(SocketCookieMatcher {
+            cookie,
+            invert: false,
+        });
+        match core {
+            CoreSocket::V4(_) => {
+                self.api().tcp::<Ipv4>().disconnect_bound(&matcher);
+            }
+            CoreSocket::V6(_) => {
+                self.api().tcp::<Ipv6>().disconnect_bound(&matcher);
+            }
+        }
     }
     fn remove(&mut self, i: usize) {
         let socket = self.sockets.swap_remove(i);
-        self.api().tcp::<Ipv4>().close(socket.core);
+        match socket.core {
+            CoreSocket::V4(c) => self.api().tcp::<Ipv4>().close(c),
+            CoreSocket::V6(c) => self.api().tcp::<Ipv6>().close(c),
+        };
     }
     pub fn set_link(&mut self, up: bool) {
+        if self.link != up && self.ipv6.is_some() {
+            let device = self.ethernet.as_ref().unwrap().clone().into();
+            if self
+                .api()
+                .device_ip::<Ipv6>()
+                .update_configuration(
+                    &device,
+                    IpDeviceConfigurationUpdate {
+                        ip_enabled: Some(up),
+                        ..Default::default()
+                    }
+                    .into(),
+                )
+                .is_err()
+            {
+                self.bindings.mark_failed();
+            }
+        }
         if self.link && !up {
             for i in 0..self.sockets.len() {
-                if self.sockets[i]
-                    .remote
-                    .is_some_and(|r| !self.is_local(r.address))
-                {
+                if self.sockets[i].remote.is_some_and(|r| !self.is_local_ip(r)) {
                     self.force(i);
                     self.sockets[i].error = Some(Error::NoRoute);
                 }
             }
+        }
+        if self.link && !up {
+            self.udp_link_down();
         }
         self.link = up;
     }
@@ -713,18 +903,25 @@ impl Engine {
             let alias = self.aliases[n];
             let mut used = false;
             for i in 0..self.sockets.len() {
-                let core = self.sockets[i].core.clone();
+                let CoreSocket::V4(core) = self.sockets[i].core.clone() else {
+                    continue;
+                };
                 let local = match self.api().tcp::<Ipv4>().get_info(&core) {
                     SocketInfo::Bound(x) => x.addr.map(|x| x.addr().ipv4_bytes()),
                     SocketInfo::Connection(x) => Some(x.local_addr.ip.addr().ipv4_bytes()),
                     _ => None,
                 };
                 if local == Some(alias)
-                    || self.sockets[i].remote.is_some_and(|x| x.address == alias)
+                    || self.sockets[i]
+                        .remote
+                        .is_some_and(|x| matches!(x,IpEndpoint::V4(e) if e.address == alias))
                 {
                     used = true;
                     break;
                 }
+            }
+            if !used {
+                used = self.udp_uses_alias(alias);
             }
             if used {
                 n += 1
@@ -752,7 +949,11 @@ impl Engine {
         {
             return Err(Error::Invalid);
         }
-        if frame[12..14] != [8, 0] && frame[12..14] != [8, 6] {
+        if frame[12..14] == [0x86, 0xdd] {
+            if self.ipv6.is_none() || !ipv6::valid_packet(&frame[14..]) {
+                return Err(Error::Invalid);
+            }
+        } else if frame[12..14] != [8, 0] && frame[12..14] != [8, 6] {
             return Err(Error::Invalid);
         }
         let mut bytes = Vec::new();
@@ -824,7 +1025,7 @@ impl Engine {
             self.refresh(i);
             if let Some(deadline) = self.sockets[i].closing {
                 let core = self.sockets[i].core.clone();
-                let state = self.api().tcp::<Ipv4>().get_tcp_info(&core).state;
+                let state = tcp!(self, &core, get_tcp_info()).state;
                 if state == TcpSocketState::Close || deadline <= self.now {
                     if state != TcpSocketState::Close {
                         self.force(i)
@@ -920,6 +1121,13 @@ impl Drop for Engine {
             self.force(0);
             self.remove(0);
         }
+        while let Some(socket) = self.datagrams.last() {
+            let id = socket.id;
+            let _ = self.udp_close(id);
+        }
+        let table6 = self.api().routes::<Ipv6>().main_table_id();
+        self.api().routes::<Ipv6>().set_routes(&table6, Vec::new());
+        drop(table6);
         let table = self.api().routes::<Ipv4>().main_table_id();
         self.api().routes::<Ipv4>().set_routes(&table, Vec::new());
         drop(table);
@@ -946,6 +1154,12 @@ pub struct Resources {
     pub tuple_bytes: usize,
     pub queued_frames: usize,
     pub scheduled_timers: usize,
+    pub ipv6_conntrack_entries: usize,
+    pub ipv6_conntrack_capacity: usize,
+    pub ipv6_conntrack_limit_hits: u64,
+    pub ipv6_conntrack_limit_drops: u64,
+    pub ipv6_connection_object_bytes: usize,
+    pub ipv6_tuple_bytes: usize,
 }
 struct ResourceInspector<'a> {
     result: &'a mut Resources,
@@ -974,10 +1188,20 @@ impl netstack3_core::inspect::Inspector for ResourceInspector<'_> {
     }
     fn record_unnamed_child<F: FnOnce(&mut Self::ChildInspector<'_>)>(&mut self, _f: F) {}
     fn record_usize<T: Into<usize>>(&mut self, name: &str, value: T) {
-        if !self.ipv4 || !self.conntrack {
+        if !self.conntrack {
             return;
         }
         let value = value.into();
+        if !self.ipv4 {
+            match name {
+                "num_entries" => self.result.ipv6_conntrack_entries = value,
+                "table_capacity" => self.result.ipv6_conntrack_capacity = value,
+                "connection_object_bytes" => self.result.ipv6_connection_object_bytes = value,
+                "tuple_bytes" => self.result.ipv6_tuple_bytes = value,
+                _ => {}
+            }
+            return;
+        }
         match name {
             "num_entries" => self.result.conntrack_entries = value,
             "table_capacity" => self.result.conntrack_capacity = value,
@@ -988,7 +1212,15 @@ impl netstack3_core::inspect::Inspector for ResourceInspector<'_> {
         }
     }
     fn record_uint<T: Into<u64>>(&mut self, name: &str, value: T) {
-        if !self.ipv4 || !self.conntrack {
+        if !self.conntrack {
+            return;
+        }
+        if !self.ipv4 {
+            match name {
+                "table_limit_hits" => self.result.ipv6_conntrack_limit_hits = value.into(),
+                "table_limit_drops" => self.result.ipv6_conntrack_limit_drops = value.into(),
+                _ => {}
+            }
             return;
         }
         match name {

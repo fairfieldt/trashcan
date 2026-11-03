@@ -20,6 +20,7 @@ mod channel_cycles;
 mod launch_tests;
 mod sdk_tests;
 mod network_tests;
+mod network_extension_tests;
 mod service_tests;
 
 dross_rt::main!(main);
@@ -168,6 +169,7 @@ fn run_all(b: &Bootstrap) -> i32 {
     launch_tests::run(&mut t, b);
     sdk_tests::run(&mut t);
     network_tests::run(&mut t);
+    network_extension_tests::run(&mut t);
     service_tests::run(&mut t, b);
 
     if let Some(account) = b.handle("account/test") {

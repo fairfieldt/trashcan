@@ -4,6 +4,7 @@
 /* Native service rights, deliberately separate from kernel handle rights. */
 #define OSCAR_NETWORK_CONNECT_RIGHT 1u
 #define OSCAR_NETWORK_LISTEN_RIGHT 2u
+#define OSCAR_NETWORK_DATAGRAM_RIGHT 4u
 #define OSCAR_STREAM_READ_RIGHT 1u
 #define OSCAR_STREAM_WRITE_RIGHT 2u
 #define OSCAR_STREAM_OBSERVE_RIGHT 4u
@@ -22,6 +23,9 @@
 #define OSCAR_NET_ACCEPTABLE 8u
 #define OSCAR_NET_PEER_CLOSED 16u
 #define OSCAR_NET_ERROR 32u
+#define OSCAR_NET_COMPLETE 64u
+#define OSCAR_NET_DATAGRAM_SIGNALS 51u
+#define OSCAR_NET_QUERY_SIGNALS 112u
 #define OSCAR_NET_STREAM_SIGNALS 55u
 #define OSCAR_NET_LISTENER_SIGNALS 56u
 #define OSCAR_NETWORK_MAX_BACKLOG 4u
@@ -40,15 +44,14 @@ static inline int oscar_network_endpoint_encode(uint8_t*p,size_t n,const oscar_e
  if(in->family==4){if(in->scope)return -1;for(size_t i=4;i<16;i++)if(in->address[i])return -1;}
  oscar_put16(p,in->family);oscar_put16(p+2,in->port);oscar_put32(p+4,in->scope);for(size_t i=0;i<16;i++)p[8+i]=in->address[i];return 0;
 }
-static inline uint32_t oscar_network_signal_mask(uint32_t protocol){return protocol==OSCAR_PROTOCOL_TCP_STREAM?OSCAR_NET_STREAM_SIGNALS:protocol==OSCAR_PROTOCOL_TCP_LISTENER?OSCAR_NET_LISTENER_SIGNALS:0;}
-static inline uint32_t oscar_network_rights_mask(uint32_t protocol){return protocol==OSCAR_PROTOCOL_NETWORK?3u:protocol==OSCAR_PROTOCOL_TCP_STREAM?127u:protocol==OSCAR_PROTOCOL_TCP_LISTENER?7u:0;}
+static inline uint32_t oscar_network_signal_mask(uint32_t protocol){return protocol==OSCAR_PROTOCOL_TCP_STREAM?OSCAR_NET_STREAM_SIGNALS:protocol==OSCAR_PROTOCOL_TCP_LISTENER?OSCAR_NET_LISTENER_SIGNALS:protocol==OSCAR_PROTOCOL_DATAGRAM_SOCKET?OSCAR_NET_DATAGRAM_SIGNALS:protocol==OSCAR_PROTOCOL_RESOLVE_QUERY?OSCAR_NET_QUERY_SIGNALS:0;}
+static inline uint32_t oscar_network_rights_mask(uint32_t protocol){return protocol==OSCAR_PROTOCOL_NETWORK?7u:protocol==OSCAR_PROTOCOL_TCP_STREAM?127u:protocol==OSCAR_PROTOCOL_TCP_LISTENER?7u:(protocol==OSCAR_PROTOCOL_DATAGRAM_SOCKET||protocol==OSCAR_PROTOCOL_RESOLVE_QUERY)?15u:0;}
 typedef struct {oscar_header header;uint64_t deadline,subscription,revision,key;oscar_endpoint endpoint;uint32_t rights,stream_rights,backlog,maximum,mask;const uint8_t*data;size_t data_bytes;} oscar_network_request;
-/* 0 valid, 1 unsupported protocol/version/ordinal, -1 malformed. IPv6 remains
- * structurally valid; the current service explicitly returns Unsupported. */
+/* 0 valid, 1 unsupported protocol/version/ordinal, -1 malformed. */
 static inline int oscar_network_request_decode(const uint8_t*p,size_t n,size_t handles,oscar_network_request*out){
  if(!p||!out)return -1;*out=(oscar_network_request){0};oscar_header*h=&out->header;
  int frame=oscar_frame_decode(p,n,handles,0,1,h);if(frame)return frame;
- if(h->kind!=OSCAR_KIND_REQUEST)return 1;if(!oscar_network_rights_mask(h->protocol))return 1;
+ if(h->kind!=OSCAR_KIND_REQUEST)return 1;if(h->protocol!=OSCAR_PROTOCOL_NETWORK&&h->protocol!=OSCAR_PROTOCOL_TCP_STREAM&&h->protocol!=OSCAR_PROTOCOL_TCP_LISTENER)return 1;
  if(h->body_bytes<8)return -1;out->deadline=oscar_get64(p+32);const uint8_t*b=p+40;size_t size=h->body_bytes-8;size_t want_handles=0;
  if(h->protocol==OSCAR_PROTOCOL_NETWORK){
   if(h->ordinal==OSCAR_NETWORK_DESCRIBE){if(size)return -1;}
@@ -67,7 +70,7 @@ static inline int oscar_network_request_decode(const uint8_t*p,size_t n,size_t h
  return handles==want_handles?0:-1;
 }
 typedef struct {uint64_t subscription,key,revision;uint32_t signals;int32_t error;} oscar_network_readiness;
-static inline int oscar_network_readiness_valid(const oscar_network_readiness*e){return e&&e->subscription&&e->revision&&!(e->signals&~63u)&&e->error<=0&&((e->error!=0)==((e->signals&OSCAR_NET_ERROR)!=0));}
+static inline int oscar_network_readiness_valid(const oscar_network_readiness*e){return e&&e->subscription&&e->revision&&!(e->signals&~127u)&&e->error<=0&&((e->error!=0)==((e->signals&OSCAR_NET_ERROR)!=0));}
 static inline int oscar_network_event_encode(uint8_t*p,size_t n,const oscar_network_readiness*e){
  if(!p||n<64||!oscar_network_readiness_valid(e))return -1;oscar_header h={OSCAR_PROTOCOL_NETWORK_OBSERVER,1,OSCAR_KIND_EVENT,OSCAR_NETWORK_OBSERVER_READY,32,0,0,0};if(oscar_frame_encode(p,&h))return -1;
  oscar_put64(p+32,e->subscription);oscar_put64(p+40,e->key);oscar_put64(p+48,e->revision);oscar_put32(p+56,e->signals);oscar_put32(p+60,(uint32_t)e->error);return 0;
@@ -78,7 +81,7 @@ static inline int oscar_network_event_decode(const uint8_t*p,size_t n,size_t han
 }
 typedef struct {uint32_t rights,signals;int32_t error;uint64_t revision;uint32_t address_flags;oscar_endpoint local,peer;} oscar_network_info;
 static inline int oscar_network_info_decode(uint32_t protocol,const uint8_t*p,size_t n,oscar_network_info*out){
- if(!p||!out||n!=80||oscar_get32(p)||oscar_get32(p+76)||(oscar_get32(p+72)&~3u)||!oscar_network_signal_mask(protocol))return -1;
+ if(!p||!out||n!=80||oscar_get32(p)||oscar_get32(p+76)||(oscar_get32(p+72)&~3u)||(protocol!=OSCAR_PROTOCOL_TCP_STREAM&&protocol!=OSCAR_PROTOCOL_TCP_LISTENER&&protocol!=OSCAR_PROTOCOL_DATAGRAM_SOCKET))return -1;
  *out=(oscar_network_info){0};out->rights=oscar_get32(p+4);out->signals=oscar_get32(p+8);out->error=(int32_t)oscar_get32(p+12);out->revision=oscar_get64(p+16);out->address_flags=oscar_get32(p+72);
  if((out->rights&~oscar_network_rights_mask(protocol))||(out->signals&~oscar_network_signal_mask(protocol))||out->error>0||!out->revision||((out->error!=0)!=((out->signals&OSCAR_NET_ERROR)!=0)))return -1;
  if(out->address_flags&1){if(oscar_network_endpoint_decode(p+24,24,&out->local))return -1;}else for(size_t i=24;i<48;i++)if(p[i])return -1;

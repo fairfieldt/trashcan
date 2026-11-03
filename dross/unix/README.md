@@ -48,7 +48,7 @@ SSH starts. Logs are `target/qemu.log`, `target/ssh-pty.log` and
 Unix test init
   ├─ pcid → unix-nic (QEMU e1000, BAR + private VT-d domain)
   │              ↕ OETH frame channel
-  ├─ netd (Netstack3 IPv4/TCP, no PCI or system resource)
+  ├─ netd (Netstack3 IPv4/IPv6 TCP/UDP, no PCI or system resource)
   │              ↕ native factory, connection and listener capabilities
   ├─ native-net-test
   │              ↕ socket capability channels
@@ -97,14 +97,23 @@ report), and optionally `@service` (kernel's Linux socket factory endpoint).
 At least one Linux or native factory must be supplied. Optional values: `ip` (IPv4),
 `prefix` (0..32), `gateway` (IPv4). The default QEMU configuration is 10.0.2.15/24
 through 10.0.2.2. With an explicit `ip`, no gateway is assumed. Loopback covers
-127.0.0.0/8 and the configured local address. The service supports IPv4 TCP;
-UDP, IPv6, DHCP and name resolution remain future interfaces.
+127.0.0.0/8 and the configured local address. Native clients also have IPv6 TCP,
+IPv4/IPv6 UDP and a separate A/AAAA resolver. The Linux adapter retains IPv4 TCP.
+IPv6 supplies `::1`, a derived link-local address, and optional `ip6`, `prefix6`
+and `gateway6` configuration. Ethernet DAD completes before online READY; an
+offline link still permits loopback. Global addresses/routes are static; DHCP
+and router-advertisement configuration are not implemented.
 
-Optional `@native/connect`, `@native/listen` and `@native/network` handles seed
-connect-only, listen-only and combined native factories. Applications receive
+Optional `@native/connect`, `@native/listen`, `@native/network` and
+`@native/datagram` handles seed connect-only, listen-only, combined connect/listen,
+and UDP factories. The existing combined grant does not gain UDP implicitly.
+`@native/resolver` seeds a separate resolver and requires explicit `dns-server`
+configuration; `dns-port` defaults to 53 and `dns-scope` selects a link-local scope. Applications receive
 the other channel ends explicitly. The test supervisor delegates separate
 connect-only and listen-only factories to `native-net-test` before launching
-the Unix probe. It repeats the native fixture against a second service with a
+the Unix probe. The fixture also exercises packet metadata, IPv6 streams, DNS
+reply validation, CNAME lifetimes, TCP fallback and retained query budgets.
+It repeats the native fixture against a second service with a
 fake Ethernet link and no Linux factory or registration. Native networking does
 not require the compatibility subsystem. The daemon does not discover services
 or devices by name.

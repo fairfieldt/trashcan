@@ -166,10 +166,61 @@ normal watch. The service keeps at most one unsent event; historical events can
 still occupy the bounded underlying kernel queue if a raw client violates
 normal dequeue-before-rearm use.
 
-Inline operations carry at most 16 KiB. IPv6 addresses decode as values, but the
-current IPv4 service returns Unsupported for IPv6 operations. UDP, resolution and
-administration are separate future interfaces. See [networking contracts](../../NETWORKING.md)
-and the [C wire codec](../../protocol/include/oscar_network.h).
+Inline operations carry at most 16 KiB. IPv4 and IPv6 use explicit address
+families; IPv4-mapped IPv6 addresses are not translated. IPv6 link-local endpoints
+use interface scope 1 for Ethernet or 2 for loopback. See
+[networking contracts](../../NETWORKING.md) and the
+[C TCP codec](../../protocol/include/oscar_network.h).
+
+## Native UDP
+
+`Network::open_datagram(local, rights, deadline)` needs a factory with DATAGRAM
+authority and returns a fresh `datagram::DatagramSocket`. Request SEND, RECEIVE,
+OBSERVE and INFO independently through `datagram::rights`. A local port of zero
+selects an available port, reported by `socket.info(deadline)`.
+
+`send_to(destination, bytes, deadline)` accepts one whole packet or returns an
+error. A successful count equals `bytes.len()`, including zero; it promises local
+acceptance, not delivery. `MessageTooLarge` reports the current packet size limit.
+The inline ceiling is 16 KiB, and the interface MTU can impose a smaller limit.
+
+`receive(maximum, deadline)` consumes one packet or returns WouldBlock.
+`Datagram::bytes()` borrows its owned message. `metadata()` reports the sender,
+local destination, interface, original and copied lengths, and truncation. A
+zero-length packet is data. A zero maximum consumes a packet and reports its
+original length without copying bytes. `receive_wait` uses one temporary
+READABLE/ERROR watch and preserves the same absolute deadline. The explicit
+`observe`, `rearm`, and `cancel_observation` methods use the same one-shot rules as
+TCP. See the [C UDP codec](../../protocol/include/oscar_datagram.h).
+
+## Native DNS jobs
+
+Construct `resolver::Resolver` from a delegated resolver capability. It uses the
+service's configured recursive upstream; clients do not inherit a search path or
+an ambient resolver. `lookup(name, QueryType::A, rights, deadline)` admits a query
+immediately and returns an owned `ResolveQuery`. AAAA is a separate query type.
+Names contain ASCII LDH/underscore labels of 1..63 bytes. A final dot is optional;
+`.` selects the root. The maximum is 253 bytes, or 254 with a final dot.
+
+The lookup deadline bounds the query I/O. `collect(deadline)` is nonblocking and
+returns WouldBlock while pending. On success, `Answers` owns up to 16 addresses;
+`addresses()` yields endpoints with port and scope zero. Repeated collection
+keeps the original `expires_at_monotonic_ns()`. `ttl_seconds_remaining()` ages the
+minimum TTL across the CNAME chain and answer records. An expired result remains
+a historical answer with zero cache lifetime.
+
+`query.wait(deadline)` waits using a temporary COMPLETE/ERROR observer; a shorter
+event-wait timeout does not cancel the owned query. `Resolver::lookup_wait`
+combines admission and waiting and requires COLLECT and OBSERVE authority.
+`cancel(deadline)` acknowledges that I/O has stopped and retains terminal Canceled
+status for INFO and repeated COLLECT. `unobserve` cancels only the readiness watch.
+Dropping the query closes its control endpoint and cancels outstanding work.
+
+NameNotFound, NoData, TemporaryFailure and ResponseInvalid are distinct DNS results.
+Transport loss remains `ResolveError::Client(NetworkError::...)`. An uncertain or
+malformed control reply retires the client, and every received attachment is
+owned even when validation fails. See the
+[C DNS codec](../../protocol/include/oscar_resolver.h).
 
 ## Validation
 
@@ -179,16 +230,18 @@ From `dross/`:
 cargo test -p dross-rt --no-default-features --lib
 python3 protocol/tests/check.py
 python3 protocol/tests/check_network.py
+python3 protocol/tests/check_network_extensions.py
 SMP=1 PROFILE=release KERNEL_FEATURES=unix,audit-test ./run-qemu.sh
 SMP=4 PROFILE=release KERNEL_FEATURES=unix,audit-test ./run-qemu.sh
 SMP=4 PROFILE=release KERNEL_FEATURES=audit-test ./run-qemu.sh
 ```
 
-The current suite passes 84 native checks on one CPU and 89 on four CPUs, plus
+The SDK extension suite passes 91 native checks on one CPU and 96 on four CPUs, plus
 28 POSIX checks in each configuration. Tests include heap exhaustion before
 receive, failed-send ownership, bootstrap recovery after failed launch, native
 Rust and C directory clients, rights attenuation and provider failure cleanup.
-Host codecs agree on 267 framing/bootstrap cases and 1,534 networking cases. The network service hardware cohort also passes 89 native checks and the native
-TCP fixture on a physical Mac Pro 6,1 with 24 logical CPUs, followed by the full
+Host codecs agree on 267 framing/bootstrap cases, 1,534 TCP cases and 2,010 UDP/DNS
+cases. The service hardware cohort passes 96 native checks and the native
+TCP/UDP/DNS fixture on a physical Mac Pro 6,1 with 24 logical CPUs, followed by the full
 Unix and OpenSSH acceptance suite. See [network validation](../../netstack3/VALIDATION.md)
 for the exact cohort and remaining limits.

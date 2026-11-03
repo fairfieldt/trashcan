@@ -13,7 +13,104 @@ the same source revision for all imported directories. A fresh preparation in
 `/tmp/oscar-netstack3-clean-proof` also succeeded; the fetched source is replaced
 from fresh staging directories and cannot retain removed files from an older pin.
 
-## Service integration, 2026-11-03
+## UDP, DNS and IPv6 integration, 2026-11-03
+
+Native clients now use IPv4/IPv6 TCP and UDP plus separate bounded DNS query
+capabilities. The private Linux adapter retains IPv4 TCP. There are no new kernel
+syscalls or network-stack code in the kernel. IPv6 configuration is static,
+with derived link-local addresses, DAD, NDP and explicit scoped endpoints.
+
+| Check | Result |
+| --- | --- |
+| Pinned native engine and service release builds | Pass |
+| Native SDK tests under unchanged Oscar kernel | 91 native checks on one CPU, 96 on four; 28 POSIX checks in each cohort |
+| Independent C/Rust UDP/DNS codecs | 2,010 comparisons passed |
+| Existing TCP codecs and framing/bootstrap | 1,534 and 267 comparisons passed |
+| Runtime host tests | 4 passed |
+| DNS message parser | 6 host tests passed, including compression, hostile lengths, correlation, CNAME, TTL and bounded mutations |
+| Upstream UDP/filter and preserved host proofs | 372, 676 and 5 tests passed |
+| Native engine regression binaries | Legacy engine and new dual-stack suites passed |
+| Native forwarding resolver regression | A/AAAA, foreign sender/ID/name rejection, retry, partial TCP fallback, CNAME absolute expiry, negative results, cancel, timeout and admission passed |
+| Full Unix/native service/OpenSSH suite | Pass on one and four CPUs |
+
+The native engine suite includes DAD success and detected duplicate addresses,
+link restart, global/link-local NDP, IPv6 default gateway, TCP bytes/half-close,
+UDP packet metadata/peek/truncation/empty datagrams/connected filtering/overflow,
+`::1` and self-address delivery, scopes, minimum MTU, fragment rejection and a
+single 32-socket admission budget across both families and UDP. Interface metadata
+reports the core's destination-owning device, including self-address delivery.
+
+The daemon fixture checks new UDP/IPv6/DNS protocols against the shared service
+and against a second native-only daemon. The DNS server fixture runs over IPv4
+and then IPv6 loopback, checking wrong source/ID/name rejection, same-packet and
+follow-up CNAME lifetimes, UDP truncation/TCP fallback, cancellation, query expiry,
+eight retained canceled queries, admission failure and reclamation after close.
+TCP byte, ownership and observer-isolation regressions remain enabled.
+
+The final native dual-stack and legacy engine binaries are SHA-256
+`02e277f6db10f18e110185b773550014181c2ded16eef2acbd39a9ea1228508d`
+and `d06e45cb110896128f721493253abfe3deb9e912e4cc61fce5285cf1b0c3cdec`.
+The final service before staging strip is
+`1262e0103d7805d878f9e629bd5ba0e513161e22c235022e4cddb1cf5a57cc58`;
+the native fixture is
+`f8522079d0ce1a835e803c99d546370f0fb62a211f57aa631881fc0a04bffb2e`.
+QEMU logs, input manifests, host parser results and build commands are archived
+under repository-root `results/dross/network-expanded-20261103/` outside this
+branch. The native test image passed 96 OS checks and all three networking
+regression executables. Hardware records are separate below.
+
+The one-CPU SSH sample measured 0.80 MiB/s upload and 5.25 MiB/s download; four
+CPUs measured 0.77 and 6.87 MiB/s. These TCG samples are functional observations,
+not hardware throughput or a controlled before/after comparison.
+
+The same frozen service passed a full physical run on enlight: 96 native checks,
+the new native fixture, 49 Unix probes and all OpenSSH cases. The 8 MiB sample
+measured 2.28 MiB/s upload and 10.79 MiB/s download. No GPU workload ran; GPU
+clocks do not apply. Evidence is under
+`results/dross/enlight-netstack3-dualstack-20261103/`.
+
+A second physical boot tested against an independent Linux peer over the real
+Broadcom NIC: TCP4/TCP6 exact 16,403-byte data with half-close/EOF, UDP4/UDP6 exact
+1,007-byte and empty datagrams with source/interface checks, A/AAAA DNS over
+IPv6 UDP, and truncated-UDP fallback to IPv6 TCP. The external fixture returned
+zero and reported complete success. The peer bound only its existing tailnet
+IPv4/IPv6 addresses; the test realm routed through that peer's physical on-link
+gateways. No Linux interface, route or security setting was changed. Captured
+peer requests confirm the physical data path separately from the local tests.
+
+The full image SHA-256 is
+`ab5c01af37fd31971be194bdf95986de18d455437b1d8caa8f2dc85587f2a6c1`.
+The completed external image is
+`4894a6a07eb3647b7aa75dbb5c35294119f3398fa60998e2455ea80cf5c88ab5`.
+Both embed the same stripped daemon
+`faaaa049157b900d065b7152a3876f90bd1286e5b55a367b0f177c5a82670f08`
+and native fixture
+`25d5f59ba63e7501a1c05efb22c191550655cf5dcb8384580dcb8cab8a5e0014`.
+An earlier external boot lost final log lines after the native-only worker and
+NIC logger exited. The repeat kept a supervisor-owned service anchor alive for
+log flushing; the client grants and runtime binaries were unchanged. That
+incomplete-capture attempt is retained separately and is not the final proof.
+
+Both physical runs returned to normal Linux with the original BootOrder and
+no pending BootNext. Temporary EFI entries/directories and uploads were removed,
+the netlog receiver and independent peer were stopped and removed, and lease 205
+was released. The peer's IPv4/IPv6 TCP/UDP ports were confirmed unbound.
+
+The QEMU e1000 driver now accepts Ethernet multicast for NDP and DAD, matching
+Broadcom Serve mode's existing multicast reception. The subsequent one-CPU full
+service/OpenSSH run passed; its functional sample was 0.75/4.80 MiB/s. This is a
+correctness setting, not an optional performance switch.
+
+Resource limits remain explicit: 32 admitted sockets, UDP receive queues of
+16 packets/32 KiB, eight retained DNS jobs, and 1,024 conntrack tuple entries per
+family. Dual-stack mode can therefore retain 2,048 tuple entries. Neighbor state
+and internal packet retention also have independent per-family bounds and can
+still exhaust the finite worker heap. This is not a complete graceful-OOM or
+per-client quota guarantee. IPv6 multicast application sockets, IP fragmentation,
+RA/SLAAC/DHCP configuration, DNSSEC validation and automatic service recovery are
+outside this implementation.
+
+## Initial IPv4/TCP service integration, 2026-11-03
 
 The service replaces the smoltcp implementation. The binary remains named
 `unix-netd` for existing boot configurations; it is built from package

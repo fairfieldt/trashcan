@@ -22,6 +22,8 @@ pub fn errno(error: NetError) -> i64 {
         NetError::NotConnected => 107,
         NetError::BrokenPipe => 32,
         NetError::BadSocket => 9,
+        NetError::MessageTooLarge => 90,
+        NetError::Unsupported => 95,
     }
 }
 fn endpoint(b: &[u8]) -> Result<Endpoint, NetError> {

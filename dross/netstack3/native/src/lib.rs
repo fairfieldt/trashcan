@@ -1,12 +1,12 @@
-//! Off-path Oscar userspace bindings for Netstack3. No Fuchsia testutils.
-//!
-//! This is a finite TCP proof worker, not a public networking service. It does
-//! not register as netd or use a hardware NIC. Queues and TCP payloads are
-//! bounded; infallible core allocations can still exhaust the process heap.
+//! Oscar userspace bindings for the pinned Netstack3 core, without testutils.
+//! Production and simulated-link engines share real locks and native entropy.
+//! Binding queues, datagrams, timers and TCP payloads are bounded; infallible
+//! core allocations can still exhaust the worker account/heap.
 #![no_std]
 #![recursion_limit = "256"]
 extern crate alloc;
 pub mod buffers;
+pub mod datagrams;
 pub mod runner;
 mod sync;
 pub mod time;
@@ -121,6 +121,7 @@ struct State {
     events: AtomicU64,
     wakeups: AtomicU64,
     failed: AtomicBool,
+    ipv6_dad_failed: AtomicBool,
     rx_pending: AtomicBool,
 }
 
@@ -149,6 +150,7 @@ impl Bindings {
                 events: AtomicU64::new(0),
                 wakeups: AtomicU64::new(0),
                 failed: AtomicBool::new(false),
+                ipv6_dad_failed: AtomicBool::new(false),
                 rx_pending: AtomicBool::new(false),
             }),
             settings: TcpSettings {
@@ -182,6 +184,12 @@ impl Bindings {
     }
     pub fn pop_frame(&mut self) -> Option<FrameBytes> {
         self.state.frames.lock().pop_front()
+    }
+    pub fn mark_failed(&self) {
+        self.state.failed.store(true, Ordering::Release);
+    }
+    pub fn ipv6_dad_failed(&self) -> bool {
+        self.state.ipv6_dad_failed.load(Ordering::Acquire)
     }
     pub fn failed(&self) -> bool {
         self.state.failed.load(Ordering::Acquire)
@@ -332,9 +340,23 @@ impl SettingsContext<TcpSettings> for Bindings {
         &self.settings
     }
 }
-impl<T> EventContext<T> for Bindings {
-    fn on_event(&mut self, _event: T) {
+impl<T: 'static> EventContext<T> for Bindings {
+    fn on_event(&mut self, event: T) {
         self.state.events.fetch_add(1, Ordering::Relaxed);
+        // Keep a bounded diagnostic flag, not a queue of core-owned device IDs.
+        // All core events are owned; Any avoids separate overlapping blanket
+        // EventContext implementations while recognizing this precise event.
+        use netstack3_ip::device::{AddressRemovedReason, IpDeviceEvent};
+        if let Some(IpDeviceEvent::AddressRemoved {
+            reason: AddressRemovedReason::DadFailed | AddressRemovedReason::Forfeited,
+            ..
+        }) = (&event as &dyn core::any::Any).downcast_ref::<IpDeviceEvent<
+            DeviceId<Self>,
+            net_types::ip::Ipv6,
+            Instant,
+        >>() {
+            self.state.ipv6_dad_failed.store(true, Ordering::Release);
+        }
     }
 }
 impl ReferenceNotifiers for Bindings {
@@ -526,24 +548,26 @@ impl SocketOpsFilterBindingContext<DeviceId<Self>> for Bindings {
     }
 }
 impl UdpBindingsTypes for Bindings {
-    type ExternalData<I: Ip> = ();
+    type ExternalData<I: Ip> = datagrams::UdpRx<I>;
     type SendToken = ();
 }
 impl<I: netstack3_core::IpExt> UdpReceiveBindingsContext<I, DeviceId<Self>> for Bindings {
     fn receive_udp(
         &mut self,
-        _id: &UdpSocketId<I, WeakDeviceId<Self>, Self>,
-        _device: &DeviceId<Self>,
-        _meta: UdpPacketMeta<I>,
-        _body: &[u8],
+        id: &UdpSocketId<I, WeakDeviceId<Self>, Self>,
+        device: &DeviceId<Self>,
+        meta: UdpPacketMeta<I>,
+        body: &[u8],
     ) -> Result<(), ReceiveUdpError> {
-        Err(ReceiveUdpError::QueueFull)
+        id.external_data()
+            .push(meta, device.bindings_id().0.get() as u32, body)
     }
     fn on_socket_error(
         &mut self,
-        _id: &UdpSocketId<I, WeakDeviceId<Self>, Self>,
-        _error: netstack3_datagram::PendingDatagramSocketError,
+        id: &UdpSocketId<I, WeakDeviceId<Self>, Self>,
+        error: netstack3_datagram::PendingDatagramSocketError,
     ) {
+        id.external_data().set_error(error);
     }
 }
 impl IcmpEchoBindingsTypes for Bindings {

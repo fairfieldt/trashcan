@@ -14,9 +14,12 @@ use dross_rt::{
     },
     sys,
 };
-use oscar_netstack3_engine::{Endpoint, Error as NetError, Shutdown};
+use oscar_netstack3_engine::{
+    Endpoint, Endpoint6, Error as NetError, Family, IpEndpoint, Shutdown,
+};
 const STREAM_ALL: u32 = 127;
 const LISTENER_ALL: u32 = 7;
+const DATAGRAM_ALL: u32 = 15;
 pub fn status(e: NetError) -> i32 {
     match e {
         NetError::WouldBlock => STATUS_WOULD_BLOCK,
@@ -30,15 +33,17 @@ pub fn status(e: NetError) -> i32 {
         NetError::NoResources => STATUS_LIMIT,
         NetError::NotConnected => STATUS_NOT_CONNECTED,
         NetError::BrokenPipe => STATUS_CLOSED,
+        NetError::MessageTooLarge => STATUS_MESSAGE_TOO_LARGE,
+        NetError::Unsupported => STATUS_UNSUPPORTED,
     }
 }
-fn u32at(b: &[u8], at: usize) -> u32 {
+pub(crate) fn u32at(b: &[u8], at: usize) -> u32 {
     u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
 }
-fn u64at(b: &[u8], at: usize) -> u64 {
+pub(crate) fn u64at(b: &[u8], at: usize) -> u64 {
     u64::from_le_bytes(b[at..at + 8].try_into().unwrap())
 }
-fn reply(h: Header, body: usize, handles: usize) -> Result<Message, Error> {
+pub(crate) fn reply(h: Header, body: usize, handles: usize) -> Result<Message, Error> {
     let mut m = message_with_space(32 + body)?;
     Header::new(
         h.protocol,
@@ -54,22 +59,46 @@ fn reply(h: Header, body: usize, handles: usize) -> Result<Message, Error> {
     .map_err(|_| Error::InvalidArgs)?;
     Ok(m)
 }
-fn error(h: Header, value: i32) -> Result<Message, Error> {
+pub(crate) fn error(h: Header, value: i32) -> Result<Message, Error> {
     let mut m = reply(h, 4, 0)?;
     m.bytes_mut()[32..].copy_from_slice(&value.to_le_bytes());
     Ok(m)
 }
-fn decode_endpoint(b: &[u8]) -> Result<Endpoint, i32> {
-    let endpoint = wire::Endpoint::decode(b).map_err(|_| STATUS_MALFORMED)?;
+pub(crate) fn to_engine(endpoint: wire::Endpoint) -> IpEndpoint {
     match endpoint.address {
-        wire::Address::V4(address) => Ok(Endpoint {
+        wire::Address::V4(address) => IpEndpoint::V4(Endpoint {
             address,
             port: endpoint.port,
         }),
-        wire::Address::V6 { .. } => Err(STATUS_UNSUPPORTED),
+        wire::Address::V6 { octets, scope } => IpEndpoint::V6(Endpoint6 {
+            address: octets,
+            port: endpoint.port,
+            scope_id: scope,
+        }),
     }
 }
-fn valid_request(m: &Message, protocol: u32, last: &mut u64) -> Result<Header, Option<Header>> {
+pub(crate) fn to_wire(endpoint: IpEndpoint) -> wire::Endpoint {
+    match endpoint {
+        IpEndpoint::V4(e) => wire::Endpoint::v4(e.address, e.port),
+        IpEndpoint::V6(e) => wire::Endpoint::v6(e.address, e.scope_id, e.port),
+    }
+}
+fn family(e: IpEndpoint) -> Family {
+    match e {
+        IpEndpoint::V4(_) => Family::Ipv4,
+        IpEndpoint::V6(_) => Family::Ipv6,
+    }
+}
+fn decode_endpoint(b: &[u8]) -> Result<IpEndpoint, i32> {
+    wire::Endpoint::decode(b)
+        .map(to_engine)
+        .map_err(|_| STATUS_MALFORMED)
+}
+pub(crate) fn valid_request(
+    m: &Message,
+    protocol: u32,
+    last: &mut u64,
+) -> Result<Header, Option<Header>> {
     let f = Frame::parse(m.bytes(), m.handle_count()).map_err(|_| None)?;
     let h = f.header;
     if h.kind != KIND_REQUEST || h.request_id <= *last {
@@ -81,9 +110,21 @@ fn valid_request(m: &Message, protocol: u32, last: &mut u64) -> Result<Header, O
     }
     Ok(h)
 }
-fn body_error(m: &Message) -> Option<i32> {
-    match wire::decode_request(m.bytes(), m.handle_count()) {
-        Ok(_) => None,
+pub(crate) fn body_error(m: &Message) -> Option<i32> {
+    let datagram = Frame::parse(m.bytes(), m.handle_count())
+        .ok()
+        .is_some_and(|f| {
+            f.header.protocol == PROTOCOL_DATAGRAM_SOCKET
+                || (f.header.protocol == PROTOCOL_NETWORK
+                    && f.header.ordinal == NETWORK_OPEN_DATAGRAM)
+        });
+    let decoded = if datagram {
+        dross_rt::protocol::datagram::decode_request(m.bytes(), m.handle_count()).map(|_| ())
+    } else {
+        wire::decode_request(m.bytes(), m.handle_count()).map(|_| ())
+    };
+    match decoded {
+        Ok(()) => None,
         Err(ProtocolError::Unsupported) => Some(STATUS_UNSUPPORTED),
         Err(ProtocolError::Limit | ProtocolError::Allocation) => Some(STATUS_LIMIT),
         Err(_) => Some(STATUS_MALFORMED),
@@ -91,9 +132,10 @@ fn body_error(m: &Message) -> Option<i32> {
 }
 fn known(protocol: u32, op: u32) -> bool {
     match protocol {
-        PROTOCOL_NETWORK => op <= 2,
+        PROTOCOL_NETWORK => op <= 3,
         PROTOCOL_TCP_STREAM => (1..=9).contains(&op),
         PROTOCOL_TCP_LISTENER => [1, 4, 5, 6, 7].contains(&op),
+        PROTOCOL_DATAGRAM_SOCKET => [1, 2, 4, 5, 6, 7].contains(&op),
         _ => false,
     }
 }
@@ -103,9 +145,14 @@ fn prepare_channel(
     if d.connections.len() + usize::from(d.processing) >= MAX_CONNECTIONS {
         return Err(STATUS_LIMIT);
     }
+    prepare_transport(d.queue.as_handle().as_raw())
+}
+pub(crate) fn prepare_transport(
+    queue: Handle,
+) -> Result<(OwnedHandle, OwnedHandle, crate::wait::Registration), i32> {
     let (server, client) = Channel::pair().map_err(|_| STATUS_LIMIT)?;
     let wait = crate::wait::Registration::new(
-        d.queue.as_handle().as_raw(),
+        queue,
         server.as_handle().as_untyped(),
         dross_abi::event::READABLE | dross_abi::event::PEER_CLOSED,
     )
@@ -157,10 +204,15 @@ fn factory(d: &mut Daemon, f: &mut Factory, m: Message) {
             let mut out = reply(h, 16, 0).map_err(|_| STATUS_LIMIT)?;
             out.bytes_mut()[36..40].copy_from_slice(&f.rights.to_le_bytes());
             out.bytes_mut()[40..44].copy_from_slice(&(MAX_NETWORK_BYTES as u32).to_le_bytes());
-            out.bytes_mut()[44..48].copy_from_slice(&1u32.to_le_bytes());
+            out.bytes_mut()[44..48].copy_from_slice(&3u32.to_le_bytes());
             return Ok(out);
         }
-        let need = if h.ordinal == NETWORK_CONNECT { 1 } else { 2 };
+        let need = match h.ordinal {
+            NETWORK_CONNECT => 1,
+            NETWORK_LISTEN => 2,
+            NETWORK_OPEN_DATAGRAM => 4,
+            _ => return Err(STATUS_UNSUPPORTED),
+        };
         if f.rights & need == 0 {
             return Err(STATUS_DENIED);
         }
@@ -171,10 +223,10 @@ fn factory(d: &mut Daemon, f: &mut Factory, m: Message) {
         } else {
             0
         };
-        let mask = if h.ordinal == NETWORK_CONNECT {
-            STREAM_ALL
-        } else {
-            LISTENER_ALL
+        let mask = match h.ordinal {
+            NETWORK_CONNECT => STREAM_ALL,
+            NETWORK_LISTEN => LISTENER_ALL,
+            _ => DATAGRAM_ALL,
         };
         if rights & !mask != 0 || h.ordinal == NETWORK_LISTEN && accepted & !STREAM_ALL != 0 {
             return Err(STATUS_DENIED);
@@ -183,18 +235,25 @@ fn factory(d: &mut Daemon, f: &mut Factory, m: Message) {
         let mut out = reply(h, 8, 1).map_err(|_| STATUS_LIMIT)?;
         out.try_push_handle(client).map_err(|_| STATUS_LIMIT)?;
         out.bytes_mut()[36..40].copy_from_slice(&rights.to_le_bytes());
-        let socket = d.engine.create().map_err(status)?;
+        let socket = if h.ordinal == NETWORK_OPEN_DATAGRAM {
+            d.engine.create_udp(family(ep))
+        } else {
+            d.engine.create_tcp(family(ep))
+        }
+        .map_err(status)?;
         let setup = if h.ordinal == NETWORK_CONNECT {
-            match d.engine.connect(socket, ep) {
+            match d.engine.connect_ip(socket, ep) {
                 Ok(()) => Ok(false),
                 Err(NetError::WouldBlock) => Ok(true),
                 Err(e) => Err(e),
             }
-        } else {
+        } else if h.ordinal == NETWORK_LISTEN {
             d.engine
-                .bind(socket, ep)
+                .bind_ip(socket, ep)
                 .and_then(|()| d.engine.listen(socket, u32at(b, 40) as usize))
                 .map(|()| false)
+        } else {
+            d.engine.udp_bind(socket, ep).map(|()| false)
         };
         let connecting = match setup {
             Ok(c) => c,
@@ -203,10 +262,10 @@ fn factory(d: &mut Daemon, f: &mut Factory, m: Message) {
                 return Err(status(e));
             }
         };
-        let role = if h.ordinal == NETWORK_CONNECT {
-            Role::Stream { rights }
-        } else {
-            Role::Listener { rights, accepted }
+        let role = match h.ordinal {
+            NETWORK_CONNECT => Role::Stream { rights },
+            NETWORK_LISTEN => Role::Listener { rights, accepted },
+            _ => Role::Datagram { rights },
         };
         let mut c = Connection::new(server, socket, role, wait);
         c.connecting = connecting;
@@ -251,78 +310,26 @@ pub fn factories(d: &mut Daemon) -> Result<(), Error> {
     Ok(())
 }
 
-pub struct Observer {
-    sink: OwnedHandle,
-    id: u64,
-    key: u64,
-    mask: u32,
-    armed: bool,
-    pending: Option<[u8; 64]>,
-    wait: Option<crate::wait::Registration>,
-}
-impl Observer {
-    pub fn wait(&mut self, queue: Handle, delivered: Option<u64>) -> Result<(), Error> {
-        use dross_abi::event::{PEER_CLOSED, READABLE, WRITABLE};
-        let signals = READABLE | PEER_CLOSED | if self.pending.is_some() { WRITABLE } else { 0 };
-        crate::wait::Registration::update(
-            &mut self.wait,
-            queue,
-            self.sink.as_handle(),
-            signals,
-            delivered,
-        )
-    }
-}
-fn event(observer: &Observer, c: &Connection) -> [u8; 64] {
-    wire::encode_event(wire::Readiness {
-        subscription: observer.id,
-        key: observer.key,
+pub use crate::observer::Observer;
+pub fn view(c: &Connection) -> crate::observer::View {
+    crate::observer::View {
         revision: c.revision,
         signals: c.snapshot.signals,
         error: c.snapshot.error,
-    })
-    .expect("validated daemon snapshot")
+    }
 }
 pub fn notify(c: &mut Connection) {
-    let Some(mut o) = c.observer.take() else {
-        return;
-    };
-    // Event receiver is a channel peer, not an RPC endpoint. Any reverse traffic
-    // retires the watch; every attached capability is closed before it is dropped.
-    let mut bytes = [0; 1];
-    let mut handles = [Handle(0); 64];
-    let closed = match sys::channel_read(o.sink.as_handle().as_raw(), &mut bytes, &mut handles, 0) {
-        Err(Error::ShouldWait | Error::TimedOut) => false,
-        Ok((_, nh)) => {
-            for h in &handles[..nh] {
-                let _ = sys::close(*h);
-            }
-            true
-        }
-        Err(_) => true,
-    };
-    if closed {
-        return;
-    }
-    if o.armed && c.snapshot.signals & o.mask != 0 {
-        o.pending = Some(event(&o, c));
-        o.armed = false;
-    }
-    if let Some(bytes) = o.pending {
-        match sys::channel_write(o.sink.as_handle().as_raw(), &bytes, &[]) {
-            Ok(()) => o.pending = None,
-            Err(Error::ShouldWait) => {}
-            Err(_) => return,
-        }
-    }
-    c.observer = Some(o);
+    let state = view(c);
+    crate::observer::notify(&mut c.observer, state);
 }
 fn info(h: Header, c: &Connection) -> Result<Message, i32> {
     let rights = match c.role {
-        Role::Stream { rights } | Role::Listener { rights, .. } => rights,
+        Role::Stream { rights } | Role::Listener { rights, .. } | Role::Datagram { rights } => {
+            rights
+        }
         _ => 0,
     };
-    let endpoint = |e: Endpoint| wire::Endpoint::v4(e.address, e.port);
+    let endpoint = to_wire;
     let body = wire::encode_info(
         h.protocol,
         wire::Info {
@@ -340,10 +347,10 @@ fn info(h: Header, c: &Connection) -> Result<Message, i32> {
     Ok(m)
 }
 pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
-    let protocol = if matches!(c.role, Role::Listener { .. }) {
-        PROTOCOL_TCP_LISTENER
-    } else {
-        PROTOCOL_TCP_STREAM
+    let protocol = match c.role {
+        Role::Listener { .. } => PROTOCOL_TCP_LISTENER,
+        Role::Datagram { .. } => PROTOCOL_DATAGRAM_SOCKET,
+        _ => PROTOCOL_TCP_STREAM,
     };
     let h = match valid_request(&m, protocol, &mut c.last_id) {
         Ok(h) => h,
@@ -385,11 +392,20 @@ pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
             return Err(STATUS_TIMED_OUT);
         }
         let rights = match c.role {
-            Role::Stream { rights } | Role::Listener { rights, .. } => rights,
+            Role::Stream { rights } | Role::Listener { rights, .. } | Role::Datagram { rights } => {
+                rights
+            }
             _ => 0,
         };
         let listener = matches!(c.role, Role::Listener { .. });
-        let need = if listener {
+        let need = if matches!(c.role, Role::Datagram { .. }) {
+            match h.ordinal {
+                1 => 1,
+                2 => 2,
+                4 => 8,
+                _ => 4,
+            }
+        } else if listener {
             match h.ordinal {
                 1 => 1,
                 4 => 4,
@@ -409,6 +425,9 @@ pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
         if rights & need == 0 {
             return Err(STATUS_DENIED);
         }
+        if matches!(c.role, Role::Datagram { .. }) && matches!(h.ordinal, 1 | 2) {
+            return datagram(d, c, &m, h);
+        }
         match h.ordinal {
             TCP_STREAM_INFO => info(h, c),
             TCP_STREAM_OBSERVE => {
@@ -417,10 +436,10 @@ pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
                     return Err(STATUS_BAD_STATE);
                 }
                 let mask = u32at(b, 8);
-                let allowed = if listener {
-                    8 | 16 | 32
-                } else {
-                    1 | 2 | 4 | 16 | 32
+                let allowed = match c.role {
+                    Role::Listener { .. } => 8 | 16 | 32,
+                    Role::Datagram { .. } => 1 | 2 | 16 | 32,
+                    _ => 1 | 2 | 4 | 16 | 32,
                 };
                 if mask == 0 || mask & !allowed != 0 {
                     return Err(STATUS_MALFORMED);
@@ -429,52 +448,24 @@ pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
                 let mut out = reply(h, 16, 0).map_err(|_| STATUS_LIMIT)?;
                 let id = d.observer_id().map_err(|_| STATUS_LIMIT)?;
                 let sink = m.take_handle(0).ok_or(STATUS_MALFORMED)?;
-                let wait = crate::wait::Registration::new(
-                    d.queue.as_handle().as_raw(),
-                    sink.as_handle(),
-                    dross_abi::event::READABLE | dross_abi::event::PEER_CLOSED,
-                )
-                .map_err(|e| match e {
-                    Error::NoMemory | Error::NoResources => STATUS_LIMIT,
-                    Error::PeerClosed => STATUS_CLOSED,
-                    _ => STATUS_MALFORMED,
-                })?;
+                let observer =
+                    Observer::register(sink, d.queue.as_handle().as_raw(), id, key, mask)?;
                 out.bytes_mut()[40..48].copy_from_slice(&id.to_le_bytes());
-                c.observer = Some(Observer {
-                    sink,
-                    id,
-                    key,
-                    mask,
-                    armed: true,
-                    pending: None,
-                    wait: Some(wait),
-                });
+                c.observer = Some(observer);
                 Ok(out)
             }
             TCP_STREAM_REARM => {
                 let id = u64at(b, 8);
                 let revision = u64at(b, 16);
                 let out = reply(h, 4, 0).map_err(|_| STATUS_LIMIT)?;
-                let Some(o) = c.observer.as_ref() else {
-                    return Err(STATUS_BAD_STATE);
-                };
-                if o.id != id || o.pending.is_some() || o.armed {
-                    return Err(STATUS_BAD_STATE);
-                }
-                let immediate = c.snapshot.signals & o.mask != 0 || revision != c.revision;
-                let pending = if immediate { Some(event(o, c)) } else { None };
-                let o = c.observer.as_mut().unwrap();
-                o.pending = pending;
-                o.armed = !immediate;
+                let state = view(c);
+                crate::observer::rearm(&mut c.observer, id, revision, state)?;
                 Ok(out)
             }
             TCP_STREAM_CANCEL => {
                 let id = u64at(b, 8);
                 let out = reply(h, 4, 0).map_err(|_| STATUS_LIMIT)?;
-                if c.observer.as_ref().is_none_or(|o| o.id != id) {
-                    return Err(STATUS_BAD_STATE);
-                }
-                c.observer.take();
+                crate::observer::cancel(&mut c.observer, id)?;
                 Ok(out)
             }
             TCP_LISTENER_ACCEPT if listener => {
@@ -490,7 +481,7 @@ pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
                 let mut out = reply(h, 8, 1).map_err(|_| STATUS_LIMIT)?;
                 out.try_push_handle(client).map_err(|_| STATUS_LIMIT)?;
                 out.bytes_mut()[36..40].copy_from_slice(&requested.to_le_bytes());
-                let (socket, _) = d.engine.accept(c.socket).map_err(status)?;
+                let (socket, _) = d.engine.accept_ip(c.socket).map_err(status)?;
                 let mut child =
                     Connection::new(server, socket, Role::Stream { rights: requested }, wait);
                 child.refresh(&mut d.engine);
@@ -563,4 +554,50 @@ pub fn handle(d: &mut Daemon, c: &mut Connection, mut m: Message) {
             fallback
         }
     });
+}
+
+fn datagram(d: &mut Daemon, c: &mut Connection, m: &Message, h: Header) -> Result<Message, i32> {
+    use dross_rt::protocol::datagram as udp;
+    let request = udp::decode_request(m.bytes(), m.handle_count()).map_err(|_| STATUS_MALFORMED)?;
+    match request.operation {
+        udp::Operation::SendTo { destination, bytes } => {
+            let mut out = reply(h, 8, 0).map_err(|_| STATUS_LIMIT)?;
+            let count = d
+                .engine
+                .send_to(c.socket, bytes, Some(to_engine(destination)))
+                .map_err(status)?;
+            if count != bytes.len() {
+                return Err(STATUS_BAD_STATE);
+            }
+            out.bytes_mut()[36..40].copy_from_slice(&(count as u32).to_le_bytes());
+            Ok(out)
+        }
+        udp::Operation::Receive { maximum } => {
+            let max = maximum as usize;
+            let mut out = reply(h, udp::RECEIVE_HEADER_BYTES + max, 0).map_err(|_| STATUS_LIMIT)?;
+            let read = d
+                .engine
+                .recv_from(
+                    c.socket,
+                    &mut out.bytes_mut()[32 + udp::RECEIVE_HEADER_BYTES..],
+                    false,
+                )
+                .map_err(status)?;
+            let metadata = udp::encode_metadata(udp::Metadata {
+                sender: to_wire(read.sender),
+                local: to_wire(read.local),
+                interface: read.interface,
+                original_len: read.original_len as u32,
+                copied_len: read.copied as u32,
+                truncated: read.truncated,
+            })
+            .map_err(|_| STATUS_BAD_STATE)?;
+            out.bytes_mut()[32..32 + udp::RECEIVE_HEADER_BYTES].copy_from_slice(&metadata);
+            out.truncate_bytes(32 + udp::RECEIVE_HEADER_BYTES + read.copied);
+            out.bytes_mut()[12..16]
+                .copy_from_slice(&((udp::RECEIVE_HEADER_BYTES + read.copied) as u32).to_le_bytes());
+            Ok(out)
+        }
+        _ => Err(STATUS_UNSUPPORTED),
+    }
 }

@@ -106,6 +106,8 @@ not retract an OFFER already delivered to a provider.
 ## Native networking
 
 NETWORK, TCP_STREAM, TCP_LISTENER and NETWORK_OBSERVER use major version 1.
+DATAGRAM_SOCKET, RESOLVER and RESOLVE_QUERY also use major version 1. The TCP
+message layouts remain unchanged. UDP and resolver grants are explicit.
 Every request carries an absolute monotonic deadline. Factory grants and stream
 operation rights are separate from channel permissions. Read replies distinguish
 data from EOF; write replies count bytes accepted into the local TCP buffer.
@@ -116,6 +118,13 @@ partial I/O and failure behavior. The Rust codec and clients are in
 `include/oscar_network.h`. Their fixed-width fields and transferred handles are
 the language boundary. They do not require a Rust runtime in the caller.
 
+`datagram.rs` and `include/oscar_datagram.h` preserve packet boundaries, original
+length, truncation, sender, destination and interface metadata, including empty
+packets. `resolver.rs` and `include/oscar_resolver.h` define asynchronous A/AAAA
+jobs with cancellation, fixed expiry and the common observer format. DNS packets
+themselves use standard network byte order in the separate `netstack3/dns-wire`
+crate; they are not native service frames.
+
 ## Validation
 
 From the repository root:
@@ -124,6 +133,7 @@ From the repository root:
 python3 dross/protocol/generate.py --check
 python3 dross/protocol/tests/check.py
 python3 dross/protocol/tests/check_network.py
+python3 dross/protocol/tests/check_network_extensions.py
 ```
 
 The host checks compare C and Rust bytes and decode results, including truncated

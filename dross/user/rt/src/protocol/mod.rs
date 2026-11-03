@@ -22,3 +22,6 @@ impl From<frame::FrameError> for ProtocolError {
 pub(crate) fn valid_name(s: &str) -> bool {
     !s.is_empty() && s.len() <= schema::MAX_NAME_BYTES && !s.chars().any(char::is_control)
 }
+
+pub mod datagram;
+pub mod resolver;

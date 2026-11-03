@@ -6,6 +6,8 @@ extern crate alloc;
 mod ethernet;
 mod legacy;
 mod native;
+mod observer;
+mod query;
 mod seed;
 mod service;
 mod wait;

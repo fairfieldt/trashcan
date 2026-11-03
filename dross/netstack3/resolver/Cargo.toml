@@ -1,0 +1,16 @@
+[package]
+name = "oscar-resolver"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+oscar-dns-wire = { path = "../dns-wire" }
+oscar-netstack3-engine = { path = "../engine" }
+dross-rt = { path = "../../user/rt" }
+
+[[bin]]
+name = "resolver-test"
+path = "src/bin/resolver-test.rs"
+test = false
+bench = false

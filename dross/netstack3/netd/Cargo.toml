@@ -12,6 +12,8 @@ bench = false
 
 [dependencies]
 oscar-netstack3-engine = { path = "../engine" }
+oscar-resolver = { path = "../resolver" }
+oscar-dns-wire = { path = "../dns-wire" }
 oscar-ethernet = { path = "../../unix/ethernet" }
 dross-rt = { path = "../../user/rt" }
 dross-abi = { path = "../../abi" }

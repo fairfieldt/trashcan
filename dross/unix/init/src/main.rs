@@ -40,6 +40,8 @@ fn main(handle: Handle) -> i32 {
     let (driver, ethernet) = sys::channel_create().unwrap();
     let (connect_factory, connect_client) = sys::channel_create().unwrap();
     let (listen_factory, listen_client) = sys::channel_create().unwrap();
+    let (datagram_factory, datagram_client) = sys::channel_create().unwrap();
+    let (resolver_factory, resolver_client) = sys::channel_create().unwrap();
     let db = Builder::default()
         .handle("pci", pci_client)
         .handle("ethernet", driver);
@@ -49,7 +51,11 @@ fn main(handle: Handle) -> i32 {
         .handle("service", daemon)
         .handle("ready", ready)
         .handle("native/connect", connect_factory)
-        .handle("native/listen", listen_factory);
+        .handle("native/listen", listen_factory)
+        .handle("native/datagram", datagram_factory)
+        .handle("native/resolver", resolver_factory)
+        .value("dns-server", "127.0.0.1")
+        .value("dns-port", "53053");
     bootstrap::spawn(b.handle("module/unix-netd").unwrap(), "netd", nb, u64::MAX).unwrap();
     let mut bytes = [0; 64];
     sys::channel_read(report, &mut bytes, &mut [], sys::after_ms(10000)).expect("netd ready");
@@ -59,11 +65,15 @@ fn main(handle: Handle) -> i32 {
         "native-net-test",
         Builder::default()
             .handle("connect", connect_client)
-            .handle("listen", listen_client),
+            .handle("listen", listen_client)
+            .handle("datagram", datagram_client)
+            .handle("resolver", resolver_client)
+            .value("dns-server", "127.0.0.1")
+            .value("dns-port", "53053"),
         u64::MAX,
     )
     .expect("spawn native network test");
-    assert_eq!(sys::process_wait(test, sys::after_ms(30000)), Ok(0));
+    assert_eq!(sys::process_wait(test, sys::after_ms(45000)), Ok(0));
     let _ = sys::close(test);
     println!("native networking passed");
     // A second process receives native factories and a fake OETH link only:
@@ -76,6 +86,8 @@ fn main(handle: Handle) -> i32 {
     let (native_report, native_ready) = sys::channel_create().unwrap();
     let (connect_factory, connect_client) = sys::channel_create().unwrap();
     let (listen_factory, listen_client) = sys::channel_create().unwrap();
+    let (datagram_factory, datagram_client) = sys::channel_create().unwrap();
+    let (resolver_factory, resolver_client) = sys::channel_create().unwrap();
     let native_service = bootstrap::spawn(
         b.handle("module/unix-netd").unwrap(),
         "native-only-netd",
@@ -83,7 +95,11 @@ fn main(handle: Handle) -> i32 {
             .handle("ethernet", fake_link)
             .handle("ready", native_ready)
             .handle("native/connect", connect_factory)
-            .handle("native/listen", listen_factory),
+            .handle("native/listen", listen_factory)
+            .handle("native/datagram", datagram_factory)
+            .handle("native/resolver", resolver_factory)
+            .value("dns-server", "::1")
+            .value("dns-port", "53053"),
         u64::MAX,
     )
     .expect("native-only service");
@@ -99,12 +115,16 @@ fn main(handle: Handle) -> i32 {
         "native-only-net-test",
         Builder::default()
             .handle("connect", connect_client)
-            .handle("listen", listen_client),
+            .handle("listen", listen_client)
+            .handle("datagram", datagram_client)
+            .handle("resolver", resolver_client)
+            .value("dns-server", "::1")
+            .value("dns-port", "53053"),
         u64::MAX,
     )
     .expect("native-only client");
     assert_eq!(
-        sys::process_wait(native_client, sys::after_ms(30000)),
+        sys::process_wait(native_client, sys::after_ms(45000)),
         Ok(0)
     );
     sys::close(native_client).unwrap();
