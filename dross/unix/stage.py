@@ -28,6 +28,13 @@ with tarfile.open(esp/'modules/rootfs.tar','w',format=tarfile.USTAR_FORMAT) as t
  for path in (out/'src/busybox-1.37.0/busybox.links').read_text().splitlines():
   path = path.lstrip('/')
   info=tarfile.TarInfo(path);info.type=tarfile.SYMTYPE;info.linkname='/bin/busybox';info.mode=0o777;tar.addfile(info)
+ # Dynamically linked programs: musl's dynamic linker and BusyBox from Alpine, and linux/dyntest.
+ with tarfile.open(here/'vendor-cache/alpine-minirootfs-3.24.3-x86_64.tar.gz') as alpine:
+  data('lib/ld-musl-x86_64.so.1',alpine.extractfile('./lib/ld-musl-x86_64.so.1').read(),0o755)
+  data('opt/alpine/bin/busybox',alpine.extractfile('./bin/busybox').read(),0o755)
+ data('usr/share/licenses/musl/COPYRIGHT',(out/'musl-COPYRIGHT').read_bytes())
+ data('usr/bin/dyntest',(out/'dyntest').read_bytes(),0o755)
+ data('usr/lib/libdrosstest.so',(out/'libdrosstest.so').read_bytes(),0o755)
  data('etc/passwd',b'root:x:0:0:root:/root:/bin/sh\n')
  data('etc/group',b'root:x:0:\n')
  data('etc/shells',b'/bin/sh\n/bin/ash\n')

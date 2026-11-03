@@ -80,6 +80,12 @@ pub fn publish_table(sig: &str, data: &'static [u8]) {
     TREE.lock().insert(alloc::format!("sys/firmware/acpi/tables/{sig}"), data);
 }
 
+/// A file in the tree (an interpreter for exec).
+#[cfg(not(feature = "unix"))]
+pub(super) fn tree_file(path: &str) -> Option<&'static [u8]> {
+    TREE.lock().get(&normalize(path)).copied()
+}
+
 fn is_dir(path: &str) -> bool {
     path.is_empty() || TREE.lock().range(String::from(path)..).next().is_some_and(|(k, _)| k.starts_with(path) && k.as_bytes().get(path.len()) == Some(&b'/'))
 }
@@ -174,35 +180,52 @@ impl File {
         self.flags.load(Ordering::Relaxed) & O_NONBLOCK != 0
     }
 
-    /// The memory behind a mapping of this file at `off` (shared mappings only work for memfds).
-    pub fn backing(&self, off: u64, len: u64) -> Result<(Arc<Memory>, bool), Errno> {
+    /// The memory behind a shared mapping of this file at `off` (memfds, mounted files), or None for a regular
+    /// file, which is mapped by copying it.
+    pub fn backing(&self, off: u64, len: u64) -> Result<Option<Arc<Memory>>, Errno> {
         match &self.kind {
             #[cfg(feature = "unix")]
-            Kind::Node(node) => {
-                // A mounted file's contents are shared (read-only); a RAM file's are copied.
-                if let Some(m) = node.content()? {
-                    return if off + len <= m.size() { Ok((m, true)) } else { Err(EINVAL) };
-                }
-                let data = node.data.lock(); let size = (data.len() as u64).next_multiple_of(4096).max(4096);
-                let mem = Arc::new(Memory::anonymous(size, false, false).map_err(|_| ENOMEM)?);
-                mem.write(0, &data).map_err(|_| EINVAL)?; Ok((mem, false))
-            }
+            // A mounted file's contents (read-only) map directly; a RAM file maps as a copy.
+            Kind::Node(node) => Ok(node.content()?.filter(|m| off + len <= m.size())),
+            Kind::Data(_) => Ok(None),
             Kind::Memfd(m) => {
                 let m = m.lock().clone().ok_or(EINVAL)?;
                 if off + len > m.size() {
                     return Err(EINVAL);
                 }
-                Ok((m, true))
-            }
-            Kind::Data(d) => {
-                // A copy of the file, for a private mapping.
-                let size = (d.len() as u64).next_multiple_of(4096).max(4096);
-                let m = Memory::anonymous(size, false, false).map_err(|_| ENOMEM)?;
-                m.write(0, d).map_err(|_| EINVAL)?;
-                Ok((Arc::new(m), false))
+                Ok(Some(m))
             }
             _ => Err(EACCES),
         }
+    }
+
+    /// A copy of [off, off+len) of the file (zeros past its end), for a private mapping.
+    pub fn copy(&self, off: u64, len: u64) -> Result<Memory, Errno> {
+        let m = Memory::anonymous(len, false, false).map_err(|_| ENOMEM)?;
+        let put = |d: &[u8]| {
+            let from = d.len().min(off as usize);
+            m.write(0, &d[from..d.len().min(from + len as usize)]).map_err(|_| EINVAL)
+        };
+        match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Node(node) => match node.content()? {
+                Some(c) => {
+                    let mut buf = alloc::vec![0u8; len.min(c.size().saturating_sub(off)) as usize];
+                    c.read(off, &mut buf).map_err(|_| EINVAL)?;
+                    m.write(0, &buf).map_err(|_| EINVAL)?
+                }
+                None => put(&node.data.lock())?,
+            },
+            Kind::Data(d) => put(d)?,
+            Kind::Memfd(mf) => {
+                let mf = mf.lock().clone().ok_or(EINVAL)?;
+                let mut buf = alloc::vec![0u8; len.min(mf.size().saturating_sub(off)) as usize];
+                mf.read(off, &mut buf).map_err(|_| EINVAL)?;
+                m.write(0, &buf).map_err(|_| EINVAL)?
+            }
+            _ => return Err(EACCES),
+        }
+        Ok(m)
     }
 
     fn mode(&self) -> u32 {
@@ -498,6 +521,9 @@ fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
         Kind::Memfd(_) => f.size.load(Ordering::Relaxed),
         _ => 0,
     };
+    // Each file its own inode: musl's dynamic linker takes a library whose (st_dev, st_ino) it has seen for one it
+    // already loaded.
+    let ino = if let Kind::Data(d) = &f.kind { d.as_ptr() as u64 } else { ino };
     #[cfg(feature = "unix")]
     let ino = match &f.kind { Kind::Node(node) => node.ino, Kind::Pty(end) => end.pty.node.ino, _ => ino };
     #[cfg(feature = "unix")]

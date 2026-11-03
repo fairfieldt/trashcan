@@ -133,6 +133,8 @@ fn exec(p: &Arc<Process>, frame: &mut Frame, a: [u64; 6]) -> R {
     let mut argv = string_array(p, a[1])?;
     let envp = string_array(p, a[2])?;
     let mut path = super::files::absolute(p, &path);
+    // AT_EXECFN: the path as given, also for a script.
+    let execfn = path.clone();
     let mut contents = vfs::read_executable(p, &path)?;
     // Interpret at most four shebang layers. Preserve argv[1..], replacing argv[0].
     for _ in 0..4 {
@@ -172,7 +174,7 @@ fn exec(p: &Arc<Process>, frame: &mut Frame, a: [u64; 6]) -> R {
     )
     .map_err(|_| ENOMEM)?;
     image.write(0, &contents).map_err(|_| EFAULT)?;
-    let (loaded, entry, sp) = super::super::exec::load(&image, &argv, &envp, {
+    let (loaded, entry, sp) = super::super::exec::load(&image, execfn.as_bytes(), &argv, &envp, {
         let c = state(p).credentials.lock();
         [
             c.uid[0] as u64,
@@ -181,7 +183,8 @@ fn exec(p: &Arc<Process>, frame: &mut Frame, a: [u64; 6]) -> R {
             c.gid[1] as u64,
         ]
     })
-    .map_err(|_| 8i64)?;
+    // A missing interpreter is ENOENT, as on Linux.
+    .map_err(|e| if e == dross_abi::Error::NotFound { ENOENT } else { 8 })?;
     // Nothing changes until the full image has been validated and loaded.
     p.aspace.replace_from(&loaded.aspace);
     if let Some(gate) = state(p).vfork.lock().take() {

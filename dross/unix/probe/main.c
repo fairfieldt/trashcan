@@ -80,6 +80,9 @@ int main(int argc,char **argv) {
  child=fork();if(!child){signal(SIGCONT,SIG_IGN);got_signal=0;raise(SIGSTOP);_exit(got_signal==SIGUSR1?42:1);}
  int stopped=waitpid(child,&status,WUNTRACED)==child&&WIFSTOPPED(status);kill(child,SIGUSR1);usleep(10000);int stayed=waitpid(child,&status,WNOHANG)==0;kill(child,SIGCONT);waitpid(child,&status,0);
  check("stopped signals wait for ignored SIGCONT",stopped&&stayed&&WIFEXITED(status)&&WEXITSTATUS(status)==42);
+ check("dynamically linked program and dlopen",run("/usr/bin/dyntest")==0);
+ check("Alpine's dynamically linked BusyBox",run("test \"$(/opt/alpine/bin/busybox sh -c 'x=$(/opt/alpine/bin/busybox echo 6); echo $((x*7))')\" = 42")==0);
+ check("dynamic linker as a command",run("/lib/ld-musl-x86_64.so.1 --list /usr/bin/dyntest | grep -q libc.so")==0);
  network_checks();namespace_checks();
  check("missing executable",run("/does-not-exist")==127);
  check("host key provisioning",run("/usr/sbin/dropbearconvert openssh dropbear /etc/test-hostkey /etc/dropbear/hostkey")==0);

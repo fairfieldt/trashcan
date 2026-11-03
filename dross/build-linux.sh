@@ -3,8 +3,11 @@
 #   posixtest                          checks dross's Linux interface
 #   gpud, tbd, ethd                    the drivers (driver/), with gpud-platform's dross backend
 #   test-*                             the drivers' unit tests
-# and target/linux/rootfs.tar from linux/rootfs (plus /lib/firmware from FIRMWARE, a directory, if set).
-# Needs the x86_64-unknown-linux-musl Rust target and zig (as the C compiler for gpud's C).
+#   dyntest                            a dynamically linked C program (linux/dyntest)
+# and target/linux/rootfs.tar from linux/rootfs (plus /lib/firmware from FIRMWARE, a directory, if set), with
+# musl's dynamic linker from Alpine's minirootfs (downloaded once into target/alpine, checked by its SHA-256) and
+# dyntest's library.
+# Needs the x86_64-unknown-linux-musl Rust target and zig (as the C compiler for gpud's C and dyntest).
 set -eu
 cd "$(dirname "$0")"
 out=$PWD/target/linux
@@ -47,9 +50,23 @@ for line in sys.stdin:
 ' "$out"
 fi
 
+alpine=alpine-minirootfs-3.24.3-x86_64.tar.gz
+mkdir -p target/alpine
+if [ ! -f "target/alpine/$alpine" ]; then
+    curl -fsSL -o "target/alpine/$alpine.part" "https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/$alpine"
+    mv "target/alpine/$alpine.part" "target/alpine/$alpine"
+fi
+python3 -I -c 'import hashlib, sys; sys.exit(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest() != sys.argv[2])' \
+    "target/alpine/$alpine" f8e1cafba9b1b283b5d30d06f9885c8d2bc161ffe9083ade8e2e157813a53407 \
+    || { echo "checksum mismatch: target/alpine/$alpine" >&2; exit 1; }
+
 stage=$PWD/target/rootfs
 rm -rf "$stage"
 cp -R linux/rootfs "$stage"
+tar -xzf "target/alpine/$alpine" -C "$stage" ./lib/ld-musl-x86_64.so.1
+mkdir -p "$stage/usr/lib"
+zig cc -target x86_64-linux-musl -O2 -shared -fPIC linux/dyntest/lib.c -o "$stage/usr/lib/libdrosstest.so"
+zig build-exe -target x86_64-linux-musl -dynamic -lc -O ReleaseSmall linux/dyntest/main.c -femit-bin="$out/dyntest"
 if [ -n "${FIRMWARE:-}" ]; then
     mkdir -p "$stage/lib/firmware"
     cp -R "$FIRMWARE"/. "$stage/lib/firmware/"

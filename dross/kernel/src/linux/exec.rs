@@ -1,6 +1,8 @@
-//! Starting a static Linux executable: its segments (static or static-PIE, which relocates itself), an 8 MiB
-//! stack with argv, envp and the auxiliary vector, and the first thread.
+//! Starting a Linux executable: its segments (static or static-PIE, which relocates itself, or dynamically linked,
+//! with the interpreter its PT_INTERP names loaded beside it), an 8 MiB stack with argv, envp and the auxiliary
+//! vector, and the first thread.
 
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use dross_abi::{vm, Error, USER_TOP};
@@ -14,6 +16,8 @@ const STACK_SIZE: u64 = 8 << 20;
 const STACK_TOP: u64 = 0x0000_7fff_ffff_0000;
 /// Where position-independent executables go.
 const PIE_BASE: u64 = 0x0000_5555_0000_0000;
+/// Where the interpreter (musl's dynamic linker) goes.
+const INTERP_BASE: u64 = 0x0000_7f00_0000_0000;
 
 fn u16_at(b: &[u8], o: usize) -> u16 {
     u16::from_le_bytes(b[o..o + 2].try_into().unwrap())
@@ -27,39 +31,53 @@ fn u64_at(b: &[u8], o: usize) -> u64 {
 
 /// `argv` and `envp` are NUL-separated strings. `bootstrap` becomes native handle 1.
 pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>) -> Result<Arc<Process>, Error> {
-    let (p, entry, sp) = load(image, argv, envp, [0; 4])?;
+    let execfn = argv.split(|&b| b == 0).next().unwrap_or_default();
+    let (p, entry, sp) = load(image, execfn, argv, envp, [0; 4])?;
     if let Some(e) = bootstrap { let h = p.handles.lock().insert(e); debug_assert_eq!(h, 1); }
     sched::spawn_user(p.clone(), sched::pick_cpu(), entry, sp, 0);
     Ok(p)
 }
 
-pub(super) fn load(image: &Memory, argv: &[u8], envp: &[u8], ids: [u64; 4]) -> Result<(Arc<Process>, u64, u64), Error> {
-    let packed = |bytes: &[u8]| -> Vec<Vec<u8>> {
-        if bytes.is_empty() { Vec::new() } else { bytes.strip_suffix(&[0]).unwrap_or(bytes).split(|&b| b == 0).map(|s| s.to_vec()).collect() }
-    };
-    let args = packed(argv); let envs = packed(envp);
-    let name = args.first().and_then(|a| core::str::from_utf8(a).ok()).map(|a| a.rsplit('/').next().unwrap_or(a)).unwrap_or("linux");
+/// What mapping an ELF image placed.
+struct Image {
+    base: u64,
+    entry: u64,
+    phdr: u64,
+    phent: u64,
+    phnum: u64,
+    interp: Option<String>,
+}
 
+/// Maps the segments of an ELF image into `p` (a position-independent one at `pie_base`).
+fn map_image(p: &Process, image: &Memory, pie_base: u64) -> Result<Image, Error> {
     let mut hdr = [0u8; 64];
     image.read(0, &mut hdr).map_err(|_| Error::BadElf)?;
     let kind = u16_at(&hdr, 16);
     if &hdr[..4] != b"\x7fELF" || hdr[4] != 2 || hdr[5] != 1 || !(kind == 2 || kind == 3) || u16_at(&hdr, 18) != 0x3e {
         return Err(Error::BadElf);
     }
-    let base = if kind == 3 { PIE_BASE } else { 0 };
+    let base = if kind == 3 { pie_base } else { 0 };
     let (phoff, phentsize, phnum) = (u64_at(&hdr, 32), u16_at(&hdr, 54) as u64, u16_at(&hdr, 56) as u64);
     if phentsize < 56 || phnum > 64 {
         return Err(Error::BadElf);
     }
-    let p = Process::new_linux(name);
     let mut phdr_addr = 0;
     let mut first_load = None;
+    let mut interp = None;
     for i in 0..phnum {
         let mut ph = [0u8; 56];
         image.read(phoff + i * phentsize, &mut ph).map_err(|_| Error::BadElf)?;
         let ty = u32_at(&ph, 0);
         let (flags, offset, vaddr, filesz, memsz) = (u32_at(&ph, 4), u64_at(&ph, 8), u64_at(&ph, 16), u64_at(&ph, 32), u64_at(&ph, 40));
-        if ty == 3 { return Err(Error::BadElf); }
+        if ty == 3 {
+            if filesz > 4096 {
+                return Err(Error::BadElf);
+            }
+            let mut path = alloc::vec![0u8; filesz as usize];
+            image.read(offset, &mut path).map_err(|_| Error::BadElf)?;
+            let path = path.strip_suffix(&[0]).unwrap_or(&path);
+            interp = Some(String::from(core::str::from_utf8(path).map_err(|_| Error::BadElf)?));
+        }
         if ty == 6 {
             phdr_addr = base + vaddr;
         }
@@ -93,6 +111,43 @@ pub(super) fn load(image: &Memory, argv: &[u8], envp: &[u8], ids: [u64; 4]) -> R
         phdr_addr = base + v - off + phoff;
     }
     let entry = base.checked_add(u64_at(&hdr, 24)).filter(|entry| *entry < USER_TOP && *entry >= 4096).ok_or(Error::BadElf)?;
+    Ok(Image { base, entry, phdr: phdr_addr, phent: phentsize, phnum, interp })
+}
+
+/// The interpreter's file, from the rootfs (with `unix`, the VFS), as a memory object.
+fn interpreter(path: &str) -> Result<Memory, Error> {
+    #[cfg(feature = "unix")]
+    let (_, node) = super::unix::vfs::lookup(path, true).map_err(|_| Error::NotFound)?;
+    #[cfg(feature = "unix")]
+    let data = node.read_at(0, node.len() as usize).map_err(|_| Error::NotFound)?;
+    #[cfg(not(feature = "unix"))]
+    let data = super::fs::tree_file(path).ok_or(Error::NotFound)?;
+    let m = Memory::anonymous((data.len() as u64).next_multiple_of(4096).max(4096), false, false)?;
+    m.write(0, &data[..])?;
+    Ok(m)
+}
+
+/// `execfn` is the path the program was started by (AT_EXECFN).
+pub(super) fn load(image: &Memory, execfn: &[u8], argv: &[u8], envp: &[u8], ids: [u64; 4]) -> Result<(Arc<Process>, u64, u64), Error> {
+    let packed = |bytes: &[u8]| -> Vec<Vec<u8>> {
+        if bytes.is_empty() { Vec::new() } else { bytes.strip_suffix(&[0]).unwrap_or(bytes).split(|&b| b == 0).map(|s| s.to_vec()).collect() }
+    };
+    let args = packed(argv); let envs = packed(envp);
+    let name = args.first().and_then(|a| core::str::from_utf8(a).ok()).map(|a| a.rsplit('/').next().unwrap_or(a)).unwrap_or("linux");
+
+    let p = Process::new_linux(name);
+    let prog = map_image(&p, image, PIE_BASE)?;
+    // A dynamically linked program starts in its interpreter, which finds the program by AT_PHDR.
+    let (entry, interp_base) = match &prog.interp {
+        Some(path) => {
+            let ld = map_image(&p, &interpreter(path)?, INTERP_BASE)?;
+            if ld.interp.is_some() || ld.base != INTERP_BASE {
+                return Err(Error::BadElf);
+            }
+            (ld.entry, ld.base)
+        }
+        None => (prog.entry, 0),
+    };
 
     // The stack, built in a kernel buffer and copied into its top page(s).
     let stack = Arc::new(Memory::anonymous(STACK_SIZE, false, false)?);
@@ -111,22 +166,25 @@ pub(super) fn load(image: &Memory, argv: &[u8], envp: &[u8], ids: [u64; 4]) -> R
     super::random_bytes(&mut random);
     strings.extend_from_slice(&random);
     let platform_off = place(&mut strings, b"x86_64");
+    let execfn_off = place(&mut strings, execfn);
     let strings_at = (STACK_TOP - strings.len() as u64 - 64) & !15;
     let (_, _, _, edx) = crate::cpu::cpuid(1, 0);
-    let aux: [(u64, u64); 13] = [
-        (3, phdr_addr),
-        (4, phentsize),
-        (5, phnum),
+    let aux: [(u64, u64); 15] = [
+        (3, prog.phdr),
+        (4, prog.phent),
+        (5, prog.phnum),
         (6, 4096),
-        (7, 0),
-        (9, entry),
+        (7, interp_base),
+        (9, prog.entry),
         (11, ids[0]),
         (12, ids[1]),
         (13, ids[2]),
         (14, ids[3]),
         (16, edx as u64),
+        (23, 0),
         (25, strings_at + rand_off),
         (15, strings_at + platform_off),
+        (31, strings_at + execfn_off),
     ];
     let mut words: Vec<u64> = Vec::new();
     words.push(args.len() as u64);

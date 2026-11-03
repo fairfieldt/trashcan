@@ -1,13 +1,15 @@
-//! The Linux system call interface, for static Linux executables (Rust `std` and C on musl): how gpud, tbd and
-//! ethd run on dross unchanged. A process started with `SPAWN_LINUX` gets this interface for `syscall`; its
-//! native dross calls (handles, pcid, DMA) stay reachable with `NATIVE` set in the number.
+//! The Linux system call interface, for Linux executables on musl (Rust `std` and C; static, or dynamically linked
+//! through musl's dynamic linker): how gpud, tbd and ethd run on dross unchanged. A process started with
+//! `SPAWN_LINUX` gets this interface for `syscall`; its native dross calls (handles, pcid, DMA) stay reachable with
+//! `NATIVE` set in the number.
 //!
-//! Covered: memory (mmap of anonymous memory and memfds, munmap and mprotect of any range), threads (clone,
-//! futex, TLS, exit with clear-tid), files (a read-only tree from the `rootfs.tar` boot module, the ACPI tables
-//! under /sys/firmware/acpi/tables, /dev/null, logs on stdout and stderr), Unix sockets (stream, datagram and
-//! seqpacket, with fd passing), pipes, memfd, eventfd, poll, time, sleeping, randomness. Signals are accepted and
-//! never delivered (except an abort, which ends the process). The optional `unix` feature adds fork, exec,
-//! signals, writable files, PTYs and TCP capability RPC; see unix/mod.rs and ../../unix/README.md.
+//! Covered: memory (mmap of anonymous memory, memfds and files, which are mapped by copying them; munmap and
+//! mprotect of any range), threads (clone, futex, TLS, exit with clear-tid), files (a read-only tree from the
+//! `rootfs.tar` boot module, the ACPI tables under /sys/firmware/acpi/tables, /dev/null, logs on stdout and
+//! stderr), Unix sockets (stream, datagram and seqpacket, with fd passing), pipes, memfd, eventfd, poll, time,
+//! sleeping, randomness. Signals are accepted and never delivered (except an abort, which ends the process). The
+//! optional `unix` feature adds fork, exec, signals, writable files, PTYs and TCP capability RPC; see unix/mod.rs
+//! and ../../unix/README.md.
 
 mod exec;
 mod fs;
@@ -314,32 +316,38 @@ fn mmap(p: &Process, addr: u64, len: u64, prot: u64, flags: u64, fd: u64, off: u
     if fixed && addr % 4096 != 0 {
         return Err(EINVAL);
     }
-    let at = if fixed { addr } else { 0 };
     let f = prot_flags(prot) | if cfg!(feature = "unix") && flags & MAP_SHARED != 0 { crate::paging::FORK_SHARED } else { 0 };
+    // MAP_FIXED replaces what is there, MAP_FIXED_NOREPLACE fails if anything is; otherwise `addr` is a hint, taken
+    // if the range is free (musl's dynamic linker places non-PIE objects so).
+    let place = |map: &dyn Fn(u64, bool) -> Result<u64, dross_abi::Error>| {
+        if fixed {
+            map(addr, flags & MAP_FIXED != 0)
+        } else if addr != 0 {
+            map(addr & !0xfff, false).or_else(|_| map(0, false))
+        } else {
+            map(0, false)
+        }
+    };
+    let map_memory = |mem: Arc<crate::memory::Memory>, off: u64| {
+        place(&|at, replace| if replace { p.aspace.map_replace(mem.clone(), off, len, at, f) } else { p.aspace.map(mem.clone(), off, len, at, f) })
+    };
     let r = if flags & MAP_ANONYMOUS != 0 {
         if f == 0 {
-            p.aspace.reserve(len, at, flags & MAP_FIXED != 0)
+            place(&|at, replace| p.aspace.reserve(len, at, replace))
         } else {
-            let m = crate::memory::Memory::anonymous(len, false, false).map_err(|_| ENOMEM)?;
-            if flags & MAP_FIXED != 0 { p.aspace.map_replace(Arc::new(m), 0, len, at, f) } else { p.aspace.map(Arc::new(m), 0, len, at, f) }
+            map_memory(Arc::new(crate::memory::Memory::anonymous(len, false, false).map_err(|_| ENOMEM)?), 0)
         }
     } else {
         let file = linux(p).files.get(fd as i32)?;
-        let (mem, shared_ok) = file.backing(off, len)?;
-        let mem = if flags & MAP_SHARED != 0 {
-            if !shared_ok {
-                return Err(EACCES);
-            }
-            mem
-        } else {
-            // A private copy.
-            let copy = crate::memory::Memory::anonymous(len, false, false).map_err(|_| ENOMEM)?;
-            let mut buf = alloc::vec![0u8; len.min(mem.size().saturating_sub(off)) as usize];
-            mem.read(off, &mut buf).map_err(|_| EINVAL)?;
-            copy.write(0, &buf).map_err(|_| EINVAL)?;
-            return p.aspace.map(Arc::new(copy), 0, len, at, f).map_err(|_| ENOMEM);
-        };
-        if flags & MAP_FIXED != 0 { p.aspace.map_replace(mem, off, len, at, f) } else { p.aspace.map(mem, off, len, at, f) }
+        match file.backing(off, len)? {
+            // Read-only memory (a mounted file's contents) can't be written through any mapping, so a private
+            // read-only mapping shares it too (a 7 GB model file isn't copied).
+            Some(mem) if !mem.writable() && prot & 2 != 0 && flags & MAP_SHARED != 0 => return Err(EACCES),
+            Some(mem) if flags & MAP_SHARED != 0 || (!mem.writable() && prot & 2 == 0) => map_memory(mem, off),
+            // Nothing writes a copy back: a shared mapping of a regular file is only a copy if read-only.
+            None if flags & MAP_SHARED != 0 && prot & 2 != 0 => return Err(EACCES),
+            _ => map_memory(Arc::new(file.copy(off, len)?), 0),
+        }
     };
     r.map_err(|e| match e {
         dross_abi::Error::Busy => EEXIST,
@@ -547,7 +555,18 @@ fn dispatch(p: &Arc<Process>, f: &Frame, n: u64, a: [u64; 6]) -> R {
         }
         // fsync, fdatasync, sync, syncfs: files live in memory.
         74 | 75 | 162 | 306 => Ok(0),
-        274 | 334 | 324 => Err(ENOSYS),
+        274 | 334 => Err(ENOSYS),
+        // membarrier: query, and the private expedited barrier (with its registration) that musl's dynamic linker
+        // issues after installing a dlopen'ed library's TLS for every thread. x86 keeps stores in order, so a fence
+        // here is enough; without it, musl would signal each thread instead.
+        324 => match a[0] {
+            0 => Ok(8 | 16),
+            8 | 16 => {
+                core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
+                Ok(0)
+            }
+            _ => Err(EINVAL),
+        },
         24 => {
             sched::request_resched();
             Ok(0)
