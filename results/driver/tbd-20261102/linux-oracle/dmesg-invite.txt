@@ -1,0 +1,358 @@
+[  380.619735] ACPI: bus type thunderbolt unregistered
+[  380.717877] ACPI: bus type thunderbolt registered
+[  380.718120] thunderbolt 0000:16:00.0: IOMMU DMA protection is disabled
+[  380.718135] thunderbolt 0000:16:00.0: total paths: 12
+[  380.718599] thunderbolt 0000:16:00.0: allocating TX ring 0 of size 10
+[  380.718635] thunderbolt 0000:16:00.0: allocating RX ring 0 of size 10
+[  380.718661] thunderbolt 0000:16:00.0: control channel created
+[  380.718668] thunderbolt 0000:16:00.0: ICM not supported on this controller
+[  380.718683] thunderbolt 0000:16:00.0: freeing RX ring 0
+[  380.718694] thunderbolt 0000:16:00.0: freeing TX ring 0
+[  380.718724] thunderbolt 0000:16:00.0: allocating TX ring 0 of size 10
+[  380.718741] thunderbolt 0000:16:00.0: allocating RX ring 0 of size 10
+[  380.718758] thunderbolt 0000:16:00.0: control channel created
+[  380.718763] thunderbolt 0000:16:00.0: using software connection manager
+[  380.718768] thunderbolt 0000:16:00.0: device link creation from 0000:15:00.0 failed
+[  380.718830] thunderbolt 0000:16:00.0: created link from 0000:15:03.0
+[  380.718853] thunderbolt 0000:16:00.0: created link from 0000:15:04.0
+[  380.718873] thunderbolt 0000:16:00.0: created link from 0000:15:05.0
+[  380.718893] thunderbolt 0000:16:00.0: created link from 0000:15:06.0
+[  380.718896] thunderbolt 0000:16:00.0: NHI initialized, starting thunderbolt
+[  380.718898] thunderbolt 0000:16:00.0: control channel starting...
+[  380.718900] thunderbolt 0000:16:00.0: starting TX ring 0
+[  380.718909] thunderbolt 0000:16:00.0: enabling interrupt at register 0x38200 bit 0 (0x0 -> 0x1)
+[  380.718913] thunderbolt 0000:16:00.0: starting RX ring 0
+[  380.718921] thunderbolt 0000:16:00.0: enabling interrupt at register 0x38200 bit 12 (0x1 -> 0x1001)
+[  380.718926] thunderbolt 0000:16:00.0: security level set to user
+[  380.719087] thunderbolt 0000:16:00.0: current switch config:
+[  380.719092] thunderbolt 0000:16:00.0:  Thunderbolt 2 Switch: 8086:156d (Revision: 0, TB Version: 2)
+[  380.719096] thunderbolt 0000:16:00.0:   Max Port Number: 12
+[  380.719098] thunderbolt 0000:16:00.0:   Config:
+[  380.719100] thunderbolt 0000:16:00.0:    Upstream Port Number: 5 Depth: 0 Route String: 0x0 Enabled: 1, PlugEventsDelay: 255ms
+[  380.719104] thunderbolt 0000:16:00.0:    unknown1: 0x0 unknown4: 0x0
+[  380.720428] thunderbolt 0000:16:00.0: initializing Switch at 0x0 (depth: 0, up port: 5)
+[  380.720539] thunderbolt 0000:16:00.0: 0: DROM version: 1
+[  380.720802] thunderbolt 0000:16:00.0: 0: uid: 0x1000e0108fa10
+[  380.721161] thunderbolt 0000:16:00.0:  Port 1: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.721168] thunderbolt 0000:16:00.0:   Max hop id (in/out): 15/15
+[  380.721171] thunderbolt 0000:16:00.0:   Max counters: 16
+[  380.721174] thunderbolt 0000:16:00.0:   NFC Credits: 0x3c00000
+[  380.721178] thunderbolt 0000:16:00.0:   Credits (total/control): 60/2
+[  380.721533] thunderbolt 0000:16:00.0:  Port 2: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.721539] thunderbolt 0000:16:00.0:   Max hop id (in/out): 15/15
+[  380.721542] thunderbolt 0000:16:00.0:   Max counters: 16
+[  380.721545] thunderbolt 0000:16:00.0:   NFC Credits: 0x3c00000
+[  380.721548] thunderbolt 0000:16:00.0:   Credits (total/control): 60/2
+[  380.721902] thunderbolt 0000:16:00.0:  Port 3: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.721907] thunderbolt 0000:16:00.0:   Max hop id (in/out): 15/15
+[  380.721911] thunderbolt 0000:16:00.0:   Max counters: 16
+[  380.721913] thunderbolt 0000:16:00.0:   NFC Credits: 0x3c00000
+[  380.721916] thunderbolt 0000:16:00.0:   Credits (total/control): 60/2
+[  380.722270] thunderbolt 0000:16:00.0:  Port 4: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.722275] thunderbolt 0000:16:00.0:   Max hop id (in/out): 15/15
+[  380.722279] thunderbolt 0000:16:00.0:   Max counters: 16
+[  380.722281] thunderbolt 0000:16:00.0:   NFC Credits: 0x3c00000
+[  380.722284] thunderbolt 0000:16:00.0:   Credits (total/control): 60/2
+[  380.722431] thunderbolt 0000:16:00.0:  Port 5: 8086:156d (Revision: 0, TB Version: 1, Type: NHI (0x2))
+[  380.722437] thunderbolt 0000:16:00.0:   Max hop id (in/out): 11/11
+[  380.722440] thunderbolt 0000:16:00.0:   Max counters: 16
+[  380.722443] thunderbolt 0000:16:00.0:   NFC Credits: 0xf00000
+[  380.722446] thunderbolt 0000:16:00.0:   Credits (total/control): 15/0
+[  380.722500] thunderbolt 0000:16:00.0:  Port 6: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.722506] thunderbolt 0000:16:00.0:   Max hop id (in/out): 8/8
+[  380.722509] thunderbolt 0000:16:00.0:   Max counters: 2
+[  380.722512] thunderbolt 0000:16:00.0:   NFC Credits: 0x700000
+[  380.722515] thunderbolt 0000:16:00.0:   Credits (total/control): 7/0
+[  380.722571] thunderbolt 0000:16:00.0:  Port 7: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.722576] thunderbolt 0000:16:00.0:   Max hop id (in/out): 8/8
+[  380.722579] thunderbolt 0000:16:00.0:   Max counters: 2
+[  380.722582] thunderbolt 0000:16:00.0:   NFC Credits: 0x700000
+[  380.722586] thunderbolt 0000:16:00.0:   Credits (total/control): 7/0
+[  380.722641] thunderbolt 0000:16:00.0:  Port 8: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.722646] thunderbolt 0000:16:00.0:   Max hop id (in/out): 8/8
+[  380.722649] thunderbolt 0000:16:00.0:   Max counters: 2
+[  380.722652] thunderbolt 0000:16:00.0:   NFC Credits: 0x700000
+[  380.722655] thunderbolt 0000:16:00.0:   Credits (total/control): 7/0
+[  380.722709] thunderbolt 0000:16:00.0:  Port 9: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.722714] thunderbolt 0000:16:00.0:   Max hop id (in/out): 8/8
+[  380.722717] thunderbolt 0000:16:00.0:   Max counters: 2
+[  380.722720] thunderbolt 0000:16:00.0:   NFC Credits: 0x700000
+[  380.722723] thunderbolt 0000:16:00.0:   Credits (total/control): 7/0
+[  380.722726] thunderbolt 0000:16:00.0: 0:10: disabled by eeprom
+[  380.722781] thunderbolt 0000:16:00.0:  Port 11: 8086:156d (Revision: 0, TB Version: 1, Type: DP/HDMI (0xe0101))
+[  380.722787] thunderbolt 0000:16:00.0:   Max hop id (in/out): 9/9
+[  380.722790] thunderbolt 0000:16:00.0:   Max counters: 2
+[  380.722793] thunderbolt 0000:16:00.0:   NFC Credits: 0xf00000
+[  380.722796] thunderbolt 0000:16:00.0:   Credits (total/control): 15/0
+[  380.722851] thunderbolt 0000:16:00.0:  Port 12: 8086:156d (Revision: 0, TB Version: 1, Type: DP/HDMI (0xe0101))
+[  380.722856] thunderbolt 0000:16:00.0:   Max hop id (in/out): 9/9
+[  380.722859] thunderbolt 0000:16:00.0:   Max counters: 2
+[  380.722862] thunderbolt 0000:16:00.0:   NFC Credits: 0xf00000
+[  380.722865] thunderbolt 0000:16:00.0:   Credits (total/control): 15/0
+[  380.723810] thunderbolt 0000:16:00.0: 0: TMU: current mode: bi-directional, HiFi
+[  380.724111] thunderbolt 0000:16:00.0: 0:1: is connected, link is up (state: 2)
+[  380.724176] thunderbolt 0-1: local UUID 00000000-0000-0008-8041-c5264ae46855
+[  380.724288] thunderbolt 0000:16:00.0: 0:3: is unplugged (state: 7)
+[  380.724450] thunderbolt 0000:16:00.0: 0:11: DP IN resource available
+[  380.724454] thunderbolt 0000:16:00.0: 0:12: DP IN resource available
+[  380.724882] thunderbolt 0000:5d:00.0: IOMMU DMA protection is disabled
+[  380.724892] thunderbolt 0000:5d:00.0: total paths: 12
+[  380.725322] thunderbolt 0000:5d:00.0: allocating TX ring 0 of size 10
+[  380.725345] thunderbolt 0000:5d:00.0: allocating RX ring 0 of size 10
+[  380.725364] thunderbolt 0000:5d:00.0: control channel created
+[  380.725368] thunderbolt 0000:5d:00.0: ICM not supported on this controller
+[  380.725379] thunderbolt 0000:5d:00.0: freeing RX ring 0
+[  380.725388] thunderbolt 0000:5d:00.0: freeing TX ring 0
+[  380.725409] thunderbolt 0000:5d:00.0: allocating TX ring 0 of size 10
+[  380.725422] thunderbolt 0000:5d:00.0: allocating RX ring 0 of size 10
+[  380.725435] thunderbolt 0000:5d:00.0: control channel created
+[  380.725439] thunderbolt 0000:5d:00.0: using software connection manager
+[  380.725442] thunderbolt 0000:5d:00.0: device link creation from 0000:5c:00.0 failed
+[  380.725483] thunderbolt 0000:5d:00.0: created link from 0000:5c:03.0
+[  380.725519] thunderbolt 0000:5d:00.0: created link from 0000:5c:04.0
+[  380.725567] thunderbolt 0000:5d:00.0: created link from 0000:5c:05.0
+[  380.725604] thunderbolt 0000:5d:00.0: created link from 0000:5c:06.0
+[  380.725606] thunderbolt 0000:5d:00.0: NHI initialized, starting thunderbolt
+[  380.725609] thunderbolt 0000:5d:00.0: control channel starting...
+[  380.725611] thunderbolt 0000:5d:00.0: starting TX ring 0
+[  380.725619] thunderbolt 0000:5d:00.0: enabling interrupt at register 0x38200 bit 0 (0x0 -> 0x1)
+[  380.725623] thunderbolt 0000:5d:00.0: starting RX ring 0
+[  380.725631] thunderbolt 0000:5d:00.0: enabling interrupt at register 0x38200 bit 12 (0x1 -> 0x1001)
+[  380.725636] thunderbolt 0000:5d:00.0: security level set to user
+[  380.725784] thunderbolt 0000:5d:00.0: current switch config:
+[  380.725788] thunderbolt 0000:5d:00.0:  Thunderbolt 2 Switch: 8086:156d (Revision: 0, TB Version: 2)
+[  380.725791] thunderbolt 0000:5d:00.0:   Max Port Number: 12
+[  380.725793] thunderbolt 0000:5d:00.0:   Config:
+[  380.725795] thunderbolt 0000:5d:00.0:    Upstream Port Number: 5 Depth: 0 Route String: 0x0 Enabled: 1, PlugEventsDelay: 255ms
+[  380.725799] thunderbolt 0000:5d:00.0:    unknown1: 0x0 unknown4: 0x0
+[  380.726511] thunderbolt 0000:5d:00.0: initializing Switch at 0x0 (depth: 0, up port: 5)
+[  380.726591] thunderbolt 0000:5d:00.0: 0: DROM version: 1
+[  380.726788] thunderbolt 0000:5d:00.0: 0: uid: 0x1000e0108fa11
+[  380.727092] thunderbolt 0000:5d:00.0:  Port 1: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.727097] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 15/15
+[  380.727099] thunderbolt 0000:5d:00.0:   Max counters: 16
+[  380.727100] thunderbolt 0000:5d:00.0:   NFC Credits: 0x3c00000
+[  380.727102] thunderbolt 0000:5d:00.0:   Credits (total/control): 60/2
+[  380.727342] thunderbolt 0000:5d:00.0:  Port 2: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.727345] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 15/15
+[  380.727347] thunderbolt 0000:5d:00.0:   Max counters: 16
+[  380.727349] thunderbolt 0000:5d:00.0:   NFC Credits: 0x3c00000
+[  380.727350] thunderbolt 0000:5d:00.0:   Credits (total/control): 60/2
+[  380.727591] thunderbolt 0000:5d:00.0:  Port 3: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.727594] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 15/15
+[  380.727595] thunderbolt 0000:5d:00.0:   Max counters: 16
+[  380.727597] thunderbolt 0000:5d:00.0:   NFC Credits: 0x3c00000
+[  380.727599] thunderbolt 0000:5d:00.0:   Credits (total/control): 60/2
+[  380.727835] thunderbolt 0000:5d:00.0:  Port 4: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.727838] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 15/15
+[  380.727840] thunderbolt 0000:5d:00.0:   Max counters: 16
+[  380.727842] thunderbolt 0000:5d:00.0:   NFC Credits: 0x3c00000
+[  380.727843] thunderbolt 0000:5d:00.0:   Credits (total/control): 60/2
+[  380.727942] thunderbolt 0000:5d:00.0:  Port 5: 8086:156d (Revision: 0, TB Version: 1, Type: NHI (0x2))
+[  380.727945] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 11/11
+[  380.727946] thunderbolt 0000:5d:00.0:   Max counters: 16
+[  380.727948] thunderbolt 0000:5d:00.0:   NFC Credits: 0xf00000
+[  380.727949] thunderbolt 0000:5d:00.0:   Credits (total/control): 15/0
+[  380.727985] thunderbolt 0000:5d:00.0:  Port 6: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.727988] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 8/8
+[  380.727990] thunderbolt 0000:5d:00.0:   Max counters: 2
+[  380.727991] thunderbolt 0000:5d:00.0:   NFC Credits: 0x700000
+[  380.727993] thunderbolt 0000:5d:00.0:   Credits (total/control): 7/0
+[  380.728029] thunderbolt 0000:5d:00.0:  Port 7: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.728032] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 8/8
+[  380.728033] thunderbolt 0000:5d:00.0:   Max counters: 2
+[  380.728035] thunderbolt 0000:5d:00.0:   NFC Credits: 0x700000
+[  380.728036] thunderbolt 0000:5d:00.0:   Credits (total/control): 7/0
+[  380.728072] thunderbolt 0000:5d:00.0:  Port 8: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.728075] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 8/8
+[  380.728077] thunderbolt 0000:5d:00.0:   Max counters: 2
+[  380.728078] thunderbolt 0000:5d:00.0:   NFC Credits: 0x700000
+[  380.728080] thunderbolt 0000:5d:00.0:   Credits (total/control): 7/0
+[  380.728116] thunderbolt 0000:5d:00.0:  Port 9: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.728118] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 8/8
+[  380.728120] thunderbolt 0000:5d:00.0:   Max counters: 2
+[  380.728122] thunderbolt 0000:5d:00.0:   NFC Credits: 0x700000
+[  380.728123] thunderbolt 0000:5d:00.0:   Credits (total/control): 7/0
+[  380.728125] thunderbolt 0000:5d:00.0: 0:10: disabled by eeprom
+[  380.728191] thunderbolt 0000:5d:00.0:  Port 11: 8086:156d (Revision: 0, TB Version: 1, Type: DP/HDMI (0xe0101))
+[  380.728197] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 9/9
+[  380.728200] thunderbolt 0000:5d:00.0:   Max counters: 2
+[  380.728203] thunderbolt 0000:5d:00.0:   NFC Credits: 0xf00000
+[  380.728206] thunderbolt 0000:5d:00.0:   Credits (total/control): 15/0
+[  380.728261] thunderbolt 0000:5d:00.0:  Port 12: 8086:156d (Revision: 0, TB Version: 1, Type: DP/HDMI (0xe0101))
+[  380.728266] thunderbolt 0000:5d:00.0:   Max hop id (in/out): 9/9
+[  380.728269] thunderbolt 0000:5d:00.0:   Max counters: 2
+[  380.728272] thunderbolt 0000:5d:00.0:   NFC Credits: 0xf00000
+[  380.728275] thunderbolt 0000:5d:00.0:   Credits (total/control): 15/0
+[  380.729175] thunderbolt 0000:5d:00.0: 0: TMU: current mode: bi-directional, HiFi
+[  380.729484] thunderbolt 0000:5d:00.0: 0:1: is unplugged (state: 7)
+[  380.729515] thunderbolt 0000:5d:00.0: 0:3: is unplugged (state: 7)
+[  380.729664] thunderbolt 0000:5d:00.0: 0:11: DP IN resource available
+[  380.729669] thunderbolt 0000:5d:00.0: 0:12: DP IN resource available
+[  380.731469] thunderbolt 0000:a4:00.0: IOMMU DMA protection is disabled
+[  380.731481] thunderbolt 0000:a4:00.0: total paths: 12
+[  380.732031] thunderbolt 0000:a4:00.0: allocating TX ring 0 of size 10
+[  380.732062] thunderbolt 0000:a4:00.0: allocating RX ring 0 of size 10
+[  380.732095] thunderbolt 0000:a4:00.0: control channel created
+[  380.732101] thunderbolt 0000:a4:00.0: ICM not supported on this controller
+[  380.732115] thunderbolt 0000:a4:00.0: freeing RX ring 0
+[  380.732126] thunderbolt 0000:a4:00.0: freeing TX ring 0
+[  380.732154] thunderbolt 0000:a4:00.0: allocating TX ring 0 of size 10
+[  380.732171] thunderbolt 0000:a4:00.0: allocating RX ring 0 of size 10
+[  380.732187] thunderbolt 0000:a4:00.0: control channel created
+[  380.732193] thunderbolt 0000:a4:00.0: using software connection manager
+[  380.732197] thunderbolt 0000:a4:00.0: device link creation from 0000:a3:00.0 failed
+[  380.732256] thunderbolt 0000:a4:00.0: created link from 0000:a3:03.0
+[  380.732294] thunderbolt 0000:a4:00.0: created link from 0000:a3:04.0
+[  380.732347] thunderbolt 0000:a4:00.0: created link from 0000:a3:05.0
+[  380.732400] thunderbolt 0000:a4:00.0: created link from 0000:a3:06.0
+[  380.732404] thunderbolt 0000:a4:00.0: NHI initialized, starting thunderbolt
+[  380.732407] thunderbolt 0000:a4:00.0: control channel starting...
+[  380.732410] thunderbolt 0000:a4:00.0: starting TX ring 0
+[  380.732419] thunderbolt 0000:a4:00.0: enabling interrupt at register 0x38200 bit 0 (0x0 -> 0x1)
+[  380.732425] thunderbolt 0000:a4:00.0: starting RX ring 0
+[  380.732434] thunderbolt 0000:a4:00.0: enabling interrupt at register 0x38200 bit 12 (0x1 -> 0x1001)
+[  380.732441] thunderbolt 0000:a4:00.0: security level set to user
+[  380.734005] thunderbolt 0000:a4:00.0: current switch config:
+[  380.734011] thunderbolt 0000:a4:00.0:  Thunderbolt 2 Switch: 8086:156d (Revision: 0, TB Version: 2)
+[  380.734016] thunderbolt 0000:a4:00.0:   Max Port Number: 12
+[  380.734019] thunderbolt 0000:a4:00.0:   Config:
+[  380.734022] thunderbolt 0000:a4:00.0:    Upstream Port Number: 5 Depth: 0 Route String: 0x0 Enabled: 1, PlugEventsDelay: 255ms
+[  380.734028] thunderbolt 0000:a4:00.0:    unknown1: 0x0 unknown4: 0x0
+[  380.735004] thunderbolt 0000:a4:00.0: initializing Switch at 0x0 (depth: 0, up port: 5)
+[  380.735075] thunderbolt 0000:a4:00.0: 0: DROM version: 1
+[  380.735236] thunderbolt 0000:a4:00.0: 0: uid: 0x1000e0108fa12
+[  380.735457] thunderbolt 0000:a4:00.0:  Port 1: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.735460] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 15/15
+[  380.735462] thunderbolt 0000:a4:00.0:   Max counters: 16
+[  380.735464] thunderbolt 0000:a4:00.0:   NFC Credits: 0x3c00000
+[  380.735465] thunderbolt 0000:a4:00.0:   Credits (total/control): 60/2
+[  380.737331] thunderbolt 0000:a4:00.0:  Port 2: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.737335] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 15/15
+[  380.737336] thunderbolt 0000:a4:00.0:   Max counters: 16
+[  380.737338] thunderbolt 0000:a4:00.0:   NFC Credits: 0x3c00000
+[  380.737340] thunderbolt 0000:a4:00.0:   Credits (total/control): 60/2
+[  380.738672] thunderbolt 0000:a4:00.0:  Port 3: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.738676] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 15/15
+[  380.738677] thunderbolt 0000:a4:00.0:   Max counters: 16
+[  380.738679] thunderbolt 0000:a4:00.0:   NFC Credits: 0x3c00000
+[  380.738680] thunderbolt 0000:a4:00.0:   Credits (total/control): 60/2
+[  380.738902] thunderbolt 0000:a4:00.0:  Port 4: 8086:156d (Revision: 0, TB Version: 1, Type: Port (0x1))
+[  380.738905] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 15/15
+[  380.738906] thunderbolt 0000:a4:00.0:   Max counters: 16
+[  380.738908] thunderbolt 0000:a4:00.0:   NFC Credits: 0x3c00000
+[  380.738909] thunderbolt 0000:a4:00.0:   Credits (total/control): 60/2
+[  380.739017] thunderbolt 0000:a4:00.0:  Port 5: 8086:156d (Revision: 0, TB Version: 1, Type: NHI (0x2))
+[  380.739021] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 11/11
+[  380.739022] thunderbolt 0000:a4:00.0:   Max counters: 16
+[  380.739024] thunderbolt 0000:a4:00.0:   NFC Credits: 0xf00000
+[  380.739025] thunderbolt 0000:a4:00.0:   Credits (total/control): 15/0
+[  380.739061] thunderbolt 0000:a4:00.0:  Port 6: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.739064] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 8/8
+[  380.739066] thunderbolt 0000:a4:00.0:   Max counters: 2
+[  380.739067] thunderbolt 0000:a4:00.0:   NFC Credits: 0x700000
+[  380.739069] thunderbolt 0000:a4:00.0:   Credits (total/control): 7/0
+[  380.739104] thunderbolt 0000:a4:00.0:  Port 7: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.739106] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 8/8
+[  380.739108] thunderbolt 0000:a4:00.0:   Max counters: 2
+[  380.739110] thunderbolt 0000:a4:00.0:   NFC Credits: 0x700000
+[  380.739111] thunderbolt 0000:a4:00.0:   Credits (total/control): 7/0
+[  380.739146] thunderbolt 0000:a4:00.0:  Port 8: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.739149] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 8/8
+[  380.739150] thunderbolt 0000:a4:00.0:   Max counters: 2
+[  380.739152] thunderbolt 0000:a4:00.0:   NFC Credits: 0x700000
+[  380.739153] thunderbolt 0000:a4:00.0:   Credits (total/control): 7/0
+[  380.739188] thunderbolt 0000:a4:00.0:  Port 9: 8086:156d (Revision: 0, TB Version: 1, Type: PCIe (0x100101))
+[  380.739191] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 8/8
+[  380.739193] thunderbolt 0000:a4:00.0:   Max counters: 2
+[  380.739194] thunderbolt 0000:a4:00.0:   NFC Credits: 0x700000
+[  380.739196] thunderbolt 0000:a4:00.0:   Credits (total/control): 7/0
+[  380.739197] thunderbolt 0000:a4:00.0: 0:10: disabled by eeprom
+[  380.739233] thunderbolt 0000:a4:00.0:  Port 11: 8086:156d (Revision: 0, TB Version: 1, Type: DP/HDMI (0xe0101))
+[  380.739236] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 9/9
+[  380.739237] thunderbolt 0000:a4:00.0:   Max counters: 2
+[  380.739239] thunderbolt 0000:a4:00.0:   NFC Credits: 0xf00000
+[  380.739240] thunderbolt 0000:a4:00.0:   Credits (total/control): 15/0
+[  380.739276] thunderbolt 0000:a4:00.0:  Port 12: 8086:156d (Revision: 0, TB Version: 1, Type: DP/HDMI (0xe0101))
+[  380.739278] thunderbolt 0000:a4:00.0:   Max hop id (in/out): 9/9
+[  380.739280] thunderbolt 0000:a4:00.0:   Max counters: 2
+[  380.739281] thunderbolt 0000:a4:00.0:   NFC Credits: 0xf00000
+[  380.739283] thunderbolt 0000:a4:00.0:   Credits (total/control): 15/0
+[  380.739844] thunderbolt 0000:a4:00.0: 0: TMU: current mode: bi-directional, HiFi
+[  380.739996] thunderbolt 0000:a4:00.0: 0:1: is unplugged (state: 7)
+[  380.740016] thunderbolt 0000:a4:00.0: 0:3: is unplugged (state: 7)
+[  380.740970] thunderbolt 0000:a4:00.0: 0:11: DP IN resource available
+[  380.740973] thunderbolt 0000:a4:00.0: 0:12: DP IN resource available
+[  380.827010] thunderbolt 0-1: running state INIT
+[  380.921446] thunderbolt 0000:16:00.0: 1: received XDomain UUID request
+[  380.930966] thunderbolt 0-1: running state UUID
+[  380.930972] thunderbolt 0-1: requesting remote UUID
+[  380.931069] thunderbolt 0-1: got remote UUID 00000000-0000-0008-0048-1a1dad52f062
+[  381.025408] thunderbolt 0000:16:00.0: 1: received XDomain properties changed request
+[  381.035014] thunderbolt 0-1: sending properties changed notification
+[  381.375044] thunderbolt 0000:16:00.0: acking hot plug event on 0:2
+[  381.375132] thunderbolt 0000:16:00.0: 0:2: hotplug: scanning
+[  381.375145] thunderbolt 0000:16:00.0: 0:2: hotplug: no switch found
+[  381.937389] thunderbolt 0000:16:00.0: 1: received XDomain link state status request
+[  381.937435] thunderbolt 0000:16:00.0: 1: replying with target link width set to 0x3
+[  381.963069] thunderbolt 0-1: running state LINK_STATUS
+[  381.963076] thunderbolt 0-1: sending link state status request to 00000000-0000-0008-0048-1a1dad52f062
+[  381.963326] thunderbolt 0-1: remote link supports width 0x3 speed 0x8
+[  381.963333] thunderbolt 0-1: we have higher UUID, other side bonds the lanes
+[  382.961561] thunderbolt 0000:16:00.0: 1: received XDomain link state change request
+[  382.987089] thunderbolt 0-1: running state BONDING_UUID_HIGH
+[  383.985467] thunderbolt 0000:16:00.0: 1: received XDomain link state status request
+[  383.985497] thunderbolt 0000:16:00.0: 1: replying with target link width set to 0x3
+[  385.009873] thunderbolt 0000:16:00.0: acking hot unplug event on 0:2
+[  385.011297] thunderbolt 0-1: lane bonding enabled
+[  385.011316] thunderbolt 0000:16:00.0: 0:2: got unplug event for disconnected port, ignoring
+[  386.027147] thunderbolt 0-1: running state PROPERTIES
+[  386.027159] thunderbolt 0-1: requesting remote properties
+[  386.027716] thunderbolt 0-1: current link speed 10.0 Gb/s
+[  386.027728] thunderbolt 0-1: current link width symmetric, dual lanes
+[  386.027812] thunderbolt 0-1: new host found, vendor=0x1d6b device=0x4
+[  386.027829] thunderbolt 0-1: Linux enlight
+[  386.033481] thunderbolt 0000:16:00.0: 1: received XDomain properties request
+[  386.033555] thunderbolt 0000:16:00.0: 1: received XDomain properties request
+[  389.489593] thunderbolt-net 0-1.0 thunderbolt0: remote login request received
+[  390.163576] thunderbolt 0000:16:00.0: allocating TX ring -1 of size 256
+[  390.163615] thunderbolt 0000:16:00.0: allocating RX ring -1 of size 256
+[  390.163630] thunderbolt 0000:16:00.0: quirking E2E TX HopID 2 -> 1
+[  390.163635] thunderbolt-net 0-1.0 thunderbolt0: login started
+[  391.179216] thunderbolt-net 0-1.0 thunderbolt0: sending login request, retries=0
+[  391.179429] thunderbolt-net 0-1.0 thunderbolt0: received login reply
+[  394.609778] thunderbolt-net 0-1.0 thunderbolt0: remote login request received
+[  394.609790] thunderbolt-net 0-1.0 thunderbolt0: remote login response sent
+[  394.609795] thunderbolt-net 0-1.0 thunderbolt0: login successful, enabling paths
+[  394.609799] thunderbolt 0000:16:00.0: starting TX ring 2
+[  394.609808] thunderbolt 0000:16:00.0: enabling interrupt at register 0x38200 bit 2 (0x1001 -> 0x1005)
+[  394.609812] thunderbolt 0000:16:00.0: starting RX ring 2
+[  394.609815] thunderbolt 0000:16:00.0: enabling E2E for RX ring 2 with TX HopID 1
+[  394.609821] thunderbolt 0000:16:00.0: enabling interrupt at register 0x38200 bit 14 (0x1005 -> 0x5005)
+[  394.610296] thunderbolt 0000:16:00.0: 0:5 <-> 0:1 (DMA): activating
+[  394.610301] thunderbolt 0000:16:00.0: activating DMA RX path from 0:1 to 0:5
+[  394.610352] thunderbolt 0000:16:00.0: 0:1: Writing hop 0
+[  394.610356] thunderbolt 0000:16:00.0: 0:1:  In HopID: 8 => Out port: 5 Out HopID: 2
+[  394.610358] thunderbolt 0000:16:00.0: 0:1:   Weight: 1 Priority: 5 Credits: 14 Drop: 0 PM: 0
+[  394.610362] thunderbolt 0000:16:00.0: 0:1:    Counter enabled: 0 Counter index: 2047
+[  394.610364] thunderbolt 0000:16:00.0: 0:1:   Flow Control (In/Eg): 1/0 Shared Buffer (In/Eg): 0/0
+[  394.610367] thunderbolt 0000:16:00.0: 0:1:   Unknown1: 0x0 Unknown2: 0x0 Unknown3: 0x0
+[  394.610387] thunderbolt 0000:16:00.0: DMA RX path activation complete
+[  394.610390] thunderbolt 0000:16:00.0: activating DMA TX path from 0:5 to 0:1
+[  394.610424] thunderbolt 0000:16:00.0: 0:5: Writing hop 0
+[  394.610426] thunderbolt 0000:16:00.0: 0:5:  In HopID: 2 => Out port: 1 Out HopID: 8
+[  394.610429] thunderbolt 0000:16:00.0: 0:5:   Weight: 1 Priority: 5 Credits: 14 Drop: 0 PM: 0
+[  394.610431] thunderbolt 0000:16:00.0: 0:5:    Counter enabled: 0 Counter index: 2047
+[  394.610433] thunderbolt 0000:16:00.0: 0:5:   Flow Control (In/Eg): 1/1 Shared Buffer (In/Eg): 0/0
+[  394.610436] thunderbolt 0000:16:00.0: 0:5:   Unknown1: 0x0 Unknown2: 0x0 Unknown3: 0x0
+[  394.610455] thunderbolt 0000:16:00.0: DMA TX path activation complete
+[  394.610483] thunderbolt-net 0-1.0 thunderbolt0: network traffic started
+[  395.229646] thunderbolt_stream 0-1.1: added local directory trashcan: in HopID 15, out HopID 15
+[  395.279358] thunderbolt 0-1: sending properties changed notification
+[  396.401829] thunderbolt 0000:16:00.0: 1: received XDomain properties request
+[  396.401915] thunderbolt 0000:16:00.0: 1: received XDomain properties request
+[  396.401967] thunderbolt 0000:16:00.0: 1: received XDomain properties request
+[  398.625923] thunderbolt 0000:16:00.0: 1: received XDomain properties changed request
+[  398.727426] thunderbolt 0-1: running state ENUMERATED
+[  399.755424] thunderbolt 0-1: running state PROPERTIES
+[  399.755432] thunderbolt 0-1: requesting remote properties
