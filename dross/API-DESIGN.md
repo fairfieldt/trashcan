@@ -377,6 +377,9 @@ directory.
 
 ## Applying the design
 
+[Native networking interfaces](NETWORKING.md) applies these rules to network
+authority, connections, listeners, readiness and partial I/O.
+
 | Interface | Capability and operation model |
 |---|---|
 | Filesystem | Directory and file objects; offset-based I/O; explicit buffer release and durability |

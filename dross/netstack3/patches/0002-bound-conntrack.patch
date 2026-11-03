@@ -1,0 +1,68 @@
+--- a/core/filter/src/conntrack.rs
++++ b/core/filter/src/conntrack.rs
+@@ -44,7 +44,8 @@
+ /// NOTE: This is subtly different from the number of connections in the table
+ /// because self-connected sockets only have a single entry instead of the
+ /// normal two.
+-pub(crate) const MAXIMUM_ENTRIES: usize = 100_000;
++// Oscar: bound flow metadata for the 32-socket userspace worker.
++pub(crate) const MAXIMUM_ENTRIES: usize = 1024;
+ 
+ /// Implements a connection tracking subsystem.
+ ///
+@@ -192,7 +193,8 @@
+ 
+         let mut guard = self.inner.lock();
+ 
+-        if guard.table.len() >= MAXIMUM_ENTRIES {
++        let new_entries = if exclusive.inner.original_tuple == exclusive.inner.reply_tuple { 1 } else { 2 };
++        while guard.table.len() + new_entries > MAXIMUM_ENTRIES {
+             guard.table_limit_hits = guard.table_limit_hits.saturating_add(1);
+ 
+             struct Info<'a, I: IpExt, BT: FilterBindingsTypes> {
+@@ -491,6 +493,10 @@
+         let guard = self.inner.lock();
+ 
+         inspector.record_usize("num_entries", guard.table.len());
++        inspector.record_usize("table_capacity", guard.table.capacity());
++        inspector.record_usize("connection_object_bytes", core::mem::size_of::<ConnectionShared<I, E, BT>>());
++        inspector.record_usize("connection_alignment", core::mem::align_of::<ConnectionShared<I, E, BT>>());
++        inspector.record_usize("tuple_bytes", core::mem::size_of::<Tuple<I>>());
+         inspector.record_uint("table_limit_hits", guard.table_limit_hits);
+         inspector.record_uint("table_limit_drops", guard.table_limit_drops);
+ 
+@@ -1954,6 +1960,34 @@
+     }
+ 
+     #[ip_test(I)]
++    fn table_size_limit_mixed_self_and_normal<I: IpExt + TestIpExt>() {
++        let mut bindings_ctx = FakeBindingsCtx::<I>::new();
++        let table = Table::<I, (), _>::new::<IntoCoreTimerCtx>(&mut bindings_ctx);
++        for i in 0..MAXIMUM_ENTRIES {
++            let port = u16::try_from(i + 1).unwrap();
++            let packet = PacketMetadata::<I>::new(
++                I::SRC_IP, I::SRC_IP,
++                TransportPacketData::Udp { src_port: port, dst_port: port },
++            );
++            let (connection, _) = table
++                .get_connection_for_packet_and_update(&bindings_ctx, packet)
++                .unwrap().unwrap();
++            table.finalize_connection(&mut bindings_ctx, connection).unwrap();
++        }
++        assert_eq!(table.inner.lock().table.len(), MAXIMUM_ENTRIES);
++        bindings_ctx.sleep(CONNECTION_EXPIRY_TIME_UDP);
++        for i in 0..u32::try_from(MAXIMUM_ENTRIES).unwrap() {
++            let (packet, _) = make_test_udp_packets::<I>(i);
++            let (connection, _) = table
++                .get_connection_for_packet_and_update(&bindings_ctx, packet.conntrack_packet().unwrap())
++                .unwrap().unwrap();
++            table.finalize_connection(&mut bindings_ctx, connection).unwrap();
++            let entries = table.inner.lock().table.len();
++            assert!(entries <= MAXIMUM_ENTRIES, "mixed flow table grew to {entries}");
++        }
++    }
++
++    #[ip_test(I)]
+     #[test_case(EstablishmentLifecycle::SeenOriginal; "existing connections unestablished")]
+     #[test_case(EstablishmentLifecycle::SeenReply; "existing connections partially established")]
+     #[test_case(EstablishmentLifecycle::Established; "existing connections established")]

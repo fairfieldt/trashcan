@@ -1,0 +1,23 @@
+[package]
+name = "oscar-netd"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[[bin]]
+name = "unix-netd"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+oscar-netstack3-engine = { path = "../engine" }
+oscar-ethernet = { path = "../../unix/ethernet" }
+dross-rt = { path = "../../user/rt" }
+dross-abi = { path = "../../abi" }
+
+[[bin]]
+name = "native-net-test"
+path = "src/bin/network-test.rs"
+test = false
+bench = false

@@ -99,6 +99,78 @@ See [Native program interfaces](../../API.md) for kernel contracts and
 [Oscar application API design](../../API-DESIGN.md) for service protocols,
 delegation and the environment subsystem boundary.
 
+## Native TCP networking
+
+`protocol::network` provides `Network`, `TcpStream`, `TcpListener` and
+`Observation`. `Network::new(capability)` consumes a fresh network-service channel
+owner. Each client has one request/reply reader; do not reuse an old connection
+in a new client. The service enforces CONNECT and LISTEN grants separately from
+kernel channel rights.
+
+`begin_connect(peer, stream_rights, deadline)` returns an admitted, possibly
+connecting stream. `connect_tcp(peer, stream_rights, deadline)` waits for the
+handshake and requires INFO and OBSERVE in the requested stream rights. These
+rights are explicit; the helper does not add them. `listen_tcp(local,
+listener_rights, accepted_stream_rights, backlog, deadline)` creates a listener;
+port zero selects an available port, reported by `listener.info(deadline)`.
+`accept(rights, deadline)` returns a fresh stream or WouldBlock. `accept_wait`
+uses the listener's readiness observer while waiting.
+
+```rust,ignore
+use dross_rt::protocol::network::{Endpoint, ReadResult, stream_rights};
+
+let rights = stream_rights::READ | stream_rights::WRITE
+    | stream_rights::INFO | stream_rights::OBSERVE | stream_rights::SHUTDOWN_SEND;
+let mut stream = network.connect_tcp(Endpoint::v4([127, 0, 0, 1], 8080), rights, deadline)?;
+stream.write_all(b"request", deadline)?;
+stream.shutdown_send(deadline)?;
+match stream.read_wait(4096, deadline)? {
+    ReadResult::Data(data) => use_bytes(data.bytes()),
+    ReadResult::Eof => finish_response(),
+}
+```
+
+`read(maximum, deadline)` is nonblocking and can return WouldBlock. Positive data
+owns its received message; `ReadData::bytes()` borrows private copied bytes without
+another allocation. EOF has a separate result and follows buffered input.
+Networking-service loss is a transport error, not EOF. `read_wait` waits for
+readiness and retries using the same deadline.
+
+`write(bytes, deadline)` returns a possibly partial count accepted into the local
+TCP queue. It does not promise delivery to the peer. `write_all` waits for local
+capacity and retries only the unaccepted suffix. It returns `WriteAllError` with
+`accepted` counting confirmed bytes. If
+`latest_request_may_have_succeeded()` is true, the latest batch may have accepted
+additional bytes: do not replay that batch automatically. Waiting on backpressure
+requires OBSERVE authority. ShutdownSend, ShutdownReceive and Abort have separate
+methods; successful Abort retires the local control client.
+
+All helpers preserve one absolute deadline through admission, readiness and
+retries. An uncertain or invalid RPC reply retires that serial control channel.
+After CONNECT admission, a later transport timeout is OutcomeUnknown even if the
+follow-up INFO or OBSERVE request itself could not be sent. Dropping the stream
+releases its control endpoint; it does not prove no handshake happened remotely.
+
+There is one normal observer per stream or listener. `observe(mask, key,
+deadline)` returns its independent event receiver; `Observation::as_handle()` can
+be registered for READABLE in a kernel event queue. `receive(deadline)` timing out
+leaves the watch registered. Dequeue an event before `stream.rearm(&mut watch,
+deadline)` or the corresponding listener call. Rearm uses the observed revision
+and can return a new snapshot with no requested readiness bits; retry the actual
+operation before waiting again. Explicit `cancel` uses a control RPC; dropping a
+watch closes its receiver without waiting for a service reply.
+
+The waiting helpers temporarily use that same observer slot when they need to
+wait. They cannot simultaneously claim it while an application holds its own
+normal watch. The service keeps at most one unsent event; historical events can
+still occupy the bounded underlying kernel queue if a raw client violates
+normal dequeue-before-rearm use.
+
+Inline operations carry at most 16 KiB. IPv6 addresses decode as values, but the
+current IPv4 service returns Unsupported for IPv6 operations. UDP, resolution and
+administration are separate future interfaces. See [networking contracts](../../NETWORKING.md)
+and the [C wire codec](../../protocol/include/oscar_network.h).
+
 ## Validation
 
 From `dross/`:
@@ -106,15 +178,17 @@ From `dross/`:
 ```sh
 cargo test -p dross-rt --no-default-features --lib
 python3 protocol/tests/check.py
+python3 protocol/tests/check_network.py
 SMP=1 PROFILE=release KERNEL_FEATURES=unix,audit-test ./run-qemu.sh
 SMP=4 PROFILE=release KERNEL_FEATURES=unix,audit-test ./run-qemu.sh
 SMP=4 PROFILE=release KERNEL_FEATURES=audit-test ./run-qemu.sh
 ```
 
-The API foundation passes 75 native checks on one CPU and 80 on four CPUs, plus
+The current suite passes 84 native checks on one CPU and 89 on four CPUs, plus
 28 POSIX checks in each configuration. Tests include heap exhaustion before
 receive, failed-send ownership, bootstrap recovery after failed launch, native
 Rust and C directory clients, rights attenuation and provider failure cleanup.
-Host codecs agree on 267 framing and bootstrap cases. The Unix audit build also
-passes 80 native and 28 POSIX checks on a physical Mac Pro 6,1 with 24 logical
-CPUs, including both native service clients and failure cleanup tests.
+Host codecs agree on 267 framing/bootstrap cases and 1,534 networking cases. The network service hardware cohort also passes 89 native checks and the native
+TCP fixture on a physical Mac Pro 6,1 with 24 logical CPUs, followed by the full
+Unix and OpenSSH acceptance suite. See [network validation](../../netstack3/VALIDATION.md)
+for the exact cohort and remaining limits.

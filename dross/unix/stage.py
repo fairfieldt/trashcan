@@ -11,6 +11,7 @@ shutil.copy2(out/'unix-probe',esp/'modules/unix-probe')
 shutil.copy2(out/'native/x86_64-unknown-linux-musl/release/unix-terminal-bridge',esp/'modules/unix-terminal-bridge')
 (esp/'modules/entropy.seed').write_bytes(os.urandom(32))
 shutil.copy2(out/'native/x86_64-unknown-none/release/unix-netd',esp/'modules/unix-netd')
+shutil.copy2(out/'native/x86_64-unknown-none/release/native-net-test',esp/'modules/native-net-test')
 shutil.copy2(out/'native/x86_64-unknown-none/release/unix-nic',esp/'modules/unix-nic')
 shutil.copy2(out/'kernel/x86_64-unknown-none/release/pcid',esp/'modules/pcid')
 busybox=out/'src/busybox-1.37.0/busybox_unstripped'

@@ -4,6 +4,12 @@ from pathlib import Path
 import os, sys, subprocess, time, tempfile, socket, shutil, pty, fcntl, termios, struct, select, signal, hashlib
 here=Path(__file__).resolve().parent; out=here/'target'; os.chdir(here)
 port=int(os.environ.get('SSH_PORT','2222'))
+# Keep the forwarded listener on the host's private network interface.
+if shutil.which('tailscale'):
+ host_address=subprocess.check_output(['tailscale','ip','-4'],text=True,timeout=10).strip().splitlines()[0]
+ socket.inet_aton(host_address)
+else:
+ host_address='127.0.0.1'
 subprocess.run([sys.executable,'stage.py'],check=True)
 firmware=None
 for root in ['/opt/homebrew/share/qemu','/usr/local/share/qemu','/usr/share/qemu','/usr/share/OVMF']:
@@ -14,9 +20,9 @@ if not firmware:raise SystemExit('No OVMF firmware found')
 shutil.copy2(firmware[1],out/'vars.fd')
 args=['qemu-system-x86_64','-machine','q35,i8042=off','-accel','tcg,thread=multi','-cpu','IvyBridge,+x2apic','-smp',os.environ.get('SMP','4'),'-m','2G','-device','intel-iommu,intremap=off',
  '-drive',f'if=pflash,format=raw,readonly=on,file={firmware[0]}','-drive',f'if=pflash,format=raw,file={out}/vars.fd','-drive',f'format=raw,file=fat:rw:{out}/esp',
- '-device','isa-debug-exit,iobase=0xf4,iosize=4','-serial',f'file:{out}/qemu.log','-display','none','-no-reboot','-netdev',f'user,id=net0,hostfwd=tcp:127.0.0.1:{port}-:22','-device','e1000,netdev=net0']
-known=out/'known_hosts';known.write_text(f'[127.0.0.1]:{port} '+(out/'test-hostkey.pub').read_text())
-ssh=['ssh','-F','/dev/null','-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','IdentityAgent=none','-o','AddKeysToAgent=no','-o','StrictHostKeyChecking=yes','-o',f'UserKnownHostsFile={known}','-o','ConnectTimeout=3','-i',str(out/'test-client'),'-p',str(port),'root@127.0.0.1']
+ '-device','isa-debug-exit,iobase=0xf4,iosize=4','-serial',f'file:{out}/qemu.log','-display','none','-no-reboot','-netdev',f'user,id=net0,hostfwd=tcp:{host_address}:{port}-:22','-device','e1000,netdev=net0']
+known=out/'known_hosts';known.write_text(f'[{host_address}]:{port} '+(out/'test-hostkey.pub').read_text())
+ssh=['ssh','-F','/dev/null','-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','IdentityAgent=none','-o','AddKeysToAgent=no','-o','StrictHostKeyChecking=yes','-o',f'UserKnownHostsFile={known}','-o','ConnectTimeout=3','-i',str(out/'test-client'),'-p',str(port),f'root@{host_address}']
 def run(command, data=None, expected=0):
  p=subprocess.run(ssh+[command],input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=45)
  if p.returncode!=expected:raise AssertionError((command,p.returncode,p.stdout,p.stderr))

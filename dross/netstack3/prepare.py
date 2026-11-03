@@ -304,9 +304,9 @@ def main():
             raise RuntimeError("pinned Fuchsia license differs from the reviewed notice")
     for patch in sorted((HERE / "patches").glob("*.patch")):
         # An already applied patch is verified by reverse dry-run.
-        applied = subprocess.run(["patch", "--dry-run", "-R", "-p1", "-i", str(patch)], cwd=SOURCE, capture_output=True)
+        applied = subprocess.run(["patch", "--force", "--fuzz=0", "--dry-run", "-R", "-p1", "-i", str(patch)], cwd=SOURCE, capture_output=True)
         if applied.returncode:
-            subprocess.run(["patch", "--batch", "-p1", "-i", str(patch)], cwd=SOURCE, check=True)
+            subprocess.run(["patch", "--force", "--fuzz=0", "--batch", "-p1", "-i", str(patch)], cwd=SOURCE, check=True)
     generate()
 
 

@@ -853,6 +853,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
+name = "oscar-ethernet"
+version = "0.1.0"
+
+[[package]]
+name = "oscar-netd"
+version = "0.1.0"
+dependencies = [
+ "dross-abi",
+ "dross-rt",
+ "oscar-ethernet",
+ "oscar-netstack3-engine",
+]
+
+[[package]]
+name = "oscar-netstack3-engine"
+version = "0.1.0"
+dependencies = [
+ "dross-rt",
+ "net_types",
+ "netstack3_base",
+ "netstack3_core",
+ "netstack3_device",
+ "netstack3_ip",
+ "netstack3_tcp",
+ "oscar-netstack3-native",
+ "packet",
+]
+
+[[package]]
 name = "oscar-netstack3-native"
 version = "0.1.0"
 dependencies = [

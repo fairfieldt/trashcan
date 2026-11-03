@@ -1,5 +1,5 @@
 [workspace]
-members = ["init", "netd", "terminal-bridge", "ethernet", "nic", "native-run"]
+members = ["init", "terminal-bridge", "ethernet", "nic", "native-run"]
 resolver = "2"
 [profile.dev]
 panic = "abort"

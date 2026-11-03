@@ -103,6 +103,19 @@ after two seconds and retires an unresponsive provider control connection. Closi
 a client ends its observation and releases its retained client endpoint; it does
 not retract an OFFER already delivered to a provider.
 
+## Native networking
+
+NETWORK, TCP_STREAM, TCP_LISTENER and NETWORK_OBSERVER use major version 1.
+Every request carries an absolute monotonic deadline. Factory grants and stream
+operation rights are separate from channel permissions. Read replies distinguish
+data from EOF; write replies count bytes accepted into the local TCP buffer.
+
+[Native networking interfaces](../NETWORKING.md) describes ownership, readiness,
+partial I/O and failure behavior. The Rust codec and clients are in
+`user/rt/src/protocol/network.rs`; the independent C codec is
+`include/oscar_network.h`. Their fixed-width fields and transferred handles are
+the language boundary. They do not require a Rust runtime in the caller.
+
 ## Validation
 
 From the repository root:
@@ -110,6 +123,7 @@ From the repository root:
 ```sh
 python3 dross/protocol/generate.py --check
 python3 dross/protocol/tests/check.py
+python3 dross/protocol/tests/check_network.py
 ```
 
 The host checks compare C and Rust bytes and decode results, including truncated

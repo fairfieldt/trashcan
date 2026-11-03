@@ -23,7 +23,7 @@ fn main(boot: Handle) -> i32 {
     let conf = b.handle("module/init.conf").map(read_module).unwrap_or_default();
     let all: alloc::vec::Vec<alloc::vec::Vec<&str>> =
         conf.lines().map(|l| l.split_whitespace().collect::<alloc::vec::Vec<_>>()).filter(|w| w.first().is_some_and(|f| !f.starts_with('#'))).collect();
-    let lines: alloc::vec::Vec<&alloc::vec::Vec<&str>> = all.iter().filter(|w| matches!(w[0], "start" | "check" | "native")).collect();
+    let lines: alloc::vec::Vec<&alloc::vec::Vec<&str>> = all.iter().filter(|w| matches!(w[0], "start" | "check" | "native" | "native-check")).collect();
     // `channel NAME` makes a channel; `@NAME=HANDLE` on a start or check line gives that program the next end of
     // it as bootstrap handle HANDLE (so a driver and its client can be connected, e.g. ethd and netd).
     let mut channels: Channels = alloc::vec::Vec::new();
@@ -91,7 +91,7 @@ fn main(boot: Handle) -> i32 {
         if matches!(words[0], "start" | "native") {
             ok &= start(&b, &mut channels, words, ends[li].take().unwrap());
         }
-        li += matches!(words[0], "start" | "native" | "check") as usize;
+        li += matches!(words[0], "start" | "native" | "check" | "native-check") as usize;
     }
 
     if let Some(img) = b.handle("module/selftest") {
@@ -180,18 +180,25 @@ fn main(boot: Handle) -> i32 {
             "reboot" => reboot = true,
             "channel" | "netservice" | "mount" => {}
             "start" | "native" => li += 1,
-            "check" => {
+            "check" | "native-check" => {
                 let end = ends[li].take().unwrap();
                 li += 1;
                 let want = words.get(2).and_then(|c| c.parse::<i64>().ok());
                 let mut words_argv = alloc::vec![words[1]];
                 words_argv.extend_from_slice(&words[3..]);
                 let args = take_ends(&b, &mut channels, &words_argv);
-                match launch(&b, &args, end) {
+                let process = if words[0] == "native-check" {
+                    let _ = sys::close(end);
+                    launch_native(&b, &args, None)
+                } else {
+                    launch(&b, &args, end)
+                };
+                match process {
                     Some(p) => {
                         let code = sys::process_wait(p, sys::after_ms(600_000));
                         println!("{} exited with {code:?}", args.argv.join(" "));
                         ok &= code.ok() == want;
+                        let _ = sys::close(p);
                     }
                     None => ok = false,
                 }
@@ -230,7 +237,7 @@ struct Args {
 /// A `start` or `native` line: runs the program; false if it could not be started.
 fn start(b: &Bootstrap, channels: &mut Channels, words: &[&str], pci: Handle) -> bool {
     let args = take_ends(b, channels, &words[1..]);
-    if words[0] == "native" { launch_native(b, &args, pci) } else { launch(b, &args, pci).is_some() }
+    if words[0] == "native" { launch_native(b, &args, Some(pci)).is_some() } else { launch(b, &args, pci).is_some() }
 }
 
 /// A line's arguments: `@NAME=HANDLE` passes the next free end of channel NAME, or else a duplicate of init's
@@ -286,7 +293,7 @@ fn launch(b: &Bootstrap, args: &Args, pci: Handle) -> Option<Handle> {
         println!("init.conf: no module {}", argv[0]);
         return None;
     };
-    let boot = builder(args, pci).send().ok()?;
+    let boot = builder(args, Some(pci)).send().ok()?;
     let env = ["DROSS_BOOTSTRAP=1", "RUST_BACKTRACE=0", "PATH=/bin:/sbin:/usr/bin:/usr/sbin", "HOME=/root", "TERM=xterm"];
     match sys::spawn_linux(img, &argv, &env, Some(boot)) {
         Ok(p) => Some(p),
@@ -297,23 +304,31 @@ fn launch(b: &Bootstrap, args: &Args, pci: Handle) -> Option<Handle> {
     }
 }
 
-/// Starts the native program `argv[0]` (a module) with a pcid connection, the line's handles and values.
-fn launch_native(b: &Bootstrap, args: &Args, pci: Handle) -> bool {
+/// Starts a native module with explicit handles/values and an optional pcid connection.
+fn launch_native(b: &Bootstrap, args: &Args, pci: Option<Handle>) -> Option<Handle> {
     let Some(img) = b.handle(&alloc::format!("module/{}", args.argv[0])) else {
         println!("init.conf: no module {}", args.argv[0]);
-        return false;
+        return None;
     };
     match bootstrap::spawn(img, &args.argv[0], builder(args, pci), u64::MAX) {
-        Ok(_) => true,
+        Ok(process) => Some(process),
         Err(e) => {
             println!("{}: {e:?}", args.argv.join(" "));
-            false
+            None
         }
     }
 }
 
-fn builder(args: &Args, pci: Handle) -> Builder {
-    let mut bb = Builder::default().handle("pci", pci);
+fn builder(args: &Args, pci: Option<Handle>) -> Builder {
+    let mut bb = Builder::default();
+    if let Some(pci) = pci {
+        if args.argv.first().is_some_and(|name| name == "unix-netd") {
+            // The network service receives a port from the NIC driver, not PCI access.
+            let _ = sys::close(pci);
+        } else {
+            bb = bb.handle("pci", pci);
+        }
+    }
     for (name, h) in &args.handles {
         bb = bb.handle(name, *h);
     }

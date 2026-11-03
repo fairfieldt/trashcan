@@ -4,6 +4,7 @@
 //! not register as netd or use a hardware NIC. Queues and TCP payloads are
 //! bounded; infallible core allocations can still exhaust the process heap.
 #![no_std]
+#![recursion_limit = "256"]
 extern crate alloc;
 pub mod buffers;
 pub mod runner;
@@ -119,6 +120,8 @@ struct State {
     deferred: Mutex<Vec<Completion>>,
     events: AtomicU64,
     wakeups: AtomicU64,
+    failed: AtomicBool,
+    rx_pending: AtomicBool,
 }
 
 pub struct Bindings {
@@ -127,7 +130,10 @@ pub struct Bindings {
 }
 impl Bindings {
     pub fn new() -> Self {
-        let size = NonZeroUsize::new(buffers::TCP_BYTES).unwrap();
+        Self::with_tcp_bytes(buffers::TCP_BYTES)
+    }
+    pub fn with_tcp_bytes(bytes: usize) -> Self {
+        let size = NonZeroUsize::new(bytes.min(buffers::MAX_TCP_BYTES).max(1)).unwrap();
         let bound = BufferSizeSettings::new(size, size, size).unwrap();
         Self {
             state: Arc::new(State {
@@ -142,6 +148,8 @@ impl Bindings {
                 deferred: Mutex::new(Vec::with_capacity(MAX_DEFERRED)),
                 events: AtomicU64::new(0),
                 wakeups: AtomicU64::new(0),
+                failed: AtomicBool::new(false),
+                rx_pending: AtomicBool::new(false),
             }),
             settings: TcpSettings {
                 receive_buffer: bound,
@@ -150,9 +158,7 @@ impl Bindings {
         }
     }
     pub fn set_now(&self, now: Instant) {
-        let before = self.state.now.load(Ordering::Relaxed);
-        assert!(now.0 >= before, "native proof clock moved backwards");
-        self.state.now.store(now.0, Ordering::Relaxed);
+        self.state.now.fetch_max(now.0, Ordering::Relaxed);
     }
     pub fn next_deadline(&self) -> Option<Instant> {
         self.state
@@ -177,6 +183,12 @@ impl Bindings {
     pub fn pop_frame(&mut self) -> Option<FrameBytes> {
         self.state.frames.lock().pop_front()
     }
+    pub fn failed(&self) -> bool {
+        self.state.failed.load(Ordering::Acquire)
+    }
+    pub fn take_rx_pending(&self) -> bool {
+        self.state.rx_pending.swap(false, Ordering::AcqRel)
+    }
     pub fn frame_count(&self) -> usize {
         self.state.frames.lock().len()
     }
@@ -192,11 +204,11 @@ impl Bindings {
     fn track_deferred(&self, receiver: Completion) {
         let mut pending = self.state.deferred.lock();
         pending.retain(|completion| !completion.0.load(Ordering::Acquire));
-        assert!(
-            pending.len() < MAX_DEFERRED,
-            "native deferred resource budget exhausted"
-        );
-        pending.push(receiver);
+        if pending.len() < MAX_DEFERRED {
+            pending.push(receiver);
+        } else {
+            self.state.failed.store(true, Ordering::Release);
+        }
     }
     pub fn deferred_pending(&self) -> usize {
         self.state
@@ -252,10 +264,10 @@ impl TimerContext for Bindings {
             .iter()
             .position(|entry| entry.id == timer.id)
             .map(|index| pool.entries.swap_remove(index).at);
-        assert!(
-            pool.entries.len() < MAX_TIMERS,
-            "native scheduled timer budget exhausted"
-        );
+        if pool.entries.len() >= MAX_TIMERS {
+            self.state.failed.store(true, Ordering::Release);
+            return old;
+        }
         pool.entries.push(TimerEntry {
             id: timer.id,
             at,
@@ -416,6 +428,7 @@ impl DeviceBufferBindingsTypes for Bindings {
 }
 impl ReceiveQueueBindingsContext<LoopbackDeviceId<Self>> for Bindings {
     fn wake_rx_task(&mut self, _device: &LoopbackDeviceId<Self>) {
+        self.state.rx_pending.store(true, Ordering::Release);
         self.state.wakeups.fetch_add(1, Ordering::Relaxed);
     }
 }

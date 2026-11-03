@@ -1,10 +1,14 @@
 [workspace]
 resolver = "3"
-members = ["proof", "native", "target/manifests/*"]
+members = ["proof", "native", "engine", "netd", "target/manifests/*"]
 
 [profile.dev]
 panic = "abort"
 incremental = false
 
 [profile.test]
+incremental = false
+
+[profile.release]
+panic = "abort"
 incremental = false

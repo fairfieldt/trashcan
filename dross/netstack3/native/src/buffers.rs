@@ -5,6 +5,7 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::fmt;
+use core::sync::atomic::{AtomicBool, Ordering};
 use netstack3_base::{FragmentedPayload, Payload};
 use netstack3_tcp::{
     AcceptQueueChange, Buffer, BufferLimits, BufferSizes, IntoBuffers, ListenerNotifier,
@@ -12,6 +13,7 @@ use netstack3_tcp::{
 };
 
 pub const TCP_BYTES: usize = 16 * 1024;
+pub const MAX_TCP_BYTES: usize = 32 * 1024;
 
 #[derive(Debug)]
 pub struct Ring {
@@ -22,7 +24,7 @@ pub struct Ring {
 }
 impl Ring {
     fn new(requested: usize) -> Self {
-        let capacity = requested.min(TCP_BYTES);
+        let capacity = requested.min(MAX_TCP_BYTES);
         assert!(capacity > 0);
         Self {
             storage: vec![0; capacity],
@@ -58,11 +60,15 @@ impl Ring {
         count
     }
     pub fn read(&mut self, destination: &mut [u8]) -> usize {
+        let count = self.peek(destination);
+        self.discard(count);
+        count
+    }
+    pub fn peek(&self, destination: &mut [u8]) -> usize {
         let count = self.length.min(destination.len());
         let first = count.min(self.storage.len() - self.head);
         destination[..first].copy_from_slice(&self.storage[self.head..self.head + first]);
         destination[first..count].copy_from_slice(&self.storage[..count - first]);
-        self.discard(count);
         count
     }
     fn discard(&mut self, count: usize) {
@@ -134,13 +140,19 @@ impl ClientBuffers {
     pub fn read(&self, destination: &mut [u8]) -> usize {
         self.receive.0.lock().read(destination)
     }
+    pub fn peek(&self, destination: &mut [u8]) -> usize {
+        self.receive.0.lock().peek(destination)
+    }
+    pub fn readable(&self) -> usize {
+        self.receive.0.lock().limits().len
+    }
 }
 
 #[derive(Clone)]
-pub struct SocketExtra(pub Arc<Mutex<Option<ClientBuffers>>>);
+pub struct SocketExtra(pub Arc<Mutex<Option<ClientBuffers>>>, Arc<AtomicBool>);
 impl Default for SocketExtra {
     fn default() -> Self {
-        Self(Arc::new(Mutex::new(None)))
+        Self(Arc::new(Mutex::new(None)), Arc::new(AtomicBool::new(false)))
     }
 }
 impl fmt::Debug for SocketExtra {
@@ -152,6 +164,9 @@ impl SocketExtra {
     pub fn take(&self) -> Option<ClientBuffers> {
         self.0.lock().take()
     }
+    pub fn accept_ready(&self) -> bool {
+        self.1.load(Ordering::Acquire)
+    }
 }
 impl IntoBuffers<Rx, Ring> for SocketExtra {
     fn into_buffers(self, sizes: BufferSizes) -> (Rx, Ring) {
@@ -161,9 +176,12 @@ impl IntoBuffers<Rx, Ring> for SocketExtra {
     }
 }
 impl ListenerNotifier for SocketExtra {
-    fn accept_queue_changed(&mut self, _change: AcceptQueueChange) {
-        // The off-path proof polls between finite dispatches; service wakeups
-        // will be wired to native wait objects before any real clients exist.
+    fn accept_queue_changed(&mut self, change: AcceptQueueChange) {
+        let ready = match change {
+            AcceptQueueChange::ConnectionAdded { .. } => true,
+            AcceptQueueChange::ConnectionRemoved { is_empty } => !is_empty,
+        };
+        self.1.store(ready, Ordering::Release);
     }
 }
 pub fn new_buffers(sizes: BufferSizes) -> (Rx, Ring, ClientBuffers) {

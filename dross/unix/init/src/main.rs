@@ -38,6 +38,8 @@ fn main(handle: Handle) -> i32 {
     }
     assert_eq!(status, 0, "register network service");
     let (driver, ethernet) = sys::channel_create().unwrap();
+    let (connect_factory, connect_client) = sys::channel_create().unwrap();
+    let (listen_factory, listen_client) = sys::channel_create().unwrap();
     let db = Builder::default()
         .handle("pci", pci_client)
         .handle("ethernet", driver);
@@ -45,10 +47,76 @@ fn main(handle: Handle) -> i32 {
     let nb = Builder::default()
         .handle("ethernet", ethernet)
         .handle("service", daemon)
-        .handle("ready", ready);
+        .handle("ready", ready)
+        .handle("native/connect", connect_factory)
+        .handle("native/listen", listen_factory);
     bootstrap::spawn(b.handle("module/unix-netd").unwrap(), "netd", nb, u64::MAX).unwrap();
     let mut bytes = [0; 64];
     sys::channel_read(report, &mut bytes, &mut [], sys::after_ms(10000)).expect("netd ready");
+    let test = bootstrap::spawn(
+        b.handle("module/native-net-test")
+            .expect("native network test"),
+        "native-net-test",
+        Builder::default()
+            .handle("connect", connect_client)
+            .handle("listen", listen_client),
+        u64::MAX,
+    )
+    .expect("spawn native network test");
+    assert_eq!(sys::process_wait(test, sys::after_ms(30000)), Ok(0));
+    let _ = sys::close(test);
+    println!("native networking passed");
+    // A second process receives native factories and a fake OETH link only:
+    // no legacy root, no PCI or system authority, and no Unix registration.
+    let (fake_driver, fake_link) = sys::channel_create().unwrap();
+    let info = [
+        b'O', b'E', b'T', b'H', 1, 0, 1, 0, 2, 0, 0, 0, 0, 2, 220, 5, 1, 0, 0, 0, 232, 3, 0, 0,
+    ];
+    sys::channel_write(fake_driver, &info, &[]).unwrap();
+    let (native_report, native_ready) = sys::channel_create().unwrap();
+    let (connect_factory, connect_client) = sys::channel_create().unwrap();
+    let (listen_factory, listen_client) = sys::channel_create().unwrap();
+    let native_service = bootstrap::spawn(
+        b.handle("module/unix-netd").unwrap(),
+        "native-only-netd",
+        Builder::default()
+            .handle("ethernet", fake_link)
+            .handle("ready", native_ready)
+            .handle("native/connect", connect_factory)
+            .handle("native/listen", listen_factory),
+        u64::MAX,
+    )
+    .expect("native-only service");
+    sys::channel_read(native_report, &mut bytes, &mut [], sys::after_ms(10000))
+        .expect("native-only service ready");
+    sys::close(native_report).unwrap();
+    // Keep one non-reading factory alias until link shutdown, so a fast daemon
+    // cannot exit successfully on the client's last close before this test
+    // exercises the explicit Ethernet PeerClosed failure path.
+    let shutdown_anchor = sys::dup(connect_client, dross_abi::rights::ALL).unwrap();
+    let native_client = bootstrap::spawn(
+        b.handle("module/native-net-test").unwrap(),
+        "native-only-net-test",
+        Builder::default()
+            .handle("connect", connect_client)
+            .handle("listen", listen_client),
+        u64::MAX,
+    )
+    .expect("native-only client");
+    assert_eq!(
+        sys::process_wait(native_client, sys::after_ms(30000)),
+        Ok(0)
+    );
+    sys::close(native_client).unwrap();
+    // Link loss is an explicit finite service failure, not a Unix dependency.
+    sys::close(fake_driver).unwrap();
+    assert_eq!(
+        sys::process_wait(native_service, sys::after_ms(5000)),
+        Ok(1)
+    );
+    sys::close(native_service).unwrap();
+    sys::close(shutdown_anchor).unwrap();
+    println!("native-only networking and link-close cleanup passed");
     let mut bytes = [0; 4096];
     let (front, stream) = sys::channel_create().unwrap();
     let message = Builder::default()

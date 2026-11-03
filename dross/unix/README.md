@@ -9,6 +9,8 @@ hardware build, init program and init.conf files do not enable it.
 Requires Rust's `x86_64-unknown-none`, `x86_64-unknown-uefi` and
 `x86_64-unknown-linux-musl` targets, Zig, a host C compiler, make, Python, QEMU/OVMF
 and OpenSSH client tools.
+The network service also uses the pinned toolchain in `../netstack3/`;
+`build.sh` prepares its sources and builds it separately.
 
 ```sh
 cd dross/unix
@@ -24,8 +26,9 @@ NIC or change the hardware bring-up configuration. Source archives are pinned by
 SHA-256 in `build.py`; Cargo dependencies are locked in both workspaces. Upstream
 license texts are included in the guest at `/usr/share/licenses`.
 
-The runner forwards **127.0.0.1:2222** to guest TCP port 22. `SSH_PORT` selects a
-free local port when running another guest. It creates dedicated test identities,
+The runner binds the host's Tailscale IPv4 address and forwards port 2222 to guest
+TCP port 22. It uses loopback only when Tailscale is not installed. `SSH_PORT`
+selects a free port when running another guest. It creates dedicated test identities,
 uses a known host key with strict verification, ignores the user's SSH config and
 agent, and never adds keys to the agent or the user's known_hosts. The test image
 contains test private keys and is not an installable production root filesystem.
@@ -45,7 +48,9 @@ SSH starts. Logs are `target/qemu.log`, `target/ssh-pty.log` and
 Unix test init
   ├─ pcid → unix-nic (QEMU e1000, BAR + private VT-d domain)
   │              ↕ OETH frame channel
-  ├─ netd (smoltcp IPv4/TCP, no PCI or system resource)
+  ├─ netd (Netstack3 IPv4/TCP, no PCI or system resource)
+  │              ↕ native factory, connection and listener capabilities
+  ├─ native-net-test
   │              ↕ socket capability channels
   └─ Linux programs: BusyBox ash, utilities, Dropbear, terminal bridge
                          ↕ shared kernel PTYs
@@ -59,7 +64,10 @@ stack. The default dross build retains its driver-harness personality.
 `unix-init` is a separate test supervisor copied as `init` only into this suite's
 ESP. It uses the normal native process/channel APIs and registers netd with native
 `UNIX_NET_REGISTER` (33): `(system resource, channel)`. Only the supervisor receives
-the system resource. The socket RPC contract is in [netd/PROTOCOL.md](netd/PROTOCOL.md).
+the system resource. The private Linux socket RPC contract is in
+[ONET v1](../netstack3/netd/ONET.md). The public native interface is described in
+[Native networking interfaces](../NETWORKING.md). Both use the same engine and
+resource limits; Linux address layouts and errno values stay in the adapter.
 Every socket gets its own channel capability; its identity
 comes from that endpoint, not a client-supplied socket ID. A fork shares an open
 socket description, with serialized bounded RPCs. Ordinary signals are deferred
@@ -84,11 +92,22 @@ without changing netd or the kernel's socket ABI. Physical link state and interr
 belong to the driver; channel messages wake netd. The existing hardware `ethd
 netlog` mode is unaffected.
 
-netd bootstrap handles: `@ethernet` (driver endpoint), `@service` (kernel's socket
-factory endpoint), `@ready` (one-shot ready report). Optional values: `ip` (IPv4),
+netd bootstrap handles: `@ethernet` (driver endpoint), `@ready` (one-shot ready
+report), and optionally `@service` (kernel's Linux socket factory endpoint).
+At least one Linux or native factory must be supplied. Optional values: `ip` (IPv4),
 `prefix` (0..32), `gateway` (IPv4). The default QEMU configuration is 10.0.2.15/24
-through 10.0.2.2. With an explicit `ip`, no gateway is assumed. The server currently
-supports IPv4 TCP, not UDP, IPv6, DHCP, DNS configuration or a loopback interface.
+through 10.0.2.2. With an explicit `ip`, no gateway is assumed. Loopback covers
+127.0.0.0/8 and the configured local address. The service supports IPv4 TCP;
+UDP, IPv6, DHCP and name resolution remain future interfaces.
+
+Optional `@native/connect`, `@native/listen` and `@native/network` handles seed
+connect-only, listen-only and combined native factories. Applications receive
+the other channel ends explicitly. The test supervisor delegates separate
+connect-only and listen-only factories to `native-net-test` before launching
+the Unix probe. It repeats the native fixture against a second service with a
+fake Ethernet link and no Linux factory or registration. Native networking does
+not require the compatibility subsystem. The daemon does not discover services
+or devices by name.
 
 Hardware integration must supply the real NIC endpoint and addressing, enable the
 Unix kernel feature deliberately, provision account/key files, and arrange secure

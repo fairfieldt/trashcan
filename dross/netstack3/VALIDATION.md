@@ -4,13 +4,99 @@ Source: Fuchsia `650b15d5ea9cfe67faf22ea68cb40e8bc3293303`.
 Compiler: `rustc 1.101.0-nightly (f9ceb4a4d 2026-10-31)`, dated toolchain
 `nightly-2026-11-01`, with `-Znext-solver=no`. Incremental compilation is disabled
 in the standalone dev/test profiles after a reproducible compiler fingerprint
-verification panic following regeneration. Imported protocol code is unchanged.
+verification panic following regeneration. The extraction now carries an Oscar connection-tracking resource policy patch;
+see README.md and patches/0002-bound-conntrack.patch.
 
 Run from `dross/netstack3`; this selects its toolchain/config and inherits Oscar's
 freestanding static relocation/code-model flags. Python preparation is pinned to
 the same source revision for all imported directories. A fresh preparation in
 `/tmp/oscar-netstack3-clean-proof` also succeeded; the fetched source is replaced
 from fresh staging directories and cannot retain removed files from an older pin.
+
+## Service integration, 2026-11-03
+
+The service replaces the smoltcp implementation. The binary remains named
+`unix-netd` for existing boot configurations; it is built from package
+`oscar-netd` in this workspace. The old crate and its dependency closure have
+been removed from the Unix workspace. No kernel ABI changed.
+
+| Check | Result |
+| --- | --- |
+| Complete `python3 dross/unix/build.py` | Pass, including the separate pinned-toolchain service build |
+| Native engine under Oscar, four CPUs | Pass: learned ARP, lost SYN/data, bounded partial I/O, peek, half-close, EOF, 127/8 and self-address routes, admission, default gateway, link loss, fragments, pending cancellation and rejected shutdown |
+| Connection tracking pressure | 1,500 SYN flows; 1,024 retained tuple entries, 988 limit hits, no binding-budget fault |
+| Strict mixed self/normal tuple budget | Both IPv4/IPv6 regressions fail the old check at 1,025 entries and pass the new pre-insert check |
+| Upstream filter unit suite after the policy patch | 676 passed |
+| Preserved host proof tests | 5 passed |
+| Native SDK and ownership tests | 84 native checks on one CPU, 89 on four; 28 POSIX checks in each cohort |
+| Independent C/Rust network codecs | 1,534 comparisons passed |
+| Existing framing/bootstrap codecs | 267 comparisons passed |
+| Full Unix and OpenSSH suite | Pass on one and four CPUs |
+
+The native daemon fixture runs against the same engine as Linux sockets, then
+against a second daemon with no Linux factory or network registration. It checks
+connect/listen grants, IPv6 Unsupported, readiness registration/rearm/cancel,
+observer capability rejection without killing other clients, 96 KiB plus 17 bytes
+of exact binary data, partial I/O, FIN/EOF, sending after peer FIN, accepted-stream
+rights attenuation and abort. The second daemon exits after its fake Ethernet
+endpoint closes.
+
+The SSH tests authenticate with fixed test keys, upload and download 8 MiB with
+hash checks, test ENOSPC, PTY input/resize, Ctrl-Z/foreground/Ctrl-C, rejected keys,
+exit status and reconnect cleanup. QEMU uses TCG on macOS with an emulated e1000;
+its host forwarding binds Pinkerton's tailnet address. The final one-CPU run
+measured 0.81 MiB/s upload and 5.13 MiB/s download; four CPUs measured 0.79 and
+7.13 MiB/s. These are emulation observations, not hardware results or a controlled
+comparison with the previous stack. No GPU work ran; GPU clocks do not apply.
+
+The final native engine test is SHA-256
+`2d9d91658d4f1c5fc750c5705b3aee827c124d2d1f9070a9ee23a4dad82a34a9`,
+7,904,008 bytes. The service is SHA-256
+`e3fa634d67b7d1a63efd9e18cbfb98128f2fb2cac17eb9ee180453b7f176408b`,
+3,817,608 bytes before staging strip. Logs, source hashes and artifact manifests
+are archived at repository-root `results/dross/netstack3-service-20261103/`,
+outside this branch. The engine cohort also exercises normal init's
+`native-check` command and passes 89 native checks with zero failures.
+
+Reproduce the service acceptance from the repository root:
+
+```sh
+python3 dross/unix/build.py
+SMP=1 python3 dross/unix/test.py
+SMP=4 python3 dross/unix/test.py
+python3 dross/protocol/tests/check.py
+python3 dross/protocol/tests/check_network.py
+```
+
+Physical acceptance also passed on enlight, a Mac Pro 6,1 with 24 logical CPUs.
+The BCM57762 driver supplied real Ethernet frames over OETH. The same service
+passed 89 native OS checks, the native TCP fixture including observer isolation,
+and 49 Unix probes plus the full remote OpenSSH suite. The 8 MiB hash-checked transfer
+measured 2.26 MiB/s upload and 10.69 MiB/s download. This is the new hardware
+baseline; it is not a controlled before/after comparison. The hardware cohort did
+not separately launch the complete 28-test POSIX program; that result applies
+to the QEMU cohorts above.
+
+The hardware image is SHA-256
+`2b1cb96c47737d9d22cb0f2c97f7ecaf9ff6eb5a7e759e8d217a2ee1eb67b1bd`.
+Its stripped `unix-netd` is 2,246,456 bytes, SHA-256
+`36ecaee0f0c6f7636c8e5adedd8dc44ae105a05100dc47d33107dd38ed3b3023`.
+Logs, exact input/source hashes, ELF checks and SSH transcripts are archived at
+`results/dross/enlight-netstack3-service-20261103/`. The kernel is unchanged from
+the earlier native proof. The finite boot reported all checks passed and requested
+a clean reset. Linux returned with its original BootOrder, no BootNext and no
+temporary EFI entry or directory. The capture helper was stopped and removed,
+and the hardware lease was released.
+
+These checks do not establish graceful recovery from every upstream allocation
+failure, a complete per-client memory quota, automatic restart, IPv6/UDP service
+support or DNS resolution. See README.md for the worker's resource boundaries.
+
+## Earlier extraction proof
+
+The following records the frozen proof before service integration. Its hashes
+identify those archived artifacts; current builds also include the service and
+resource-policy changes described above.
 
 | Check | Result | Evidence |
 | --- | --- | --- |

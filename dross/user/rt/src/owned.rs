@@ -161,6 +161,9 @@ impl Message {
         self.bytes.extend_from_slice(bytes);
         Ok(())
     }
+    /// Shorten initialized bytes without allocating. Services can reserve a
+    /// reply before consuming data, then trim it to the actual result length.
+    pub fn truncate_bytes(&mut self, len: usize) { self.bytes.truncate(len); }
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }

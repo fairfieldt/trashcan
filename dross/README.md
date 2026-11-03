@@ -5,6 +5,8 @@ object-wait subscriptions and deadlines, and [Memory ownership and allocation](M
 for reclamation and allocation budgets.
 See [Oscar application API design](API-DESIGN.md) for the proposed public SDK and
 service contracts, including process launch and service discovery.
+See [Native networking interfaces](NETWORKING.md) for network capabilities,
+TCP connections, readiness events and deadline behavior.
 The first [owned Rust SDK](user/rt/README.md) and draft
 [bootstrap and directory protocols](protocol/README.md) are implemented, including
 a native C interoperability test.
@@ -178,10 +180,9 @@ with `grub-reboot` from Linux's GRUB, which chainloads the loader on the EFI sys
   the stack's side, an ARP request goes out and the gateway's reply comes back through it (0.6 ms);
 - ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux;
 - with the `unix` kernel feature (`unix/README.md`), Oscar's Unix userland runs on the real network: ethd serve,
-  netd (smoltcp) and Dropbear, logged into with OpenSSH from a Mac on the same LAN. A session (key exchange,
-  public-key login, one command) takes 0.11 s; 7 MB go up at 5.1 MB/s and down at 10.1 MB/s (hashes checked).
-  Uploads first ran at 125 KB/s: netd told smoltcp its device takes one frame at a time, and smoltcp then caps
-  the receive window at one segment, so every segment waited for its acknowledgement.
+  Netstack3 netd and Dropbear. The service supports both native capability clients
+  and the existing Linux socket adapter. Throughput measurements from the previous
+  stack do not describe this implementation; see `netstack3/VALIDATION.md`.
 
 Channel messages between threads on two CPUs: 2.7 us one way to a thread blocked in the kernel on a halted CPU
 (p50; p99 2.8 us), 1.4 us to one spinning on non-blocking reads, round trips 5.6 us (p99 6.4 us, max 6.7 us over
@@ -204,7 +205,9 @@ programs as `@NAME=HANDLE` (a NAME that isn't a channel passes a duplicate of in
 other end of channel NAME at PATH (`unix` kernels); `%KEY=VALUE` passes a value, `%KEY=$NAME` one of init's (the
 kernel's `display-width` and so on); a `native usbd` line replaces the usbd init starts by itself; then, in order, `wait CHANNEL
 [MS]` (init's end of the channel gets a message, e.g. netd's `ready`), the remaining `start` lines, `check PROG
-CODE ARGS`, `sleep MS` and `reboot`.
+CODE ARGS`, `native-check PROG CODE ARGS`, `sleep MS` and `reboot`.
+`native-check` starts a native program, waits for its exit code and supplies only
+the capabilities named on that line; it does not add a PCI connection.
 
 ### Oscar's desktop
 
@@ -270,9 +273,9 @@ decode (46 on Linux), and `trashcan serve` with the Responses API on port 8000, 
 
 `oscar-chat` (also `ocsar-chat`) talks to it from Oscar's shell, and `oscar-chat-gui` is the desktop's chat
 window (`desktop/chat`). They reach the server on the same machine through netd's loopback interface:
-127.0.0.0/8 and the machine's own address go to a second smoltcp interface on a loopback device. netd used to
-end the sending side on `shutdown(SHUT_RD)`, so an HTTP server that shuts reading down before it answers
-(trashcan's, for `Connection: close`) sent nothing.
+127.0.0.0/8 and the machine's own address route through Netstack3's loopback
+device. Receive shutdown and send shutdown are separate operations, so a server
+can stop reading a request and still send its response.
 
 ```
 channel chatwin
@@ -381,5 +384,5 @@ default) and has a dross backend. What it doesn't do yet: resets (pcid has none)
 memory by address into a DMA domain (`map_external`; peer BARs will come from pcid as memory objects), and
 counting interrupts (a notification reports one however often it fired).
 
-Next: a network stack (ethd and tbd's ThunderboltIP), and the engine with
-RADV, as Alpine's musl builds of Mesa and the Vulkan loader (shared libraries, dlopen'ed).
+Networking now uses the userspace [Netstack3 service](netstack3/README.md).
+ThunderboltIP integration remains separate work.

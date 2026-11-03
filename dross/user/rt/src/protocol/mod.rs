@@ -3,6 +3,7 @@ pub mod bootstrap;
 pub mod directory;
 pub mod frame;
 pub mod schema;
+pub mod network;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProtocolError {
     Frame(frame::FrameError),

@@ -1,11 +1,28 @@
-# Netstack3 extraction proof
+# Netstack3 network service
 
-This standalone workspace tests a pinned Fuchsia Netstack3 core outside Fuchsia.
-The host tests and the native worker pass; the worker has run under Oscar in
-QEMU and on the enlight Mac Pro 6,1. Native runs use simulated links and logical
-time with real OS entropy. They do not test a hardware NIC or network service.
-It does not replace `unix/netd`, register a network service, or change any boot,
-kernel, native API, Linux socket, NIC or SSH path.
+This standalone workspace packages a pinned Fuchsia Netstack3 core for Oscar.
+`engine/` supplies IPv4 TCP, learned ARP, routes, loopback, bounded socket
+admission and monotonic timers. `netd/` runs it as a native userspace service.
+The service replaces smoltcp and exposes both native network capabilities and
+Oscar's existing private Linux socket adapter. Drivers supply OETH frame channels;
+the service receives no PCI or system capability.
+
+[Native networking interfaces](../NETWORKING.md) describes the public contract.
+[ONET v1](netd/ONET.md) documents the Linux adapter. The proof programs remain
+separate: simulated links and logical time exercise the engine without a NIC.
+Read [VALIDATION.md](VALIDATION.md) for the tested artifacts and their limits.
+
+Build the service and its native acceptance program:
+
+```sh
+python3 build-netd.py
+```
+
+The script prepares pinned sources, uses this directory's toolchain and release
+profile, and stages `unix-netd` and `native-net-test` under the Unix workspace's
+native output directory. `../unix/build.sh` calls it automatically. The normal
+Unix/QEMU test image runs native capability tests before the Linux and SSH tests.
+UDP, IPv6, DHCP and DNS service APIs are not implemented yet.
 
 Run from this directory with Python 3.12+ and rustup:
 
@@ -31,7 +48,7 @@ replacement, with revision, URL and archive hash recorded beside the source.
 `Cargo.lock` pins resolved third-party dependencies. Runtime features omit the
 Fuchsia monorepo's global `std`/`serde` unification; host proc macros can use `std`.
 The generated core build script uses upstream's `no_lock_order` setting to disable
-compile-time lock-order checking in this proof. Actual synchronization remains
+compile-time lock-order checking in this extraction. Actual synchronization remains
 enabled; concurrent lock stress is outside these tests.
 
 ## Compiler
@@ -60,10 +77,37 @@ panic during regeneration; the failure evidence is retained under
 common-type reexport from `net-declare`; the Cargo translation omits precisely
 that FIDL dependency label. Netstack3's IGMP/MLD code needs the native address
 macros from this helper. Host token-generating macro implementations remain;
-FIDL macros/types are not supported by this extraction. Protocol algorithms are
-unchanged. The patch is checked before application and checked on repeated runs.
+FIDL macros/types are not supported by this extraction.
+
+`patches/0002-bound-conntrack.patch` caps connection tracking at 1,024 entries
+and exposes read-only layout diagnostics for resource tests. It checks space
+for all new tuple entries before insertion and repeats upstream victim selection
+until enough space is available. Established flows retain upstream protection;
+if no eligible victim exists, the new entry is dropped. This is an Oscar
+resource policy change; protocol algorithms otherwise remain upstream.
+Both patches are checked before application and on repeated runs.
 
 ## Test boundary
+
+The service admits at most 32 sockets, including reserved passive backlog slots
+and closing connections. A listener reserves one to four backlog slots. TCP
+buffers hold 32 KiB in each direction. Closing a pending connection aborts it;
+an established connection may drain for at most five seconds after its last
+control endpoint closes. Loopback aliases, frame queues, timer dispatch batches,
+deferred work and connection tracking are bounded. IPv4 fragments are rejected
+before core processing; reassembly is outside the first service.
+
+These limits do not turn every upstream allocation into a fallible operation.
+Core allocation failure or timer/deferred-table exhaustion can stop the worker.
+Clients then see service loss, never TCP EOF. Restart needs fresh service
+capabilities and cannot recover established connections. A hard per-client
+memory quota and automatic restart remain future work.
+
+Upstream neighbor state can retain up to 1,024 neighbors per device and ten
+pending frames per unresolved neighbor. Its loopback queues also have larger
+upstream limits. These allocations share the worker's finite heap; they are not
+covered by the TCP buffer budget. Broad-prefix configurations and packet pressure
+can still exhaust that heap. Socket admission is not a total memory guarantee.
 
 The host harness runs two full cores with upstream fake bindings and simulated
 Ethernet links. Its stream wrapper supplies native-shaped `WouldBlock`, closed,
@@ -105,10 +149,11 @@ readiness protocol is exposed. Timer/deferred-table overflow and core OOM can
 terminate this worker; total per-client admission and supervision are not supplied
 by this proof.
 
-Hardware NIC integration, concurrent clients and graceful OOM still need tests.
-No throughput or latency claim follows from this proof.
-A capped supervised worker is a possible later design; restarting it loses its
-connections and must report failure coherently to clients.
+The simulated proof alone makes no hardware NIC or throughput claim.
+The service acceptance results are recorded separately in VALIDATION.md.
+A supervisor that enforces a total worker memory budget and recreates service
+capabilities remains future work. Restarting loses connections and must report
+failure coherently to clients.
 
 ## Notices
 
