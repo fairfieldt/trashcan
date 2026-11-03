@@ -1,0 +1,75 @@
+# tbd: a userspace Thunderbolt 2 driver for the Mac Pro 6,1
+
+`tbd` owns one of the Mac Pro's three Falcon Ridge controllers through VFIO and talks to the hosts on its cables:
+ThunderboltIP networking (a TAP device) and USB4STREAM streams, both compatible with Linux's `thunderbolt_net`
+and `thunderbolt_stream` on the other end. Like `gpud`, it runs as an ordinary process on `gpud-platform` (PCI
+config, MMIO, DMA through the IOMMU, MSI), so another OS can host it by replacing the platform backend.
+
+Only host-to-host links over Falcon Ridge are supported. No PCIe, DisplayPort or USB tunnels, no devices, no
+firmware upgrades.
+
+## Status
+
+Measured on two Mac Pros joined by one cable (both lanes): `tbd` on one end, Linux 7.3's driver on the other.
+
+- It finds the other host and bonds the two lanes, whichever side has the lower UUID. Linux lists it as a host
+  with `network` and `stream` services.
+- ThunderboltIP: Linux logs in and the link carries traffic both ways (ping, TCP).
+- USB4STREAM: an echo through the kernel's `/dev/tbstreamN` gets every byte back intact.
+- On exit it logs out, undoes bonding and takes the link down and up once, so the other host starts afresh.
+
+Compared with Linux on both ends, on the same cable and with the same tools:
+
+| | Linux ↔ Linux | tbd ↔ Linux |
+|---|---|---|
+| TCP, tbd sending (iperf3) | 8.9 Gb/s | 1.7 Gb/s |
+| TCP, tbd receiving | 8.3 Gb/s | 7.6-8.3 Gb/s |
+| ping | 0.15 ms | 0.30 ms |
+| stream echo, 512 KiB window (`tbd bench`) | 289 MB/s | 175 MB/s |
+| stream round trip, 64 B, median (`tbd ping`) | 45 µs | 78 µs |
+
+Sending is slow because the TAP device hands `tbd` one 1500-byte frame per read. Linux's driver gets 64 KiB TSO
+packets. Streams go through a Unix socket and two thread wakeups each way.
+
+## Layout
+
+| File | What | Linux reference (7.3) |
+|---|---|---|
+| `nhi.rs` | NHI registers, descriptor rings, interrupts (one MSI; a ring's interrupt is unmasked only while its thread sleeps) | `nhi.c`, `nhi_regs.h`, `pci.c` |
+| `ctl.rs` | Control channel: frames, CRC-32C, config reads/writes, matching replies to requests | `ctl.c`, `tb_msgs.h` |
+| `switch.rs` | Host router: header, capabilities, ports, lane control, link controller UUID, hop entries | `switch.c`, `cap.c`, `lc.c`, `path.c`, `tb_regs.h` |
+| `property.rs` | XDomain property blocks | `property.c` |
+| `xdomain.rs` | XDomain discovery packets | `xdomain.c` |
+| `domain.rs` | Bring-up, hot plug, per-peer discovery and lane bonding, our property block, DMA paths | `tb.c`, `xdomain.c`, `tunnel.c` |
+| `net.rs`, `tap.rs` | ThunderboltIP login and framing; the TAP device | `drivers/net/thunderbolt/main.c` |
+| `stream.rs` | USB4STREAM: DATA/CLOSE frames, HopIDs in the `stream` service directory, a socket per stream | `stream.c` |
+| `bench.rs` | `echo`, `bench`, `ping` on a tbd socket or a Linux `/dev/tbstreamN` | |
+
+The Rust is written from the Linux code's protocol and register definitions, not translated from it. Tests check
+the packet and register layouts against values captured from a running Linux driver.
+
+## Running
+
+The NHI must be on vfio-pci, with the IOMMU on (`intel_iommu=on iommu=pt vfio_pci.disable_idle_d3=1`; the Mac Pro
+has no interrupt remapping, so `allow_unsafe_interrupts` too, see `../docs/vfio.md`). `vfio.sh take` unbinds the
+kernel's Thunderbolt services on that controller first, then hands the NHI over. Unbinding the NHI under a running
+`thunderbolt_net` leaves that driver's rings behind, writing to an NHI it no longer owns.
+
+```bash
+sudo ./vfio.sh take 0000:16:00.0
+sudo ./tbd probe 0000:16:00.0                        # read-only: router, ports, link states, UUID, hops
+sudo ./tbd run 0000:16:00.0 --stream trashcan:15:15  # TAP tbd0 plus one stream per peer
+sudo ip addr add 10.0.0.2/30 dev tbd0
+sudo ./tbd bench /run/tbd/PEER.trashcan             # against `tbd echo /dev/tbstreamN` on the other host
+sudo ./vfio.sh give 0000:16:00.0                     # back to the kernel driver
+```
+
+A stream's socket (`SOCK_SEQPACKET`) takes one client at a time. Each message is one frame (up to 4 KiB) each way.
+A CLOSE from the other host arrives as an empty message. A client that shuts down its writing side sends a CLOSE
+and keeps reading. Paths are routed only while a client is connected, as Linux routes them only while the device
+is open.
+
+`TBD_TRACE=1` prints every control frame. `TBD_KMSG=1` copies tbd's output to the kernel log (with
+`sysctl kernel.printk_devkmsg=on`), so netconsole has it if the machine goes down.
+
+`driver/` is one Cargo workspace. `cargo test -p tbd` runs anywhere. The driver builds on Linux only.

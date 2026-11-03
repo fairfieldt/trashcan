@@ -256,7 +256,7 @@ mod tests {
         net.add_immediate("prtcid", 1).add_immediate("prtcvers", 1).add_immediate("prtcrevs", 1).add_immediate("prtcstns", 6);
         let mut root = Dir::new(None);
         root.add_immediate("vendorid", 0x1d6b).add_text("vendorid", "Linux").add_immediate("deviceid", 4);
-        root.add_dir("network", net).add_text("deviceid", "enlight").add_immediate("maxhopid", 15);
+        root.add_dir("network", net).add_text("deviceid", "host").add_immediate("maxhopid", 15);
         root
     }
 
