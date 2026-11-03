@@ -83,6 +83,7 @@ impl Chat {
         let mut reply = String::new();
         let mut stream = self.request("POST", "/v1/responses", Some(&body.to_string()))?;
         let mut data = String::new();
+        let mut has_data = false;
         let mut line = String::new();
         loop {
             line.clear();
@@ -91,14 +92,17 @@ impl Chat {
             }
             let l = line.trim_end_matches(['\r', '\n']);
             if let Some(d) = l.strip_prefix("data:") {
-                data.push_str(d.trim_start());
+                if has_data { data.push('\n'); }
+                data.push_str(d.strip_prefix(' ').unwrap_or(d));
+                has_data = true;
                 continue;
             }
-            if !l.is_empty() || data.is_empty() {
+            if !l.is_empty() || !has_data {
                 continue;
             }
             let event: Value = serde_json::from_str(&data).map_err(|e| format!("bad event from the server: {e}"))?;
             data.clear();
+            has_data = false;
             match event["type"].as_str().unwrap_or("") {
                 "response.output_text.delta" => {
                     if let Some(d) = event["delta"].as_str() {
@@ -194,9 +198,13 @@ pub struct Body {
 
 impl Read for Body {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if buf.is_empty() { return Ok(0); }
         if self.sized {
             let n = buf.len().min(self.left);
             let n = if n == 0 { 0 } else { self.inner.read(&mut buf[..n])? };
+            if n == 0 && !buf.is_empty() && self.left != 0 {
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "short HTTP body"));
+            }
             self.left -= n;
             return Ok(n);
         }
@@ -212,8 +220,7 @@ impl Read for Body {
             while size.trim().is_empty() {
                 size.clear();
                 if self.inner.read_line(&mut size)? == 0 {
-                    self.done = true;
-                    return Ok(0);
+                    return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "missing HTTP chunk size"));
                 }
             }
             let hex = size.trim().split(';').next().unwrap_or("0");
@@ -226,8 +233,8 @@ impl Read for Body {
         }
         let n = buf.len().min(self.left);
         let n = self.inner.read(&mut buf[..n])?;
-        if n == 0 {
-            self.done = true;
+        if n == 0 && !buf.is_empty() {
+            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "short HTTP chunk"));
         }
         self.left -= n;
         Ok(n)
@@ -289,5 +296,40 @@ data: {\"type\":\"response.completed\"}\n\n";
         assert_eq!(chat.ask("hi", |d| seen.push_str(d)).unwrap(), "Scram!");
         assert_eq!(seen, "Scram!");
         assert_eq!(chat.history.len(), 2);
+    }
+
+    #[test]
+    fn truncated_http_bodies_are_errors() {
+        use std::net::TcpListener;
+        for reply in ["HTTP/1.1 200 OK\r\nContent-Length: 8\r\n\r\nshort", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n8\r\nshort", "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n5\r\nshort\r\n"] {
+            let l = TcpListener::bind("127.0.0.1:0").unwrap();
+            let addr = l.local_addr().unwrap();
+            let server = std::thread::spawn(move || {
+                let (mut s, _) = l.accept().unwrap();
+                let mut b = [0u8; 1024];
+                let _ = s.read(&mut b);
+                s.write_all(reply.as_bytes()).unwrap();
+            });
+            let mut body = Chat::new(addr.to_string()).request("GET", "/", None).unwrap();
+            assert_eq!(body.read_to_end(&mut Vec::new()).unwrap_err().kind(), std::io::ErrorKind::UnexpectedEof);
+            server.join().unwrap();
+        }
+    }
+
+    #[test]
+    fn multiline_sse_data() {
+        use std::net::TcpListener;
+        let l = TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = l.local_addr().unwrap();
+        let server = std::thread::spawn(move || {
+            let (mut s, _) = l.accept().unwrap();
+            let mut b = [0u8; 2048];
+            let _ = s.read(&mut b);
+            s.write_all(b"HTTP/1.1 200 OK\r\n\r\ndata: {\"type\":\ndata: \"response.completed\"}\n\n").unwrap();
+        });
+        let mut chat = Chat::new(addr.to_string());
+        chat.model = Some("test".into());
+        assert_eq!(chat.ask("hi", |_| {}).unwrap(), "");
+        server.join().unwrap();
     }
 }

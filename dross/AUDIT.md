@@ -11,8 +11,8 @@ Fixes:
 
 Validation: host ACPI, PMM and Ethernet tests; four-CPU QEMU native/Linux boot; QEMU Unix and OpenSSH suite. The Unix suite was rebuilt after the channel changes, before the final mprotect validation change. No physical hardware was tested.
 
-Additional fixes: bound aggregate vectored-write allocations; handle the SSH test completion race; skip zero-length user copies before touching pointers; reject overflowing ancillary-message offsets and overflowing mapping lengths and oversized memfd truncation; reject unaligned mprotect and fixed mappings at address zero.
+Additional fixes: handle truncated HTTP bodies and multiline server events in chat; bound aggregate vectored-write allocations; handle the SSH test completion race; skip zero-length user copies before touching pointers; reject overflowing ancillary-message offsets and overflowing mapping lengths and oversized memfd truncation; reject unaligned mprotect and fixed mappings at address zero.
 
 Run `KERNEL_FEATURES=audit-test PROFILE=release SMP=4 MEM=2G ./run-qemu.sh` for page-table allocation failure injection. It checks partial mapping rollback, mprotect rollback and a subsequent successful retry.
 
-Open audit item: the channel close race still needs targeted concurrent stress; allocation failure tests do not cover all allocation sites or cross-CPU TLB behavior. This is not a complete kernel or userland audit.
+The boot self-test races channel close against handle transfer 512 times on two CPUs. This checks return values and handle ownership; it does not prove queued objects are reclaimed in every interleaving. Allocation failure tests do not cover all allocation sites or cross-CPU TLB behavior. This is not a complete kernel or userland audit.

@@ -166,6 +166,56 @@ fn run_all(b: &Bootstrap) -> i32 {
     sys::close(first).unwrap();
     sys::close(second).unwrap();
 
+    // Race a sender transferring a handle with the peer closing on another CPU.
+    if cpus > 1 {
+        struct Race { phase: AtomicU64, send: AtomicU64, handle: AtomicU64, result: AtomicU64 }
+        let race = Arc::new(Race { phase: AtomicU64::new(0), send: AtomicU64::new(0), handle: AtomicU64::new(0), result: AtomicU64::new(0) });
+        let other = race.clone();
+        thread::spawn(1, move || {
+            for _ in 0..512 {
+                while other.phase.load(Ordering::Acquire) != 1 { core::hint::spin_loop(); }
+                let send = Handle(other.send.load(Ordering::Relaxed) as u32);
+                let handle = Handle(other.handle.load(Ordering::Relaxed) as u32);
+                other.phase.store(2, Ordering::Release);
+                let good = match sys::channel_write(send, b"race", &[handle]) {
+                    Ok(()) => sys::notify_signal(handle, 1) == Err(Error::BadHandle),
+                    Err(Error::PeerClosed) => sys::notify_signal(handle, 1).is_ok() && sys::close(handle).is_ok(),
+                    _ => false,
+                };
+                let good = good && sys::close(send).is_ok();
+                other.result.store(good as u64, Ordering::Relaxed);
+                other.phase.store(3, Ordering::Release);
+                while other.phase.load(Ordering::Acquire) != 0 { core::hint::spin_loop(); }
+                other.phase.store(4, Ordering::Release);
+            }
+        }).unwrap();
+        let mut good = true;
+        let wait_for = |wanted: u64, different: bool| {
+            let deadline = sys::after_ms(5000);
+            while (race.phase.load(Ordering::Acquire) == wanted) == different {
+                if sys::clock() >= deadline { return false; }
+                core::hint::spin_loop();
+            }
+            true
+        };
+        for _ in 0..512 {
+            let (send, recv) = sys::channel_create().unwrap();
+            let n = sys::notify_create().unwrap();
+            let h = sys::dup(n, rights::ALL).unwrap();
+            race.send.store(send.0 as u64, Ordering::Relaxed);
+            race.handle.store(h.0 as u64, Ordering::Relaxed);
+            race.phase.store(1, Ordering::Release);
+            if !wait_for(1, true) { good = false; break; }
+            good &= sys::close(recv).is_ok();
+            if !wait_for(3, false) { good = false; break; }
+            good &= race.result.load(Ordering::Relaxed) == 1;
+            good &= sys::close(n).is_ok();
+            race.phase.store(0, Ordering::Release);
+            if !wait_for(4, false) { good = false; break; }
+        }
+        t.check("channel close and transfer race", good, "(512 attempts)");
+    }
+
     // Rights: a handle without SIGNAL can't signal.
     let weak = sys::dup(n, rights::WAIT | rights::DUPLICATE).unwrap();
     t.check("rights", sys::notify_signal(weak, 1) == Err(Error::AccessDenied), "");
