@@ -11,4 +11,8 @@ Fixes:
 
 Validation: host ACPI, PMM and Ethernet tests; four-CPU QEMU native/Linux boot; QEMU Unix and OpenSSH suite. The Unix suite was rebuilt after the channel changes, before the final mprotect validation change. No physical hardware was tested.
 
-Open audit item: mprotect rollback, the channel close race and page-table allocation failure need targeted concurrent and fault-injection tests. This is not a complete kernel or userland audit.
+Additional fixes: reject overflowing mapping lengths and oversized memfd truncation; reject unaligned mprotect and fixed mappings at address zero.
+
+Run `KERNEL_FEATURES=audit-test PROFILE=release SMP=4 MEM=2G ./run-qemu.sh` for page-table allocation failure injection. It checks partial mapping rollback, mprotect rollback and a subsequent successful retry.
+
+Open audit item: the channel close race still needs targeted concurrent stress; allocation failure tests do not cover all allocation sites or cross-CPU TLB behavior. This is not a complete kernel or userland audit.

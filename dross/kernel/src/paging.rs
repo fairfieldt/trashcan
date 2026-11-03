@@ -48,9 +48,16 @@ pub fn init_kernel_space() {
 
 struct TableFrames;
 
+#[cfg(feature = "audit-test")]
+static TABLES_BEFORE_FAILURE: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(-1);
+
 // SAFETY: hands out unused frames; the mapper zeroes the tables it makes from them.
 unsafe impl FrameAllocator<Size4KiB> for TableFrames {
     fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
+        #[cfg(feature = "audit-test")]
+        if TABLES_BEFORE_FAILURE.load(Ordering::Relaxed) >= 0 {
+            if TABLES_BEFORE_FAILURE.fetch_sub(1, Ordering::Relaxed) == 0 { return None; }
+        }
         mem::alloc_phys(1, PAGE, u64::MAX).map(|p| PhysFrame::containing_address(PhysAddr::new(p)))
     }
 }
@@ -82,6 +89,36 @@ pub struct AddressSpace {
 }
 
 const AUTO_BASE: u64 = 0x0000_1000_0000_0000;
+
+/// Fault injection runs before user processes exist and is absent from normal kernels.
+#[cfg(feature = "audit-test")]
+pub fn audit_test() {
+    use x86_64::structures::paging::{Translate, mapper::TranslateResult};
+    let present = |space: &AddressSpace, addr| space.mapper().translate_addr(VirtAddr::new(addr)).is_some();
+    let s = AddressSpace::new();
+    let m = Arc::new(Memory::anonymous(2 * PAGE, false, false).unwrap());
+    TABLES_BEFORE_FAILURE.store(3, Ordering::Relaxed);
+    assert!(matches!(s.map(m, 0, 2 * PAGE, 0x3ff000, vm::READ), Err(Error::NoMemory)));
+    assert!(!present(&s, 0x3ff000) && !present(&s, 0x400000));
+    assert!(s.lookup(0x3ff000).is_none());
+    TABLES_BEFORE_FAILURE.store(-1, Ordering::Relaxed);
+
+    let s = AddressSpace::new();
+    let m = Arc::new(Memory::anonymous(PAGE, false, false).unwrap());
+    s.map(m, 0, PAGE, 0x3ff000, vm::READ).unwrap();
+    s.reserve(PAGE, 0x400000, false).unwrap();
+    TABLES_BEFORE_FAILURE.store(0, Ordering::Relaxed);
+    assert!(matches!(s.protect(0x3ff000, 2 * PAGE, vm::READ | vm::WRITE), Err(Error::NoMemory)));
+    TABLES_BEFORE_FAILURE.store(-1, Ordering::Relaxed);
+    assert!(present(&s, 0x3ff000) && !present(&s, 0x400000));
+    assert_eq!(s.lookup_mapping(0x3ff000).unwrap().2, vm::READ);
+    assert!(matches!(s.mapper().translate(VirtAddr::new(0x3ff000)), TranslateResult::Mapped { flags, .. } if !flags.contains(F::WRITABLE)));
+    assert!(s.lookup(0x400000).is_none());
+    s.protect(0x3ff000, 2 * PAGE, vm::READ | vm::WRITE).unwrap();
+    assert!(present(&s, 0x400000));
+    assert!(matches!(s.mapper().translate(VirtAddr::new(0x3ff000)), TranslateResult::Mapped { flags, .. } if flags.contains(F::WRITABLE)));
+    crate::println!("paging: allocation failure rollback tests passed");
+}
 
 impl AddressSpace {
     pub fn new() -> AddressSpace {
@@ -212,16 +249,17 @@ impl AddressSpace {
     }
 
     /// Picks a free range of `len` bytes (with a guard page after it), past mappings placed by address.
-    fn place(inner: &mut Inner, len: u64) -> u64 {
+    fn place(inner: &mut Inner, len: u64) -> Result<u64, Error> {
         let mut a = inner.next;
-        while let Some((&s, m)) = inner.mappings.range(..a + len + PAGE).next_back() {
+        while let Some((&s, m)) = inner.mappings.range(..a.checked_add(len).and_then(|v| v.checked_add(PAGE)).ok_or(Error::OutOfRange)?).next_back() {
             if s + m.len <= a {
                 break;
             }
-            a = s + m.len + PAGE;
+            a = s.checked_add(m.len).and_then(|v| v.checked_add(PAGE)).ok_or(Error::OutOfRange)?;
         }
-        inner.next = a + len + PAGE;
-        a
+        Self::check_range(a, len)?;
+        inner.next = a.checked_add(len).and_then(|v| v.checked_add(PAGE)).ok_or(Error::OutOfRange)?;
+        Ok(a)
     }
 
     /// Maps `len` bytes of `mem` from `offset` at `addr` (0: anywhere). Returns the address.
@@ -250,7 +288,7 @@ impl AddressSpace {
 
     fn insert(&self, mem: Option<Arc<Memory>>, offset: u64, len: u64, addr: u64, flags: u64, replace: bool) -> Result<u64, Error> {
         let mut inner = self.inner.lock();
-        let addr = if addr == 0 { Self::place(&mut inner, len) } else { addr };
+        let addr = if addr == 0 { Self::place(&mut inner, len)? } else { addr };
         let end = Self::check_range(addr, len)?;
         let removed = if replace {
             self.remove_locked(&mut inner, addr, len)

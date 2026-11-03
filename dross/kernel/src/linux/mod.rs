@@ -314,9 +314,9 @@ fn mmap(p: &Process, addr: u64, len: u64, prot: u64, flags: u64, fd: u64, off: u
     if len == 0 || off % 4096 != 0 {
         return Err(EINVAL);
     }
-    let len = len.next_multiple_of(4096);
+    let len = len.checked_add(4095).ok_or(ENOMEM)? & !4095;
     let fixed = flags & (MAP_FIXED | MAP_FIXED_NOREPLACE) != 0;
-    if fixed && addr % 4096 != 0 {
+    if fixed && (addr < 4096 || addr % 4096 != 0) {
         return Err(EINVAL);
     }
     let f = prot_flags(prot) | if cfg!(feature = "unix") && flags & MAP_SHARED != 0 { crate::paging::FORK_SHARED } else { 0 };
@@ -420,8 +420,16 @@ fn dispatch(p: &Arc<Process>, f: &Frame, n: u64, a: [u64; 6]) -> R {
         // Sockets.
         41..=55 | 288 => sock::syscall(p, n, a),
         9 => mmap(p, a[0], a[1], a[2], a[3], a[4], a[5]),
-        10 => p.aspace.protect(a[0] & !0xfff, (a[1] + (a[0] & 0xfff)).next_multiple_of(4096), prot_flags(a[2])).map(|_| 0).map_err(|_| ENOMEM),
-        11 => p.aspace.unmap_range(a[0], a[1].next_multiple_of(4096)).map(|_| 0).map_err(|_| EINVAL),
+        10 => {
+            if a[0] % 4096 != 0 { return Err(EINVAL); }
+            if a[1] == 0 { return Ok(0); }
+            let len = a[1].checked_add(4095).ok_or(ENOMEM)? & !4095;
+            p.aspace.protect(a[0], len, prot_flags(a[2])).map(|_| 0).map_err(|_| ENOMEM)
+        }
+        11 => {
+            let len = a[1].checked_add(4095).ok_or(EINVAL)? & !4095;
+            p.aspace.unmap_range(a[0], len).map(|_| 0).map_err(|_| EINVAL)
+        }
         // brk: no heap that way (musl falls back to mmap).
         12 => Ok(0),
         25 => Err(ENOMEM),

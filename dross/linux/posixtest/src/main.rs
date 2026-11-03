@@ -163,6 +163,9 @@ fn main() {
     // SAFETY: socketpair into sv.
     let r = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, 0, sv.as_mut_ptr()) };
     let mfd = memfd_with(b"shared memory");
+    // Invalid or unrepresentable sizes must fail without damaging the live file.
+    let bad_sizes = unsafe { libc::ftruncate(mfd.as_raw_fd(), -1) == -1 && libc::ftruncate(mfd.as_raw_fd(), i64::MAX) == -1 };
+    t.check("memfd oversized truncate", bad_sizes, String::new());
     let sent = send_fd(sv[0], mfd.as_raw_fd());
     let got = recv_fd(sv[1]);
     let text = got.map(|fd| {

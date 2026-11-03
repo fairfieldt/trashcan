@@ -15,6 +15,8 @@
 #include <netinet/in.h>
 #include <spawn.h>
 #include <sys/mman.h>
+#include <stdint.h>
+#include <sys/syscall.h>
 extern char **environ;
 static int failures;
 static void check(const char *name, int ok) { printf("unix: %s %s (errno %d)\n", ok ? "ok" : "FAIL", name, errno); if(!ok) failures++; }
@@ -74,6 +76,13 @@ int main(int argc,char **argv) {
  child=fork();if(!child){execl("/bin/unix-probe","unix-probe","--check-fd",fdtext,(char*)0);_exit(127);}waitpid(child,&status,0);check("fd close-on-exec",WIFEXITED(status)&&WEXITSTATUS(status)==0);
  check("dup2 preserves cloexec on same fd",dup2(fd,fd)==fd&&(fcntl(fd,F_GETFD)&FD_CLOEXEC));
  check("large fd rejected",dup2(fd,1000000)==-1&&errno==EBADF);
+ check("oversized mmap rejected",syscall(SYS_mmap,0,SIZE_MAX,PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0)==-1);
+ check("oversized munmap rejected",syscall(SYS_munmap,4096,SIZE_MAX)==-1);
+ check("oversized mprotect rejected",syscall(SYS_mprotect,4096,SIZE_MAX,PROT_READ)==-1);
+ check("unaligned mprotect rejected",syscall(SYS_mprotect,4097,4096,PROT_READ)==-1&&errno==EINVAL);
+ check("fixed null mmap rejected",syscall(SYS_mmap,0,4096,PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED,-1,0)==-1);
+ void *after_bad=mmap(0,4096,PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
+ check("mmap works after rejected lengths",after_bad!=MAP_FAILED);if(after_bad!=MAP_FAILED)munmap(after_bad,4096);
  write(fd,"A",1);child=fork();if(!child){write(fd,"B",1);_exit(0);}waitpid(child,&status,0);write(fd,"C",1);lseek(fd,0,SEEK_SET);char shared_offset[4]={0};read(fd,shared_offset,3);check("fork shares open file descriptions",!strcmp(shared_offset,"ABC"));
  unlink("/tmp/fd-test");lseek(fd,0,SEEK_SET);check("unlinked fd remains readable",read(fd,shared_offset,3)==3);close(fd);
  void *shared=mmap(0,4096,PROT_READ|PROT_WRITE,MAP_SHARED|MAP_ANONYMOUS,-1,0);*(volatile int*)shared=3;child=fork();if(!child){*(volatile int*)shared=11;_exit(0);}waitpid(child,&status,0);check("fork preserves shared mappings",*(volatile int*)shared==11);munmap(shared,4096);

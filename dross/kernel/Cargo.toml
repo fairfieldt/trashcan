@@ -24,3 +24,4 @@ rand_core = { version = "=0.6.4", default-features = false, optional = true }
 
 [features]
 unix = ["dep:rand_chacha", "dep:rand_core"]
+audit-test = []

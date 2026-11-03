@@ -825,10 +825,12 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             let f = files.get(fd)?;
             let Kind::Memfd(m) = &f.kind else { return Err(EINVAL) };
             let size = a[1];
+            if size > i64::MAX as u64 { return Err(EINVAL); }
+            let rounded = size.checked_add(4095).ok_or(EINVAL)? & !4095;
             let mut g = m.lock();
             let cur = g.as_ref().map_or(0, |m| m.size());
-            if size.next_multiple_of(4096) > cur {
-                let new = Arc::new(Memory::anonymous(size.next_multiple_of(4096).max(4096), false, false).map_err(|_| ENOMEM)?);
+            if rounded > cur {
+                let new = Arc::new(Memory::anonymous(rounded.max(4096), false, false).map_err(|_| ENOMEM)?);
                 if let Some(old) = g.as_ref() {
                     new.copy_from(0, old, 0, old.size()).map_err(|_| EINVAL)?;
                 }
