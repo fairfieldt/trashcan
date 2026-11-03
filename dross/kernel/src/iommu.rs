@@ -129,6 +129,11 @@ impl Unit {
         }
     }
 
+    /// The unit can force snooping per mapping (ECAP.SC).
+    fn snoop_control(&self) -> bool {
+        self.ecap & 1 << 7 != 0
+    }
+
     fn caching_mode(&self) -> bool {
         self.cap & 1 << 7 != 0
     }
@@ -171,12 +176,13 @@ pub fn init(acpi: &Acpi) {
     let fro_end = (u.cap >> 24 & 0x3ff) * 16 + ((u.cap >> 40 & 0xff) + 1) * 16;
     assert!(iotlb_end <= 0x1000 && fro_end <= 0x1000, "iommu: registers beyond the first page");
     println!(
-        "iommu: unit at {:#x} version {:#x}, {}-level tables, {} domains, coherent {}, caching mode {}, translation {}",
+        "iommu: unit at {:#x} version {:#x}, {}-level tables, {} domains, coherent {}, snoop control {}, caching mode {}, translation {}",
         base,
         u.r32(VER),
         u.levels,
         1u64 << (4 + 2 * (u.cap & 7)),
         u.coherent(),
+        u.snoop_control(),
         u.caching_mode(),
         if u.r32(GSTS) & GCMD_TE != 0 { "already on" } else { "off" }
     );
@@ -307,7 +313,12 @@ impl Domain {
                 return Err(Error::Busy);
             }
         }
-        let perm = (flags & dma::READ != 0) as u64 | ((flags & dma::WRITE != 0) as u64) << 1;
+        let mut perm = (flags & dma::READ != 0) as u64 | ((flags & dma::WRITE != 0) as u64) << 1;
+        // Snoop: device writes marked no-snoop (a GPU's AGP aperture uses them) still go through the CPU caches,
+        // so the CPU never reads a stale cached copy. Linux sets it for VFIO the same way.
+        if u.snoop_control() {
+            perm |= 1 << 11;
+        }
         for i in 0..len / PAGE {
             let e = self.leaf(u, iova + i * PAGE);
             // SAFETY: an entry of this domain's tables.

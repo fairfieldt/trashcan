@@ -24,6 +24,28 @@ fn main(boot: Handle) -> i32 {
     let all: alloc::vec::Vec<alloc::vec::Vec<&str>> =
         conf.lines().map(|l| l.split_whitespace().collect::<alloc::vec::Vec<_>>()).filter(|w| w.first().is_some_and(|f| !f.starts_with('#'))).collect();
     let lines: alloc::vec::Vec<&alloc::vec::Vec<&str>> = all.iter().filter(|w| matches!(w[0], "start" | "check")).collect();
+    // `channel NAME` makes a channel; `@NAME=HANDLE` on a start or check line gives that program the next end of
+    // it as bootstrap handle HANDLE (so a driver and its client can be connected, e.g. ethd and netd).
+    let mut channels: alloc::vec::Vec<(&str, alloc::vec::Vec<Handle>)> = alloc::vec::Vec::new();
+    for w in all.iter().filter(|w| w[0] == "channel" && w.len() == 2) {
+        let (a, b) = sys::channel_create().unwrap();
+        channels.push((w[1], alloc::vec![b, a]));
+    }
+    let mut take_ends = |args: &[&str]| -> (alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<(alloc::string::String, Handle)>) {
+        let mut argv = alloc::vec::Vec::new();
+        let mut extra = alloc::vec::Vec::new();
+        for a in args {
+            if let Some((chan, name)) = a.strip_prefix('@').and_then(|r| r.split_once('=')) {
+                match channels.iter_mut().find(|(n, _)| *n == chan).and_then(|(_, ends)| ends.pop()) {
+                    Some(end) => extra.push((alloc::string::String::from(name), end)),
+                    None => println!("init.conf: no free end of channel {chan}"),
+                }
+            } else {
+                argv.push(alloc::string::String::from(*a));
+            }
+        }
+        (argv, extra)
+    };
 
     // pcid gets the ECAM, physical memory for BARs, interrupts and the IOMMU; each driver a channel to it.
     let (Some(pcid), Some(ecam)) = (b.handle("module/pcid"), b.value_u64("ecam")) else {
@@ -61,7 +83,9 @@ fn main(boot: Handle) -> i32 {
     let mut ends: alloc::vec::Vec<Option<Handle>> = conf_ends.into_iter().map(Some).collect();
     for (i, words) in lines.iter().enumerate() {
         if words[0] == "start" {
-            ok &= launch(&b, &words[1..], ends[i].take().unwrap()).is_some();
+            let (argv, extra) = take_ends(&words[1..]);
+            let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+            ok &= launch(&b, &argv, ends[i].take().unwrap(), &extra).is_some();
         }
     }
 
@@ -119,14 +143,17 @@ fn main(boot: Handle) -> i32 {
                 let _ = sys::notify_wait(sys::notify_create().unwrap(), sys::after_ms(ms));
             }
             "reboot" => reboot = true,
+            "channel" => {}
             "start" => li += 1,
             "check" => {
                 let end = ends[li].take().unwrap();
                 li += 1;
                 let want = words.get(2).and_then(|c| c.parse::<i64>().ok());
-                let mut argv = alloc::vec![words[1]];
-                argv.extend_from_slice(&words[3..]);
-                match launch(&b, &argv, end) {
+                let mut words_argv = alloc::vec![words[1]];
+                words_argv.extend_from_slice(&words[3..]);
+                let (argv, extra) = take_ends(&words_argv);
+                let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+                match launch(&b, &argv, end, &extra) {
                     Some(p) => {
                         let code = sys::process_wait(p, sys::after_ms(600_000));
                         println!("{} exited with {code:?}", argv.join(" "));
@@ -171,12 +198,16 @@ fn read_module(h: Handle) -> alloc::string::String {
 }
 
 /// Starts the Linux program `argv[0]` (a module) with a pcid connection in its bootstrap message.
-fn launch(b: &Bootstrap, argv: &[&str], pci: Handle) -> Option<Handle> {
+fn launch(b: &Bootstrap, argv: &[&str], pci: Handle, extra: &[(alloc::string::String, Handle)]) -> Option<Handle> {
     let Some(img) = b.handle(&alloc::format!("module/{}", argv[0])) else {
         println!("init.conf: no module {}", argv[0]);
         return None;
     };
-    let boot = Builder::default().handle("pci", pci).send().ok()?;
+    let mut bb = Builder::default().handle("pci", pci);
+    for (name, h) in extra {
+        bb = bb.handle(name, *h);
+    }
+    let boot = bb.send().ok()?;
     match sys::spawn_linux(img, argv, &["DROSS_BOOTSTRAP=1", "RUST_BACKTRACE=0"], Some(boot)) {
         Ok(p) => Some(p),
         Err(e) => {

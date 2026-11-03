@@ -9,4 +9,5 @@ description = "Userspace Ethernet driver for the Mac Pro 6,1's Broadcom BCM57762
 anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 gpud-platform = { path = "../platform", features = ["dross"] }
+dross-rt = { path = "../../dross/user/rt", default-features = false }
 libc = "0.2"

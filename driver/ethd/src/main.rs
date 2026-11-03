@@ -7,6 +7,7 @@
 
 mod hw;
 mod netlog;
+mod oeth;
 mod nic;
 mod phy;
 mod regs;
@@ -74,6 +75,26 @@ enum Command {
         to_mac: String,
         #[arg(long, default_value_t = 6666)]
         port: u16,
+    },
+    /// On dross: be the NIC behind Oscar's network stack, frames between the port and the OETH channel named
+    /// `ethernet` in the bootstrap message, until SIGINT or SIGTERM or the stack goes away. With --netlog-to it
+    /// also sends the kernel log out of the port, as `netlog` does.
+    Serve {
+        address: String,
+        #[arg(long)]
+        netlog_to: Option<std::net::Ipv4Addr>,
+        #[arg(long, default_value = "ff:ff:ff:ff:ff:ff")]
+        netlog_mac: String,
+        #[arg(long, default_value = "0.0.0.0")]
+        netlog_ip: std::net::Ipv4Addr,
+    },
+    /// On dross: check an OETH driver from the stack's side: take its Info, ARP for TARGET from IP through the
+    /// channel named `ethernet`, and wait for the reply.
+    OethArp {
+        #[arg(long)]
+        ip: std::net::Ipv4Addr,
+        #[arg(long)]
+        target: std::net::Ipv4Addr,
     },
     /// Run the driver: frames between the port and a TAP interface until SIGINT or SIGTERM.
     Run {
@@ -165,7 +186,202 @@ mod linux {
             }
             Command::Run { address, expect_mac, tap, all_multi } => run(&address, &expect_mac, &tap, all_multi),
             Command::Netlog { address, ip, to, to_mac, port } => netlog(&address, ip, to, &to_mac, port),
+            Command::Serve { address, netlog_to, netlog_mac, netlog_ip } => serve(&address, netlog_to.map(|to| (to, netlog_mac, netlog_ip))),
+            Command::OethArp { ip, target } => oeth_arp(ip, target),
         }
+    }
+
+    fn ethernet_channel() -> Result<dross_rt::Handle> {
+        gpud_platform::dross::bootstrap_handle("ethernet").context("no `ethernet` channel in the bootstrap message (dross only)")
+    }
+
+    fn os(e: dross_rt::Error) -> anyhow::Error {
+        anyhow::anyhow!("dross: {e:?}")
+    }
+
+    /// Waits until `irq` fires, the channel has a message (its bound notification's fd `n_fd`), or `ms` pass.
+    fn wait_either(irq: &IrqEvent, n_fd: i32, ms: i32) {
+        let mut fds = [
+            libc::pollfd { fd: n_fd, events: libc::POLLIN, revents: 0 },
+            libc::pollfd { fd: irq.raw_fd().unwrap_or(-1), events: libc::POLLIN, revents: 0 },
+        ];
+        // SAFETY: poll on two descriptors this process owns.
+        unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as _, ms) };
+    }
+
+    type NetlogTo = (std::net::Ipv4Addr, String, std::net::Ipv4Addr);
+
+    fn serve(address: &str, netlog: Option<NetlogTo>) -> Result<()> {
+        use crate::oeth::{self, Message};
+        use dross_rt::sys;
+        use std::collections::VecDeque;
+        use std::io::Read;
+        catch_signals();
+        let eth = ethernet_channel()?;
+        let port = open_port(address)?;
+        let mac = nic::station_address(&*port.hw)?;
+        let opts = Options { all_multi: true, link_wait: Duration::from_secs(10) };
+        let (nic, irq) = start(&port, &fmt_mac(&mac), opts)?;
+        let mut link = nic.link();
+        eprintln!("serve: {} ({}) for the network stack", fmt_mac(&mac), link);
+        let n = sys::notify_create().map_err(os)?;
+        sys::channel_bind(eth, n, 1).map_err(os)?;
+        let n_fd = sys::handle_fd(n).map_err(os)?;
+        let send = |m: &[u8]| sys::channel_write(eth, m, &[]);
+        send(&oeth::info(&mac, 1500, link.up, link.speed)).map_err(os)?;
+
+        // The kernel log, if asked for, read by a thread as in `netlog`.
+        let log = match netlog {
+            Some((to, to_mac, ip)) => {
+                let dst = (parse_mac(&to_mac)?, to.octets());
+                let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
+                std::thread::spawn(move || {
+                    let Ok(mut kmsg) = std::fs::File::open("/dev/kmsg") else { return };
+                    let mut buf = vec![0u8; 8192];
+                    while let Ok(n) = kmsg.read(&mut buf) {
+                        if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                            break;
+                        }
+                    }
+                });
+                Some((rx, dst, ip))
+            }
+            None => None,
+        };
+        let mut log_id = 0u16;
+
+        // Frames the stack's channel had no room for yet (bounded, oldest dropped), and frames for the wire.
+        let mut to_stack: VecDeque<Vec<u8>> = VecDeque::new();
+        let mut to_wire: VecDeque<Vec<u8>> = VecDeque::new();
+        let mut buf = vec![0u8; 2048];
+        let mut hs = [dross_rt::Handle(0); 1];
+        let (mut up, mut down, mut dropped) = (0u64, 0u64, 0u64);
+        let mut last_link_check = Instant::now();
+        let mut last_report = Instant::now();
+        let mut loops = 0u64;
+        'outer: while !STOP.load(Ordering::SeqCst) {
+            loops += 1;
+            if last_report.elapsed() > Duration::from_secs(2) {
+                last_report = Instant::now();
+                eprintln!("serve: {loops} loops, {up} frames to the stack, {down} to the wire, {} and {} queued", to_stack.len(), to_wire.len());
+            }
+            wait_either(&irq, n_fd, 20);
+            let _ = irq.take();
+            // Drain the notification's fd so it polls quiet until the next message.
+            let mut pf = libc::pollfd { fd: n_fd, events: libc::POLLIN, revents: 0 };
+            let mut b8 = [0u8; 8];
+            // SAFETY: poll and read on our own descriptor; the read only happens when it is readable.
+            unsafe {
+                if libc::poll(&mut pf, 1, 0) > 0 {
+                    libc::read(n_fd, b8.as_mut_ptr().cast(), 8);
+                }
+            }
+            // From the stack.
+            loop {
+                match sys::channel_read(eth, &mut buf, &mut hs, 0) {
+                    Ok((len, _)) => {
+                        if let Some(Message::Frame(f)) = oeth::parse(&buf[..len]) {
+                            to_wire.push_back(f.to_vec());
+                        }
+                    }
+                    Err(dross_rt::Error::TimedOut) => break,
+                    Err(dross_rt::Error::PeerClosed) => break 'outer,
+                    Err(e) => return Err(os(e)),
+                }
+            }
+            // The kernel log.
+            if let Some((rx, dst, ip)) = &log {
+                let mut batch = Vec::new();
+                for r in rx.try_iter() {
+                    if let Some(m) = netlog::kmsg_message(&r) {
+                        if batch.len() + m.len() > 1400 && !batch.is_empty() {
+                            to_wire.push_back(netlog::udp_frame(&mac, ip.octets(), &dst.0, dst.1, 6666, &batch, log_id));
+                            log_id = log_id.wrapping_add(1);
+                            batch.clear();
+                        }
+                        batch.extend_from_slice(&m[..m.len().min(1400)]);
+                        batch.push(b'\n');
+                    }
+                }
+                if !batch.is_empty() {
+                    to_wire.push_back(netlog::udp_frame(&mac, ip.octets(), &dst.0, dst.1, 6666, &batch, log_id));
+                    log_id = log_id.wrapping_add(1);
+                }
+            }
+            while let Some(f) = to_wire.front() {
+                let mut f = f.clone();
+                f.resize(f.len().max(60), 0);
+                if !nic.send(&f)? {
+                    break;
+                }
+                to_wire.pop_front();
+                down += 1;
+            }
+            // From the wire.
+            let serviced = nic.service(&mut |f: &[u8]| {
+                if to_stack.len() >= 1024 {
+                    to_stack.pop_front();
+                    dropped += 1;
+                }
+                to_stack.push_back(oeth::frame(&f[..f.len().min(oeth::MAX_FRAME)]));
+            })?;
+            while let Some(m) = to_stack.front() {
+                match send(m) {
+                    Ok(()) => {
+                        to_stack.pop_front();
+                        up += 1;
+                    }
+                    Err(dross_rt::Error::ShouldWait) => break,
+                    Err(dross_rt::Error::PeerClosed) => break 'outer,
+                    Err(e) => return Err(os(e)),
+                }
+            }
+            let now_link = match serviced.link {
+                Some(l) => Some(l),
+                None if last_link_check.elapsed() > Duration::from_secs(1) => {
+                    last_link_check = Instant::now();
+                    Some(nic.check_link()?)
+                }
+                None => None,
+            };
+            if let Some(l) = now_link.filter(|l| l.up != link.up || l.speed != link.speed) {
+                link = l;
+                eprintln!("serve: link {link}");
+                let _ = send(&oeth::link(link.up, link.speed));
+            }
+        }
+        eprintln!("serve: {up} frames to the stack, {down} to the wire, {dropped} dropped");
+        nic.halt()?;
+        Ok(())
+    }
+
+    fn oeth_arp(ip: std::net::Ipv4Addr, target: std::net::Ipv4Addr) -> Result<()> {
+        use crate::oeth::{self, Message};
+        use dross_rt::sys;
+        let eth = ethernet_channel()?;
+        let mut buf = vec![0u8; 2048];
+        let mut hs = [dross_rt::Handle(0); 1];
+        let deadline = |ms: u64| sys::clock() + ms * 1_000_000;
+        let (len, _) = sys::channel_read(eth, &mut buf, &mut hs, deadline(20_000)).map_err(os)?;
+        let Some(Message::Info { mac, mtu, link, mbps }) = oeth::parse(&buf[..len]) else {
+            bail!("the driver's first message is not Info")
+        };
+        println!("oeth: driver {} mtu {mtu} link {link} {mbps} Mb/s", fmt_mac(&mac));
+        let t0 = Instant::now();
+        for attempt in 0..5 {
+            sys::channel_write(eth, &oeth::frame(&oeth::arp_request(&mac, ip.octets(), target.octets())), &[]).map_err(os)?;
+            let until = deadline(1000);
+            while sys::clock() < until {
+                let Ok((len, _)) = sys::channel_read(eth, &mut buf, &mut hs, until) else { break };
+                if let Some(Message::Frame(f)) = oeth::parse(&buf[..len]) {
+                    if let Some(who) = oeth::arp_reply_from(f, target.octets()) {
+                        println!("oeth: {target} is at {} (attempt {}, {:.2} ms)", fmt_mac(&who), attempt + 1, t0.elapsed().as_secs_f64() * 1e3);
+                        return Ok(());
+                    }
+                }
+            }
+        }
+        bail!("no ARP reply from {target}")
     }
 
     fn netlog(

@@ -146,7 +146,10 @@ with `grub-reboot` from Linux's GRUB, which chainloads the loader on the EFI sys
 - `gpud init` brings both D700s up under dross as under VFIO: memory controller and GART through the IOMMU, the
   CP, RLC and SMC microcode (Tahiti's files from linux-firmware in the rootfs, `FIRMWARE=` in build-linux.sh), SI
   power management, and ring and IB tests on all five rings (gfx, two compute, two SDMA; IB tests 22-24 us, fence
-  interrupts as dross notifications), 670 ms per card;
+  interrupts as dross notifications), 670 ms per card; `gpud dma-smoke` passes on both (the DMA engine writes VRAM
+  and host memory, through the AGP aperture and the IOMMU, and its writes to unmapped addresses are stopped);
+- `ethd serve` drives the BCM57762 for Oscar's network stack over a channel (OETH, `dross/unix/ethernet`): from
+  the stack's side, an ARP request goes out and the gateway's reply comes back through it (0.6 ms);
 - ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux.
 
 Channel messages between threads on two CPUs: 2.7 us one way to a thread blocked in the kernel on a halted CPU
@@ -169,7 +172,9 @@ GRUB entry that chainloads it (`/boot/grub/custom.cfg`) and `grub-reboot` into i
 Bugs only the hardware showed, now fixed: an AP's local APIC ignores unmasking LVT entries while it is software
 disabled (its timer never fired, so timed waits hung); new threads started with MXCSR 0 (every floating-point
 exception unmasked: gpud's tests died of a SIMD exception); pcid protected the largest possible MSI capability and
-so refused the BCM57762's MISC_HOST_CTRL right after it; the dross DMA backend never reused device addresses.
+so refused the BCM57762's MISC_HOST_CTRL right after it; the dross DMA backend never reused device addresses; the
+IOMMU's page tables lacked the snoop bit, so the GPU's no-snoop writes (its AGP aperture) went around the CPU caches
+and the CPU kept reading stale data. Open: writes the IOMMU blocks log no fault on the real unit (they do in QEMU).
 
 ## The Mac Pro 6,1, as dross sees it
 

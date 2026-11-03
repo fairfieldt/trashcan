@@ -28,15 +28,23 @@ pub fn started_by_dross() -> bool {
     std::env::var_os("DROSS_BOOTSTRAP").is_some()
 }
 
+/// A handle named in this program's bootstrap message (read once; the program's other handles, such as an
+/// Ethernet channel, come the same way as `pci`).
+#[cfg(feature = "std")]
+pub fn bootstrap_handle(name: &str) -> Option<Handle> {
+    static BOOT: std::sync::OnceLock<Option<dross_rt::bootstrap::Bootstrap>> = std::sync::OnceLock::new();
+    let b = BOOT.get_or_init(|| {
+        let h: u32 = std::env::var("DROSS_BOOTSTRAP").ok()?.parse().ok()?;
+        dross_rt::bootstrap::Bootstrap::read(Handle(h)).ok()
+    });
+    b.as_ref()?.handle(name)
+}
+
 /// Opens `address` through the pcid connection named `pci` in this program's bootstrap message.
 #[cfg(feature = "std")]
 pub fn open_from_env(address: PciAddress) -> Result<(DrossDevice, DrossDma)> {
     static PCI: std::sync::OnceLock<Option<Pci>> = std::sync::OnceLock::new();
-    let pci = PCI.get_or_init(|| {
-        let h: u32 = std::env::var("DROSS_BOOTSTRAP").ok()?.parse().ok()?;
-        let b = dross_rt::bootstrap::Bootstrap::read(Handle(h)).ok()?;
-        b.handle("pci").map(Pci::new)
-    });
+    let pci = PCI.get_or_init(|| bootstrap_handle("pci").map(Pci::new));
     let pci = pci.as_ref().ok_or_else(|| Error::NotFound(String::from("no pcid connection in the bootstrap message")))?;
     LINUX.store(true, core::sync::atomic::Ordering::Relaxed);
     open(pci, address)
