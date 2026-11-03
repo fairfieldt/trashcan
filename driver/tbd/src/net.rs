@@ -36,8 +36,10 @@ const PDF_FRAME_START: u8 = 1;
 const PDF_FRAME_END: u8 = 2;
 const HEADER: usize = 12;
 const MAX_PAYLOAD: usize = MAX_FRAME_SIZE - HEADER;
-const MAX_PACKET: usize = 64 * 1024;
+const MAX_PACKET: usize = 64 * 1024 + 64;
 const RING_SIZE: u32 = 256;
+/// The receive ring absorbs bursts while the TAP write of a 64 KiB packet runs (1024 frames: 4 MiB).
+const RX_RING_SIZE: u32 = 1024;
 
 const LOGIN_DELAY: Duration = Duration::from_millis(4500);
 const LOGIN_TIMEOUT: Duration = Duration::from_millis(500);
@@ -51,6 +53,8 @@ pub struct NetConfig {
     pub mtu: u32,
     /// Full end-to-end flow control on our RX ring, if the other host announces it too.
     pub e2e: bool,
+    /// Spin on the rings and the TAP device instead of sleeping.
+    pub busy_poll: bool,
 }
 
 /// Our `network` service directory (what thunderbolt_net registers).
@@ -257,9 +261,11 @@ fn connected(d: &Arc<Domain>, peer: &Arc<Peer>, c: &Arc<Conn>, tap: &Arc<crate::
     let local_max = d.router.read().unwrap().port(peer.port).max_in_hop;
     peer.alloc_hop(true, Some(rx_path), local_max).context("RX HopID")?;
     let e2e = cfg.e2e && prtcstns & E2E != 0;
-    let mut ring_cfg = RingConfig { hop: None, size: RING_SIZE, frame: true, e2e: false, sof_mask: 0, eof_mask: 0, interrupt: true };
+    let mut ring_cfg =
+        RingConfig { hop: None, size: RING_SIZE, frame: true, e2e: false, sof_mask: 0, eof_mask: 0, interrupt: !cfg.busy_poll };
     let tx = d.nhi.ring(Kind::Tx, ring_cfg)?;
     ring_cfg.e2e = e2e;
+    ring_cfg.size = RX_RING_SIZE;
     ring_cfg.sof_mask = 1 << PDF_FRAME_START;
     ring_cfg.eof_mask = 1 << PDF_FRAME_END;
     let rx = d.nhi.ring(Kind::Rx, ring_cfg)?;
@@ -273,8 +279,8 @@ fn connected(d: &Arc<Domain>, peer: &Arc<Peer>, c: &Arc<Conn>, tap: &Arc<crate::
         );
         let stop = Arc::new(AtomicBool::new(false));
         let frags_id = prtcstns & MATCH_FRAGS_ID != 0;
-        let (t, s) = (tap.clone(), stop.clone());
-        let txh = std::thread::Builder::new().name(format!("tbd-net{}-tx", peer.port)).spawn(move || tx_loop(tx, &t, &s, frags_id))?;
+        let (t, s, spin) = (tap.clone(), stop.clone(), cfg.busy_poll);
+        let txh = std::thread::Builder::new().name(format!("tbd-net{}-tx", peer.port)).spawn(move || tx_loop(tx, &t, &s, frags_id, spin))?;
         let (t, s) = (tap.clone(), stop.clone());
         let rxh = std::thread::Builder::new().name(format!("tbd-net{}-rx", peer.port)).spawn(move || rx_loop(rx, &t, &s))?;
         {
@@ -296,18 +302,39 @@ fn connected(d: &Arc<Domain>, peer: &Arc<Peer>, c: &Arc<Conn>, tap: &Arc<crate::
 }
 
 /// Packets from the TAP device to the TX ring, split into frames (`tbnet_start_xmit`).
-fn tx_loop(mut tx: Ring, tap: &crate::tap::Tap, stop: &AtomicBool, frags_id: bool) {
-    let mut buf = vec![0u8; MAX_PACKET];
+fn tx_loop(mut tx: Ring, tap: &crate::tap::Tap, stop: &AtomicBool, frags_id: bool, spin: bool) {
+    use crate::tap::{VNET_F_NEEDS_CSUM, VNET_HDR, finish_checksum};
+    let mut raw = vec![0u8; VNET_HDR + MAX_PACKET];
     let mut frame_id: u16 = 0;
+    let mut bad = 0u64;
     while !stop.load(Ordering::Relaxed) {
-        let n = match tap.read(&mut buf, Duration::from_millis(100)) {
-            Ok(0) => continue,
+        let wait = if spin { Duration::ZERO } else { Duration::from_millis(100) };
+        let n = match tap.read(&mut raw, wait) {
+            Ok(0) if spin => {
+                std::hint::spin_loop();
+                continue;
+            }
+            Ok(n) if n <= VNET_HDR + 14 => continue,
             Ok(n) => n,
             Err(e) => {
                 eprintln!("tbd: TAP read: {e}");
                 return;
             }
         };
+        let (hdr, rest) = raw.split_at_mut(VNET_HDR);
+        let buf = &mut rest[..n - VNET_HDR];
+        let n = buf.len();
+        if hdr[0] & VNET_F_NEEDS_CSUM != 0 {
+            let start = u16::from_le_bytes([hdr[6], hdr[7]]) as usize;
+            let offset = u16::from_le_bytes([hdr[8], hdr[9]]) as usize;
+            if !finish_checksum(buf, start, offset) {
+                bad += 1;
+                if bad.is_power_of_two() {
+                    eprintln!("tbd: ThunderboltIP: {bad} packets whose checksum could not be filled in, dropped");
+                }
+                continue;
+            }
+        }
         let count = n.div_ceil(MAX_PAYLOAD);
         // Wait for room for the whole packet.
         loop {
@@ -336,13 +363,15 @@ fn tx_loop(mut tx: Ring, tap: &crate::tap::Tap, stop: &AtomicBool, frags_id: boo
 }
 
 /// Frames from the RX ring put back together into packets for the TAP device (`tbnet_poll`, `tbnet_check_frame`).
+/// A packet's frames stay in their slots until it is complete and written out from there; a frame that does not
+/// fit the packet so far drops the packet and itself, as Linux does.
 fn rx_loop(mut rx: Ring, tap: &crate::tap::Tap, stop: &AtomicBool) {
-    let mut pkt: Vec<u8> = Vec::with_capacity(MAX_PACKET);
-    // (count, index, id) of the packet being assembled.
+    // Frames of the packet being assembled, still in the ring, and its (count, last index, id).
+    let mut held = 0u32;
     let mut cur: Option<(u32, u16, u16)> = None;
     let mut errors = 0u64;
     while !stop.load(Ordering::Relaxed) {
-        while let Some(f) = rx.rx_peek() {
+        while let Some(f) = rx.rx_peek_nth(held) {
             let ok = (|| {
                 if f.flags & (DESC_CRC_ERROR | DESC_BUFFER_OVERRUN) != 0 || f.len <= HEADER {
                     return None;
@@ -356,41 +385,50 @@ fn rx_loop(mut rx: Ring, tap: &crate::tap::Tap, stop: &AtomicBool) {
                     return None;
                 }
                 match cur {
-                    Some((c, i, pid)) => {
-                        if count != c || index != i + 1 || id != pid || pkt.len() + size > MAX_PACKET {
-                            return None;
-                        }
-                    }
-                    None => {
-                        if count == 0 || count > 17 || index != 0 {
-                            return None;
-                        }
-                        pkt.clear();
-                    }
+                    Some((c, i, pid)) if count != c || index != i + 1 || id != pid => return None,
+                    Some(_) => {}
+                    None if count == 0 || count > 17 || index != 0 => return None,
+                    None => {}
                 }
-                pkt.extend_from_slice(&data[HEADER..HEADER + size]);
                 cur = Some((count, index, id));
                 Some(index as u32 == count - 1)
             })();
-            rx.rx_release();
             match ok {
+                Some(false) => held += 1,
                 Some(true) => {
-                    if let Err(e) = tap.write(&pkt) {
+                    held += 1;
+                    let parts: Vec<&[u8]> = (0..held)
+                        .map(|k| {
+                            let g = rx.rx_peek_nth(k).unwrap();
+                            let d = rx.rx_data(&g);
+                            let size = u32::from_le_bytes(d[0..4].try_into().unwrap()) as usize;
+                            &d[HEADER..HEADER + size]
+                        })
+                        .collect();
+                    if let Err(e) = tap.write_parts(&parts) {
                         eprintln!("tbd: TAP write: {e}");
                     }
+                    drop(parts);
+                    for _ in 0..held {
+                        rx.rx_release();
+                    }
+                    held = 0;
                     cur = None;
                 }
-                Some(false) => {}
                 None => {
+                    for _ in 0..=held {
+                        rx.rx_release();
+                    }
+                    held = 0;
+                    cur = None;
                     errors += 1;
                     if errors.is_power_of_two() {
                         eprintln!("tbd: ThunderboltIP: {errors} bad frames so far");
                     }
-                    cur = None;
                 }
             }
         }
-        rx.wait(Duration::from_millis(10));
+        rx.wait_nth(held, Duration::from_millis(10));
     }
 }
 

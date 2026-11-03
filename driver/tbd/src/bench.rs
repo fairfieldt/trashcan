@@ -16,7 +16,8 @@ pub struct Endpoint {
     socket: bool,
 }
 
-pub const FRAME: usize = 4096;
+/// The largest message a tbd stream socket takes (it cuts it into 4 KiB frames).
+pub const FRAME: usize = 64 * 1024;
 
 impl Endpoint {
     pub fn open(path: &Path) -> Result<Endpoint> {
@@ -50,6 +51,16 @@ impl Endpoint {
         // SAFETY: a read into buf.
         let n = unsafe { libc::read(self.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
         if n < 0 { Err(io::Error::last_os_error()) } else { Ok(n as usize) }
+    }
+
+    /// A read that does not wait: `None` if nothing is there.
+    pub fn read_nonblocking(&self, buf: &mut [u8]) -> io::Result<Option<usize>> {
+        let mut p = libc::pollfd { fd: self.fd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+        // SAFETY: one pollfd with no wait.
+        if unsafe { libc::poll(&mut p, 1, 0) } == 0 {
+            return Ok(None);
+        }
+        self.read(buf).map(Some)
     }
 
     /// Writes all of `data`, in frames of at most 4 KiB on a socket.
@@ -168,7 +179,7 @@ pub fn bench(path: &Path, bytes: u64, window: usize, write: usize) -> Result<()>
 }
 
 /// Round trips of `size`-byte messages through an echo.
-pub fn ping(path: &Path, count: usize, size: usize) -> Result<()> {
+pub fn ping(path: &Path, count: usize, size: usize, spin: bool) -> Result<()> {
     let ep = Endpoint::open(path)?;
     let mut msg = vec![0u8; size];
     let mut buf = vec![0u8; size.max(FRAME)];
@@ -178,9 +189,21 @@ pub fn ping(path: &Path, count: usize, size: usize) -> Result<()> {
         let t = Instant::now();
         ep.write_all(&msg)?;
         let mut got = 0;
+        let deadline = Instant::now() + Duration::from_secs(2);
         while got < size {
-            ensure!(ep.wait_readable(Duration::from_secs(2)), "no echo for 2 s (message {i})");
-            let k = ep.read(&mut buf[got..])?;
+            let k = if spin {
+                match ep.read_nonblocking(&mut buf[got..])? {
+                    Some(k) => k,
+                    None => {
+                        ensure!(Instant::now() < deadline, "no echo for 2 s (message {i})");
+                        std::hint::spin_loop();
+                        continue;
+                    }
+                }
+            } else {
+                ensure!(ep.wait_readable(Duration::from_secs(2)), "no echo for 2 s (message {i})");
+                ep.read(&mut buf[got..])?
+            };
             ensure!(k > 0, "CLOSE during message {i}");
             got += k;
         }

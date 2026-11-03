@@ -401,6 +401,11 @@ impl Ring {
         Some(unsafe { &mut self.bufs.as_mut_slice()[o..o + self.frame_bytes] })
     }
 
+    /// TX: free slots.
+    pub fn tx_room(&self) -> u32 {
+        self.size - 1 - self.in_flight()
+    }
+
     /// TX: posts the slot filled through `tx_slot` with `len` bytes.
     pub fn tx_submit(&mut self, len: usize, sof: u8, eof: u8) {
         assert!(!self.full() && len > 0 && len <= self.frame_bytes, "tx_submit of {len} bytes");
@@ -423,10 +428,16 @@ impl Ring {
 
     /// RX: the next completed frame, if any. Its data stays valid until `rx_release`.
     pub fn rx_peek(&self) -> Option<RxFrame> {
-        if self.empty() {
+        self.rx_peek_nth(0)
+    }
+
+    /// RX: the `k`-th completed frame after the next one (frames complete in order).
+    pub fn rx_peek_nth(&self, k: u32) -> Option<RxFrame> {
+        if k >= self.in_flight() {
             return None;
         }
-        let w = self.desc_word2(self.tail);
+        let slot = (self.tail + k) % self.size;
+        let w = self.desc_word2(slot);
         let flags = w >> 20;
         if flags & DESC_COMPLETED == 0 {
             return None;
@@ -436,7 +447,7 @@ impl Ring {
             0 => MAX_FRAME_SIZE,
             l => l as usize,
         };
-        Some(RxFrame { slot: self.tail, len, eof: (w >> 12 & 0xf) as u8, sof: (w >> 16 & 0xf) as u8, flags })
+        Some(RxFrame { slot, len, eof: (w >> 12 & 0xf) as u8, sof: (w >> 16 & 0xf) as u8, flags })
     }
 
     pub fn rx_data(&self, f: &RxFrame) -> &[u8] {
@@ -452,14 +463,19 @@ impl Ring {
         self.post_rx();
     }
 
-    /// The descriptor at the tail is done (an RX frame to take, or a TX slot to reap).
-    pub fn has_work(&self) -> bool {
-        !self.empty() && self.desc_word2(self.tail) >> 20 & DESC_COMPLETED != 0
+    /// The descriptor `k` slots past the tail is done (an RX frame to take, or a TX slot to reap).
+    pub fn has_work(&self, k: u32) -> bool {
+        k < self.in_flight() && self.desc_word2((self.tail + k) % self.size) >> 20 & DESC_COMPLETED != 0
     }
 
     /// Sleeps until the NHI completes a descriptor on this ring, or `timeout`. The ring's interrupt is unmasked
     /// only while sleeping (as NAPI does): a busy ring raises none.
     pub fn wait(&mut self, timeout: Duration) {
+        self.wait_nth(0, timeout)
+    }
+
+    /// `wait` for the descriptor `k` slots past the tail (RX frames before it are held, not yet released).
+    pub fn wait_nth(&mut self, k: u32, timeout: Duration) {
         if !self.interrupt {
             // Busy polling: give the core back briefly, nothing more.
             std::thread::yield_now();
@@ -471,7 +487,7 @@ impl Ring {
         drop(g);
         self.nhi.set_interrupt(self.kind, self.hop, true);
         // A completion that landed before the unmask raised nothing.
-        if !self.has_work() {
+        if !self.has_work(k) {
             let g = w.count.lock().unwrap();
             let _ = w.cv.wait_timeout_while(g, timeout, |c| *c == self.seen).unwrap();
         }

@@ -18,18 +18,20 @@ Measured on two Mac Pros joined by one cable (both lanes): `tbd` on one end, Lin
 - USB4STREAM: an echo through the kernel's `/dev/tbstreamN` gets every byte back intact.
 - On exit it logs out, undoes bonding and takes the link down and up once, so the other host starts afresh.
 
-Compared with Linux on both ends, on the same cable and with the same tools:
+Compared with Linux on both ends, on the same cable and with the same tools (two runs or more each; "busy" is
+`tbd run --busy-poll`):
 
-| | Linux ↔ Linux | tbd ↔ Linux |
-|---|---|---|
-| TCP, tbd sending (iperf3) | 8.9 Gb/s | 1.7 Gb/s |
-| TCP, tbd receiving | 8.3 Gb/s | 7.6-8.3 Gb/s |
-| ping | 0.15 ms | 0.30 ms |
-| stream echo, 512 KiB window (`tbd bench`) | 289 MB/s | 175 MB/s |
-| stream round trip, 64 B, median (`tbd ping`) | 45 µs | 78 µs |
+| | Linux ↔ Linux | tbd ↔ Linux | tbd busy ↔ Linux |
+|---|---|---|---|
+| TCP, tbd sending (iperf3) | 8.9 Gb/s | 9.1 Gb/s | 8.8 Gb/s |
+| TCP, tbd receiving | 8.3 Gb/s | 8.0 Gb/s | 6.9-7.3 Gb/s |
+| ping | 0.15 ms | 0.34 ms | 0.14 ms |
+| stream echo, 64 KiB writes, 512 KiB window (`tbd bench`) | 331-453 MB/s | 292 MB/s | 321-385 MB/s |
+| stream round trip, 64 B, median (`tbd ping`) | 45 µs | 85 µs | 42 µs |
 
-Sending is slow because the TAP device hands `tbd` one 1500-byte frame per read. Linux's driver gets 64 KiB TSO
-packets. Streams go through a Unix socket and two thread wakeups each way.
+TCP goes through the TAP device as 64 KiB TSO packets, as Linux's driver gets them from its stack. The checksums are
+filled in in software, as Linux does. Without busy polling every wakeup takes two threads (the MSI's, then the
+ring's), which costs latency.
 
 ## Layout
 
@@ -64,7 +66,7 @@ sudo ./tbd bench /run/tbd/PEER.trashcan             # against `tbd echo /dev/tbs
 sudo ./vfio.sh give 0000:16:00.0                     # back to the kernel driver
 ```
 
-A stream's socket (`SOCK_SEQPACKET`) takes one client at a time. Each message is one frame (up to 4 KiB) each way.
+A stream's socket (`SOCK_SEQPACKET`) takes one client at a time. A message of up to 64 KiB goes out as 4 KiB frames, and consecutive received frames come back as one message.
 A CLOSE from the other host arrives as an empty message. A client that shuts down its writing side sends a CLOSE
 and keeps reading. Paths are routed only while a client is connected, as Linux routes them only while the device
 is open.

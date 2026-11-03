@@ -172,7 +172,7 @@ fn serve(d: &Arc<Domain>, peer: &Arc<Peer>, spec: &StreamSpec, in_hop: u32, out_
     let stop = Arc::new(AtomicBool::new(false));
     let (cl, st, cc, p) = (client.clone(), stop.clone(), c.clone(), peer.clone());
     let rxh = std::thread::Builder::new().name("tbd-st-rx".into()).spawn(move || rx_loop(rx, &cl, &st, &cc, &p))?;
-    tx_loop(tx, &client, &stop, c, peer);
+    tx_loop(tx, &client, &stop, c, peer, spec.busy_poll);
     stop.store(true, Ordering::Relaxed);
     let _ = rxh.join();
     d.disable_paths(peer, tx_ring, in_hop);
@@ -189,11 +189,15 @@ fn serve(d: &Arc<Domain>, peer: &Arc<Peer>, spec: &StreamSpec, in_hop: u32, out_
     Ok(())
 }
 
+/// A client message: up to this many bytes, cut into 4 KiB DATA frames.
+pub const MAX_MESSAGE: usize = 64 * 1024;
+const MESSAGE_FRAMES: u32 = (MAX_MESSAGE / MAX_FRAME_SIZE) as u32;
+
 /// Client messages to DATA frames. A client that shuts down its writing side (or sends an empty message) sends a
 /// CLOSE and can still read; one that closes the socket ends the session, with a CLOSE if it had not sent one.
-fn tx_loop(mut tx: Ring, client: &OwnedFd, stop: &AtomicBool, c: &Counters, peer: &Peer) {
+fn tx_loop(mut tx: Ring, client: &OwnedFd, stop: &AtomicBool, c: &Counters, peer: &Peer, spin: bool) {
     let fd = client.as_raw_fd();
-    let mut buf = vec![0u8; MAX_FRAME_SIZE];
+    let mut buf = vec![0u8; MAX_MESSAGE];
     let mut closed = false;
     loop {
         if peer.gone() || stop.load(Ordering::Relaxed) {
@@ -207,17 +211,21 @@ fn tx_loop(mut tx: Ring, client: &OwnedFd, stop: &AtomicBool, c: &Counters, peer
             }
             continue;
         }
-        // Room for the next frame before taking it off the socket.
-        if tx.full() {
+        // Room for the largest message before taking one off the socket.
+        if tx.tx_room() < MESSAGE_FRAMES.min(tx.size - 1) {
             tx.wait(Duration::from_millis(5));
             continue;
         }
-        if !poll_in(fd, Duration::from_millis(100)) {
+        if !spin && !poll_in(fd, Duration::from_millis(100)) {
             continue;
         }
         // SAFETY: recv into buf.
-        let n = unsafe { libc::recv(fd, buf.as_mut_ptr().cast(), buf.len(), 0) };
+        let n = unsafe { libc::recv(fd, buf.as_mut_ptr().cast(), buf.len(), if spin { libc::MSG_DONTWAIT } else { 0 }) };
         if n < 0 {
+            if spin && std::io::Error::last_os_error().kind() == std::io::ErrorKind::WouldBlock {
+                std::hint::spin_loop();
+                continue;
+            }
             break;
         }
         if n == 0 {
@@ -229,10 +237,12 @@ fn tx_loop(mut tx: Ring, client: &OwnedFd, stop: &AtomicBool, c: &Counters, peer
             continue;
         }
         let n = n as usize;
-        let slot = tx.tx_slot().expect("room checked");
-        slot[..n].copy_from_slice(&buf[..n]);
-        tx.tx_submit(n, PDF_FRAME_START, PDF_DATA);
-        c.tx_frames.fetch_add(1, Ordering::Relaxed);
+        for chunk in buf[..n].chunks(MAX_FRAME_SIZE) {
+            let slot = tx.tx_slot().expect("room checked");
+            slot[..chunk.len()].copy_from_slice(chunk);
+            tx.tx_submit(chunk.len(), PDF_FRAME_START, PDF_DATA);
+            c.tx_frames.fetch_add(1, Ordering::Relaxed);
+        }
         c.tx_bytes.fetch_add(n as u64, Ordering::Relaxed);
     }
     stop.store(true, Ordering::Relaxed);
@@ -268,24 +278,49 @@ fn send_close(tx: &mut Ring) {
     }
 }
 
-/// DATA frames to client messages; a CLOSE as an empty message.
+/// DATA frames to client messages, as many consecutive frames per message as are there (up to 64 KiB, sent from
+/// the ring buffers); a CLOSE as an empty message.
 fn rx_loop(mut rx: Ring, client: &OwnedFd, stop: &AtomicBool, c: &Counters, peer: &Peer) {
     let fd = client.as_raw_fd();
+    let max = MESSAGE_FRAMES as usize;
     while !stop.load(Ordering::Relaxed) && !peer.gone() {
-        while let Some(f) = rx.rx_peek() {
-            if f.flags & (DESC_CRC_ERROR | DESC_BUFFER_OVERRUN) != 0 {
-                c.rx_errors.fetch_add(1, Ordering::Relaxed);
+        while let Some(first) = rx.rx_peek() {
+            let mut iov: Vec<libc::iovec> = Vec::with_capacity(max);
+            let mut frames = 0;
+            let mut bytes = 0;
+            if first.eof == PDF_CLOSE {
+                frames = 1;
+            } else {
+                while iov.len() < max {
+                    let Some(f) = rx.rx_peek_nth(frames) else { break };
+                    if f.eof == PDF_CLOSE {
+                        break;
+                    }
+                    if f.flags & (DESC_CRC_ERROR | DESC_BUFFER_OVERRUN) != 0 {
+                        c.rx_errors.fetch_add(1, Ordering::Relaxed);
+                    }
+                    let d = rx.rx_data(&f);
+                    iov.push(libc::iovec { iov_base: d.as_ptr() as *mut _, iov_len: d.len() });
+                    bytes += d.len();
+                    frames += 1;
+                }
             }
-            let data = if f.eof == PDF_CLOSE { &[][..] } else { rx.rx_data(&f) };
-            // SAFETY: send of data's bytes; MSG_NOSIGNAL so a gone client is an error, not SIGPIPE.
-            let n = unsafe { libc::send(fd, data.as_ptr().cast(), data.len(), libc::MSG_NOSIGNAL) };
-            let len = data.len();
-            rx.rx_release();
+            // SAFETY: sendmsg of buffers in completed RX slots, which stay ours until rx_release; MSG_NOSIGNAL so a
+            // gone client is an error, not SIGPIPE.
+            let n = unsafe {
+                let mut msg: libc::msghdr = std::mem::zeroed();
+                msg.msg_iov = iov.as_mut_ptr();
+                msg.msg_iovlen = iov.len() as _;
+                libc::sendmsg(fd, &msg, libc::MSG_NOSIGNAL)
+            };
+            for _ in 0..frames {
+                rx.rx_release();
+            }
             if n < 0 {
                 return;
             }
-            c.rx_frames.fetch_add(1, Ordering::Relaxed);
-            c.rx_bytes.fetch_add(len as u64, Ordering::Relaxed);
+            c.rx_frames.fetch_add(frames as u64, Ordering::Relaxed);
+            c.rx_bytes.fetch_add(bytes as u64, Ordering::Relaxed);
         }
         rx.wait(Duration::from_millis(10));
     }

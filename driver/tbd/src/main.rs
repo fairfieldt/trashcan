@@ -59,7 +59,8 @@ enum Command {
         streams: Vec<String>,
         #[arg(long, default_value_t = 256)]
         ring: u32,
-        /// Poll the stream rings instead of using interrupts.
+        /// Spin on the rings (and the stream sockets and TAP device) instead of sleeping: lower latency, a busy
+        /// core per ring.
         #[arg(long)]
         busy_poll: bool,
         /// Directory for the stream sockets.
@@ -104,6 +105,9 @@ enum Command {
         count: usize,
         #[arg(long, default_value_t = 64)]
         size: usize,
+        /// Spin for the echo instead of sleeping in poll().
+        #[arg(long)]
+        spin: bool,
     },
 }
 
@@ -120,7 +124,7 @@ fn main() {
         #[cfg(target_os = "linux")]
         Command::Bench { path, bytes, window, write } => bench::bench(&path, bytes, window, write),
         #[cfg(target_os = "linux")]
-        Command::Ping { path, count, size } => bench::ping(&path, count, size),
+        Command::Ping { path, count, size, spin } => bench::ping(&path, count, size, spin),
         #[cfg(not(target_os = "linux"))]
         Command::Echo { .. } | Command::Bench { .. } | Command::Ping { .. } => Err(anyhow::anyhow!("needs Linux")),
     };
@@ -260,7 +264,7 @@ fn run(a: RunArgs) -> Result<()> {
         None => std::fs::read_to_string("/proc/sys/kernel/hostname")?.trim().to_owned(),
     };
     let streams = a.streams.iter().map(|s| parse_stream(s, &a)).collect::<Result<Vec<_>>>()?;
-    let network = (a.net != "none").then(|| net::NetConfig { ifname: a.net.clone(), mtu: a.mtu, e2e: true });
+    let network = (a.net != "none").then(|| net::NetConfig { ifname: a.net.clone(), mtu: a.mtu, e2e: true, busy_poll: a.busy_poll });
     let config = domain::Config { hostname, network, streams, bounce: !a.no_bounce, bonding: !a.no_bonding };
     let (nhi, irq, _dev) = domain::open_nhi(&a.address)?;
     let d = domain::Domain::start(nhi.clone(), irq, config)?;
@@ -291,7 +295,7 @@ fn cat(socket: &std::path::Path) -> Result<()> {
         fd
     };
     let writer = std::thread::spawn(move || {
-        let mut buf = vec![0u8; nhi::MAX_FRAME_SIZE];
+        let mut buf = vec![0u8; stream::MAX_MESSAGE];
         let mut stdin = std::io::stdin().lock();
         loop {
             let n = match stdin.read(&mut buf) {
@@ -307,7 +311,7 @@ fn cat(socket: &std::path::Path) -> Result<()> {
         // SAFETY: shutdown of the socket's writing side.
         unsafe { libc::shutdown(fd, libc::SHUT_WR) };
     });
-    let mut buf = vec![0u8; nhi::MAX_FRAME_SIZE];
+    let mut buf = vec![0u8; stream::MAX_MESSAGE];
     let mut out = std::io::stdout().lock();
     loop {
         // SAFETY: recv into buf.
