@@ -14,6 +14,11 @@ pub trait IrqWait: Send + Sync {
 
     /// How many times it fired since the last wait or take, without waiting (0 if not at all).
     fn take(&self) -> Result<u64>;
+
+    /// The descriptor behind the notification (an eventfd on Linux), for handing it to another process.
+    fn raw_fd(&self) -> Option<i32> {
+        None
+    }
 }
 
 impl IrqEvent {
@@ -28,5 +33,9 @@ impl IrqEvent {
 
     pub fn take(&self) -> Result<u64> {
         self.inner.take()
+    }
+
+    pub fn raw_fd(&self) -> Option<i32> {
+        self.inner.raw_fd()
     }
 }

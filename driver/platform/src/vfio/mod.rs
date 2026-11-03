@@ -340,6 +340,20 @@ pub struct Device {
 }
 
 impl Device {
+    /// A duplicate of the device's descriptor, and the offset and size at which `region` maps through it: for
+    /// handing a BAR to a trusted process of the driver's (it maps it with `mmap(fd, offset)`; sysfs `resourceN`
+    /// can't map a BAR vfio-pci has claimed).
+    pub fn export_region(&self, region: Region) -> Result<(OwnedFd, u64, u64)> {
+        let r = self.region(region)?;
+        // SAFETY: dup of a descriptor we own.
+        let fd = unsafe { libc::fcntl(self.fd.as_raw_fd(), libc::F_DUPFD_CLOEXEC, 0) };
+        if fd < 0 {
+            return Err(Error::last_os("dup"));
+        }
+        // SAFETY: a fresh descriptor.
+        Ok((unsafe { OwnedFd::from_raw_fd(fd) }, r.offset, r.size))
+    }
+
     pub fn num_regions(&self) -> u32 {
         self.info.num_regions
     }
@@ -642,5 +656,9 @@ impl IrqWait for EventFd {
 
     fn take(&self) -> Result<u64> {
         self.read_count()
+    }
+
+    fn raw_fd(&self) -> Option<i32> {
+        Some(self.0.as_raw_fd())
     }
 }
