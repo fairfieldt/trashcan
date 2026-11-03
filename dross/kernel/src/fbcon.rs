@@ -2,6 +2,39 @@
 //! the top instead of scrolling, so a line costs a few KiB of framebuffer writes and no reads.
 
 use bootinfo::{Framebuffer, PixelFormat};
+use core::sync::atomic::{AtomicUsize, Ordering};
+
+/// Mappings of the framebuffer by programs (a display server). While there are any, the log stays off the
+/// screen, except for a panic or a reset.
+static CLAIMS: AtomicUsize = AtomicUsize::new(0);
+
+pub struct Claim(());
+
+impl Claim {
+    pub fn new() -> Claim {
+        if CLAIMS.fetch_add(1, Ordering::AcqRel) == 0 {
+            crate::println!("display: taken by a program; the log continues off screen");
+        }
+        Claim(())
+    }
+}
+
+impl Clone for Claim {
+    fn clone(&self) -> Claim {
+        CLAIMS.fetch_add(1, Ordering::AcqRel);
+        Claim(())
+    }
+}
+
+impl Drop for Claim {
+    fn drop(&mut self) {
+        CLAIMS.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+pub fn claimed() -> bool {
+    CLAIMS.load(Ordering::Acquire) != 0
+}
 use noto_sans_mono_bitmap::{get_raster, get_raster_width, FontWeight, RasterHeight};
 
 pub struct Console {

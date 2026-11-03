@@ -128,6 +128,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09b7b72dee69e4110d1b91fb8d497c1b74a54082da5738dff84136142c4f767b"
 
 [[package]]
+name = "oscar-desktop"
+version = "0.1.0"
+dependencies = [
+ "noto-sans-mono-bitmap",
+]
+
+[[package]]
 name = "pcid"
 version = "0.1.0"
 dependencies = [
@@ -326,6 +333,7 @@ version = "0.1.0"
 dependencies = [
  "dross-abi",
  "dross-rt",
+ "oscar-desktop",
 ]
 
 [[package]]

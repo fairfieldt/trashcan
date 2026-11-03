@@ -1,0 +1,10 @@
+[package]
+name = "oscar-desktop-host"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+oscar-desktop = { path = "../core" }
+minifb = "0.28"
+portable-pty = "0.9"

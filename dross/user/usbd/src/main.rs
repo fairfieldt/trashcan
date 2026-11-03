@@ -1,7 +1,9 @@
 //! usbd: an xHCI driver for USB keyboards and mice (HID boot protocol), for local debugging at the machine.
 //!
 //! It takes the controller from the firmware, sets up the command and event rings, enumerates the devices on
-//! the root ports, configures the HID boot interfaces it finds and logs keys and mouse movements. No hubs yet
+//! the root ports and configures the HID boot interfaces it finds. Given a `seat` channel (init.conf), it sends
+//! keys and pointer moves to the display server as the desktop's input packets (`seat.rs`); otherwise it logs
+//! them. No hubs yet
 //! (devices must be on a root port), no other device classes. The Mac Pro 6,1's rear ports are on a Fresco
 //! Logic FL1100 xHCI (1b73:1100).
 #![no_std]
@@ -16,6 +18,8 @@ use core::sync::atomic::{compiler_fence, Ordering};
 use dross_rt::bootstrap::Bootstrap;
 use dross_rt::pci::{DmaBuffer, DmaSpace, IrqEvent, Mmio, Pci};
 use dross_rt::{println, sys, Handle};
+
+mod seat;
 
 dross_rt::main!(main);
 
@@ -38,7 +42,7 @@ const PORT_ENABLED: u32 = 1 << 1;
 const PORT_RESET: u32 = 1 << 4;
 const PORT_RESET_CHANGE: u32 = 1 << 21;
 /// PORTSC bits that read back what they write (the rest are write-1-to-clear or self-clearing).
-const PORT_KEEP: u32 = 0x4e00_fde9 & !PORT_ENABLED;
+const PORT_KEEP: u32 = 0x4e00_ffe9 & !PORT_ENABLED;
 const PORT_CHANGES: u32 = 0x00fe_0000;
 
 const TRB_NORMAL: u32 = 1;
@@ -137,6 +141,8 @@ struct Xhci {
     ep0: Vec<Option<Ring>>,
     endpoints: Vec<Endpoint>,
     seen: (bool, bool, bool, bool),
+    /// The display server's input, when init.conf gives usbd a `seat` channel.
+    seat: Option<seat::Seat>,
 }
 
 impl Xhci {
@@ -287,6 +293,7 @@ impl Xhci {
             ep0: (0..=max_slots).map(|_| None).collect(),
             endpoints: Vec::new(),
             seen: (false, false, false, false),
+            seat: None,
         };
 
         // Stop, reset, wait until ready.
@@ -504,9 +511,15 @@ impl Xhci {
             r[..n].copy_from_slice(&e.buf.slice()[..n]);
             match e.kind {
                 Hid::Keyboard => {
+                    if let Some(s) = &mut self.seat {
+                        s.keyboard(&r, &e.last);
+                    }
                     for &k in &r[2..8] {
                         if k != 0 && !e.last[2..8].contains(&k) {
-                            println!("key {}", key_name(k, r[0]));
+                            // Keys typed into a program are not logged.
+                            if self.seat.is_none() {
+                                println!("key {}", key_name(k, r[0]));
+                            }
                             if k == 0x04 {
                                 self.seen.0 = true;
                             }
@@ -518,7 +531,10 @@ impl Xhci {
                 }
                 Hid::Mouse => {
                     let (b, dx, dy) = (r[0], r[1] as i8, r[2] as i8);
-                    println!("mouse dx {dx} dy {dy} buttons {b:#x}");
+                    match &mut self.seat {
+                        Some(s) => s.mouse(b, dx, dy),
+                        None => println!("mouse dx {dx} dy {dy} buttons {b:#x}"),
+                    }
                     if dx != 0 || dy != 0 {
                         self.seen.2 = true;
                     }
@@ -569,6 +585,7 @@ fn main(boot: Handle) -> i32 {
         return 0;
     };
     let mut x = Xhci::init(&pci, bdf);
+    x.seat = b.handle("seat").map(|h| seat::Seat::new(h, b.value_u64("width").unwrap_or(1024) as u32, b.value_u64("height").unwrap_or(768) as u32));
     let ports = (x.m.read32(0x04) >> 24) as usize;
     // Give devices time to connect after the reset.
     let _ = x.irq.wait(sys::after_ms(50));
@@ -599,6 +616,8 @@ fn main(boot: Handle) -> i32 {
             reported = true;
         }
         x.m.write32(x.rt + 0x20, 0b11);
-        let _ = x.irq.wait(sys::after_ms(100));
+        // A held key repeats on time; otherwise wait for the controller.
+        let next = x.seat.as_mut().and_then(|s| s.repeat());
+        let _ = x.irq.wait(next.unwrap_or(sys::after_ms(100)).min(sys::after_ms(100)));
     }
 }

@@ -64,6 +64,8 @@ struct Mapping {
     offset: u64,
     /// `vm::READ | WRITE | EXECUTE`; 0 maps nothing (no access).
     flags: u64,
+    /// Held while the framebuffer is mapped: the kernel log stays off it.
+    _display: Option<crate::fbcon::Claim>,
 }
 
 struct Inner {
@@ -99,7 +101,7 @@ impl AddressSpace {
             match &m.mem {
                 None => { child.reserve(m.len, addr, false)?; }
                 Some(mem) => {
-                    if mem.uncached() { return Err(Error::AccessDenied); }
+                    if !mem.is_ram() { return Err(Error::AccessDenied); }
                     let backing = if m.flags & FORK_SHARED != 0 { mem.clone() } else {
                         let key = Arc::as_ptr(mem) as usize;
                         if let Some(copy) = copies.get(&key) { copy.clone() } else {
@@ -124,7 +126,7 @@ impl AddressSpace {
         let inner = self.inner.lock();
         for (&addr, m) in &inner.mappings {
             if let Some(mem) = &m.mem {
-                if mem.uncached() { return Err(Error::AccessDenied); }
+                if !mem.is_ram() { return Err(Error::AccessDenied); }
                 child.map(mem.clone(), m.offset, m.len, addr, m.flags)?;
             } else { child.reserve(m.len, addr, false)?; }
         }
@@ -249,7 +251,8 @@ impl AddressSpace {
             }
             Vec::new()
         };
-        let m = Mapping { len, mem, offset, flags };
+        let _display = mem.as_ref().filter(|m| m.is_display()).map(|_| crate::fbcon::Claim::new());
+        let m = Mapping { len, mem, offset, flags, _display };
         let r = self.install(addr, &m);
         if r.is_ok() {
             inner.mappings.insert(addr, m);

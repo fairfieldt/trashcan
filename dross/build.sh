@@ -2,7 +2,7 @@
 # Builds the loader and the kernel and lays out an EFI system partition in target/esp:
 #   EFI/BOOT/BOOTX64.EFI  the loader
 #   dross.elf             the kernel
-#   modules/              user programs the kernel starts or hands to init
+#   modules/              user programs the kernel starts or hands to init (and Oscar's desktop)
 # PROFILE=release for an optimized build.
 set -eu
 cd "$(dirname "$0")"
@@ -13,6 +13,8 @@ cargo build -p dross-boot --target x86_64-unknown-uefi $flag
 # KERNEL_FEATURES=unix builds the kernel with the Unix subsystem (unix/README.md).
 cargo build -p dross --target x86_64-unknown-none $flag ${KERNEL_FEATURES:+--features dross/$KERNEL_FEATURES}
 cargo build -p init -p selftest -p pcid -p edutest -p usbd --target x86_64-unknown-none $flag
+# Oscar's desktop (desktop/README.md): its own workspace.
+cargo build --manifest-path desktop/Cargo.toml -p oscar-desktop-native --features native --bins --target x86_64-unknown-none $flag
 esp=target/esp
 rm -rf "$esp"
 mkdir -p "$esp/EFI/BOOT"
@@ -21,6 +23,9 @@ cp "target/x86_64-unknown-none/$PROFILE/dross" "$esp/dross.elf"
 mkdir -p "$esp/modules"
 for m in init selftest pcid edutest usbd; do
     cp "target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
+done
+for m in oscar-session oscar-windowd oscar-terminal trash; do
+    cp "desktop/target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
 done
 # Linux programs and their files, if build-linux.sh made them.
 if [ -d target/linux ]; then

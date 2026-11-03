@@ -57,10 +57,11 @@ fn main(boot: Handle) -> i32 {
         .value("ecam", &alloc::format!("{ecam:#x}"))
         .value("ecam-buses", buses);
     let test = b.value("hypervisor") == Some("1");
-    // QEMU's edu device only exists under QEMU.
-    let drivers: &[&str] = if test { &["edutest", "usbd"] } else { &["usbd"] };
+    // QEMU's edu device only exists under QEMU; init.conf can start usbd itself (`native usbd @seat=input`).
+    let conf_usbd = lines.iter().any(|w| w[0] == "native" && w.get(1) == Some(&"usbd"));
+    let drivers: alloc::vec::Vec<&str> = ["edutest", "usbd"].into_iter().filter(|&d| (d != "edutest" || test) && (d != "usbd" || !conf_usbd)).collect();
     let mut driver_ends = alloc::vec::Vec::new();
-    for &d in drivers {
+    for &d in &drivers {
         let (mine, theirs) = sys::channel_create().unwrap();
         pb = pb.handle(&alloc::format!("client/{d}"), mine);
         driver_ends.push(theirs);
@@ -163,12 +164,11 @@ fn main(boot: Handle) -> i32 {
                 let want = words.get(2).and_then(|c| c.parse::<i64>().ok());
                 let mut words_argv = alloc::vec![words[1]];
                 words_argv.extend_from_slice(&words[3..]);
-                let (argv, extra) = take_ends(&mut channels, &words_argv);
-                let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
-                match launch(&b, &argv, end, &extra) {
+                let args = take_ends(&b, &mut channels, &words_argv);
+                match launch(&b, &args, end) {
                     Some(p) => {
                         let code = sys::process_wait(p, sys::after_ms(600_000));
-                        println!("{} exited with {code:?}", argv.join(" "));
+                        println!("{} exited with {code:?}", args.argv.join(" "));
                         ok &= code.ok() == want;
                     }
                     None => ok = false,
@@ -197,31 +197,49 @@ fn main(boot: Handle) -> i32 {
 
 type Channels<'a> = alloc::vec::Vec<(&'a str, alloc::vec::Vec<Handle>)>;
 
-/// A `start` or `native` line: runs the program; false if it could not be started.
-fn start(b: &Bootstrap, channels: &mut Channels, words: &[&str], pci: Handle) -> bool {
-    let (argv, extra) = take_ends(channels, &words[1..]);
-    let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
-    if words[0] == "native" { launch_native(b, &argv, pci, &extra) } else { launch(b, &argv, pci, &extra).is_some() }
+/// A program's arguments, handles and bootstrap values, from an init.conf line.
+#[derive(Default)]
+struct Args {
+    argv: alloc::vec::Vec<alloc::string::String>,
+    handles: alloc::vec::Vec<(alloc::string::String, Handle)>,
+    values: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>,
 }
 
-/// A line's arguments: `@NAME=HANDLE` takes the next free end of channel NAME as bootstrap handle HANDLE;
-/// `%KEY=VALUE` becomes a value in the program's bootstrap message; the rest are its arguments.
-fn take_ends(channels: &mut Channels, args: &[&str]) -> (alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<(alloc::string::String, Handle)>) {
-    let mut argv = alloc::vec::Vec::new();
-    let mut extra = alloc::vec::Vec::new();
-    for a in args {
-        if let Some(kv) = a.strip_prefix('%') {
-            argv.push(alloc::format!("%{kv}"));
+/// A `start` or `native` line: runs the program; false if it could not be started.
+fn start(b: &Bootstrap, channels: &mut Channels, words: &[&str], pci: Handle) -> bool {
+    let args = take_ends(b, channels, &words[1..]);
+    if words[0] == "native" { launch_native(b, &args, pci) } else { launch(b, &args, pci).is_some() }
+}
+
+/// A line's arguments: `@NAME=HANDLE` passes the next free end of channel NAME, or else a duplicate of init's
+/// own handle NAME (`module/...`, `display`), as bootstrap handle HANDLE; `%KEY=VALUE` passes a value, and
+/// `%KEY=$NAME` init's own value NAME (the kernel's `display-width` and so on); the rest are arguments.
+fn take_ends(b: &Bootstrap, channels: &mut Channels, words: &[&str]) -> Args {
+    let mut args = Args::default();
+    for a in words {
+        if let Some((k, v)) = a.strip_prefix('%').and_then(|kv| kv.split_once('=')) {
+            let v = match v.strip_prefix('$') {
+                Some(name) => match b.value(name) {
+                    Some(v) => v,
+                    None => {
+                        println!("init.conf: no value {name}");
+                        continue;
+                    }
+                },
+                None => v,
+            };
+            args.values.push((alloc::string::String::from(k), alloc::string::String::from(v)));
         } else if let Some((chan, name)) = a.strip_prefix('@').and_then(|r| r.split_once('=')) {
-            match channels.iter_mut().find(|(n, _)| *n == chan).and_then(|(_, ends)| ends.pop()) {
-                Some(end) => extra.push((alloc::string::String::from(name), end)),
-                None => println!("init.conf: no free end of channel {chan}"),
+            let end = channels.iter_mut().find(|(n, _)| *n == chan).and_then(|(_, ends)| ends.pop());
+            match end.or_else(|| b.handle(chan).and_then(|h| sys::dup(h, rights::ALL).ok())) {
+                Some(h) => args.handles.push((alloc::string::String::from(name), h)),
+                None => println!("init.conf: no free end of channel {chan} and no handle of that name"),
             }
         } else {
-            argv.push(alloc::string::String::from(*a));
+            args.argv.push(alloc::string::String::from(*a));
         }
     }
-    (argv, extra)
+    args
 }
 
 /// A text module (init.conf) as a string.
@@ -238,19 +256,17 @@ fn read_module(h: Handle) -> alloc::string::String {
     alloc::string::String::from_utf8_lossy(&bytes[..end]).into_owned()
 }
 
-/// Starts the Linux program `argv[0]` (a module) with a pcid connection in its bootstrap message.
-fn launch(b: &Bootstrap, argv: &[&str], pci: Handle, extra: &[(alloc::string::String, Handle)]) -> Option<Handle> {
+/// Starts the Linux program `argv[0]` (a module) with a pcid connection, the line's handles and values in its
+/// bootstrap message.
+fn launch(b: &Bootstrap, args: &Args, pci: Handle) -> Option<Handle> {
+    let argv: alloc::vec::Vec<&str> = args.argv.iter().map(|s| s.as_str()).collect();
     let Some(img) = b.handle(&alloc::format!("module/{}", argv[0])) else {
         println!("init.conf: no module {}", argv[0]);
         return None;
     };
-    let mut bb = Builder::default().handle("pci", pci);
-    for (name, h) in extra {
-        bb = bb.handle(name, *h);
-    }
-    let boot = bb.send().ok()?;
+    let boot = builder(args, pci).send().ok()?;
     let env = ["DROSS_BOOTSTRAP=1", "RUST_BACKTRACE=0", "PATH=/bin:/sbin:/usr/bin:/usr/sbin", "HOME=/root", "TERM=xterm"];
-    match sys::spawn_linux(img, argv, &env, Some(boot)) {
+    match sys::spawn_linux(img, &argv, &env, Some(boot)) {
         Ok(p) => Some(p),
         Err(e) => {
             println!("{}: {e:?}", argv.join(" "));
@@ -259,27 +275,28 @@ fn launch(b: &Bootstrap, argv: &[&str], pci: Handle, extra: &[(alloc::string::St
     }
 }
 
-/// Starts the native program `argv[0]` (a module): a pcid connection, the given handles, and `%KEY=VALUE`
-/// arguments as values in its bootstrap message.
-fn launch_native(b: &Bootstrap, argv: &[&str], pci: Handle, extra: &[(alloc::string::String, Handle)]) -> bool {
-    let Some(img) = b.handle(&alloc::format!("module/{}", argv[0])) else {
-        println!("init.conf: no module {}", argv[0]);
+/// Starts the native program `argv[0]` (a module) with a pcid connection, the line's handles and values.
+fn launch_native(b: &Bootstrap, args: &Args, pci: Handle) -> bool {
+    let Some(img) = b.handle(&alloc::format!("module/{}", args.argv[0])) else {
+        println!("init.conf: no module {}", args.argv[0]);
         return false;
     };
-    let mut bb = Builder::default().handle("pci", pci);
-    for (name, h) in extra {
-        bb = bb.handle(name, *h);
-    }
-    for a in &argv[1..] {
-        if let Some((k, v)) = a.strip_prefix('%').and_then(|kv| kv.split_once('=')) {
-            bb = bb.value(k, v);
-        }
-    }
-    match bootstrap::spawn(img, argv[0], bb, u64::MAX) {
+    match bootstrap::spawn(img, &args.argv[0], builder(args, pci), u64::MAX) {
         Ok(_) => true,
         Err(e) => {
-            println!("{}: {e:?}", argv.join(" "));
+            println!("{}: {e:?}", args.argv.join(" "));
             false
         }
     }
+}
+
+fn builder(args: &Args, pci: Handle) -> Builder {
+    let mut bb = Builder::default().handle("pci", pci);
+    for (name, h) in &args.handles {
+        bb = bb.handle(name, *h);
+    }
+    for (k, v) in &args.values {
+        bb = bb.value(k, v);
+    }
+    bb
 }

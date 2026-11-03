@@ -17,6 +17,9 @@ enum Kind {
     Borrowed(u64),
     /// A device's registers or other non-RAM range.
     Device(u64),
+    /// The firmware's framebuffer: mapped with the caching the firmware's MTRRs give it (write-combining on the
+    /// Mac Pro), and while mapped anywhere the kernel log stays off it (`fbcon::Claim`).
+    Display(u64),
 }
 
 pub struct Memory {
@@ -68,6 +71,19 @@ impl Memory {
         Memory { size, kind: Kind::Device(phys), writable: true }
     }
 
+    pub fn display(phys: u64, size: u64) -> Memory {
+        Memory { size, kind: Kind::Display(phys), writable: true }
+    }
+
+    pub fn is_display(&self) -> bool {
+        matches!(self.kind, Kind::Display(_))
+    }
+
+    /// RAM the kernel can copy (not device registers or the framebuffer).
+    pub fn is_ram(&self) -> bool {
+        !matches!(self.kind, Kind::Device(_) | Kind::Display(_))
+    }
+
     pub fn size(&self) -> u64 {
         self.size
     }
@@ -83,13 +99,13 @@ impl Memory {
     pub fn page_phys(&self, i: usize) -> u64 {
         match &self.kind {
             Kind::Pages(v) => v[i],
-            Kind::Contiguous(p) | Kind::Borrowed(p) | Kind::Device(p) => p + i as u64 * PAGE,
+            Kind::Contiguous(p) | Kind::Borrowed(p) | Kind::Device(p) | Kind::Display(p) => p + i as u64 * PAGE,
         }
     }
 
     /// Copies out of RAM-backed memory (the kernel reads ELF images this way).
     pub fn read(&self, offset: u64, buf: &mut [u8]) -> Result<(), Error> {
-        if matches!(self.kind, Kind::Device(_)) {
+        if !self.is_ram() {
             return Err(Error::WrongType);
         }
         if offset.checked_add(buf.len() as u64).is_none_or(|e| e > self.size) {
@@ -133,7 +149,7 @@ impl Drop for Memory {
         match &self.kind {
             Kind::Pages(v) => v.iter().for_each(|&p| mem::free_phys(p, 1)),
             Kind::Contiguous(p) => mem::free_phys(*p, (self.size / PAGE) as usize),
-            Kind::Borrowed(_) | Kind::Device(_) => {}
+            Kind::Borrowed(_) | Kind::Device(_) | Kind::Display(_) => {}
         }
     }
 }

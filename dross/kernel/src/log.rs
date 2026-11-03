@@ -24,7 +24,9 @@ impl Serial {
             Port::<u8>::new(COM1).write(b);
         }
         if let Some(fb) = &mut self.fb {
-            fb.put(b as char);
+            if !crate::fbcon::claimed() || EMERGENCY.load(core::sync::atomic::Ordering::Relaxed) {
+                fb.put(b as char);
+            }
         }
     }
 }
@@ -130,7 +132,11 @@ pub fn print(args: fmt::Arguments) {
 }
 
 /// For panics and fatal exceptions: does not wait for a lock another CPU may hold forever.
+/// Set by a panic, a fatal fault or a reset: the log goes back on the screen even if a program has it.
+static EMERGENCY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 pub fn emergency(args: fmt::Arguments) {
+    EMERGENCY.store(true, core::sync::atomic::Ordering::Relaxed);
     match SERIAL.try_lock() {
         Some(mut s) => line(&mut s, args),
         None => line(&mut Serial { fb: None }, args),

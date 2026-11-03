@@ -173,10 +173,31 @@ Linux program's `reboot(2)` (BusyBox `reboot -f`, e.g. over SSH) after 300 ms, a
 
 What init runs comes from `init.conf`: `start PROG ARGS` (a Linux program) and `native PROG ARGS` (a dross
 program) run before the self-test, up to the first `wait`; `channel NAME` makes a channel whose ends go to
-programs as `@NAME=HANDLE`; `netservice NAME` registers one end of a channel as the kernel's network service
-(`unix` kernels) and hands the other to the stack; `%KEY=VALUE` passes a value; then, in order, `wait CHANNEL
+programs as `@NAME=HANDLE` (a NAME that isn't a channel passes a duplicate of init's own handle, such as
+`module/trash` or `display`); `netservice NAME` registers one end of a channel as the kernel's network service
+(`unix` kernels) and hands the other to the stack; `%KEY=VALUE` passes a value, `%KEY=$NAME` one of init's (the
+kernel's `display-width` and so on); a `native usbd` line replaces the usbd init starts by itself; then, in order, `wait CHANNEL
 [MS]` (init's end of the channel gets a message, e.g. netd's `ready`), the remaining `start` lines, `check PROG
 CODE ARGS`, `sleep MS` and `reboot`.
+
+### Oscar's desktop
+
+The desktop (`desktop/`: a window server, toolkit, Trash shell and terminal) runs on the firmware framebuffer.
+The kernel hands init the framebuffer as `display` with its geometry; while a program has it mapped, the log
+stays off the screen (a panic or a reset still draws). usbd is the seat. With the `unix` kernel and the staged
+userland (`unix/stage-hw.py`), the terminal runs BusyBox's shell on a PTY through `unix-terminal-bridge`:
+
+```
+channel seat
+channel term
+native usbd @seat=seat %width=$display-width %height=$display-height
+start unix-terminal-bridge @term=terminal %columns=94 %rows=27
+native oscar-session @module/oscar-windowd=module/oscar-windowd @module/oscar-terminal=module/oscar-terminal @display=display @seat=input @term=terminal %app=terminal %width=$display-width %height=$display-height %stride=$display-stride %format=$display-format
+```
+
+(94 by 27 cells is the terminal's default 760 by 500 window.) On the Mac Pro it draws on the 1600 by 1200
+framebuffer, and a keyboard and mouse on the rear ports work. usbd used to switch a port's power off when it
+reset it (its mask of the port bits to keep lacked port power; QEMU's controller ignores that bit).
 
 ### Network boot
 

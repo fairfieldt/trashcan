@@ -115,6 +115,14 @@ fn start_init(info: &BootInfo, acpi: &firmware::Acpi) {
     ] {
         add(&alloc::format!("resource/{name}"), Object::Resource(Arc::new(Resource::root(kind, size))), &mut text);
     }
+    // The firmware's framebuffer, for a display server: `display` and its geometry.
+    let fb = info.framebuffer;
+    if fb.base != 0 && fb.width != 0 && fb.base % 4096 == 0 {
+        let format = if matches!(fb.format, bootinfo::PixelFormat::Bgr) { "bgr" } else { "rgb" };
+        println!("display: {}x{} (stride {}, {format}) at {:#x}", fb.width, fb.height, fb.stride, fb.base);
+        add("display", Object::Memory(Arc::new(Memory::display(fb.base, fb.size.next_multiple_of(4096)))), &mut text);
+        text.push_str(&alloc::format!("display-width {}\ndisplay-height {}\ndisplay-stride {}\ndisplay-format {format}\n", fb.width, fb.height, fb.stride));
+    }
     text.push_str(&alloc::format!("rsdp {:#x}\ncpus {}\nhypervisor {}\n", info.rsdp, smp::online(), cpu::Features::detect().hypervisor as u8));
     if let Some(r) = acpi.mcfg.as_ref().and_then(|t| ::acpi::mcfg::ranges(t).ok()).and_then(|mut r| r.next()) {
         text.push_str(&alloc::format!("ecam {:#x}\necam-buses {} {}\n", r.base, r.start_bus, r.end_bus));

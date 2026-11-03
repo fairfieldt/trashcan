@@ -12,3 +12,4 @@ bench = false
 [dependencies]
 dross-rt = { path = "../rt" }
 dross-abi = { path = "../../abi" }
+oscar-desktop = { path = "../../desktop/core" }

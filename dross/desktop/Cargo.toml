@@ -1,0 +1,11 @@
+[workspace]
+members = ["core", "host", "native"]
+default-members = ["core", "host"]
+resolver = "2"
+
+[profile.release]
+panic = "abort"
+debug = "line-tables-only"
+
+[profile.dev]
+panic = "abort"

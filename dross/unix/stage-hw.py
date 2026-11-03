@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Stages the Unix userland for a hardware boot: writes ../target/linux/rootfs.tar (replacing build-linux.sh's) with
 the files under linux/rootfs, optional firmware, BusyBox (with its applet links), Dropbear, and an /etc/rc that
-starts sshd; and copies unix-netd next to the other modules. Keys come from files, so nothing machine-specific is
+starts sshd; and copies unix-netd and unix-terminal-bridge (a shell on a PTY for the desktop's terminal) next to
+the other modules. Keys come from files, so nothing machine-specific is
 in the repository.
 
 usage: unix/stage-hw.py --host-key OPENSSH_PRIVATE_KEY --authorized-keys FILE [--firmware DIR]
@@ -21,6 +22,7 @@ args = ap.parse_args()
 
 linux = dross / 'target/linux'
 shutil.copy2(out / 'native/x86_64-unknown-none/release/unix-netd', linux / 'unix-netd')
+shutil.copy2(out / 'native/x86_64-unknown-linux-musl/release/unix-terminal-bridge', linux / 'unix-terminal-bridge')
 busybox = out / 'src/busybox-1.37.0'
 # Also a module, so init.conf can start `busybox sh /etc/rc`.
 shutil.copy2(busybox / 'busybox_unstripped', linux / 'busybox')

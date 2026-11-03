@@ -1,0 +1,37 @@
+[package]
+name = "oscar-desktop-native"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[features]
+native = ["dross-rt/runtime"]
+
+[dependencies]
+oscar-desktop = { path = "../core" }
+dross-rt = { path = "../../user/rt", default-features = false }
+dross-abi = { path = "../../abi" }
+
+[[bin]]
+name = "oscar-windowd"
+required-features = ["native"]
+test = false
+bench = false
+
+[[bin]]
+name = "trash"
+required-features = ["native"]
+test = false
+bench = false
+
+[[bin]]
+name = "oscar-terminal"
+required-features = ["native"]
+test = false
+bench = false
+
+[[bin]]
+name = "oscar-session"
+required-features = ["native"]
+test = false
+bench = false

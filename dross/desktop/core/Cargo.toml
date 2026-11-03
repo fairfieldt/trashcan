@@ -1,0 +1,8 @@
+[package]
+name = "oscar-desktop"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+noto-sans-mono-bitmap = { version = "0.4", default-features = false, features = ["regular", "size_16", "unicode-basic-latin"] }
