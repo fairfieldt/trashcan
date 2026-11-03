@@ -1,0 +1,5 @@
+plan: [[(0, 32)]]
+GPU0: layers 0..32 + head
+GPU0: 5523.0 MiB allocated
+A GPU driver acts as a critical software bridge that translates high-level commands from the operating system or applications into specific instructions the graphics hardware can execute. It manages essential resources such as memory allocation and parallel processing tasks to ensure the graphics card renders images, videos, and 3D graphics efficiently. Without this intermediary, the hardware would remain inaccessible to the user, preventing any visual output or acceleration of graphics-intensive programs.
+prefill: 23 tokens (0 reused), 26.49 tok/s; decode: 82 tokens, 20.65 tok/s
