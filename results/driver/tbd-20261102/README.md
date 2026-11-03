@@ -83,3 +83,45 @@ The second takeover with Linux's services running (`vfio.sh take`: "unbinding 0-
 
 At the end: tbd stopped, NHI back on `thunderbolt`, `tbd-debug.conf` removed and dynamic debug off on both hosts.
 enlight stays on the one-time IOMMU boot until it reboots.
+
+## Streams run in the client's process (main 7894490d, 3643e670)
+
+tbd hands a stream's rings to the client through `PEER.trashcan.ring` (driver/tbd-client): shared ring memory,
+the NHI BAR (VFIO device descriptor; sysfs `resource0` gave EINVAL on a BAR vfio-pci has claimed) and the RX
+ring's MSI-X eventfd (throttled 8 us). Clients ran as the normal user (group render). invite unchanged.
+
+`tbd bench`/`tbd ping` on the `.ring` socket against `tbd echo /dev/tbstream0` on invite:
+
+| | median (min, p99) |
+|---|---|
+| `ping --size 64`, client sleeping in poll() | 38.3 (28.0, 43.6) µs |
+| `ping --size 64 --spin` | 27.5 (17.1, 32.0) µs |
+| `ping --size 4096 --spin` | 35.3 (28.1, 38.6) µs |
+| `bench --write 65536`, 1 GB | 300-600 MB/s each way |
+
+The TX stall. Some 1 GB benches stopped 51712 bytes (the last write, 13 frames) short. With the rings' registers
+printed at the stall: invite had echoed everything, our RX ring was posted and idle (NHI tail = client tail), and
+our TX ring's register read producer 0xad, consumer 0xa1-0xa3: the NHI had sent a few of the 13 and stopped.
+Writing one more frame, or writing the same producer index again, released all of them (55808 bytes back).
+Rates: 4/20, 2/15 with one doorbell per write; 2/15 with one per frame; 1/20 with the interrupt flag on the TX
+descriptors; 1/15 with and 1/3 without E2E on our RX ring (the E2E-off series was cut short by a dead echo). Not
+understood. tbd-client now rings the doorbell again when frames are pending with no progress for 50 us; 20
+consecutive 1 GB benches then passed intact (the retry count stayed 0 in that series).
+
+Engine `trashcan link-test` (main 3643e670, the same binary on both hosts), enlight → invite's `link-test serve`:
+
+| | Linux ↔ Linux | tbd ↔ Linux, run 1 | run 2 |
+|---|---|---|---|
+| pingpong 64 B, p50 / p99 | 47.7 / 63.5 µs | 34.8 / 50.0 | 26.7 / 38.5 |
+| pingpong 64 KiB, p50 | 289 µs | 200 | 257 |
+| exchange 40 KiB, p50 | 98.6 µs | 80.3 | 78.0 |
+| chain, p50 / p99 | 167 / 4402 µs | 133 / 4422 | 107 / 3056 |
+| bulk 8 MiB, MB/s each way | 509/456, 584/518 | 574/534 | 484/420 |
+
+Every run on the stream, every byte checked, no CRC error, gap or failed epoch. `link-test churn --sessions 100
+--pattern nk` (normal exits and killed clients): 100/100 passed on the stream, up in 13.6 ms p50, 55 ms max; tbd
+handed the rings over and took them back 105 times. Bug found on the way: tbd's `accept()` blocked when asked not
+to wait, which kept a gone client's session open (fixed before these runs).
+
+`cargo test -p trashcan link::` on the workstation: `an_epoch_comes_up_soon_after_a_late_open` fails 2 times in 3
+with and without the tbd change (up after 834-847 ms against a 760 ms limit): a timing flake on that machine.
