@@ -8,6 +8,9 @@ host=${HOST:-incite}
 if [ "$mode" = push ] || [ "$mode" = both ]; then
     ssh "$host" 'mkdir -p ~/trashcan/kernel'
     rsync -a --delete --exclude target --exclude /tools/dump-activations/dump --exclude /bench/xgpu/xgpu --exclude '/bench/xgpu/*.spv' Cargo.toml Cargo.lock README.md engine scripts bench tools tests docs "$host":trashcan/
+    # The engine's tbd stream backend (driver/tbd-client, a path dependency).
+    ssh "$host" 'mkdir -p ~/trashcan/driver'
+    rsync -a --delete --exclude target driver/tbd-client "$host":trashcan/driver/
     rsync -a kernel/build.sh kernel/build-7.2.sh kernel/configs kernel/patches kernel/patches-7.2 kernel/upstream "$host":trashcan/kernel/
     # The correctness target scripts/test-engine.sh compares against.
     ssh "$host" 'mkdir -p ~/trashcan/results'

@@ -9,6 +9,9 @@ dest=${1:-trashcan-exp/qwen/target/release/trashcan}
 src=trashcan-src-$(basename "$PWD")
 ssh_vm="ssh -F $HOME/.lima/kbuild/ssh.config"
 rsync -a --delete -e "$ssh_vm" --exclude target Cargo.toml Cargo.lock engine "lima-kbuild:$src/"
+# The engine's tbd stream backend (driver/tbd-client, a path dependency).
+$ssh_vm lima-kbuild "mkdir -p $src/driver"
+rsync -a --delete -e "$ssh_vm" --exclude target driver/tbd-client "lima-kbuild:$src/driver/"
 $ssh_vm lima-kbuild "cd $src && ~/.cargo/bin/cargo build --release --target x86_64-unknown-linux-gnu 2>&1 | grep -E '^(warning|error)|Finished' ; test \${PIPESTATUS[0]} -eq 0"
 mkdir -p target
 $ssh_vm lima-kbuild "cat $src/target/x86_64-unknown-linux-gnu/release/trashcan" > target/trashcan-incite
