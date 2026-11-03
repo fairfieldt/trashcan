@@ -402,3 +402,94 @@ u64 dma_fence_context_alloc(unsigned int num)
 
 	return atomic_add_return(num, &next) - num;
 }
+
+/* ---- workqueue: one worker thread, started on first use ---- */
+static pthread_mutex_t wq_lock = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t wq_cond = PTHREAD_COND_INITIALIZER;
+static struct work_struct *wq_head, *wq_tail, *wq_running;
+static bool wq_started;
+
+static void *wq_main(void *arg)
+{
+	(void)arg;
+	pthread_mutex_lock(&wq_lock);
+	for (;;) {
+		struct work_struct *w;
+
+		while (!wq_head)
+			pthread_cond_wait(&wq_cond, &wq_lock);
+		w = wq_head;
+		wq_head = w->next;
+		if (!wq_head)
+			wq_tail = NULL;
+		w->next = NULL;
+		w->pending = false;
+		wq_running = w;
+		pthread_mutex_unlock(&wq_lock);
+		w->func(w);
+		pthread_mutex_lock(&wq_lock);
+		wq_running = NULL;
+		pthread_cond_broadcast(&wq_cond);
+	}
+	return NULL;
+}
+
+bool schedule_work(struct work_struct *w)
+{
+	bool queued = false;
+
+	pthread_mutex_lock(&wq_lock);
+	if (!wq_started) {
+		pthread_t t;
+
+		wq_started = pthread_create(&t, NULL, wq_main, NULL) == 0;
+		if (wq_started)
+			pthread_detach(t);
+	}
+	if (wq_started && !w->pending) {
+		w->pending = true;
+		w->next = NULL;
+		if (wq_tail)
+			wq_tail->next = w;
+		else
+			wq_head = w;
+		wq_tail = w;
+		queued = true;
+		pthread_cond_broadcast(&wq_cond);
+	}
+	pthread_mutex_unlock(&wq_lock);
+	return queued;
+}
+
+/* Waits until w is neither queued nor running; with cancel, takes it off the queue first. */
+static bool wq_settle(struct work_struct *w, bool cancel)
+{
+	bool was = false;
+
+	pthread_mutex_lock(&wq_lock);
+	if (cancel && w->pending) {
+		struct work_struct **p = &wq_head, *prev = NULL;
+
+		while (*p && *p != w) {
+			prev = *p;
+			p = &(*p)->next;
+		}
+		if (*p) {
+			*p = w->next;
+			if (wq_tail == w)
+				wq_tail = prev;
+		}
+		w->pending = false;
+		w->next = NULL;
+		was = true;
+	}
+	while (w->pending || wq_running == w) {
+		was = true;
+		pthread_cond_wait(&wq_cond, &wq_lock);
+	}
+	pthread_mutex_unlock(&wq_lock);
+	return was;
+}
+
+bool cancel_work_sync(struct work_struct *w) { return wq_settle(w, true); }
+bool flush_work(struct work_struct *w) { return wq_settle(w, false); }

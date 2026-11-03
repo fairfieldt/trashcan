@@ -52,8 +52,9 @@ enum Command {
         address: String,
         #[arg(long, default_value = "/lib/firmware")]
         firmware_dir: String,
-        #[arg(long, default_value = "/run/gpud/gpud.sock")]
-        socket: String,
+        /// Default: /run/gpud/ADDRESS.sock, where libgpud_drm.so looks for every GPU.
+        #[arg(long)]
+        socket: Option<String>,
     },
     /// Bring the GPU up with Linux's SI code (memory controller, GART, interrupts, GFX and DMA rings) and run the
     /// ring and IB tests.
@@ -78,7 +79,10 @@ fn main() -> Result<()> {
             Ok(())
         }
         Command::Init { address, firmware_dir } => run_init(&address, &firmware_dir),
-        Command::Serve { address, firmware_dir, socket } => run_serve(&address, &firmware_dir, &socket),
+        Command::Serve { address, firmware_dir, socket } => {
+            let socket = socket.unwrap_or_else(|| format!("/run/gpud/{address}.sock"));
+            run_serve(&address, &firmware_dir, &socket)
+        }
         Command::DmaSmoke { address } => {
             let failed = run_dma_smoke(&address)?;
             if failed > 0 {

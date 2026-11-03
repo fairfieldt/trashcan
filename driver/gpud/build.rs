@@ -28,6 +28,10 @@ fn main() {
     build
         .std("gnu11")
         .define("_GNU_SOURCE", None)
+        // the kernel's own: char is unsigned (Linux 6.2+), pointer signedness and empty printk formats are fine
+        .flag("-funsigned-char")
+        .flag("-Wno-pointer-sign")
+        .flag("-Wno-format-zero-length")
         .flag("-fno-strict-aliasing")
         .flag("-fno-common")
         .flag("-Wno-unused-function")

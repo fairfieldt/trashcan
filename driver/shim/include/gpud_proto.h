@@ -15,7 +15,7 @@
 
 #define GPUD_PROTO_VERSION 1
 #define GPUD_MAX_MSG 65536
-#define GPUD_SOCKET_DEFAULT "/run/gpud/gpud.sock"
+#define GPUD_SOCKET_DIR "/run/gpud" /* one ADDRESS.sock per GPU */
 #define GPUD_FENCE(ring, seq) (((uint64_t)(ring) << 56) | ((seq) & 0x00ffffffffffffffULL))
 #define GPUD_FENCE_RING(f) ((int)((f) >> 56))
 #define GPUD_FENCE_SEQ(f) ((f) & 0x00ffffffffffffffULL)

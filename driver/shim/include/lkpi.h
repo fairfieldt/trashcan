@@ -561,16 +561,21 @@ void wake_up_all(wait_queue_head_t *q);
 #define wait_event_timeout wait_event_interruptible_timeout
 struct work_struct;
 typedef void (*work_func_t)(struct work_struct *);
-struct work_struct { work_func_t func; };
+/* Work items run on one worker thread, in order (si_dpm's thermal handler is one); delayed work is not used. */
+struct work_struct {
+	work_func_t func;
+	struct work_struct *next;
+	bool pending;
+};
 struct delayed_work { struct work_struct work; };
-#define INIT_WORK(w, f) ((w)->func = (f))
+#define INIT_WORK(w, f) ((w)->func = (f), (w)->next = NULL, (w)->pending = false)
 #define INIT_DELAYED_WORK(w, f) ((w)->work.func = (f))
-#define schedule_work(w) ((void)(w), true)
-#define queue_work(q, w) ((void)(w), true)
+bool schedule_work(struct work_struct *w);
+#define queue_work(q, w) schedule_work(w)
+bool cancel_work_sync(struct work_struct *w);
+bool flush_work(struct work_struct *w);
 #define schedule_delayed_work(w, d) ((void)(w), true)
-#define cancel_work_sync(w) ((void)(w), false)
 #define cancel_delayed_work_sync(w) ((void)(w), false)
-#define flush_work(w) ((void)(w), false)
 #define to_delayed_work(w) container_of(w, struct delayed_work, work)
 struct timer_list { void (*function)(struct timer_list *); };
 #define timer_setup(t, f, flags) ((t)->function = (f))

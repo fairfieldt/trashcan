@@ -1,0 +1,12 @@
+[package]
+name = "tbd"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Userspace Thunderbolt 2 driver for the Mac Pro 6,1: host-to-host networking (ThunderboltIP) and USB4STREAM"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+gpud-platform = { path = "../platform" }
+libc = "0.2"

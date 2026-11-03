@@ -11,7 +11,8 @@ all passing their ring and IB tests. `gpud serve` gives clients their own GPU VM
 `libgpud_drm.so` preloaded, an unmodified Mesa RADV runs on it, and so does the engine: Qwen3.5-9B (Q4_0) on one D700
 gives activations bit-identical to amdgpu's and the same chat text. Linux's SI power management runs too (the VBIOS
 interpreter, si_dpm and the SMC firmware), so clocks follow load as under amdgpu: 204 GB/s VRAM copies, and Qwen
-decodes at 20.7 tok/s against amdgpu's 24.7. The plan is `docs/plan.md`.
+decodes at 20.7 tok/s against amdgpu's 24.7. With one `gpud serve` per D700, the engine's tensor parallelism runs across
+both (40.5 tok/s against amdgpu's 50.5). The plan is `docs/plan.md`.
 
 | Path | What |
 |---|---|
@@ -35,7 +36,7 @@ Linux only (`cargo build --release --target x86_64-unknown-linux-gnu`). On the M
 sudo ./gpud probe 0000:02:00.0              # --read-only skips the VRAM test and the MSI route
 sudo ./gpud dma-smoke 0000:02:00.0
 sudo ./gpud init 0000:02:00.0               # bring-up, ring and IB tests, then shut the engines down
-sudo ./gpud serve 0000:02:00.0 &            # the server, on /run/gpud/gpud.sock
+sudo ./gpud serve 0000:02:00.0 &            # the server, on /run/gpud/0000:02:00.0.sock (one per GPU)
 LD_PRELOAD=$PWD/libgpud_drm.so vulkaninfo --summary
 LD_PRELOAD=$PWD/libgpud_drm.so ./vkcompute
 ```
