@@ -131,6 +131,14 @@ pub fn print(args: fmt::Arguments) {
     x86_64::instructions::interrupts::without_interrupts(|| line(&mut SERIAL.lock(), args));
 }
 
+/// Last display mapping is gone. Clear stale application pixels before the
+/// console resumes; fbcon serializes this with acquisition by another owner.
+pub fn resume_framebuffer() {
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        if let Some(fb) = &mut SERIAL.lock().fb { fb.clear(); }
+    });
+}
+
 /// For panics and fatal exceptions: does not wait for a lock another CPU may hold forever.
 /// Set by a panic, a fatal fault or a reset: the log goes back on the screen even if a program has it.
 static EMERGENCY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);

@@ -7,11 +7,15 @@ use core::sync::atomic::{AtomicUsize, Ordering};
 /// Mappings of the framebuffer by programs (a display server). While there are any, the log stays off the
 /// screen, except for a panic or a reset.
 static CLAIMS: AtomicUsize = AtomicUsize::new(0);
+// Serialize the last release/clear with a new display owner. Logging only reads
+// CLAIMS, so it never takes this lock while holding the serial console lock.
+static OWNERSHIP: spin::Mutex<()> = spin::Mutex::new(());
 
 pub struct Claim(());
 
 impl Claim {
     pub fn new() -> Claim {
+        let _ownership = OWNERSHIP.lock();
         if CLAIMS.fetch_add(1, Ordering::AcqRel) == 0 {
             crate::println!("display: taken by a program; the log continues off screen");
         }
@@ -21,6 +25,7 @@ impl Claim {
 
 impl Clone for Claim {
     fn clone(&self) -> Claim {
+        let _ownership = OWNERSHIP.lock();
         CLAIMS.fetch_add(1, Ordering::AcqRel);
         Claim(())
     }
@@ -28,6 +33,10 @@ impl Clone for Claim {
 
 impl Drop for Claim {
     fn drop(&mut self) {
+        let _ownership = OWNERSHIP.lock();
+        if CLAIMS.load(Ordering::Acquire) == 1 {
+            crate::log::resume_framebuffer();
+        }
         CLAIMS.fetch_sub(1, Ordering::AcqRel);
     }
 }
@@ -54,6 +63,11 @@ pub struct Console {
 unsafe impl Send for Console {}
 
 impl Console {
+    pub fn clear(&mut self) {
+        self.col = 0;
+        self.row = 0;
+        for row in 0..=self.rows() { self.clear_row(row); }
+    }
     pub fn new(fb: &Framebuffer) -> Option<Self> {
         if fb.base == 0 || fb.width == 0 {
             return None;
