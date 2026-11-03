@@ -23,21 +23,23 @@ Compared with Linux on both ends, on the same cable and with the same tools (two
 
 | | Linux ↔ Linux | tbd ↔ Linux | tbd busy ↔ Linux |
 |---|---|---|---|
-| TCP, tbd sending (iperf3) | 8.9 Gb/s | 9.1 Gb/s | 8.8 Gb/s |
-| TCP, tbd receiving | 8.3 Gb/s | 8.0 Gb/s | 6.9-7.3 Gb/s |
-| ping | 0.15 ms | 0.34 ms | 0.14 ms |
-| stream echo, 64 KiB writes, 512 KiB window (`tbd bench`) | 331-453 MB/s | 292 MB/s | 321-385 MB/s |
-| stream round trip, 64 B, median (`tbd ping`) | 45 µs | 85 µs | 42 µs |
+| TCP, tbd sending (iperf3) | 8.9 Gb/s | 8.3-9.1 Gb/s | 8.8 Gb/s |
+| TCP, tbd receiving | 8.3 Gb/s | 7.3-8.0 Gb/s | 6.9-7.3 Gb/s |
+| ping | 0.15 ms | 0.32 ms | 0.14 ms |
+| stream echo, 64 KiB writes, 512 KiB window (`tbd bench`) | 331-453 MB/s | 292-294 MB/s | 321-385 MB/s |
+| stream round trip, 64 B, median (`tbd ping`) | 45 µs | 74 µs | 42 µs |
 
 TCP goes through the TAP device as 64 KiB TSO packets, as Linux's driver gets them from its stack. The checksums are
-filled in in software, as Linux does. Without busy polling every wakeup takes two threads (the MSI's, then the
-ring's), which costs latency.
+filled in in software, as Linux does. Each ring has an MSI-X vector of its own. Without busy polling a stream round
+trip still wakes three threads on tbd's side (its TX thread for the client's message, its RX thread for the
+interrupt, then the client), where Linux wakes one. Putting the stream rings in the client's own process would
+remove the other two.
 
 ## Layout
 
 | File | What | Linux reference (7.3) |
 |---|---|---|
-| `nhi.rs` | NHI registers, descriptor rings, interrupts (one MSI; a ring's interrupt is unmasked only while its thread sleeps) | `nhi.c`, `nhi_regs.h`, `pci.c` |
+| `nhi.rs` | NHI registers, descriptor rings, interrupts (an MSI-X vector per ring, or one MSI; a ring's interrupt is unmasked only while its thread sleeps) | `nhi.c`, `nhi_regs.h`, `pci.c` |
 | `ctl.rs` | Control channel: frames, CRC-32C, config reads/writes, matching replies to requests | `ctl.c`, `tb_msgs.h` |
 | `switch.rs` | Host router: header, capabilities, ports, lane control, link controller UUID, hop entries | `switch.c`, `cap.c`, `lc.c`, `path.c`, `tb_regs.h` |
 | `property.rs` | XDomain property blocks | `property.c` |
