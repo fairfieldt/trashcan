@@ -7,7 +7,7 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use gpud_platform::{DmaAccess, DmaBuffer, DmaSpace, IrqEvent, Mmio};
-use std::sync::atomic::{Ordering, fence};
+use std::ptr::NonNull;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
 
@@ -30,15 +30,12 @@ const RING_FLAG_ENABLE: u32 = 1 << 31;
 const RX_OPTIONS_E2E_HOP_SHIFT: u32 = 12;
 const RX_OPTIONS_E2E_HOP_MASK: u32 = 0x7ff << 12;
 
-pub const DESC_CRC_ERROR: u32 = 0x1;
-pub const DESC_COMPLETED: u32 = 0x2;
-pub const DESC_POSTED: u32 = 0x4;
-pub const DESC_BUFFER_OVERRUN: u32 = 0x4;
-pub const DESC_INTERRUPT: u32 = 0x8;
+#[allow(unused_imports)]
+pub use tbd_client::ring::{DESC_BUFFER_OVERRUN, DESC_CRC_ERROR, RingCore};
 
 /// Control frames are 256 bytes; data frames up to 4 KiB (a length of 0 in a descriptor means 4096).
 pub const FRAME_SIZE: usize = 256;
-pub const MAX_FRAME_SIZE: usize = 4096;
+pub use tbd_client::ring::MAX_FRAME_SIZE;
 
 /// On Falcon Ridge, an RX ring with end-to-end flow control sends its credits to this unused TX HopID, and
 /// automatic HopIDs start after it (Linux's QUIRK_E2E: otherwise RX packets get lost).
@@ -121,6 +118,10 @@ impl Nhi {
 
     pub fn mmio(&self) -> &Mmio {
         &self.mmio
+    }
+
+    pub fn dma(&self) -> &Arc<dyn DmaSpace> {
+        &self.dma
     }
 
     /// Stops every ring and masks every interrupt, so the NHI no longer touches host memory (before exit).
@@ -270,33 +271,49 @@ impl Nhi {
 
     /// Allocates and starts a ring. RX rings come back with every slot posted.
     pub fn ring(self: &Arc<Self>, kind: Kind, cfg: RingConfig) -> Result<Ring> {
+        self.ring_on(kind, cfg, None)
+    }
+
+    /// `ring`, on descriptor and buffer memory the caller mapped for the NHI (a stream handed to a client).
+    pub fn ring_on(self: &Arc<Self>, kind: Kind, cfg: RingConfig, mem: Option<(DmaBuffer, DmaBuffer)>) -> Result<Ring> {
         ensure!(cfg.size >= 2 && cfg.size <= 4096, "ring size {}", cfg.size);
-        let hop = self.alloc_hop(kind, cfg.hop)?;
         let frame_bytes = if cfg.frame { MAX_FRAME_SIZE } else { FRAME_SIZE };
         let size = cfg.size as usize;
-        let alloc = || -> Result<(DmaBuffer, DmaBuffer)> {
-            let desc = self.dma.alloc(size * 16, DmaAccess::ReadWrite).context("ring descriptors")?;
-            let access = if kind == Kind::Tx { DmaAccess::DeviceReads } else { DmaAccess::DeviceWrites };
-            let bufs = self.dma.alloc(size * frame_bytes, access).context("ring buffers")?;
-            Ok((desc, bufs))
-        };
-        let (desc, bufs) = match alloc() {
-            Ok(v) => v,
-            Err(e) => {
-                self.free_hop(kind, hop);
-                return Err(e);
+        let (desc, bufs) = match mem {
+            Some((d, b)) => {
+                ensure!(d.len() >= size * 16 && b.len() >= size * frame_bytes, "ring memory too small");
+                (d, b)
             }
+            None => {
+                let desc = self.dma.alloc(size * 16, DmaAccess::ReadWrite).context("ring descriptors")?;
+                let access = if kind == Kind::Tx { DmaAccess::DeviceReads } else { DmaAccess::DeviceWrites };
+                let bufs = self.dma.alloc(size * frame_bytes, access).context("ring buffers")?;
+                (desc, bufs)
+            }
+        };
+        let hop = self.alloc_hop(kind, cfg.hop)?;
+        let index_reg = Self::desc_base(kind, hop) + 8;
+        // SAFETY: desc and bufs are mapped for the NHI and this process while the ring holds them; index_reg is
+        // the ring's register in the mapped BAR.
+        let core = unsafe {
+            RingCore::new(
+                kind == Kind::Tx,
+                cfg.size,
+                frame_bytes,
+                NonNull::new(desc.as_ptr()).unwrap(),
+                NonNull::new(bufs.as_ptr()).unwrap(),
+                bufs.iova(),
+                NonNull::new(self.mmio.as_ptr().add(index_reg).cast::<u32>()).unwrap(),
+                cfg.interrupt,
+            )
         };
         let mut ring = Ring {
             nhi: self.clone(),
             kind,
             hop,
-            size: cfg.size,
-            frame_bytes,
+            core,
             desc,
             bufs,
-            head: 0,
-            tail: 0,
             interrupt: cfg.interrupt,
             seen: 0,
             e2e_tx_hop: 0,
@@ -337,9 +354,7 @@ impl Nhi {
             }
         }
         if kind == Kind::Rx {
-            for _ in 0..cfg.size - 1 {
-                ring.post_rx();
-            }
+            ring.core.post_all_rx();
         }
         Ok(ring)
     }
@@ -349,19 +364,14 @@ impl Nhi {
     }
 }
 
-/// One TX or RX ring with its descriptors and frame buffers. Slot `i` always uses buffer `i`.
+/// One TX or RX ring of this NHI: the descriptor ring (`RingCore`, through `Deref`), its memory and interrupt.
 pub struct Ring {
     nhi: Arc<Nhi>,
     pub kind: Kind,
     pub hop: u32,
-    pub size: u32,
-    frame_bytes: usize,
+    core: RingCore,
     desc: DmaBuffer,
     bufs: DmaBuffer,
-    /// Next slot software posts.
-    head: u32,
-    /// Next slot the NHI completes.
-    tail: u32,
     interrupt: bool,
     seen: u64,
     /// RX with E2E: the TX HopID its credits go to.
@@ -370,144 +380,20 @@ pub struct Ring {
     vector: Option<(u32, IrqEvent)>,
 }
 
-/// A completed RX frame: where its data is and what the NHI reported.
-#[derive(Clone, Copy, Debug)]
-pub struct RxFrame {
-    pub slot: u32,
-    pub len: usize,
-    #[allow(dead_code)]
-    pub sof: u8,
-    pub eof: u8,
-    pub flags: u32,
+impl std::ops::Deref for Ring {
+    type Target = RingCore;
+    fn deref(&self) -> &RingCore {
+        &self.core
+    }
+}
+
+impl std::ops::DerefMut for Ring {
+    fn deref_mut(&mut self) -> &mut RingCore {
+        &mut self.core
+    }
 }
 
 impl Ring {
-    fn desc_write(&self, slot: u32, phys: u64, word2: u32) {
-        let o = slot as usize * 16;
-        self.desc.write32(o, phys as u32);
-        self.desc.write32(o + 4, (phys >> 32) as u32);
-        self.desc.write32(o + 12, 0);
-        self.desc.write32(o + 8, word2);
-    }
-
-    fn desc_word2(&self, slot: u32) -> u32 {
-        self.desc.read32(slot as usize * 16 + 8)
-    }
-
-    fn buf_iova(&self, slot: u32) -> u64 {
-        self.bufs.iova() + slot as u64 * self.frame_bytes as u64
-    }
-
-    pub fn full(&self) -> bool {
-        (self.head + 1) % self.size == self.tail
-    }
-
-    pub fn empty(&self) -> bool {
-        self.head == self.tail
-    }
-
-    /// Slots posted to the NHI and not completed yet.
-    pub fn in_flight(&self) -> u32 {
-        (self.head + self.size - self.tail) % self.size
-    }
-
-    fn desc_flags(&self) -> u32 {
-        DESC_POSTED | if self.interrupt { DESC_INTERRUPT } else { 0 }
-    }
-
-    fn doorbell(&self) {
-        fence(Ordering::SeqCst);
-        let r = Nhi::desc_base(self.kind, self.hop) + 8;
-        match self.kind {
-            Kind::Tx => self.nhi.mmio.write32(r, self.head << 16),
-            Kind::Rx => self.nhi.mmio.write32(r, self.head),
-        }
-    }
-
-    fn post_rx(&mut self) {
-        debug_assert!(!self.full());
-        self.desc_write(self.head, self.buf_iova(self.head), self.desc_flags() << 20);
-        self.head = (self.head + 1) % self.size;
-        self.doorbell();
-    }
-
-    /// TX: the buffer of the next free slot, or `None` while the ring is full.
-    pub fn tx_slot(&mut self) -> Option<&mut [u8]> {
-        if self.full() {
-            return None;
-        }
-        let o = self.head as usize * self.frame_bytes;
-        // SAFETY: the NHI only reads slots between tail and head; head is not posted yet.
-        Some(unsafe { &mut self.bufs.as_mut_slice()[o..o + self.frame_bytes] })
-    }
-
-    /// TX: free slots.
-    pub fn tx_room(&self) -> u32 {
-        self.size - 1 - self.in_flight()
-    }
-
-    /// TX: posts the slot filled through `tx_slot` with `len` bytes.
-    pub fn tx_submit(&mut self, len: usize, sof: u8, eof: u8) {
-        assert!(!self.full() && len > 0 && len <= self.frame_bytes, "tx_submit of {len} bytes");
-        let word2 = (len as u32 & 0xfff) | (eof as u32 & 0xf) << 12 | (sof as u32 & 0xf) << 16 | self.desc_flags() << 20;
-        self.desc_write(self.head, self.buf_iova(self.head), word2);
-        self.head = (self.head + 1) % self.size;
-        self.doorbell();
-    }
-
-    /// TX: frees the slots the NHI has sent; returns how many.
-    pub fn tx_reap(&mut self) -> u32 {
-        let mut n = 0;
-        while !self.empty() && self.desc_word2(self.tail) >> 20 & DESC_COMPLETED != 0 {
-            self.tail = (self.tail + 1) % self.size;
-            n += 1;
-        }
-        fence(Ordering::Acquire);
-        n
-    }
-
-    /// RX: the next completed frame, if any. Its data stays valid until `rx_release`.
-    pub fn rx_peek(&self) -> Option<RxFrame> {
-        self.rx_peek_nth(0)
-    }
-
-    /// RX: the `k`-th completed frame after the next one (frames complete in order).
-    pub fn rx_peek_nth(&self, k: u32) -> Option<RxFrame> {
-        if k >= self.in_flight() {
-            return None;
-        }
-        let slot = (self.tail + k) % self.size;
-        let w = self.desc_word2(slot);
-        let flags = w >> 20;
-        if flags & DESC_COMPLETED == 0 {
-            return None;
-        }
-        fence(Ordering::Acquire);
-        let len = match w & 0xfff {
-            0 => MAX_FRAME_SIZE,
-            l => l as usize,
-        };
-        Some(RxFrame { slot, len, eof: (w >> 12 & 0xf) as u8, sof: (w >> 16 & 0xf) as u8, flags })
-    }
-
-    pub fn rx_data(&self, f: &RxFrame) -> &[u8] {
-        let o = f.slot as usize * self.frame_bytes;
-        // SAFETY: the slot is completed and not reposted until rx_release.
-        unsafe { &self.bufs.as_slice()[o..o + f.len.min(self.frame_bytes)] }
-    }
-
-    /// RX: gives the frame from `rx_peek` back to the NHI.
-    pub fn rx_release(&mut self) {
-        debug_assert!(!self.empty());
-        self.tail = (self.tail + 1) % self.size;
-        self.post_rx();
-    }
-
-    /// The descriptor `k` slots past the tail is done (an RX frame to take, or a TX slot to reap).
-    pub fn has_work(&self, k: u32) -> bool {
-        k < self.in_flight() && self.desc_word2((self.tail + k) % self.size) >> 20 & DESC_COMPLETED != 0
-    }
-
     /// Sleeps until the NHI completes a descriptor on this ring, or `timeout`. The ring's interrupt is unmasked
     /// only while sleeping (as NAPI does): a busy ring raises none.
     pub fn wait(&mut self, timeout: Duration) {
@@ -523,7 +409,7 @@ impl Ring {
         }
         if let Some((_, irq)) = &self.vector {
             self.nhi.set_interrupt(self.kind, self.hop, true);
-            if !self.has_work(k) {
+            if !self.core.has_work(k) {
                 let _ = irq.wait(Some(timeout));
             }
             self.nhi.set_interrupt(self.kind, self.hop, false);
@@ -535,11 +421,25 @@ impl Ring {
         drop(g);
         self.nhi.set_interrupt(self.kind, self.hop, true);
         // A completion that landed before the unmask raised nothing.
-        if !self.has_work(k) {
+        if !self.core.has_work(k) {
             let g = w.count.lock().unwrap();
             let _ = w.cv.wait_timeout_while(g, timeout, |c| *c == self.seen).unwrap();
         }
         self.nhi.set_interrupt(self.kind, self.hop, false);
+    }
+
+    /// Leaves the ring's interrupt on for good (for a ring a client drives and sleeps on), at most one every
+    /// `throttle_ns` (`REG_INT_THROTTLING_RATE`, 256 ns units). Returns the notification's descriptor.
+    pub fn arm_interrupt(&self, throttle_ns: u32) -> Option<i32> {
+        let (v, irq) = self.vector.as_ref()?;
+        self.nhi.mmio.write32(REG_INT_THROTTLING_RATE + *v as usize * 4, throttle_ns.div_ceil(256) & 0xffff);
+        self.nhi.set_interrupt(self.kind, self.hop, true);
+        irq.raw_fd()
+    }
+
+    /// Offset of the ring's index register in the NHI's BAR.
+    pub fn index_reg(&self) -> usize {
+        Nhi::desc_base(self.kind, self.hop) + 8
     }
 }
 
@@ -555,6 +455,7 @@ impl Drop for Ring {
             self.nhi.vectors.lock().unwrap().push(v);
         }
         self.nhi.free_hop(self.kind, self.hop);
+        let _ = (&self.desc, &self.bufs);
     }
 }
 

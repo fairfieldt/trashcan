@@ -152,7 +152,7 @@ struct RunArgs {
 fn probe(address: &str) -> Result<()> {
     use crate::ctl::Ctl;
     use crate::switch::Router;
-    let (nhi, irqs, _dev) = domain::open_nhi(address)?;
+    let (nhi, irqs, _dev, _bar) = domain::open_nhi(address)?;
     println!(
         "NHI {address}: {} paths, REG_CAPS {:#x}, {}",
         nhi.hop_count,
@@ -269,9 +269,9 @@ fn run(a: RunArgs) -> Result<()> {
         None => std::fs::read_to_string("/proc/sys/kernel/hostname")?.trim().to_owned(),
     };
     let streams = a.streams.iter().map(|s| parse_stream(s, &a)).collect::<Result<Vec<_>>>()?;
-    let network = (a.net != "none").then(|| net::NetConfig { ifname: a.net.clone(), mtu: a.mtu, e2e: true, busy_poll: a.busy_poll });
-    let config = domain::Config { hostname, network, streams, bounce: !a.no_bounce, bonding: !a.no_bonding };
-    let (nhi, irqs, _dev) = domain::open_nhi(&a.address)?;
+    let network = (a.net != "none").then(|| net::NetConfig { ifname: a.net.clone(), mtu: a.mtu, e2e: true, busy_poll: a.busy_poll, run_dir: a.socket_dir.clone() });
+    let (nhi, irqs, _dev, bar) = domain::open_nhi(&a.address)?;
+    let config = domain::Config { bar: Some(bar), hostname, network, streams, bounce: !a.no_bounce, bonding: !a.no_bonding };
     let d = domain::Domain::start(nhi.clone(), irqs, config)?;
     while !STOP.load(Ordering::Relaxed) {
         std::thread::sleep(std::time::Duration::from_millis(100));

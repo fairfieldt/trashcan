@@ -90,19 +90,42 @@ fn run(d: &Arc<Domain>, peer: &Arc<Peer>, spec: &StreamSpec) -> Result<()> {
 
     std::fs::create_dir_all(&spec.socket_dir)?;
     let path = spec.socket_dir.join(format!("{}.{}", peer.name(), spec.name));
+    let ring_path = spec.socket_dir.join(format!("{}.{}.ring", peer.name(), spec.name));
+    let info_path = spec.socket_dir.join(format!("{}.{}.info", peer.name(), spec.name));
     let listener = listen(&path)?;
-    println!("port {}: stream {} (in HopID {in_hop}, out HopID {out_hop}) on {}", peer.port, spec.name, path.display());
+    let ring_listener = listen(&ring_path)?;
+    std::fs::write(
+        &info_path,
+        format!("ring={}\nlocal={}\npeer={}\nin_hopid={in_hop}\nout_hopid={out_hop}\n", spec.ring, d.local_uuid, peer.remote_uuid()),
+    )?;
+    println!("port {}: stream {} (in HopID {in_hop}, out HopID {out_hop}) on {}{{,.ring}}", peer.port, spec.name, path.display());
     let counters = Arc::new(Counters::default());
     let result = (|| -> Result<()> {
         while !peer.gone() {
-            let Some(client) = accept(&listener, Duration::from_millis(200))? else { continue };
-            if let Err(e) = serve(d, peer, spec, in_hop, out_hop, client, &counters) {
+            let mut fds = [
+                libc::pollfd { fd: listener.as_raw_fd(), events: libc::POLLIN, revents: 0 },
+                libc::pollfd { fd: ring_listener.as_raw_fd(), events: libc::POLLIN, revents: 0 },
+            ];
+            // SAFETY: two pollfds.
+            if unsafe { libc::poll(fds.as_mut_ptr(), 2, 200) } <= 0 {
+                continue;
+            }
+            let direct = fds[1].revents != 0;
+            let Some(client) = accept(if direct { &ring_listener } else { &listener }, Duration::ZERO)? else { continue };
+            let r = if direct {
+                serve_direct(d, peer, spec, in_hop, out_hop, client, &[&listener, &ring_listener])
+            } else {
+                serve(d, peer, spec, in_hop, out_hop, client, &counters)
+            };
+            if let Err(e) = r {
                 eprintln!("port {}: stream {}: {e:#}", peer.port, spec.name);
             }
         }
         Ok(())
     })();
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_file(&ring_path);
+    let _ = std::fs::remove_file(&info_path);
     peer.free_hop(true, in_hop);
     peer.free_hop(false, out_hop);
     result
@@ -125,6 +148,13 @@ fn listen(path: &std::path::Path) -> Result<OwnedFd> {
         let len = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
         anyhow::ensure!(libc::bind(fd.as_raw_fd(), (&raw const addr).cast(), len) == 0, "bind {}: {}", path.display(), std::io::Error::last_os_error());
         anyhow::ensure!(libc::listen(fd.as_raw_fd(), 1) == 0, "listen: {}", std::io::Error::last_os_error());
+        // Clients in the render group (who use the GPUs and the stream devices too) may connect.
+        let cpath = std::ffi::CString::new(p).unwrap();
+        let g = libc::getgrnam(c"render".as_ptr());
+        if !g.is_null() {
+            libc::chown(cpath.as_ptr(), u32::MAX, (*g).gr_gid);
+            libc::chmod(cpath.as_ptr(), 0o660);
+        }
         Ok(fd)
     }
 }
@@ -136,6 +166,7 @@ fn poll_in(fd: i32, timeout: Duration) -> bool {
 }
 
 fn accept(l: &OwnedFd, timeout: Duration) -> Result<Option<OwnedFd>> {
+    // Never block in accept4: the listening sockets are blocking, and a zero timeout means "only if one waits".
     if !poll_in(l.as_raw_fd(), timeout) {
         return Ok(None);
     }
@@ -257,6 +288,160 @@ fn tx_loop(mut tx: Ring, client: &OwnedFd, stop: &AtomicBool, c: &Counters, peer
         }
         std::thread::sleep(Duration::from_millis(5));
     }
+}
+
+/// Shared memory for a stream's two rings, handed to a client: descriptors, then buffers, page-aligned pieces.
+struct SharedRings {
+    fd: OwnedFd,
+    ptr: std::ptr::NonNull<u8>,
+    len: usize,
+    layout: tbd_client::Layout,
+}
+
+impl SharedRings {
+    fn new(ring: u32) -> Result<SharedRings> {
+        let page = 4096u64;
+        let desc = (ring as u64 * 16).div_ceil(page) * page;
+        let bufs = ring as u64 * MAX_FRAME_SIZE as u64;
+        let layout = tbd_client::Layout {
+            ring: ring as u64,
+            frame_bytes: MAX_FRAME_SIZE as u64,
+            tx_desc: 0,
+            rx_desc: desc,
+            tx_buf: 2 * desc,
+            rx_buf: 2 * desc + bufs,
+            mem_size: 2 * desc + 2 * bufs,
+            ..Default::default()
+        };
+        let len = layout.mem_size as usize;
+        // SAFETY: a new memfd of len bytes, mapped shared; the mapping lives until drop.
+        unsafe {
+            let fd = libc::memfd_create(c"tbd-stream".as_ptr(), libc::MFD_CLOEXEC);
+            anyhow::ensure!(fd >= 0, "memfd_create: {}", std::io::Error::last_os_error());
+            let fd = OwnedFd::from_raw_fd(fd);
+            anyhow::ensure!(libc::ftruncate(fd.as_raw_fd(), len as libc::off_t) == 0, "ftruncate: {}", std::io::Error::last_os_error());
+            let p = libc::mmap(std::ptr::null_mut(), len, libc::PROT_READ | libc::PROT_WRITE, libc::MAP_SHARED, fd.as_raw_fd(), 0);
+            anyhow::ensure!(p != libc::MAP_FAILED, "mmap: {}", std::io::Error::last_os_error());
+            Ok(SharedRings { fd, ptr: std::ptr::NonNull::new(p.cast()).unwrap(), len, layout })
+        }
+    }
+
+    /// Maps one piece for the NHI.
+    fn map(&self, dma: &dyn gpud_platform::DmaSpace, off: u64, len: u64, access: gpud_platform::DmaAccess) -> Result<gpud_platform::DmaBuffer> {
+        let len = len.div_ceil(4096) * 4096;
+        anyhow::ensure!(off + len <= self.len as u64, "shared ring piece outside the memory");
+        // SAFETY: inside our mapping, which outlives the DMA buffers (they are dropped with the rings, before us).
+        unsafe {
+            let p = std::ptr::NonNull::new_unchecked(self.ptr.as_ptr().add(off as usize));
+            Ok(dma.map_external(p, len as usize, access)?)
+        }
+    }
+}
+
+impl Drop for SharedRings {
+    fn drop(&mut self) {
+        // SAFETY: unmaps what new mapped.
+        unsafe { libc::munmap(self.ptr.as_ptr().cast(), self.len) };
+    }
+}
+
+/// One client that runs the rings itself (tbd-client `Stream`): rings on shared memory, paths routed, everything
+/// handed over; when the client goes, the TX ring comes back here for the CLOSE.
+fn serve_direct(d: &Arc<Domain>, peer: &Arc<Peer>, spec: &StreamSpec, in_hop: u32, out_hop: u32, client: OwnedFd, listeners: &[&OwnedFd]) -> Result<()> {
+    use gpud_platform::DmaAccess;
+    let fd = client.as_raw_fd();
+    let refuse = |why: &str| {
+        let _ = tbd_client::send_fds(fd, format!("error: {why}").as_bytes(), &[]);
+        anyhow::anyhow!("ring client refused: {why}")
+    };
+    if !poll_in(fd, Duration::from_secs(2)) {
+        return Err(refuse("no hello"));
+    }
+    let mut hello = [0u8; 64];
+    // SAFETY: recv into hello.
+    let n = unsafe { libc::recv(fd, hello.as_mut_ptr().cast(), hello.len(), 0) };
+    if n <= 0 || &hello[..n as usize] != tbd_client::HELLO {
+        return Err(refuse("unknown hello"));
+    }
+    let shared = SharedRings::new(spec.ring)?;
+    let mut l = shared.layout;
+    let dma = d.nhi.dma();
+    let descs = l.ring * 16;
+    let bufs = l.ring * l.frame_bytes;
+    let txd = shared.map(dma.as_ref(), l.tx_desc, descs, DmaAccess::ReadWrite)?;
+    let rxd = shared.map(dma.as_ref(), l.rx_desc, descs, DmaAccess::ReadWrite)?;
+    let txb = shared.map(dma.as_ref(), l.tx_buf, bufs, DmaAccess::DeviceReads)?;
+    let rxb = shared.map(dma.as_ref(), l.rx_buf, bufs, DmaAccess::DeviceWrites)?;
+    l.tx_buf_iova = txb.iova();
+    l.rx_buf_iova = rxb.iova();
+    let mut tx = d.nhi.ring_on(
+        Kind::Tx,
+        RingConfig { hop: None, size: spec.ring, frame: true, e2e: false, sof_mask: 0, eof_mask: 0, interrupt: false },
+        Some((txd, txb)),
+    )?;
+    let rx = d.nhi.ring_on(
+        Kind::Rx,
+        RingConfig {
+            hop: None,
+            size: spec.ring,
+            frame: true,
+            e2e: true,
+            sof_mask: 1 << PDF_FRAME_START,
+            eof_mask: 1 << PDF_DATA | 1 << PDF_CLOSE,
+            interrupt: true,
+        },
+        Some((rxd, rxb)),
+    )?;
+    // Linux's stream rings throttle interrupts to one per 8 us (TBSTREAM_DEV_THROTTLING).
+    let Some(irq) = rx.arm_interrupt(8192) else { return Err(refuse("no MSI-X vector for the ring")) };
+    let Some(bar) = d.config.bar.clone() else { return Err(refuse("no BAR to hand over")) };
+    l.bar_size = bar.size;
+    l.bar_offset = bar.offset;
+    l.tx_reg = tx.index_reg() as u64;
+    l.rx_reg = rx.index_reg() as u64;
+    l.tx_head = tx.head as u64;
+    l.tx_tail = tx.tail as u64;
+    l.rx_head = rx.head as u64;
+    l.rx_tail = rx.tail as u64;
+    l.flags = 1;
+    let (tx_ring, rx_ring) = (tx.hop, rx.hop);
+    d.enable_paths(peer, out_hop, tx_ring, in_hop, rx_ring)?;
+    let sent = tbd_client::send_fds(fd, &l.encode(), &[shared.fd.as_raw_fd(), bar.fd.as_raw_fd(), irq]);
+    if sent.is_ok() {
+        println!("port {}: stream {} handed to a client: TX ring {tx_ring} -> HopID {out_hop}, HopID {in_hop} -> RX ring {rx_ring}", peer.port, spec.name);
+        while !peer.gone() && !hung_up(fd, Duration::from_millis(100)) {
+            // One client at a time, as an exclusive open of the device: others hear so at once.
+            for l in listeners {
+                if let Ok(Some(other)) = accept(l, Duration::ZERO) {
+                    let _ = tbd_client::send_fds(other.as_raw_fd(), b"error: the stream is in use", &[]);
+                }
+            }
+        }
+    }
+    // The client is gone: its last frames out, then our CLOSE.
+    tx.resync_tx();
+    for _ in 0..100 {
+        if tx.tx_hw_idle() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    tx.tx_reap();
+    if !peer.gone() {
+        send_close(&mut tx);
+        for _ in 0..100 {
+            tx.tx_reap();
+            if tx.empty() {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+    drop(tx);
+    drop(rx);
+    d.disable_paths(peer, tx_ring, in_hop);
+    println!("port {}: stream {}: ring client gone", peer.port, spec.name);
+    sent.map_err(Into::into)
 }
 
 fn hung_up(fd: i32, timeout: Duration) -> bool {

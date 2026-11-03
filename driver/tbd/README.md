@@ -68,10 +68,28 @@ sudo ./tbd bench /run/tbd/PEER.trashcan             # against `tbd echo /dev/tbs
 sudo ./vfio.sh give 0000:16:00.0                     # back to the kernel driver
 ```
 
-A stream's socket (`SOCK_SEQPACKET`) takes one client at a time. A message of up to 64 KiB goes out as 4 KiB frames, and consecutive received frames come back as one message.
-A CLOSE from the other host arrives as an empty message. A client that shuts down its writing side sends a CLOSE
-and keeps reading. Paths are routed only while a client is connected, as Linux routes them only while the device
-is open.
+Each stream is offered on two sockets (`SOCK_SEQPACKET`, group `render`), one client at a time between them; a
+second client is told the stream is in use. tbd also writes `PEER.NAME.info` (ring size, HopIDs, both UUIDs) and,
+for each TAP interface, `net/IFNAME` (the peer it leads to), so a program can find the stream of a link.
+
+- `PEER.NAME`: tbd moves the frames. A message of up to 64 KiB goes out as 4 KiB frames, and consecutive received
+  frames come back as one message. A CLOSE from the other host arrives as an empty message. A client that shuts
+  down its writing side sends a CLOSE and keeps reading.
+- `PEER.NAME.ring`: tbd hands the stream's two rings to the client (`../tbd-client`): the memory holding their
+  descriptors and buffers (a memfd, mapped for the NHI), the NHI's register BAR (a duplicate of the VFIO device
+  descriptor) and the RX ring's MSI-X eventfd (throttled to one per 8 µs, as Linux's streams are). The client posts
+  and completes frames itself, without system calls, and sleeps in `poll()` on the eventfd. When it goes, tbd takes
+  the TX ring back from the NHI's indexes, sends the CLOSE and takes the paths down. The client is trusted: the
+  BAR reaches every ring.
+
+Paths are routed only while a client is connected, as Linux routes them only while the device is open.
+
+Falcon Ridge's TX engine sometimes stops with frames posted: the NHI's consumer index stays behind the producer
+until the next doorbell, even one that writes the same index again. Nothing is lost. It showed at the end of
+bursts, a few times per hundred 1 GB benches through a ring client, and does not depend on end-to-end flow control
+or the descriptors' interrupt flag. The cause is not known. tbd-client writes the producer index again when frames
+have been pending for 50 µs without progress, on every read, write and wait. Only the client writes that register,
+because a stale value from tbd could move the index back.
 
 `TBD_TRACE=1` prints every control frame. `TBD_KMSG=1` copies tbd's output to the kernel log (with
 `sysctl kernel.printk_devkmsg=on`), so netconsole has it if the machine goes down.

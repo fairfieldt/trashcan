@@ -55,6 +55,9 @@ pub struct NetConfig {
     pub e2e: bool,
     /// Spin on the rings and the TAP device instead of sleeping.
     pub busy_poll: bool,
+    /// Where tbd says which peer each interface leads to (`net/IFNAME`: `peer=NAME`), for the engine to find the
+    /// stream of a link from the interface its TCP connection uses.
+    pub run_dir: std::path::PathBuf,
 }
 
 /// Our `network` service directory (what thunderbolt_net registers).
@@ -189,6 +192,9 @@ fn run(d: &Arc<Domain>, peer: &Arc<Peer>, cfg: &NetConfig) -> Result<()> {
     CONNS.lock().unwrap().push((peer.port, c.clone()));
     let tap = Arc::new(crate::tap::Tap::open(&cfg.ifname, c.mac, cfg.mtu)?);
     println!("port {}: ThunderboltIP on {} (MTU {})", peer.port, tap.name, cfg.mtu);
+    let status = cfg.run_dir.join("net").join(&tap.name);
+    std::fs::create_dir_all(cfg.run_dir.join("net"))?;
+    std::fs::write(&status, format!("peer={}\nport={}\nlocal={}\nremote={}\n", peer.name(), peer.port, d.local_uuid, peer.remote_uuid()))?;
     let (remote_max, prtcstns) = {
         let s = peer.state.lock().unwrap();
         let r = s.remote.as_ref().unwrap();
@@ -207,6 +213,7 @@ fn run(d: &Arc<Domain>, peer: &Arc<Peer>, cfg: &NetConfig) -> Result<()> {
     })();
     peer.free_hop(false, local_transmit_path);
     CONNS.lock().unwrap().retain(|x| x.0 != peer.port);
+    let _ = std::fs::remove_file(&status);
     result
 }
 

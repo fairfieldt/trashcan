@@ -12,8 +12,10 @@ use std::time::{Duration, Instant};
 
 /// A stream device or a tbd stream socket; a read of 0 bytes is a CLOSE.
 pub struct Endpoint {
-    fd: OwnedFd,
+    fd: Option<OwnedFd>,
     socket: bool,
+    /// A `.ring` socket: the stream's rings run here (tbd-client).
+    ring: Option<std::cell::RefCell<tbd_client::Stream>>,
 }
 
 /// The largest message a tbd stream socket takes (it cuts it into 4 KiB frames).
@@ -24,6 +26,10 @@ impl Endpoint {
         use std::os::unix::ffi::OsStrExt;
         use std::os::unix::fs::FileTypeExt;
         let meta = std::fs::metadata(path).with_context(|| path.display().to_string())?;
+        if path.extension().is_some_and(|e| e == "ring") {
+            let s = tbd_client::Stream::connect(path).with_context(|| path.display().to_string())?;
+            return Ok(Endpoint { fd: None, socket: true, ring: Some(std::cell::RefCell::new(s)) });
+        }
         if meta.file_type().is_socket() {
             // SAFETY: a socket and connect with a NUL-terminated path.
             unsafe {
@@ -39,23 +45,46 @@ impl Endpoint {
                 }
                 let len = std::mem::size_of::<libc::sockaddr_un>() as libc::socklen_t;
                 ensure!(libc::connect(fd.as_raw_fd(), (&raw const addr).cast(), len) == 0, "connect {}: {}", path.display(), io::Error::last_os_error());
-                Ok(Endpoint { fd, socket: true })
+                Ok(Endpoint { fd: Some(fd), socket: true, ring: None })
             }
         } else {
             let f = std::fs::OpenOptions::new().read(true).write(true).open(path).with_context(|| path.display().to_string())?;
-            Ok(Endpoint { fd: f.into(), socket: false })
+            Ok(Endpoint { fd: Some(f.into()), socket: false, ring: None })
+        }
+    }
+
+    fn raw(&self) -> i32 {
+        match &self.ring {
+            Some(r) => r.borrow().fd(),
+            None => self.fd.as_ref().unwrap().as_raw_fd(),
         }
     }
 
     pub fn read(&self, buf: &mut [u8]) -> io::Result<usize> {
+        if let Some(r) = &self.ring {
+            loop {
+                match r.borrow_mut().read(buf) {
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        r.borrow_mut().wait_readable(100);
+                    }
+                    other => return other,
+                }
+            }
+        }
         // SAFETY: a read into buf.
-        let n = unsafe { libc::read(self.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len()) };
+        let n = unsafe { libc::read(self.raw(), buf.as_mut_ptr().cast(), buf.len()) };
         if n < 0 { Err(io::Error::last_os_error()) } else { Ok(n as usize) }
     }
 
     /// A read that does not wait: `None` if nothing is there.
     pub fn read_nonblocking(&self, buf: &mut [u8]) -> io::Result<Option<usize>> {
-        let mut p = libc::pollfd { fd: self.fd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+        if let Some(r) = &self.ring {
+            return match r.borrow_mut().read(buf) {
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => Ok(None),
+                other => other.map(Some),
+            };
+        }
+        let mut p = libc::pollfd { fd: self.raw(), events: libc::POLLIN, revents: 0 };
         // SAFETY: one pollfd with no wait.
         if unsafe { libc::poll(&mut p, 1, 0) } == 0 {
             return Ok(None);
@@ -65,10 +94,20 @@ impl Endpoint {
 
     /// Writes all of `data`, in frames of at most 4 KiB on a socket.
     pub fn write_all(&self, mut data: &[u8]) -> io::Result<()> {
+        if let Some(r) = &self.ring {
+            while !data.is_empty() {
+                match r.borrow_mut().write(data) {
+                    Ok(n) => data = &data[n..],
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => std::hint::spin_loop(),
+                    Err(e) => return Err(e),
+                }
+            }
+            return Ok(());
+        }
         while !data.is_empty() {
             let len = if self.socket { data.len().min(FRAME) } else { data.len() };
             // SAFETY: a write of data's first len bytes.
-            let n = unsafe { libc::write(self.fd.as_raw_fd(), data.as_ptr().cast(), len) };
+            let n = unsafe { libc::write(self.raw(), data.as_ptr().cast(), len) };
             if n < 0 {
                 return Err(io::Error::last_os_error());
             }
@@ -79,14 +118,17 @@ impl Endpoint {
 
     /// Sends a CLOSE: shuts down the writing side of a socket; a device sends one when it is closed.
     pub fn close_write(&self) {
-        if self.socket {
+        if self.socket && self.ring.is_none() {
             // SAFETY: shutdown of our socket's writing side.
-            unsafe { libc::shutdown(self.fd.as_raw_fd(), libc::SHUT_WR) };
+            unsafe { libc::shutdown(self.raw(), libc::SHUT_WR) };
         }
     }
 
     pub fn wait_readable(&self, timeout: Duration) -> bool {
-        let mut p = libc::pollfd { fd: self.fd.as_raw_fd(), events: libc::POLLIN, revents: 0 };
+        if let Some(r) = &self.ring {
+            return r.borrow_mut().wait_readable(timeout.as_millis() as i32);
+        }
+        let mut p = libc::pollfd { fd: self.raw(), events: libc::POLLIN, revents: 0 };
         // SAFETY: one pollfd.
         unsafe { libc::poll(&mut p, 1, timeout.as_millis() as libc::c_int) > 0 }
     }
@@ -155,6 +197,9 @@ pub fn bench(path: &Path, bytes: u64, window: usize, write: usize) -> Result<()>
             sent += n as u64;
         }
         if !ep.wait_readable(Duration::from_secs(2)) {
+            if let Some(r) = &ep.ring {
+                eprintln!("stalled: {}", r.borrow().debug_state());
+            }
             bail!("no echo for 2 s: {got} of {sent} bytes back (frames lost: the window is larger than a ring holds?)");
         }
         let k = ep.read(&mut inbuf)?;
@@ -168,8 +213,9 @@ pub fn bench(path: &Path, bytes: u64, window: usize, write: usize) -> Result<()>
         last = Instant::now();
     }
     let secs = last.duration_since(t0).as_secs_f64();
+    let kicks = ep.ring.as_ref().map(|r| format!(", {} TX doorbell retries", r.borrow().tx_kicks)).unwrap_or_default();
     println!(
-        "{got} bytes echoed intact in {secs:.3} s: {:.1} MB/s each way ({:.2} Gb/s), window {window}, writes of {write}",
+        "{got} bytes echoed intact in {secs:.3} s: {:.1} MB/s each way ({:.2} Gb/s), window {window}, writes of {write}{kicks}",
         got as f64 / secs / 1e6,
         got as f64 * 8.0 / secs / 1e9
     );

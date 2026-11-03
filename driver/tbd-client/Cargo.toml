@@ -1,0 +1,9 @@
+[package]
+name = "tbd-client"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Thunderbolt NHI descriptor rings, and streams of tbd (the userspace Thunderbolt driver) run in the client's process"
+
+[dependencies]
+libc = "0.2"

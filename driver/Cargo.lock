@@ -246,6 +246,14 @@ dependencies = [
  "clap",
  "gpud-platform",
  "libc",
+ "tbd-client",
+]
+
+[[package]]
+name = "tbd-client"
+version = "0.1.0"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

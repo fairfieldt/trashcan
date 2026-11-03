@@ -26,8 +26,10 @@ const LINK_WIDTH_SINGLE: u32 = 1;
 const LINK_WIDTH_DUAL: u32 = 2;
 
 /// What this host offers to the hosts it connects to.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Config {
+    /// The NHI's register BAR, for stream clients.
+    pub bar: Option<Bar>,
     pub hostname: String,
     pub network: Option<net::NetConfig>,
     pub streams: Vec<StreamSpec>,
@@ -776,6 +778,14 @@ impl Domain {
     }
 }
 
+/// The NHI's register BAR as a client maps it: a descriptor and the offset in it.
+#[derive(Clone)]
+pub struct Bar {
+    pub fd: Arc<std::os::fd::OwnedFd>,
+    pub offset: u64,
+    pub size: u64,
+}
+
 /// The NHI's interrupts: a vector per ring (MSI-X), or one MSI for all of them.
 pub enum Irqs {
     Msix(Vec<gpud_platform::IrqEvent>),
@@ -794,7 +804,7 @@ impl Irqs {
 /// Opens the NHI at `addr` through VFIO and returns it with its interrupts (MSI-X if the platform routes it,
 /// else MSI; `TBD_MSI=1` forces MSI).
 #[cfg(target_os = "linux")]
-pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>)> {
+pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>, Bar)> {
     use gpud_platform::pci::{COMMAND_BUS_MASTER, COMMAND_MEMORY, CONFIG_COMMAND, CONFIG_DEVICE_ID, CONFIG_VENDOR_ID};
     use gpud_platform::{PciDevice, Region};
     let (container, dev) = gpud_platform::vfio::open(addr.parse()?, 1 << 20..1 << 40)?;
@@ -803,6 +813,8 @@ pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>)> 
     let cmd = dev.config_u16(CONFIG_COMMAND)?;
     dev.set_config_u16(CONFIG_COMMAND, cmd | COMMAND_MEMORY | COMMAND_BUS_MASTER)?;
     let mmio = dev.map(Region::Bar(0))?;
+    let (fd, offset, size) = dev.export_region(Region::Bar(0))?;
+    let bar = Bar { fd: Arc::new(fd), offset, size };
     let dma: Arc<dyn gpud_platform::DmaSpace> = Arc::new(container);
     let nhi = Nhi::new(mmio, dma, nhi::is_falcon_ridge(vendor, device))?;
     let msix = if std::env::var_os("TBD_MSI").is_some() { Err(gpud_platform::Error::Unsupported("TBD_MSI".into())) } else { dev.enable_msix(16) };
@@ -813,5 +825,5 @@ pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>)> 
             Irqs::Msi(dev.enable_msi()?)
         }
     };
-    Ok((nhi, irqs, Box::new(dev)))
+    Ok((nhi, irqs, Box::new(dev), bar))
 }
