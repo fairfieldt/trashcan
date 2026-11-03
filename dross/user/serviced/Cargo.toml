@@ -1,0 +1,15 @@
+[package]
+name = "dross-serviced"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Native capability-scoped service directory"
+
+[[bin]]
+name = "serviced"
+path = "src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+dross-rt = { path = "../rt" }

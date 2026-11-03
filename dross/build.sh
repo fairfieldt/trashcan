@@ -12,7 +12,9 @@ flag=""
 cargo build -p dross-boot --target x86_64-unknown-uefi $flag
 # KERNEL_FEATURES=unix builds the kernel with the Unix subsystem (unix/README.md).
 cargo build -p dross --target x86_64-unknown-none $flag ${KERNEL_FEATURES:+--features dross/$KERNEL_FEATURES}
-cargo build -p init -p selftest -p pcid -p edutest -p usbd -p fsd --target x86_64-unknown-none $flag
+cargo build -p init -p selftest -p pcid -p edutest -p usbd -p fsd -p dross-serviced --target x86_64-unknown-none $flag
+# This native C fixture checks the public protocol without a Rust runtime.
+OUT="$PWD/target/c-api-test" ./user/c-api-test/build.sh >&2
 # Oscar's desktop (desktop/README.md): its own workspace.
 cargo build --manifest-path desktop/Cargo.toml -p oscar-desktop-native --features native --bins --target x86_64-unknown-none $flag
 esp=target/esp
@@ -21,9 +23,10 @@ mkdir -p "$esp/EFI/BOOT"
 cp "target/x86_64-unknown-uefi/$PROFILE/dross-boot.efi" "$esp/EFI/BOOT/BOOTX64.EFI"
 cp "target/x86_64-unknown-none/$PROFILE/dross" "$esp/dross.elf"
 mkdir -p "$esp/modules"
-for m in init selftest pcid edutest usbd fsd; do
+for m in init selftest pcid edutest usbd fsd serviced; do
     cp "target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
 done
+cp target/c-api-test/c-api-test "$esp/modules/c-api-test"
 for m in oscar-session oscar-windowd oscar-terminal trash; do
     cp "desktop/target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
 done

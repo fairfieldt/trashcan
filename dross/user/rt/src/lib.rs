@@ -8,7 +8,11 @@
 extern crate alloc;
 
 pub mod bootstrap;
+pub mod deadline;
+pub mod launch;
+pub mod owned;
 pub mod pci;
+pub mod protocol;
 pub mod sys;
 pub mod thread;
 

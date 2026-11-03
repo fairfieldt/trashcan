@@ -5,8 +5,11 @@ to do work. Rust is the primary application language. The kernel ABI and service
 protocols remain usable from other languages without linking Rust code.
 
 This is the intended public API design. [Native program interfaces](API.md)
-describes the implemented kernel contracts. The owned Rust types, common message
-format, launcher and service directory below are proposed interfaces; existing
+describes the implemented kernel contracts. The [owned Rust SDK](user/rt/README.md)
+implements the first ownership and deadline types, with a direct native launch
+helper. Common service framing, bootstrap v2 and the service directory are draft
+protocols being exercised by native clients. Full asynchronous reply dispatch,
+supervision and the environment subsystem bridge remain future work. Existing
 services still use their own protocols.
 
 ## Interface layers
@@ -28,6 +31,40 @@ calling conventions never cross a process or language boundary. A C caller can
 use the same protocols directly; languages with a C interface can use the C
 bindings. Rust crate versions and wire protocol versions are separate contracts.
 The current kernel calling convention targets x86-64.
+
+## Relationship to Fuchsia channels
+
+Fuchsia's Zircon channels and dross channels share the basic transport model:
+two endpoints exchange ordered messages containing bytes and transferred handles.
+A service protocol gives those messages meaning. Fuchsia's
+[FIDL](https://fuchsia.dev/fuchsia-src/concepts/fidl/overview) separates that
+protocol definition and language bindings from the channel mechanism. Oscar's
+shared schema follows the same separation with a smaller initial scope.
+
+There are deliberate differences in the current contracts:
+
+| Contract | Fuchsia | dross |
+|---|---|---|
+| Ordinary failed send | Consumes attached handles, including on failure | Returns all attachments to the sender |
+| Channel endpoint duplication | Not permitted | Permitted when the handle has DUPLICATE authority |
+| Synchronous reply matching | Optional kernel channel_call operation matches transaction IDs | Userspace protocol clients match request IDs |
+| Queue pressure | Kernel IPC policy exceptions at implementation-defined limits | Bounded queues return ShouldWait and expose WRITABLE readiness |
+
+See Fuchsia's [channel object](https://fuchsia.dev/fuchsia-src/reference/kernel_objects/channel),
+[write](https://fuchsia.dev/reference/syscalls/channel_write),
+[call](https://fuchsia.dev/reference/syscalls/channel_call) and
+[IPC limits](https://fuchsia.dev/fuchsia-src/concepts/kernel/ipc_limits) contracts.
+
+The SDK does not implicitly clone endpoints. Applications should share a typed
+client with one reply dispatcher, or obtain independent connections through the
+service directory. Explicit raw duplication requires coordination between readers
+and awareness that peer closure waits for the last endpoint reference.
+
+Fuchsia's [component framework](https://fuchsia.dev/fuchsia-src/concepts/components/v2/introduction)
+routes capabilities into component namespaces. Oscar's launcher and service
+directories apply the same principle of explicit delegation without requiring
+the full component framework. The Linux/POSIX environment uses those native
+capabilities underneath its own conventions.
 
 ## Environment subsystems
 

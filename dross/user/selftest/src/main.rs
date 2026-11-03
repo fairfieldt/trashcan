@@ -17,6 +17,9 @@ mod timer_tests;
 mod join_tests;
 mod account_tests;
 mod channel_cycles;
+mod launch_tests;
+mod sdk_tests;
+mod service_tests;
 
 dross_rt::main!(main);
 
@@ -161,6 +164,9 @@ fn run_all(b: &Bootstrap) -> i32 {
     join_tests::run(&mut t);
     account_tests::run(&mut t, b);
     channel_cycles::run(&mut t, b);
+    launch_tests::run(&mut t, b);
+    sdk_tests::run(&mut t);
+    service_tests::run(&mut t, b);
 
     if let Some(account) = b.handle("account/test") {
         let full = sys::mem_create_in(account, 8192, 0).unwrap();

@@ -1,7 +1,7 @@
 # dross is its own workspace. `boot` builds for x86_64-unknown-uefi and `kernel` for x86_64-unknown-none
 # (dross/build.sh); the library crates also build and test on the host.
 [workspace]
-members = ["bootinfo", "abi", "acpi", "pmm", "boot", "kernel", "user/rt", "user/init", "user/selftest", "user/pcid", "user/edutest", "user/usbd", "user/fsd", "user/audiod"]
+members = ["bootinfo", "abi", "acpi", "pmm", "boot", "kernel", "user/rt", "user/init", "user/selftest", "user/pcid", "user/edutest", "user/usbd", "user/fsd", "user/audiod", "user/serviced"]
 resolver = "2"
 
 [profile.dev]

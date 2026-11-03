@@ -6,6 +6,10 @@ Rust wrappers. Linux programs can use the same wrappers through the native sysca
 namespace. Linux compatibility supplies its own file descriptors and conventions
 over these mechanisms.
 
+New Rust clients can use the [owned SDK](user/rt/README.md) for handle ownership,
+fallible messages, mappings, typed deadlines and direct native process launch.
+The low-level `sys` interface remains available for existing programs.
+
 See [Oscar application API design](API-DESIGN.md) for the proposed Rust SDK,
 language-neutral service framing, capability ownership, environment subsystems,
 process launch and service discovery. This page describes the implemented kernel

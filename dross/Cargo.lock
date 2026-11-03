@@ -80,6 +80,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dross-serviced"
+version = "0.1.0"
+dependencies = [
+ "dross-rt",
+]
+
+[[package]]
 name = "edutest"
 version = "0.1.0"
 dependencies = [

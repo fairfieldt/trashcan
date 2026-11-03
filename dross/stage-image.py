@@ -35,12 +35,24 @@ def main():
     if not args.esp:
         run(['cargo', 'build', '-p', 'dross', '--release', '--target', 'x86_64-unknown-none',
              '--target-dir', target, *features])
-        run(['cargo', 'build', '-p', 'init', '-p', 'selftest', '-p', 'pcid', '-p', 'usbd',
+        run(['cargo', 'build', '-p', 'init', '-p', 'selftest', '-p', 'pcid', '-p', 'usbd', '-p', 'dross-serviced',
              '--release', '--target', 'x86_64-unknown-none', '--target-dir', target])
+        run([ROOT / 'user/c-api-test/build.sh'],
+            env={**os.environ, 'OUT': str(out / 'c-api-test')})
     inputs = {'dross.elf': args.esp.resolve() / 'dross.elf' if args.esp else target / 'x86_64-unknown-none/release/dross',
               'rootfs.tar': args.rootfs.resolve(), 'init.conf': args.init_conf.resolve()}
     for name in ['init', 'selftest', 'pcid', 'usbd']:
         inputs[name] = args.esp.resolve() / 'modules' / name if args.esp else target / 'x86_64-unknown-none/release' / name
+    # New selftests exercise a real directory process and a freestanding C client.
+    # Preserve older snapshot contents when explicitly using --esp.
+    for name in ['serviced', 'c-api-test']:
+        if args.esp:
+            source = args.esp.resolve() / 'modules' / name
+            if source.exists():
+                inputs[name] = source
+        else:
+            inputs[name] = (out / 'c-api-test/c-api-test' if name == 'c-api-test'
+                            else target / 'x86_64-unknown-none/release/serviced')
     supplied = set()
     for item in args.module:
         name, separator, path = item.partition('=')

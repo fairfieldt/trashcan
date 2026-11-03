@@ -5,6 +5,9 @@ object-wait subscriptions and deadlines, and [Memory ownership and allocation](M
 for reclamation and allocation budgets.
 See [Oscar application API design](API-DESIGN.md) for the proposed public SDK and
 service contracts, including process launch and service discovery.
+The first [owned Rust SDK](user/rt/README.md) and draft
+[bootstrap and directory protocols](protocol/README.md) are implemented, including
+a native C interoperability test.
 
 dross is the kernel of Oscar, the operating system of the trashcan appliance: Mac Pro 6,1s running distributed
 inference, with the drivers (`driver/`: gpud for the D700s, tbd for Thunderbolt, ethd for Ethernet) as user
@@ -108,9 +111,12 @@ a high-speed mouse. Once usbd reports its devices ready, the script types "ab", 
 through QEMU's monitor. It exits 0 when init reports that every check passed (usbd saw the input) and the kernel
 logged the IOMMU fault for the edu driver's deliberate DMA to an unmapped address. The log is in
 `target/qemu.log`. Measured on QEMU 11.1
-(TCG on an arm64 Mac): the current audit build passes 55 native and 28 POSIX checks
-with one CPU, and 60 native and 28 POSIX checks with four CPUs. The same 60 native
-and 28 POSIX checks pass on a physical 12-CPU Mac Pro 6,1. Timings under TCG reflect
+(TCG on an arm64 Mac): the API foundation audit build passes 75 native and 28 POSIX
+checks with one CPU, and 80 native and 28 POSIX checks with four CPUs. The default
+kernel audit build also passes 80 native and 28 POSIX checks with four CPUs.
+The earlier kernel and memory foundation passed 60 native and 28 POSIX checks on
+a physical 12-CPU Mac Pro 6,1; the new SDK and service tests have been validated in
+QEMU. Timings under TCG reflect
 the emulator and the host's timer coalescing; use hardware runs for latency work.
 
 Under TCG on macOS the host coalesces QEMU's timer wakeups: 1 kHz APIC timer ticks arrive 2-18 ms apart and the

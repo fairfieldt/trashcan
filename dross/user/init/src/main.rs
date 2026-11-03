@@ -102,6 +102,14 @@ fn main(boot: Handle) -> i32 {
             .handle("account/test", sys::account_create(system, 8192).unwrap())
             .handle("resource/system", sys::dup(system, rights::ALL).unwrap());
         if let Some(image) = b.handle("module/posixtest") { bb = bb.handle("module/posixtest", sys::dup(image, rights::ALL).unwrap()); }
+        // API conformance programs get executable images only; the self-test
+        // provisions their service endpoints explicitly for each test.
+        for module in ["serviced", "c-api-test"] {
+            let name = alloc::format!("module/{module}");
+            if let Some(image) = b.handle(&name) {
+                bb = bb.handle(&name, sys::dup(image, rights::READ | rights::DUPLICATE | rights::TRANSFER).unwrap());
+            }
+        }
         let p = bootstrap::spawn(img, "selftest", bb, 0).expect("spawn selftest");
         let code = sys::process_wait(p, dross_rt::FOREVER);
         println!("selftest exited with {code:?}");
