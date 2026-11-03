@@ -83,13 +83,15 @@ impl ChannelEnd {
     }
 
     pub fn write(&self, m: Message) -> Result<(), (Error, Message)> {
-        if self.pair.closed[self.peer()].load(Ordering::Acquire) {
-            return Err((Error::PeerClosed, m));
-        }
         let mut m = Some(m);
         let bound = self.pair.sides[self.peer()].update(|s| {
+            // Serialize the close check with draining this queue in Drop. Otherwise a
+            // writer can enqueue handles after the last reader has drained it.
+            if self.pair.closed[self.peer()].load(Ordering::Acquire) {
+                return Err(Error::PeerClosed);
+            }
             if s.queue.len() >= CHANNEL_DEPTH {
-                return Err(());
+                return Err(Error::ShouldWait);
             }
             s.queue.push_back(m.take().unwrap());
             Ok(s.bound.clone())
@@ -97,7 +99,7 @@ impl ChannelEnd {
         match bound {
             Ok(Some((n, bits))) => n.signal(bits),
             Ok(None) => {}
-            Err(()) => return Err((Error::ShouldWait, m.unwrap())),
+            Err(e) => return Err((e, m.unwrap())),
         }
         Ok(())
     }
@@ -151,9 +153,11 @@ impl ChannelEnd {
 
 impl Drop for ChannelEnd {
     fn drop(&mut self) {
-        self.pair.closed[self.side].store(true, Ordering::Release);
         // Messages still queued here go (with their handles) outside the lock.
-        let left = self.pair.sides[self.side].with(|s| core::mem::take(&mut s.queue));
+        let left = self.pair.sides[self.side].with(|s| {
+            self.pair.closed[self.side].store(true, Ordering::Release);
+            core::mem::take(&mut s.queue)
+        });
         drop(left);
         let bound = self.pair.sides[self.peer()].update(|s| s.bound.clone());
         if let Some((n, bits)) = bound {

@@ -157,6 +157,14 @@ fn run_all(b: &Bootstrap) -> i32 {
     t.check("channel", &buf[..nb] == b"hello" && nh == 1 && bits == 1 << 5 && gone, "");
     sys::close(x).unwrap();
     t.check("peer closed", sys::channel_read(y, &mut buf, &mut hs, FOREVER) == Err(Error::PeerClosed), "");
+    let first = sys::notify_create().unwrap();
+    let second = sys::notify_create().unwrap();
+    let failed = sys::channel_write(y, b"", &[second, first]) == Err(Error::PeerClosed);
+    let restored = sys::notify_signal(first, 1).is_ok() && sys::notify_signal(second, 2).is_ok()
+        && sys::notify_wait(first, 0) == Ok(1) && sys::notify_wait(second, 0) == Ok(2);
+    t.check("failed transfer preserves handles", failed && restored, "");
+    sys::close(first).unwrap();
+    sys::close(second).unwrap();
 
     // Rights: a handle without SIGNAL can't signal.
     let weak = sys::dup(n, rights::WAIT | rights::DUPLICATE).unwrap();

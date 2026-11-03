@@ -264,8 +264,8 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             let hs = copy_in(&p, a[3], a[4] * 4)?;
             let hs: Vec<u32> = hs.chunks_exact(4).map(|c| u32::from_le_bytes(c.try_into().unwrap())).collect();
             // Take all the handles or none.
+            let mut t = p.handles.lock();
             let handles = {
-                let mut t = p.handles.lock();
                 for (i, &h) in hs.iter().enumerate() {
                     let e = t.get(h)?;
                     if e.rights & rights::TRANSFER == 0 || hs[..i].contains(&h) {
@@ -283,9 +283,8 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
                 Ok(()) => Ok(0),
                 Err((e, m)) => {
                     // Give the handles back.
-                    let mut t = p.handles.lock();
-                    for h in m.handles {
-                        t.insert(h);
+                    for (h, entry) in hs.into_iter().zip(m.handles) {
+                        t.restore(h, entry);
                     }
                     Err(e)
                 }

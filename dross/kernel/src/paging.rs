@@ -182,7 +182,12 @@ impl AddressSpace {
             let page = Page::<Size4KiB>::containing_address(VirtAddr::new(addr + i * PAGE));
             let frame = PhysFrame::containing_address(PhysAddr::new(mem.page_phys(((m.offset + i * PAGE) / PAGE) as usize)));
             // SAFETY: a user-half page of a checked range, to a frame the memory object owns or may expose.
-            unsafe { mapper.map_to_with_table_flags(page, frame, pf, parent, &mut TableFrames).map_err(|_| Error::NoMemory)?.ignore() };
+            if unsafe { mapper.map_to_with_table_flags(page, frame, pf, parent, &mut TableFrames) }.map(|f| f.ignore()).is_err() {
+                // A partially installed mapping must not outlive its backing object.
+                drop(mapper);
+                self.uninstall(addr, i * PAGE);
+                return Err(Error::NoMemory);
+            }
         }
         Ok(())
     }
@@ -264,7 +269,7 @@ impl AddressSpace {
             inner.mappings.insert(addr, m);
         }
         drop(inner);
-        if !removed.is_empty() {
+        if !removed.is_empty() || r.is_err() {
             self.finish(removed);
         }
         r.map(|_| addr)
@@ -350,23 +355,44 @@ impl AddressSpace {
         if at < end {
             return Err(Error::NotFound);
         }
+        // Validate the entire range before changing any of its mappings.
+        if flags & vm::WRITE != 0 && inner.mappings.range(..end).any(|(&s, m)| {
+            s + m.len > addr && m.mem.as_ref().is_some_and(|mm| !mm.writable())
+        }) {
+            return Err(Error::AccessDenied);
+        }
         Self::split(&mut inner, addr);
         Self::split(&mut inner, end);
         let keys: Vec<u64> = inner.mappings.range(addr..end).map(|(&k, _)| k).collect();
-        for k in keys {
+        let mut prepared = Vec::new();
+        for &k in &keys {
             let mut m = inner.mappings.get(&k).unwrap().clone();
-            if flags & vm::WRITE != 0 && m.mem.as_ref().is_some_and(|mm| !mm.writable()) {
-                return Err(Error::AccessDenied);
-            }
-            self.uninstall(k, m.len);
             if m.mem.is_none() && flags != 0 {
                 m.mem = Some(Arc::new(Memory::anonymous(m.len, false, false)?));
                 m.offset = 0;
             }
             m.flags = flags | (m.flags & FORK_SHARED);
-            let r = self.install(k, &m);
+            prepared.push((k, m));
+        }
+        for (index, (k, m)) in prepared.iter().enumerate() {
+            self.uninstall(*k, m.len);
+            if let Err(e) = self.install(*k, m) {
+                // Page tables are retained on unmap, so restoring the old entries
+                // requires no new table frames. Keep new backing alive through the
+                // shootdown before returning it to the allocator.
+                for (old_k, new) in &prepared[..=index] {
+                    self.uninstall(*old_k, new.len);
+                    let old = inner.mappings.get(old_k).unwrap();
+                    self.install(*old_k, old).expect("restore existing page tables");
+                }
+                drop(inner);
+                self.finish(Vec::new());
+                drop(prepared);
+                return Err(e);
+            }
+        }
+        for (k, m) in prepared {
             inner.mappings.insert(k, m);
-            r?;
         }
         drop(inner);
         self.finish(Vec::new());

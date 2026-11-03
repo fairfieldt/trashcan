@@ -70,6 +70,13 @@ impl HandleTable {
         self.slots.get_mut(h as usize).and_then(|s| s.take()).ok_or(Error::BadHandle)
     }
 
+    /// Restore a removed handle while the table lock has remained held.
+    pub fn restore(&mut self, h: u32, e: Entry) {
+        let slot = &mut self.slots[h as usize];
+        assert!(slot.is_none());
+        *slot = Some(e);
+    }
+
     /// Drops every handle (process exit); returns them so they are dropped outside the table's lock.
     pub fn clear(&mut self) -> Vec<Entry> {
         self.slots.drain(..).flatten().collect()
