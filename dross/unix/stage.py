@@ -34,6 +34,7 @@ with tarfile.open(esp/'modules/rootfs.tar','w',format=tarfile.USTAR_FORMAT) as t
   data('opt/alpine/bin/busybox',alpine.extractfile('./bin/busybox').read(),0o755)
  data('usr/share/licenses/musl/COPYRIGHT',(out/'musl-COPYRIGHT').read_bytes())
  data('usr/bin/dyntest',(out/'dyntest').read_bytes(),0o755)
+ data('bin/native-run',(out/'native/x86_64-unknown-linux-musl/release/native-run').read_bytes(),0o755)
  data('usr/lib/libdrosstest.so',(out/'libdrosstest.so').read_bytes(),0o755)
  data('etc/passwd',b'root:x:0:0:root:/root:/bin/sh\n')
  data('etc/group',b'root:x:0:\n')

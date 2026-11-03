@@ -1,0 +1,14 @@
+[package]
+name = "oscar-native-run"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Launch a native Oscar executable from a Unix development shell"
+
+[[bin]]
+name = "native-run"
+path = "src/main.rs"
+
+[dependencies]
+dross-rt = { path = "../../user/rt", default-features = false }
+dross-abi = { path = "../../abi" }

@@ -51,7 +51,7 @@ run(['cargo','build','--locked','-p','dross-boot','--target','x86_64-unknown-uef
 env['CARGO_TARGET_DIR']=str(out/'native')
 run(['cargo','build','--locked','--manifest-path',here/'Cargo.toml','-p','unix-init','-p','unix-netd','-p','unix-nic','--target','x86_64-unknown-none','--release'],dross,env)
 env['CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_LINKER']='rust-lld';env['CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUSTFLAGS']='-C link-self-contained=yes'
-run(['cargo','build','--locked','--manifest-path',here/'Cargo.toml','-p','unix-terminal-bridge','--target','x86_64-unknown-linux-musl','--release'],dross,env)
+run(['cargo','build','--locked','--manifest-path',here/'Cargo.toml','-p','unix-terminal-bridge','-p','oscar-native-run','--target','x86_64-unknown-linux-musl','--release'],dross,env)
 run([here/'cc','-O2','-static',here/'probe/main.c','-o',out/'unix-probe'])
 for name in ['test-hostkey','test-client','test-stranger']:
  if not (out/name).exists():run(['ssh-keygen','-q','-t','ed25519','-N','','-C','oscar-test','-f',out/name])
