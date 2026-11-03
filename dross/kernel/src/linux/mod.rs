@@ -534,6 +534,19 @@ fn dispatch(p: &Arc<Process>, f: &Frame, n: u64, a: [u64; 6]) -> R {
             }
         }
         273 => Ok(0),
+        // reboot: restart resets the machine; the Ctrl-Alt-Del settings are accepted.
+        169 => {
+            if a[0] != 0xfee1_dead {
+                return Err(EINVAL);
+            }
+            match a[2] as u32 {
+                0x0123_4567 => crate::qemu::reset(&alloc::format!("reboot by {}", p.name), true, 300),
+                0x89ab_cdef | 0 => Ok(0),
+                _ => Err(EINVAL),
+            }
+        }
+        // fsync, fdatasync, sync, syncfs: files live in memory.
+        74 | 75 | 162 | 306 => Ok(0),
         274 | 334 | 324 => Err(ENOSYS),
         24 => {
             sched::request_resched();

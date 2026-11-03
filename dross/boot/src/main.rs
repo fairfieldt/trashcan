@@ -119,10 +119,14 @@ fn main() -> Status {
     uefi::helpers::init().unwrap();
     info!("dross loader: firmware {} rev {:#x}", uefi::system::firmware_vendor(), uefi::system::firmware_revision());
 
-    let mut fs = uefi::fs::FileSystem::new(boot::get_image_file_system(boot::image_handle()).expect("no boot volume"));
-    let image = fs.read(cstr16!("\\dross.elf")).expect("cannot read \\dross.elf");
-    let modules = load_modules(&mut fs);
-    drop(fs);
+    #[cfg(feature = "bundle")]
+    let (image, modules) = load_bundle();
+    #[cfg(not(feature = "bundle"))]
+    let (image, modules) = {
+        let mut fs = uefi::fs::FileSystem::new(boot::get_image_file_system(boot::image_handle()).expect("no boot volume"));
+        let image = fs.read(cstr16!("\\dross.elf")).expect("cannot read \\dross.elf");
+        (image, load_modules(&mut fs))
+    };
     let elf = Elf(&image);
     elf.check();
 
@@ -261,7 +265,8 @@ fn framebuffer() -> Framebuffer {
     Framebuffer { base: fb.as_mut_ptr() as u64, size: fb.size() as u64, width: w as u32, height: h as u32, stride: mode.stride() as u32, format }
 }
 
-/// Every file in `\modules`, each in pages of its own.
+/// Every file in `\\modules`, each in pages of its own.
+#[cfg(not(feature = "bundle"))]
 fn load_modules(fs: &mut uefi::fs::FileSystem) -> alloc::vec::Vec<Module> {
     let mut out = alloc::vec::Vec::new();
     let Ok(dir) = fs.read_dir(cstr16!("\\modules")) else {
@@ -277,14 +282,46 @@ fn load_modules(fs: &mut uefi::fs::FileSystem) -> alloc::vec::Vec<Module> {
         path.push_str(&name);
         let p = uefi::CString16::try_from(path.as_str()).unwrap();
         let data = fs.read(p.as_ref()).expect("cannot read a module");
-        let phys = alloc_pages(data.len().div_ceil(PAGE as usize).max(1), 0);
-        // SAFETY: a fresh allocation of at least data.len() bytes.
-        unsafe { ptr::copy_nonoverlapping(data.as_ptr(), phys as *mut u8, data.len()) };
-        let mut m = Module { name: [0; 32], phys, size: data.len() as u64 };
-        let n = name.len().min(31);
-        m.name[..n].copy_from_slice(&name.as_bytes()[..n]);
-        info!("module {}: {} KiB at {:#x}", name, data.len() / 1024, phys);
-        out.push(m);
+        out.push(place_module(&name, &data));
     }
     out
+}
+
+/// The kernel and modules built into the loader (`build.sh` with NETBOOT=1), for a network boot, where there is
+/// no volume to read them from. Format: "DROSSBND", then per file a u16 name length, the name, a u64 size and
+/// the data; a zero name length ends it.
+#[cfg(feature = "bundle")]
+fn load_bundle() -> (alloc::vec::Vec<u8>, alloc::vec::Vec<Module>) {
+    static BUNDLE: &[u8] = include_bytes!(env!("DROSS_BUNDLE"));
+    assert!(BUNDLE.starts_with(b"DROSSBND"), "bad bundle");
+    let (mut at, mut image, mut out) = (8, alloc::vec::Vec::new(), alloc::vec::Vec::new());
+    loop {
+        let n = u16::from_le_bytes(BUNDLE[at..at + 2].try_into().unwrap()) as usize;
+        if n == 0 {
+            break;
+        }
+        let name = core::str::from_utf8(&BUNDLE[at + 2..at + 2 + n]).expect("bad bundle name");
+        let size = u64::from_le_bytes(BUNDLE[at + 2 + n..at + 10 + n].try_into().unwrap()) as usize;
+        let data = &BUNDLE[at + 10 + n..at + 10 + n + size];
+        at += 10 + n + size;
+        if name == "dross.elf" {
+            image = data.to_vec();
+        } else if out.len() < MAX_MODULES {
+            out.push(place_module(name, data));
+        }
+    }
+    assert!(!image.is_empty(), "no dross.elf in the bundle");
+    (image, out)
+}
+
+/// A module in pages of its own.
+fn place_module(name: &str, data: &[u8]) -> Module {
+    let phys = alloc_pages(data.len().div_ceil(PAGE as usize).max(1), 0);
+    // SAFETY: a fresh allocation of at least data.len() bytes.
+    unsafe { ptr::copy_nonoverlapping(data.as_ptr(), phys as *mut u8, data.len()) };
+    let mut m = Module { name: [0; 32], phys, size: data.len() as u64 };
+    let n = name.len().min(31);
+    m.name[..n].copy_from_slice(&name.as_bytes()[..n]);
+    info!("module {}: {} KiB at {:#x}", name, data.len() / 1024, phys);
+    m
 }

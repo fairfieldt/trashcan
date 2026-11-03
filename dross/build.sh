@@ -10,7 +10,8 @@ PROFILE=${PROFILE:-debug}
 flag=""
 [ "$PROFILE" = release ] && flag=--release
 cargo build -p dross-boot --target x86_64-unknown-uefi $flag
-cargo build -p dross --target x86_64-unknown-none $flag
+# KERNEL_FEATURES=unix builds the kernel with the Unix subsystem (unix/README.md).
+cargo build -p dross --target x86_64-unknown-none $flag ${KERNEL_FEATURES:+--features dross/$KERNEL_FEATURES}
 cargo build -p init -p selftest -p pcid -p edutest -p usbd --target x86_64-unknown-none $flag
 esp=target/esp
 rm -rf "$esp"
@@ -28,5 +29,32 @@ fi
 # What init starts (INIT_CONF, e.g. linux/qemu-init.conf for run-qemu.sh).
 if [ -n "${INIT_CONF:-}" ]; then
     cp "$INIT_CONF" "$esp/modules/init.conf"
+fi
+# NETBOOT=1: also target/netboot/dross.efi, the loader with the kernel and modules (stripped) built in, for
+# booting over the network (README, "Network boot").
+if [ -n "${NETBOOT:-}" ]; then
+    objcopy=$(ls "$(rustc --print sysroot)"/lib/rustlib/*/bin/llvm-objcopy | head -1)
+    rm -rf target/netboot/files
+    mkdir -p target/netboot/files
+    cp "$esp/dross.elf" "$esp"/modules/* target/netboot/files/
+    for f in target/netboot/files/*; do
+        if [ "$(head -c 4 "$f" | od -An -tx1 | tr -d ' ')" = 7f454c46 ]; then
+            "$objcopy" --strip-all "$f"
+        fi
+    done
+    python3 - target/netboot/files target/netboot/bundle <<'PY'
+import os, struct, sys
+src, out = sys.argv[1:]
+with open(out, "wb") as f:
+    f.write(b"DROSSBND")
+    for name in sorted(os.listdir(src)):
+        data = open(os.path.join(src, name), "rb").read()
+        f.write(struct.pack("<H", len(name)) + name.encode() + struct.pack("<Q", len(data)) + data)
+    f.write(struct.pack("<H", 0))
+PY
+    DROSS_BUNDLE="$PWD/target/netboot/bundle" cargo build -p dross-boot --target x86_64-unknown-uefi $flag --features bundle \
+        --target-dir target/netboot/cargo
+    cp "target/netboot/cargo/x86_64-unknown-uefi/$PROFILE/dross-boot.efi" target/netboot/dross.efi
+    ls -l target/netboot/dross.efi
 fi
 echo "$esp"

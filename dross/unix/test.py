@@ -43,6 +43,10 @@ with open(out/'qemu-stderr.log','wb') as err:
   assert result.startswith(hashlib.sha256(payload).hexdigest().encode()),result
   assert run('cat /tmp/upload')==payload
   print('ok 256 KiB upload/download and hash',flush=True)
+  big=os.urandom(4<<20);t0=time.time()
+  assert run('cat > /tmp/big; sha256sum /tmp/big',big).startswith(hashlib.sha256(big).hexdigest().encode())
+  t1=time.time();assert run('cat /tmp/big; rm /tmp/big')==big;t2=time.time()
+  print(f'ok 4 MiB upload {4/(t1-t0):.2f} MiB/s, download {4/(t2-t1):.2f} MiB/s',flush=True)
   # A real local PTY gives OpenSSH meaningful dimensions and keeps its input open.
   master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',31,107,0,0))
   child=subprocess.Popen(ssh[:-1]+['-tt',ssh[-1],'stty size; read x; stty size; printf "TTY:%s\\n" "$x"; exit 7'],stdin=slave,stdout=slave,stderr=slave,close_fds=True)

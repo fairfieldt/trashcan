@@ -197,3 +197,9 @@ pub fn after_ms(ms: u64) -> u64 {
 pub fn random(bytes: &mut [u8]) -> Result<()> {
     syscall(n::RANDOM, [bytes.as_mut_ptr() as u64, bytes.len() as u64, 0, 0, 0, 0]).map(|_| ())
 }
+
+/// Registers `service` as the kernel's network service (netd's end gets the sockets of Linux programs). Needs the
+/// system resource; kernels built with the Unix feature only.
+pub fn unix_net_register(system: Handle, service: Handle) -> Result<()> {
+    syscall(n::UNIX_NET_REGISTER, [system.0 as u64, service.0 as u64, 0, 0, 0, 0]).map(|_| ())
+}

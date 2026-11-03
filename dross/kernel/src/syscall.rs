@@ -84,6 +84,7 @@ fn insert(p: &Process, o: Object) -> u64 {
 #[unsafe(no_mangle)]
 extern "C" fn syscall_dispatch(f: &mut Frame) {
     let is_linux = sched::current_process().linux.is_some();
+    crate::cpu::this().sched.last_syscall.store(f.rax, core::sync::atomic::Ordering::Relaxed);
     if is_linux && f.rax & dross_abi::NATIVE == 0 {
         f.rax = crate::linux::syscall(f);
     } else {

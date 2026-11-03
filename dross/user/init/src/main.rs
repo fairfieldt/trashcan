@@ -23,29 +23,23 @@ fn main(boot: Handle) -> i32 {
     let conf = b.handle("module/init.conf").map(read_module).unwrap_or_default();
     let all: alloc::vec::Vec<alloc::vec::Vec<&str>> =
         conf.lines().map(|l| l.split_whitespace().collect::<alloc::vec::Vec<_>>()).filter(|w| w.first().is_some_and(|f| !f.starts_with('#'))).collect();
-    let lines: alloc::vec::Vec<&alloc::vec::Vec<&str>> = all.iter().filter(|w| matches!(w[0], "start" | "check")).collect();
+    let lines: alloc::vec::Vec<&alloc::vec::Vec<&str>> = all.iter().filter(|w| matches!(w[0], "start" | "check" | "native")).collect();
     // `channel NAME` makes a channel; `@NAME=HANDLE` on a start or check line gives that program the next end of
     // it as bootstrap handle HANDLE (so a driver and its client can be connected, e.g. ethd and netd).
-    let mut channels: alloc::vec::Vec<(&str, alloc::vec::Vec<Handle>)> = alloc::vec::Vec::new();
+    let mut channels: Channels = alloc::vec::Vec::new();
     for w in all.iter().filter(|w| w[0] == "channel" && w.len() == 2) {
         let (a, b) = sys::channel_create().unwrap();
         channels.push((w[1], alloc::vec![b, a]));
     }
-    let mut take_ends = |args: &[&str]| -> (alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<(alloc::string::String, Handle)>) {
-        let mut argv = alloc::vec::Vec::new();
-        let mut extra = alloc::vec::Vec::new();
-        for a in args {
-            if let Some((chan, name)) = a.strip_prefix('@').and_then(|r| r.split_once('=')) {
-                match channels.iter_mut().find(|(n, _)| *n == chan).and_then(|(_, ends)| ends.pop()) {
-                    Some(end) => extra.push((alloc::string::String::from(name), end)),
-                    None => println!("init.conf: no free end of channel {chan}"),
-                }
-            } else {
-                argv.push(alloc::string::String::from(*a));
-            }
+    // `netservice NAME`: a channel whose one end becomes the kernel's network service (Unix kernels); the other
+    // end goes to the network stack as `@NAME=service`.
+    for w in all.iter().filter(|w| w[0] == "netservice" && w.len() == 2) {
+        let (kernel_end, stack_end) = sys::channel_create().unwrap();
+        match sys::unix_net_register(system, kernel_end) {
+            Ok(()) => channels.push((w[1], alloc::vec![stack_end])),
+            Err(e) => println!("init.conf: netservice {}: {e:?} (a kernel without the unix feature?)", w[1]),
         }
-        (argv, extra)
-    };
+    }
 
     // pcid gets the ECAM, physical memory for BARs, interrupts and the IOMMU; each driver a channel to it.
     let (Some(pcid), Some(ecam)) = (b.handle("module/pcid"), b.value_u64("ecam")) else {
@@ -78,15 +72,16 @@ fn main(boot: Handle) -> i32 {
         conf_ends.push(theirs);
     }
     bootstrap::spawn(pcid, "pcid", pb, u64::MAX).expect("spawn pcid");
-    // init.conf's `start` lines (services such as ethd's network log) before anything else, so their output
-    // covers the rest of the run.
+    // init.conf's `start` and `native` lines up to the first `wait` (services such as ethd's network log) before
+    // anything else, so their output covers the rest of the run; the rest run in order below.
     let mut ends: alloc::vec::Vec<Option<Handle>> = conf_ends.into_iter().map(Some).collect();
-    for (i, words) in lines.iter().enumerate() {
-        if words[0] == "start" {
-            let (argv, extra) = take_ends(&words[1..]);
-            let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
-            ok &= launch(&b, &argv, ends[i].take().unwrap(), &extra).is_some();
+    let early = all.iter().position(|w| w[0] == "wait").unwrap_or(all.len());
+    let mut li = 0;
+    for words in &all[..early] {
+        if matches!(words[0], "start" | "native") {
+            ok &= start(&b, &mut channels, words, ends[li].take().unwrap());
         }
+        li += matches!(words[0], "start" | "native" | "check") as usize;
     }
 
     if let Some(img) = b.handle("module/selftest") {
@@ -132,26 +127,43 @@ fn main(boot: Handle) -> i32 {
             ok &= code == Ok(0);
         }
     }
-    // Then init.conf's `check`, `sleep MS` and `reboot` lines in order (`reboot` ends the run when everything
-    // else is done: QEMU exits, hardware resets).
+    // Then init.conf's `check`, `sleep MS`, `wait CHANNEL [MS]` (one message from the program holding the
+    // channel's other end, e.g. netd's `ready`), the remaining `start` lines and `reboot` in order (`reboot` ends
+    // the run when everything else is done: QEMU exits, hardware resets).
     let mut reboot = false;
     let mut li = 0;
-    for words in &all {
+    for (i, words) in all.iter().enumerate() {
         match words[0] {
+            "wait" => {
+                let ms = words.get(2).and_then(|v| v.parse().ok()).unwrap_or(30_000);
+                let Some(end) = words.get(1).and_then(|c| channels.iter_mut().find(|(n, _)| n == c)).and_then(|(_, e)| e.pop()) else {
+                    println!("init.conf: wait: no free end of channel {:?}", words.get(1));
+                    ok = false;
+                    continue;
+                };
+                let mut buf = [0u8; 64];
+                let got = sys::channel_read(end, &mut buf, &mut [], sys::after_ms(ms));
+                println!("{}: {:?}", words.join(" "), got.map(|(n, _)| core::str::from_utf8(&buf[..n]).unwrap_or("?")));
+                ok &= got.is_ok();
+            }
+            "start" | "native" if i > early => {
+                ok &= start(&b, &mut channels, words, ends[li].take().unwrap());
+                li += 1;
+            }
             "sleep" => {
                 let ms = words.get(1).and_then(|v| v.parse().ok()).unwrap_or(1000);
                 let _ = sys::notify_wait(sys::notify_create().unwrap(), sys::after_ms(ms));
             }
             "reboot" => reboot = true,
-            "channel" => {}
-            "start" => li += 1,
+            "channel" | "netservice" => {}
+            "start" | "native" => li += 1,
             "check" => {
                 let end = ends[li].take().unwrap();
                 li += 1;
                 let want = words.get(2).and_then(|c| c.parse::<i64>().ok());
                 let mut words_argv = alloc::vec![words[1]];
                 words_argv.extend_from_slice(&words[3..]);
-                let (argv, extra) = take_ends(&words_argv);
+                let (argv, extra) = take_ends(&mut channels, &words_argv);
                 let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
                 match launch(&b, &argv, end, &extra) {
                     Some(p) => {
@@ -183,6 +195,35 @@ fn main(boot: Handle) -> i32 {
     sys::system_exit(system, if ok { 0 } else { 1 })
 }
 
+type Channels<'a> = alloc::vec::Vec<(&'a str, alloc::vec::Vec<Handle>)>;
+
+/// A `start` or `native` line: runs the program; false if it could not be started.
+fn start(b: &Bootstrap, channels: &mut Channels, words: &[&str], pci: Handle) -> bool {
+    let (argv, extra) = take_ends(channels, &words[1..]);
+    let argv: alloc::vec::Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+    if words[0] == "native" { launch_native(b, &argv, pci, &extra) } else { launch(b, &argv, pci, &extra).is_some() }
+}
+
+/// A line's arguments: `@NAME=HANDLE` takes the next free end of channel NAME as bootstrap handle HANDLE;
+/// `%KEY=VALUE` becomes a value in the program's bootstrap message; the rest are its arguments.
+fn take_ends(channels: &mut Channels, args: &[&str]) -> (alloc::vec::Vec<alloc::string::String>, alloc::vec::Vec<(alloc::string::String, Handle)>) {
+    let mut argv = alloc::vec::Vec::new();
+    let mut extra = alloc::vec::Vec::new();
+    for a in args {
+        if let Some(kv) = a.strip_prefix('%') {
+            argv.push(alloc::format!("%{kv}"));
+        } else if let Some((chan, name)) = a.strip_prefix('@').and_then(|r| r.split_once('=')) {
+            match channels.iter_mut().find(|(n, _)| *n == chan).and_then(|(_, ends)| ends.pop()) {
+                Some(end) => extra.push((alloc::string::String::from(name), end)),
+                None => println!("init.conf: no free end of channel {chan}"),
+            }
+        } else {
+            argv.push(alloc::string::String::from(*a));
+        }
+    }
+    (argv, extra)
+}
+
 /// A text module (init.conf) as a string.
 fn read_module(h: Handle) -> alloc::string::String {
     let Ok(size) = sys::mem_size(h) else {
@@ -208,11 +249,37 @@ fn launch(b: &Bootstrap, argv: &[&str], pci: Handle, extra: &[(alloc::string::St
         bb = bb.handle(name, *h);
     }
     let boot = bb.send().ok()?;
-    match sys::spawn_linux(img, argv, &["DROSS_BOOTSTRAP=1", "RUST_BACKTRACE=0"], Some(boot)) {
+    let env = ["DROSS_BOOTSTRAP=1", "RUST_BACKTRACE=0", "PATH=/bin:/sbin:/usr/bin:/usr/sbin", "HOME=/root", "TERM=xterm"];
+    match sys::spawn_linux(img, argv, &env, Some(boot)) {
         Ok(p) => Some(p),
         Err(e) => {
             println!("{}: {e:?}", argv.join(" "));
             None
+        }
+    }
+}
+
+/// Starts the native program `argv[0]` (a module): a pcid connection, the given handles, and `%KEY=VALUE`
+/// arguments as values in its bootstrap message.
+fn launch_native(b: &Bootstrap, argv: &[&str], pci: Handle, extra: &[(alloc::string::String, Handle)]) -> bool {
+    let Some(img) = b.handle(&alloc::format!("module/{}", argv[0])) else {
+        println!("init.conf: no module {}", argv[0]);
+        return false;
+    };
+    let mut bb = Builder::default().handle("pci", pci);
+    for (name, h) in extra {
+        bb = bb.handle(name, *h);
+    }
+    for a in &argv[1..] {
+        if let Some((k, v)) = a.strip_prefix('%').and_then(|kv| kv.split_once('=')) {
+            bb = bb.value(k, v);
+        }
+    }
+    match bootstrap::spawn(img, argv[0], bb, u64::MAX) {
+        Ok(_) => true,
+        Err(e) => {
+            println!("{}: {e:?}", argv.join(" "));
+            false
         }
     }
 }

@@ -119,8 +119,9 @@ The interface lives in the kernel for now (`kernel/src/linux/`):
   interrupts with sockets), a memory object can be mapped (tbd hands its NHI's BAR to clients that way).
 
 Not there: fork and exec, signal delivery (handlers are accepted; an abort ends the process), epoll, file
-writes, and networking: ethd's and tbd's TAP interfaces need a network stack dross doesn't have yet, so ethd
-can't run its `run` mode and tbd runs streams only (`--net none`).
+writes, and networking: ethd's and tbd's TAP interfaces need a network stack inside dross, so ethd can't run its
+`run` mode and tbd runs streams only (`--net none`). (The `unix` kernel feature adds these, with a userspace
+TCP/IP stack behind sockets: `unix/README.md`.)
 
 ```bash
 ./build-linux.sh        # target/linux: posixtest, gpud, tbd, ethd, test-* and rootfs.tar (zig compiles gpud's C)
@@ -150,7 +151,12 @@ with `grub-reboot` from Linux's GRUB, which chainloads the loader on the EFI sys
   and host memory, through the AGP aperture and the IOMMU, and its writes to unmapped addresses are stopped);
 - `ethd serve` drives the BCM57762 for Oscar's network stack over a channel (OETH, `dross/unix/ethernet`): from
   the stack's side, an ARP request goes out and the gateway's reply comes back through it (0.6 ms);
-- ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux.
+- ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux;
+- with the `unix` kernel feature (`unix/README.md`), Oscar's Unix userland runs on the real network: ethd serve,
+  netd (smoltcp) and Dropbear, logged into with OpenSSH from a Mac on the same LAN. A session (key exchange,
+  public-key login, one command) takes 0.11 s; 7 MB go up at 5.1 MB/s and down at 10.1 MB/s (hashes checked).
+  Uploads first ran at 125 KB/s: netd told smoltcp its device takes one frame at a time, and smoltcp then caps
+  the receive window at one segment, so every segment waited for its acknowledgement.
 
 Channel messages between threads on two CPUs: 2.7 us one way to a thread blocked in the kernel on a halted CPU
 (p50; p99 2.8 us), 1.4 us to one spinning on non-blocking reads, round trips 5.6 us (p99 6.4 us, max 6.7 us over
@@ -161,13 +167,50 @@ Without a serial console, the log comes over the network: ethd's `netlog` mode r
 from boot) and sends each line as a UDP datagram to the netconsole port, and `driver/ethd/netlog-listen.py` on
 another machine prints them. `init.conf` starts it before anything else: `start ethd netlog 0000:0c:00.0 --ip
 ADDR --to RECEIVER --to-mac MAC` (macOS drops broadcasts from 0.0.0.0, so give real addresses). On hardware a
-panic, a fatal kernel fault or `reboot` resets the machine after 5 s (the FADT reset register), and dross clears
-the chipset's "stay off after power loss" bit, so a machine on a switched outlet can always be power-cycled back
-into Linux.
+panic, a fatal kernel fault or init.conf's `reboot` resets the machine after 1 s (the FADT reset register), a
+Linux program's `reboot(2)` (BusyBox `reboot -f`, e.g. over SSH) after 300 ms, and dross clears the chipset's
+"stay off after power loss" bit, so a machine on a switched outlet can always be power-cycled.
 
-To run it: `./build-linux.sh && INIT_CONF=YOUR.conf PROFILE=release ./build.sh`; copy `target/esp/dross.elf` and
-`target/esp/modules/` to the root of the EFI system partition and the loader to `EFI/dross/BOOTX64.EFI`; add a
-GRUB entry that chainloads it (`/boot/grub/custom.cfg`) and `grub-reboot` into it.
+What init runs comes from `init.conf`: `start PROG ARGS` (a Linux program) and `native PROG ARGS` (a dross
+program) run before the self-test, up to the first `wait`; `channel NAME` makes a channel whose ends go to
+programs as `@NAME=HANDLE`; `netservice NAME` registers one end of a channel as the kernel's network service
+(`unix` kernels) and hands the other to the stack; `%KEY=VALUE` passes a value; then, in order, `wait CHANNEL
+[MS]` (init's end of the channel gets a message, e.g. netd's `ready`), the remaining `start` lines, `check PROG
+CODE ARGS`, `sleep MS` and `reboot`.
+
+### Network boot
+
+A test machine boots the newest build over the network, so a deploy is a build and a reset:
+
+```bash
+./build-linux.sh && INIT_CONF=YOUR.conf PROFILE=release NETBOOT=1 ./build.sh   # target/netboot/dross.efi
+./netboot.sh dross     # or linux: what the machine boots next
+```
+
+`NETBOOT=1` builds the loader with the kernel and modules (stripped, 18 MB) built in, since a network boot has no
+volume to read them from; `NETBOOT=1 ./run-qemu.sh` boots it from an otherwise empty volume. Serve
+`target/netboot/` over HTTP and let the machine's GRUB (2.12) fetch `boot.cfg` at every boot, from
+`/boot/grub/custom.cfg`:
+
+```
+if [ -z "${boot_once}" ]; then          # not after grub-reboot
+    insmod efinet
+    insmod http
+    insmod chain
+    net_bootp efinet1 || net_bootp      # the cabled port; all of them if it fails
+    net_add_dns ROUTER                  # DHCP gave GRUB no DNS server
+    set dross_server=SERVER:PORT
+    source (http,${dross_server})/boot.cfg
+fi
+```
+
+`netboot.sh dross` writes a `boot.cfg` that adds a "dross-net" entry chainloading `dross.efi` and makes it the
+default; `netboot.sh linux` empties it, and without the server the machine boots its normal default. On the Mac
+Pro (Apple's firmware gives GRUB the BCM57762 through SNP), GRUB fetches the image in a second; from `reboot -f`
+to dross's "boot ok" takes 59 s, most of it the firmware.
+
+Without the server, copy `target/esp/dross.elf` and `target/esp/modules/` to the root of the EFI system partition
+and the loader to `EFI/dross/BOOTX64.EFI`, add a GRUB entry that chainloads it and `grub-reboot` into it.
 
 Bugs only the hardware showed, now fixed: an AP's local APIC ignores unmasking LVT entries while it is software
 disabled (its timer never fired, so timed waits hung); new threads started with MXCSR 0 (every floating-point

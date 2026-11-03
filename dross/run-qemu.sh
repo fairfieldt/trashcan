@@ -4,6 +4,7 @@
 # device for the driver path, and a USB keyboard and mouse on an xHCI controller (typed on through the
 # monitor). Exits 0 when init reports that every check passed and the IOMMU stopped the edu driver's deliberate
 # DMA to an unmapped address.
+# NETBOOT=1 boots the network-boot loader (kernel and modules built in) from an otherwise empty volume.
 #   SMP=24 MEM=8G ./run-qemu.sh [extra qemu args]
 set -eu
 cd "$(dirname "$0")"
@@ -12,6 +13,12 @@ MEM=${MEM:-8G}
 TIMEOUT=${TIMEOUT:-120}
 INIT_CONF=${INIT_CONF:-linux/qemu-init.conf} ./build.sh >&2
 esp=target/esp
+if [ -n "${NETBOOT:-}" ]; then
+    esp=target/netboot/esp
+    rm -rf "$esp"
+    mkdir -p "$esp/EFI/BOOT"
+    cp target/netboot/dross.efi "$esp/EFI/BOOT/BOOTX64.EFI"
+fi
 
 fw=""
 for d in /opt/homebrew/share/qemu /usr/local/share/qemu /usr/share/qemu /usr/share/OVMF; do

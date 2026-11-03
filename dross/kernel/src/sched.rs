@@ -110,6 +110,10 @@ struct RunQueue {
 pub struct Cpu {
     rq: Mutex<RunQueue>,
     need_resched: AtomicBool,
+    /// When the timer last asked for a reschedule (TSC; 0 once served), to report long non-preemptible stretches.
+    resched_at: AtomicU64,
+    /// The last system call entered on this CPU (for that report).
+    pub last_syscall: AtomicU64,
     /// Set by another CPU asking this one to flush its TLB.
     pub flush_pending: AtomicBool,
 }
@@ -127,6 +131,8 @@ impl Cpu {
                 slice_end: 0,
             }),
             need_resched: AtomicBool::new(false),
+            resched_at: AtomicU64::new(0),
+            last_syscall: AtomicU64::new(0),
             flush_pending: AtomicBool::new(false),
         }
     }
@@ -342,6 +348,13 @@ pub fn exit_current() -> ! {
 pub fn preempt_point() {
     let pc = cpu::this();
     if pc.sched.need_resched.swap(false, Ordering::AcqRel) {
+        let asked = pc.sched.resched_at.swap(0, Ordering::Relaxed);
+        if asked != 0 && time::ms_since(asked) > 5.0 {
+            let me = current();
+            let name = me.process.as_ref().map_or("idle", |p| p.name.as_str());
+            crate::println!("sched: cpu{} rescheduled {:.1} ms after its timer ({}, last system call {})",
+                pc.index, time::ms_since(asked), name, pc.sched.last_syscall.load(Ordering::Relaxed));
+        }
         schedule();
     }
 }
@@ -369,12 +382,14 @@ pub fn timer_interrupt() {
     for t in expired {
         wake(&t);
     }
+    let _ = pc.sched.resched_at.compare_exchange(0, now, Ordering::Relaxed, Ordering::Relaxed);
     pc.sched.need_resched.store(true, Ordering::Release);
 }
 
 /// Picks the next thread on this CPU and switches to it.
 pub fn schedule() {
     let pc: &'static PerCpu = cpu::this();
+    pc.sched.resched_at.store(0, Ordering::Relaxed);
     let mut rq = pc.sched.rq.lock();
     let cur = rq.current.clone().expect("no current thread");
     let is_idle = cur.process.is_none();
