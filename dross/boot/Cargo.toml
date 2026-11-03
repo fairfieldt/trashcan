@@ -1,0 +1,11 @@
+[package]
+name = "dross-boot"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "dross UEFI loader: loads the kernel ELF, maps it, hands over the memory map"
+
+[dependencies]
+bootinfo = { path = "../bootinfo" }
+uefi = { version = "0.41", features = ["alloc", "global_allocator", "panic_handler", "logger"] }
+log = "0.4"

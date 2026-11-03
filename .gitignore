@@ -14,6 +14,7 @@
 # rust
 /target/
 /driver/target/
+/dross/target/
 /lights/build/
 /tools/dump-activations/dump
 

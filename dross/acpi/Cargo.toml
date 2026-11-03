@@ -1,0 +1,11 @@
+[package]
+name = "acpi-tables"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Parsers for the static ACPI tables the kernel reads: RSDP, XSDT, MADT, MCFG, HPET, DMAR, FADT"
+
+[lib]
+name = "acpi"
+
+[dependencies]

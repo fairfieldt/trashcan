@@ -1,0 +1,18 @@
+[package]
+name = "dross"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "dross"
+test = false
+bench = false
+
+[dependencies]
+bootinfo = { path = "../bootinfo" }
+acpi-tables = { path = "../acpi" }
+pmm = { path = "../pmm" }
+x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
+spin = "0.10"
+noto-sans-mono-bitmap = { version = "0.4", default-features = false, features = ["regular", "size_16", "size_32", "unicode-basic-latin"] }
