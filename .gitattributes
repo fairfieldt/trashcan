@@ -1,5 +1,6 @@
 # Keep upstream source and unified patch context byte-for-byte reproducible.
 dross/user/fsd/vendor/** -whitespace
 dross/user/fsd/patches/*.patch -whitespace
+dross/netstack3/patches/*.patch -whitespace
 dross/desktop/doom/vendor/** -whitespace
 driver/linux/drivers/gpu/drm/amd/amdgpu/dce_v6_0.c -whitespace

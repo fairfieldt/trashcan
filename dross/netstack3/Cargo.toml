@@ -1,0 +1,10 @@
+[workspace]
+resolver = "3"
+members = ["proof", "native", "target/manifests/*"]
+
+[profile.dev]
+panic = "abort"
+incremental = false
+
+[profile.test]
+incremental = false

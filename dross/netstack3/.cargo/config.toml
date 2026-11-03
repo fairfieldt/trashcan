@@ -1,0 +1,8 @@
+[build]
+# Pin the trait-solver compatibility mode used by the extraction checks.
+rustflags = ["-Znext-solver=no"]
+
+[target.x86_64-unknown-none]
+# Parent config supplies static relocation/code-model. Scalar SHA avoids SIMD
+# codegen on the soft-float freestanding target; sha2 supports this backend cfg.
+rustflags = ["-Znext-solver=no", "--cfg", 'sha2_backend="soft"']

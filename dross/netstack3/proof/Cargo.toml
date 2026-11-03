@@ -1,0 +1,12 @@
+[package]
+name = "oscar-netstack3-proof"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+netstack3_core = { path = "../target/manifests/netstack3_core", features = ["testutils"] }
+netstack3_base = { path = "../target/manifests/netstack3_base", features = ["testutils"] }
+netstack3_tcp = { path = "../target/manifests/netstack3_tcp", features = ["testutils"] }
+net_types = { path = "../target/manifests/net_types" }
+packet = { path = "../target/manifests/packet" }

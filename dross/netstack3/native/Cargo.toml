@@ -1,0 +1,23 @@
+[package]
+name = "oscar-netstack3-native"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+netstack3_core = { path = "../target/manifests/netstack3_core" }
+netstack3_base = { path = "../target/manifests/netstack3_base" }
+netstack3_tcp = { path = "../target/manifests/netstack3_tcp" }
+netstack3_device = { path = "../target/manifests/netstack3_device" }
+netstack3_ip = { path = "../target/manifests/netstack3_ip" }
+netstack3_udp = { path = "../target/manifests/netstack3_udp" }
+netstack3_icmp_echo = { path = "../target/manifests/netstack3_icmp_echo" }
+netstack3_datagram = { path = "../target/manifests/netstack3_datagram" }
+netstack3_filter = { path = "../target/manifests/netstack3_filter" }
+netstack3_sync = { path = "../target/manifests/netstack3_sync" }
+net_types = { path = "../target/manifests/net_types" }
+packet = { path = "../target/manifests/packet" }
+rand = { version = "=0.10.3", default-features = false }
+lock_api = { version = "=0.4.14", default-features = false }
+zerocopy = { version = "=0.8.61", default-features = false }
+dross-rt = { path = "../../user/rt" }

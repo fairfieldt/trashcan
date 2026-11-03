@@ -1,0 +1,11 @@
+--- a/src/connectivity/lib/net-declare/src/lib.rs
++++ b/src/connectivity/lib/net-declare/src/lib.rs
+@@ -7,7 +7,7 @@
+ 
+ #![no_std]
+ 
+-pub use fidl_fuchsia_net_common as fnet_common;
++// Oscar extraction: FIDL helpers are unavailable; native address macros remain.
+ 
+ /// Declares an [`std::net::IpAddr`] from a parsable IP address (either V4 or
+ /// V6) string.
