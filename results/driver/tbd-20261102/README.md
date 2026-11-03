@@ -55,3 +55,31 @@ without trouble (second tbd column).
 Also seen: closing the VFIO device made vfio-pci reset the NHI (the only device on its bus, so a bus reset);
 the next start worked. After tbd exited with the lanes still bonded, Linux on enlight looped on `failed request link
 state change`; tbd now undoes bonding and bounces the link on exit (not yet retested).
+
+## Later the same evening (main ae9d8643, 91c6fcf3)
+
+`target/tbd-suite.sh`-style runs: tbd restarted with `--stream trashcan:15:15` (plus `--busy-poll` where marked),
+invite running `tbd echo /dev/tbstream0` and `iperf3 -s`, all tests from enlight. Linux both ends re-measured with
+64 KiB writes for the stream bench (enlight's NHI given back, tbd's exit left the link so that Linux took it back
+without a module reload: two lanes, carrier, stream).
+
+| | Linux ↔ Linux | tbd, MSI | tbd, MSI-X | tbd, busy poll |
+|---|---|---|---|---|
+| iperf3 enlight → invite | 8.88 Gb/s | 9.06 Gb/s (3452 retr) | 8.34 (2450) | 8.77, 4.20, 4.03 * |
+| iperf3 invite → enlight | 8.33 Gb/s | 7.95 (90) | 7.26 (45) | 7.25, 6.96, 6.89 |
+| ping, avg | 0.153-0.156 ms | 0.343 ms | 0.317 ms | 0.141-0.145 ms |
+| `tbd bench --write 65536` | 330.9, 453.3 MB/s | 291.8 MB/s | 294.3 MB/s | 320.6, 339.4, 384.7, 342.4 MB/s |
+| `tbd ping --size 64` median (min, p99) | 45.4 (26.6, 49.1) µs | 85.0 (48.3, 96.5) | 73.5 (42.8, 83.6) | 41.1-42.8 (26.6-28.1, 45.9-66.4) |
+| `tbd ping --size 64 --spin` median | 33.8 µs | | | 32.0 µs |
+| `tbd ping --size 4096` median | 46.8 µs | 103.9 | 64.1 | 42.9-51.5 |
+
+\* The 4.2 and 4.0 Gb/s runs were before the checksum went from 16-bit adds to 8-byte words (ae9d8643): TSO
+packets of 22 KB on average at about 40 µs each. TCP's sending side is the TAP device with TSO and checksum offload
+(the kernel hands over packets of up to 64 KiB). Remaining with tbd receiving: a few RX ring overflows per 8 s
+run (`RX overflow on ring 2`, 1-16 bad frames).
+
+The second takeover with Linux's services running (`vfio.sh take`: "unbinding 0-1.0 from thunderbolt-net",
+"unbinding 0-1.1 from thunderbolt_stream") went without trouble, and the tests ran on it.
+
+At the end: tbd stopped, NHI back on `thunderbolt`, `tbd-debug.conf` removed and dynamic debug off on both hosts.
+enlight stays on the one-time IOMMU boot until it reboots.
