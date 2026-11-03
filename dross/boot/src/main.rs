@@ -8,7 +8,7 @@
 
 extern crate alloc;
 
-use bootinfo::{BootInfo, Framebuffer, PixelFormat, Region, DIRECT_MAP, EFI_KERNEL_TYPE, MAX_REGIONS};
+use bootinfo::{BootInfo, Framebuffer, Module, PixelFormat, Region, DIRECT_MAP, EFI_KERNEL_TYPE, MAX_MODULES, MAX_REGIONS};
 use core::arch::asm;
 use core::ptr;
 use log::info;
@@ -119,10 +119,10 @@ fn main() -> Status {
     uefi::helpers::init().unwrap();
     info!("dross loader: firmware {} rev {:#x}", uefi::system::firmware_vendor(), uefi::system::firmware_revision());
 
-    let image = {
-        let mut fs = uefi::fs::FileSystem::new(boot::get_image_file_system(boot::image_handle()).expect("no boot volume"));
-        fs.read(cstr16!("\\dross.elf")).expect("cannot read \\dross.elf")
-    };
+    let mut fs = uefi::fs::FileSystem::new(boot::get_image_file_system(boot::image_handle()).expect("no boot volume"));
+    let image = fs.read(cstr16!("\\dross.elf")).expect("cannot read \\dross.elf");
+    let modules = load_modules(&mut fs);
+    drop(fs);
     let elf = Elf(&image);
     elf.check();
 
@@ -196,6 +196,8 @@ fn main() -> Status {
     bi.kernel_phys = kernel_phys;
     bi.kernel_pages = kernel_pages as u64;
     bi.trampoline = trampoline;
+    bi.module_count = modules.len() as u64;
+    bi.modules[..modules.len()].copy_from_slice(&modules);
     bi.pml4 = tables.pml4;
     let mut n = 0;
     for d in mm.entries() {
@@ -257,4 +259,32 @@ fn framebuffer() -> Framebuffer {
     let (w, h) = mode.resolution();
     let mut fb = g.frame_buffer();
     Framebuffer { base: fb.as_mut_ptr() as u64, size: fb.size() as u64, width: w as u32, height: h as u32, stride: mode.stride() as u32, format }
+}
+
+/// Every file in `\modules`, each in pages of its own.
+fn load_modules(fs: &mut uefi::fs::FileSystem) -> alloc::vec::Vec<Module> {
+    let mut out = alloc::vec::Vec::new();
+    let Ok(dir) = fs.read_dir(cstr16!("\\modules")) else {
+        info!("no \\modules directory");
+        return out;
+    };
+    let names: alloc::vec::Vec<_> = dir.flatten().filter(|f| !f.is_directory()).map(|f| alloc::string::String::from(f.file_name())).collect();
+    for name in names {
+        if out.len() == MAX_MODULES {
+            break;
+        }
+        let mut path = alloc::string::String::from("\\modules\\");
+        path.push_str(&name);
+        let p = uefi::CString16::try_from(path.as_str()).unwrap();
+        let data = fs.read(p.as_ref()).expect("cannot read a module");
+        let phys = alloc_pages(data.len().div_ceil(PAGE as usize).max(1), 0);
+        // SAFETY: a fresh allocation of at least data.len() bytes.
+        unsafe { ptr::copy_nonoverlapping(data.as_ptr(), phys as *mut u8, data.len()) };
+        let mut m = Module { name: [0; 32], phys, size: data.len() as u64 };
+        let n = name.len().min(31);
+        m.name[..n].copy_from_slice(&name.as_bytes()[..n]);
+        info!("module {}: {} KiB at {:#x}", name, data.len() / 1024, phys);
+        out.push(m);
+    }
+    out
 }

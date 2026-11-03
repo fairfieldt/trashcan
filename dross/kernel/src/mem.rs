@@ -80,6 +80,40 @@ pub fn reclaim_boot_services(info: &BootInfo) {
     crate::println!("memory: {} KiB of loader and boot services memory reclaimed", (f.free_frames() - before) * 4);
 }
 
+/// RAM ranges (usable or the kernel's) from the memory map, to keep `MEM_PHYSICAL` off them.
+static RAM: Mutex<alloc::vec::Vec<(u64, u64)>> = Mutex::new(alloc::vec::Vec::new());
+
+pub fn record_ram(info: &BootInfo) {
+    let mut r = RAM.lock();
+    for reg in info.regions().iter().filter(|r| matches!(r.kind, RegionKind::Usable | RegionKind::Kernel)) {
+        r.push((reg.start, reg.end()));
+    }
+}
+
+pub fn overlaps_ram(phys: u64, size: u64) -> bool {
+    RAM.lock().iter().any(|&(s, e)| phys < e && phys + size > s)
+}
+
+pub fn alloc_phys_zeroed(pages: usize) -> u64 {
+    let p = alloc_phys(pages, FRAME, u64::MAX).expect("out of physical memory");
+    zero_phys(p, pages);
+    p
+}
+
+pub fn zero_phys(phys: u64, pages: usize) {
+    // SAFETY: frames the caller owns, in the direct map.
+    unsafe { core::ptr::write_bytes(virt(phys) as *mut u8, 0, pages * FRAME as usize) };
+}
+
+pub fn free_phys(phys: u64, pages: usize) {
+    FRAMES.lock().as_mut().expect("memory not initialized").free(phys, pages as u64);
+}
+
+/// Frees pages given by their direct-map address (from `alloc_zeroed`).
+pub fn free_virt(v: u64, pages: usize) {
+    free_phys(v - DIRECT_MAP, pages);
+}
+
 pub fn free_bytes() -> u64 {
     FRAMES.lock().as_ref().map_or(0, |f| f.free_frames() * FRAME)
 }

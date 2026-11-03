@@ -1,0 +1,10 @@
+[package]
+name = "dross-rt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Runtime for dross programs: system calls, entry, heap, threads, bootstrap messages, PCI client"
+
+[dependencies]
+dross-abi = { path = "../../abi" }
+linked_list_allocator = "0.10"

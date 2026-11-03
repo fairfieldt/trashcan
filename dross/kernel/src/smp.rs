@@ -106,11 +106,15 @@ extern "sysv64" fn ap_main(index: u64) -> ! {
     cpu::init_cpu(index as u32, apic_id);
     apic::init_local();
     assert_eq!(apic::id(), apic_id);
+    crate::sched::init_cpu();
     ONLINE.fetch_add(1, Ordering::AcqRel);
     STARTED.store(true, Ordering::Release);
-    loop {
-        x86_64::instructions::interrupts::enable_and_hlt();
-    }
+    crate::sched::idle()
+}
+
+/// CPUs up so far (indices 0..online).
+pub fn online() -> u32 {
+    ONLINE.load(Ordering::Acquire)
 }
 
 pub fn ipi_received() {

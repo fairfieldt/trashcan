@@ -26,11 +26,6 @@ pub fn hpet_count() -> u64 {
     unsafe { hpet_reg(HPET_COUNTER).read_volatile() }
 }
 
-/// Femtoseconds per HPET tick.
-pub fn hpet_fs() -> u64 {
-    HPET_FS.load(Ordering::Relaxed)
-}
-
 pub fn tsc_hz() -> u64 {
     TSC_HZ.load(Ordering::Relaxed)
 }
@@ -42,6 +37,15 @@ pub fn now_ns() -> u64 {
         return 0;
     }
     ((rdtsc() - TSC_ZERO.load(Ordering::Relaxed)) as u128 * 1_000_000_000 / hz as u128) as u64
+}
+
+pub fn ns_to_tsc(ns: u64) -> u64 {
+    (ns as u128 * tsc_hz() as u128 / 1_000_000_000) as u64
+}
+
+/// The TSC value at `ns` on the `now_ns` clock.
+pub fn tsc_at_ns(ns: u64) -> u64 {
+    TSC_ZERO.load(Ordering::Relaxed).saturating_add(ns_to_tsc(ns))
 }
 
 pub fn ms_since(tsc: u64) -> f64 {

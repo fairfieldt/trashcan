@@ -1,10 +1,12 @@
-//! Per-CPU state (GDT, TSS with interrupt stacks, the CPU's index in GS base), the IDT, CPUID and MSRs.
+//! Per-CPU state (GDT, TSS with interrupt stacks and the I/O permission bitmap, scheduler state), reached
+//! through GS in the kernel; the IDT; CPUID, MSRs and the extended (FPU/SSE/AVX) state.
 
 use core::arch::x86_64::__cpuid_count;
 use core::fmt;
 use core::sync::atomic::{AtomicU32, Ordering};
 use x86_64::instructions::segmentation::{Segment, CS, DS, ES, SS};
 use x86_64::instructions::tables::{lidt, load_tss};
+use x86_64::registers::control::{Cr4, Cr4Flags};
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable};
 use x86_64::structures::tss::TaskStateSegment;
 use x86_64::structures::DescriptorTablePointer;
@@ -13,6 +15,9 @@ use x86_64::VirtAddr;
 pub const MAX_CPUS: usize = 64;
 
 pub const KERNEL_CODE: u16 = 0x08;
+pub const KERNEL_DATA: u16 = 0x10;
+pub const USER_DATA: u16 = 0x18 | 3;
+pub const USER_CODE: u16 = 0x20 | 3;
 
 /// Interrupt stack table slots (1-based in the IDT, 0-based in the TSS).
 const IST_DOUBLE_FAULT: u8 = 1;
@@ -97,6 +102,7 @@ impl Features {
     pub fn require(&self) {
         assert!(self.x2apic, "the kernel needs x2APIC");
         assert!(self.nx, "the kernel needs NX");
+        assert!(self.xsave, "the kernel needs XSAVE");
     }
 
     pub fn brand(&self) -> &str {
@@ -121,28 +127,82 @@ impl fmt::Display for Features {
     }
 }
 
-/// One per CPU, in frames of its own.
-#[repr(C, align(64))]
+/// One per CPU. The first fields are at fixed offsets for the entry code (`gs:[n]`).
+#[repr(C, align(4096))]
 pub struct PerCpu {
+    /// gs:0
+    pub self_ptr: u64,
+    /// gs:8: top of the running thread's kernel stack (`syscall` switches to it).
+    pub kstack_top: u64,
+    /// gs:16: the user stack pointer while `syscall` entry switches stacks.
+    pub user_rsp: u64,
     pub index: u32,
     pub apic_id: u32,
-    tss: TaskStateSegment,
+    pub sched: crate::sched::Cpu,
     gdt: GlobalDescriptorTable,
+    tss: TaskStateSegment,
+    /// The I/O permission bitmap, right after the TSS (one bit per port, set = denied, plus the
+    /// all-ones byte the CPU reads past the end).
+    iomap: [u8; 8193],
+    /// The process whose ports `iomap` grants (0: none).
+    iomap_owner: u64,
 }
+
+// The entry code reads these as gs:[8] and gs:[16].
+const _: () = assert!(core::mem::offset_of!(PerCpu, kstack_top) == 8 && core::mem::offset_of!(PerCpu, user_rsp) == 16);
 
 /// The APIC ID of each CPU index, for IPIs; `u32::MAX` when the slot is unused.
 pub static APIC_IDS: [AtomicU32; MAX_CPUS] = [const { AtomicU32::new(u32::MAX) }; MAX_CPUS];
+static PERCPUS: [core::sync::atomic::AtomicU64; MAX_CPUS] = [const { core::sync::atomic::AtomicU64::new(0) }; MAX_CPUS];
 
 const IA32_GS_BASE: u32 = 0xc000_0101;
+const IA32_KERNEL_GS_BASE: u32 = 0xc000_0102;
+const IA32_EFER: u32 = 0xc000_0080;
+const IA32_STAR: u32 = 0xc000_0081;
+const IA32_LSTAR: u32 = 0xc000_0082;
+const IA32_FMASK: u32 = 0xc000_0084;
+
+/// This CPU's block. Only valid in the kernel (GS is the kernel's) after `init_cpu`.
+pub fn this() -> &'static mut PerCpu {
+    let p: u64;
+    // SAFETY: gs:0 holds the block's own address.
+    unsafe { core::arch::asm!("mov {}, gs:[0]", out(reg) p, options(nostack, readonly, preserves_flags)) };
+    // SAFETY: the block lives as long as the CPU; each CPU only touches its own mutable fields with interrupts off.
+    unsafe { &mut *(p as *mut PerCpu) }
+}
+
+pub fn get(index: usize) -> Option<&'static PerCpu> {
+    let p = PERCPUS.get(index)?.load(Ordering::Acquire);
+    // SAFETY: as in `this`; shared access to the fields other CPUs may read (locks inside `sched`).
+    (p != 0).then(|| unsafe { &*(p as *const PerCpu) })
+}
 
 /// The index of the CPU this runs on (0 before `init_cpu` ran on it).
 pub fn index() -> u32 {
-    let p = rdmsr(IA32_GS_BASE) as *const PerCpu;
-    if p.is_null() {
+    if rdmsr(IA32_GS_BASE) == 0 {
         return 0;
     }
-    // SAFETY: GS base is only ever set to this CPU's PerCpu.
-    unsafe { (*p).index }
+    this().index
+}
+
+impl PerCpu {
+    pub fn set_kernel_stack(&mut self, top: u64) {
+        self.kstack_top = top;
+        self.tss.privilege_stack_table[0] = VirtAddr::new(top);
+    }
+
+    /// Loads `owner`'s port bitmap (None: no ports) unless it is already loaded.
+    pub fn load_iomap(&mut self, owner: u64, map: Option<&[u8; 8192]>) {
+        let owner = if map.is_some() { owner } else { 0 };
+        if self.iomap_owner == owner {
+            return;
+        }
+        match map {
+            Some(m) => self.iomap[..8192].copy_from_slice(m),
+            None => self.iomap[..8192].fill(0xff),
+        }
+        self.iomap_owner = owner;
+    }
 }
 
 #[repr(C, align(16))]
@@ -152,6 +212,7 @@ static mut IDT: Idt = Idt([0; 512]);
 
 unsafe extern "C" {
     static ISR_TABLE: [u64; 256];
+    fn syscall_entry();
 }
 
 fn build_idt() {
@@ -178,27 +239,72 @@ fn load_idt() {
     unsafe { lidt(&ptr) };
 }
 
-/// GDT, TSS, IDT and GS base for the CPU this runs on.
+/// Size of the XSAVE area for the state the kernel enables (x87, SSE, AVX).
+pub fn xsave_size() -> usize {
+    cpuid(0xd, 0).1 as usize
+}
+
+/// The components saved and restored on every switch between user threads.
+pub fn xsave_mask() -> u64 {
+    if Features::detect().avx { 0b111 } else { 0b11 }
+}
+
+/// Extended state for user code: SSE and, where present, AVX, saved with XSAVE.
+fn init_fpu() {
+    // SAFETY: enabling FXSR/XMM exceptions/XSAVE in CR4, then XCR0 with the components the CPU has.
+    unsafe {
+        Cr4::update(|f| *f |= Cr4Flags::OSFXSR | Cr4Flags::OSXMMEXCPT_ENABLE | Cr4Flags::OSXSAVE);
+        let mask = xsave_mask();
+        core::arch::asm!("xsetbv", in("ecx") 0, in("eax") mask as u32, in("edx") (mask >> 32) as u32);
+        // CR0: monitor coprocessor on, emulation off, no lazy switching (TS stays clear).
+        let mut cr0: u64;
+        core::arch::asm!("mov {}, cr0", out(reg) cr0);
+        cr0 = (cr0 | 1 << 1) & !(1 << 2 | 1 << 3);
+        core::arch::asm!("mov cr0, {}", in(reg) cr0);
+    }
+}
+
+/// `syscall`: kernel CS/SS from STAR[47:32]; user SS = STAR[63:48] + 8, CS = + 16 (the GDT order is
+/// kernel code, kernel data, user data, user code). IF, TF, DF and AC are cleared on entry.
+fn init_syscall() {
+    // SAFETY: the architectural syscall MSRs.
+    unsafe {
+        wrmsr(IA32_EFER, rdmsr(IA32_EFER) | 1);
+        wrmsr(IA32_STAR, (KERNEL_DATA as u64) << 48 | (KERNEL_CODE as u64) << 32);
+        wrmsr(IA32_LSTAR, syscall_entry as *const () as u64);
+        wrmsr(IA32_FMASK, 1 << 9 | 1 << 8 | 1 << 10 | 1 << 18);
+    }
+}
+
+/// GDT, TSS, IDT, GS, extended state and `syscall` for the CPU this runs on.
 pub fn init_cpu(index: u32, apic_id: u32) {
     let pages = size_of::<PerCpu>().div_ceil(4096);
     let pc = crate::mem::alloc_zeroed(pages, 4096) as *mut PerCpu;
-    // SAFETY: a fresh allocation of the right size, never freed.
+    // SAFETY: a fresh, zeroed allocation of the right size, never freed. Zero is a valid start for every field
+    // but the ones written here.
     let pc: &'static mut PerCpu = unsafe {
-        pc.write(PerCpu { index, apic_id, tss: TaskStateSegment::new(), gdt: GlobalDescriptorTable::new() });
+        core::ptr::addr_of_mut!((*pc).tss).write(TaskStateSegment::new());
+        core::ptr::addr_of_mut!((*pc).gdt).write(GlobalDescriptorTable::new());
+        core::ptr::addr_of_mut!((*pc).sched).write(crate::sched::Cpu::new());
         &mut *pc
     };
+    pc.self_ptr = pc as *mut PerCpu as u64;
+    pc.index = index;
+    pc.apic_id = apic_id;
+    pc.iomap.fill(0xff);
+    pc.tss.iomap_base = size_of::<TaskStateSegment>() as u16;
     for slot in [IST_DOUBLE_FAULT, IST_NMI, IST_MACHINE_CHECK] {
         let stack = crate::mem::alloc_zeroed(IST_PAGES, 4096);
         pc.tss.interrupt_stack_table[slot as usize - 1] = VirtAddr::new(stack + (IST_PAGES * 4096) as u64);
     }
-    // SAFETY: tss lives as long as the CPU (never freed).
-    let tss: &'static TaskStateSegment = unsafe { &*core::ptr::addr_of!(pc.tss) };
+    // SAFETY: tss and iomap live as long as the CPU and are adjacent (repr(C)).
+    let (tss, iomap): (&'static TaskStateSegment, &'static [u8]) = unsafe { (&*core::ptr::addr_of!(pc.tss), &*core::ptr::addr_of!(pc.iomap)) };
     let code = pc.gdt.append(Descriptor::kernel_code_segment());
     let data = pc.gdt.append(Descriptor::kernel_data_segment());
     pc.gdt.append(Descriptor::user_data_segment());
     pc.gdt.append(Descriptor::user_code_segment());
-    let tss_sel = pc.gdt.append(Descriptor::tss_segment(tss));
-    assert_eq!(code.0, KERNEL_CODE);
+    let tss_sel = pc.gdt.append(Descriptor::tss_segment_with_iomap(tss, iomap).expect("iomap"));
+    assert_eq!((code.0, data.0), (KERNEL_CODE, KERNEL_DATA));
     // SAFETY: the GDT is static for this CPU's lifetime; the selectors are from it.
     unsafe {
         pc.gdt.load_unsafe();
@@ -208,8 +314,12 @@ pub fn init_cpu(index: u32, apic_id: u32) {
         ES::set_reg(data);
         load_tss(tss_sel);
         wrmsr(IA32_GS_BASE, pc as *const PerCpu as u64);
+        wrmsr(IA32_KERNEL_GS_BASE, 0);
     }
     load_idt();
+    init_fpu();
+    init_syscall();
+    PERCPUS[index as usize].store(pc as *const PerCpu as u64, Ordering::Release);
     APIC_IDS[index as usize].store(apic_id, Ordering::Release);
 }
 
@@ -217,5 +327,5 @@ pub fn init_bsp() {
     build_idt();
     let apic_id = cpuid(1, 0).1 >> 24;
     init_cpu(0, apic_id);
-    crate::println!("cpu0: gdt, tss, idt loaded");
+    crate::println!("cpu0: gdt, tss, idt loaded; xsave area {} bytes", xsave_size());
 }

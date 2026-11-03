@@ -3,18 +3,38 @@
 #![no_std]
 #![no_main]
 
+extern crate alloc;
+
 mod apic;
 mod cpu;
 mod fbcon;
 mod firmware;
+mod heap;
 mod interrupts;
+mod iommu;
+mod ipc;
+mod irq;
 mod log;
 mod mem;
+mod memory;
+mod object;
+mod paging;
+mod process;
 mod qemu;
+mod resource;
+mod sched;
 mod smp;
+mod syscall;
 mod time;
 
+use alloc::sync::Arc;
+use alloc::vec::Vec;
 use bootinfo::BootInfo;
+
+use crate::ipc::{ChannelEnd, Message};
+use crate::memory::Memory;
+use crate::object::{Entry, Object};
+use crate::resource::{Kind, Resource};
 
 /// The loader calls this on its own stack, with interrupts off, on the loader's page tables.
 #[unsafe(no_mangle)]
@@ -28,15 +48,18 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
     features.require();
 
     mem::init(info);
+    heap::init();
+    mem::record_ram(info);
     cpu::init_bsp();
     mem::reclaim_boot_services(info);
     let acpi = firmware::Acpi::find(info);
     time::init(&acpi);
     apic::init(&acpi);
-    interrupts::enable();
-    apic::timer_check();
+    sched::init_cpu();
     let cpus = smp::start_aps(info, &acpi);
     smp::ipi_check();
+    paging::init_kernel_space();
+    iommu::init(&acpi);
 
     println!(
         "boot ok: {} cpus, {} MiB free, tsc {}.{:03} MHz, {:.1} ms since loader",
@@ -46,7 +69,49 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
         time::tsc_hz() / 1_000 % 1_000,
         time::ms_since(info.tsc_at_entry)
     );
-    qemu::exit(true);
+    start_init(info);
+    sched::idle()
+}
+
+/// Starts the `init` module with a bootstrap message: one line per handle (`@kind/name`) in handle order,
+/// then `key value` lines.
+fn start_init(info: &BootInfo) {
+    let Some(m) = info.modules().iter().find(|m| m.name() == "init") else {
+        println!("no init module: nothing to run");
+        qemu::exit(false);
+    };
+    let image = Memory::module(m.phys, m.size);
+    let (mine, theirs) = ChannelEnd::pair();
+    let mut text = alloc::string::String::new();
+    let mut handles = Vec::new();
+    let mut add = |name: &str, o: Object, text: &mut alloc::string::String| {
+        text.push('@');
+        text.push_str(name);
+        text.push('\n');
+        handles.push(Entry::new(o));
+    };
+    for m in info.modules().iter().filter(|m| m.name() != "init") {
+        add(&alloc::format!("module/{}", m.name()), Object::Memory(Arc::new(Memory::module(m.phys, m.size))), &mut text);
+    }
+    for (name, kind, size) in [
+        ("physical", Kind::Physical, 1u64 << 52),
+        ("ioport", Kind::IoPort, 0x10000),
+        ("irq", Kind::Irq, 1),
+        ("iommu", Kind::Iommu, 1),
+        ("system", Kind::System, 1),
+    ] {
+        add(&alloc::format!("resource/{name}"), Object::Resource(Arc::new(Resource::root(kind, size))), &mut text);
+    }
+    text.push_str(&alloc::format!("rsdp {:#x}\ncpus {}\n", info.rsdp, smp::online()));
+    if let Err((e, _)) = mine.write(Message { bytes: text.into_bytes(), handles }) {
+        panic!("init bootstrap: {e:?}");
+    }
+    match process::spawn("init", &image, 0, Some(Entry::new(Object::Channel(Arc::new(theirs))))) {
+        Ok(_) => println!("init started"),
+        Err(e) => panic!("init: {e:?}"),
+    }
+    // The kernel's end stays open so init can read the message.
+    core::mem::forget(mine);
 }
 
 #[panic_handler]

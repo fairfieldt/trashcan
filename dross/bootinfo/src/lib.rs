@@ -10,7 +10,7 @@
 /// Where the direct map of physical memory starts (PML4 slot 256).
 pub const DIRECT_MAP: u64 = 0xffff_8000_0000_0000;
 
-pub const MAGIC: u64 = u64::from_le_bytes(*b"DROSSBI1");
+pub const MAGIC: u64 = u64::from_le_bytes(*b"DROSSBI2");
 
 /// UEFI memory types the loader allocates its handover in, so the kernel can tell them apart (UEFI reserves
 /// 0x8000_0000 and up for OS loaders).
@@ -67,6 +67,24 @@ pub struct Framebuffer {
 }
 
 pub const MAX_REGIONS: usize = 512;
+pub const MAX_MODULES: usize = 32;
+
+/// A file from the boot volume's `\modules` directory, loaded for the kernel (user programs).
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Module {
+    /// UTF-8, NUL-padded.
+    pub name: [u8; 32],
+    pub phys: u64,
+    pub size: u64,
+}
+
+impl Module {
+    pub fn name(&self) -> &str {
+        let n = self.name.iter().position(|&b| b == 0).unwrap_or(32);
+        core::str::from_utf8(&self.name[..n]).unwrap_or("?")
+    }
+}
 
 #[repr(C)]
 pub struct BootInfo {
@@ -84,6 +102,8 @@ pub struct BootInfo {
     pub pml4: u64,
     /// TSC when the loader jumped to the kernel.
     pub tsc_at_entry: u64,
+    pub module_count: u64,
+    pub modules: [Module; MAX_MODULES],
     pub region_count: u64,
     pub regions: [Region; MAX_REGIONS],
 }
@@ -91,6 +111,10 @@ pub struct BootInfo {
 impl BootInfo {
     pub fn regions(&self) -> &[Region] {
         &self.regions[..self.region_count as usize]
+    }
+
+    pub fn modules(&self) -> &[Module] {
+        &self.modules[..self.module_count as usize]
     }
 }
 

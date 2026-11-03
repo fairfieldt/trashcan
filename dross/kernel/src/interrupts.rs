@@ -1,14 +1,19 @@
 //! Interrupt and exception entry. The stubs (build.rs) push an error code (zero when the CPU gives none) and
-//! the vector; `isr_common` saves the registers and calls `isr_dispatch` with them.
+//! the vector; `isr_common` swaps GS if it came from user mode, saves the registers and calls `isr_dispatch`.
+//! `isr_return` is also how system calls and new threads leave the kernel.
 
 use core::arch::global_asm;
 
-use crate::{apic, cpu, println, smp};
+use crate::{apic, cpu, println, sched, smp};
 
 global_asm!(include_str!(concat!(env!("OUT_DIR"), "/isr.s")));
 global_asm!(
     r#"
 isr_common:
+    test byte ptr [rsp + 24], 3
+    jz 1f
+    swapgs
+1:
     push rax
     push rbx
     push rcx
@@ -27,6 +32,8 @@ isr_common:
     mov rdi, rsp
     cld
     call isr_dispatch
+.global isr_return
+isr_return:
     pop r15
     pop r14
     pop r13
@@ -43,12 +50,19 @@ isr_common:
     pop rbx
     pop rax
     add rsp, 16
+    test byte ptr [rsp + 8], 3
+    jz 2f
+    swapgs
+2:
     iretq
 "#
 );
 
 pub const TIMER: u8 = 0x30;
 pub const IPI_TEST: u8 = 0xf0;
+pub const RESCHED: u8 = 0xf1;
+pub const SHOOTDOWN: u8 = 0xf2;
+pub const IOMMU_FAULT: u8 = 0xf3;
 pub const APIC_ERROR: u8 = 0xfe;
 pub const SPURIOUS: u8 = 0xff;
 
@@ -88,10 +102,24 @@ const EXCEPTIONS: [&str; 32] = [
 
 #[unsafe(no_mangle)]
 extern "C" fn isr_dispatch(f: &mut Frame) {
+    let from_user = f.cs & 3 != 0;
     match f.vector as u8 {
+        v @ 0..32 if from_user => user_fault(f, EXCEPTIONS[v as usize]),
         v @ 0..32 => fatal(f, EXCEPTIONS[v as usize]),
         TIMER => {
-            apic::timer_tick();
+            apic::eoi();
+            sched::timer_interrupt();
+        }
+        RESCHED => {
+            apic::eoi();
+            sched::request_resched();
+        }
+        SHOOTDOWN => {
+            apic::eoi();
+            crate::paging::serve_shootdown();
+        }
+        IOMMU_FAULT => {
+            crate::iommu::fault_interrupt();
             apic::eoi();
         }
         IPI_TEST => {
@@ -105,10 +133,29 @@ extern "C" fn isr_dispatch(f: &mut Frame) {
         // Spurious interrupts take no EOI.
         SPURIOUS => {}
         v => {
-            println!("cpu{}: unexpected interrupt {:#x}", cpu::index(), v);
+            if !crate::irq::dispatch(v) {
+                println!("cpu{}: unexpected interrupt {:#x}", cpu::index(), v);
+            }
             apic::eoi();
         }
     }
+    // Only interrupts that arrive in user mode or in the idle loop (the kernel runs with interrupts off) get here,
+    // so switching threads is safe.
+    sched::preempt_point();
+    if from_user && sched::current().killed() {
+        sched::exit_current();
+    }
+}
+
+/// An exception in user mode ends the process.
+fn user_fault(f: &Frame, name: &str) {
+    let cr2 = x86_64::registers::control::Cr2::read_raw();
+    let p = sched::current_process();
+    println!(
+        "{}: {} (vector {}, error {:#x}) at {:#x}, cr2 {:#x}, rsp {:#x}: process killed",
+        p.name, name, f.vector, f.error, f.rip, cr2, f.rsp
+    );
+    p.kill(-(f.vector as i64) - 1000);
 }
 
 fn fatal(f: &Frame, name: &str) -> ! {
@@ -121,8 +168,4 @@ fn fatal(f: &Frame, name: &str) -> ! {
         f.rax, f.rbx, f.rcx, f.rdx, f.rsi, f.rdi, f.rbp, f.r8, f.r9, f.r10, f.r11, f.r12, f.r13, f.r14, f.r15
     ));
     crate::qemu::exit(false)
-}
-
-pub fn enable() {
-    x86_64::instructions::interrupts::enable();
 }

@@ -15,4 +15,6 @@ acpi-tables = { path = "../acpi" }
 pmm = { path = "../pmm" }
 x86_64 = { version = "0.15", default-features = false, features = ["instructions"] }
 spin = "0.10"
+linked_list_allocator = "0.10"
+dross-abi = { path = "../abi" }
 noto-sans-mono-bitmap = { version = "0.4", default-features = false, features = ["regular", "size_16", "size_32", "unicode-basic-latin"] }

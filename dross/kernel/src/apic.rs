@@ -32,17 +32,14 @@ const X2_TIMER_DIVIDE: u32 = 0x83e;
 
 const LVT_MASKED: u64 = 1 << 16;
 const LVT_NMI: u64 = 4 << 8;
-const LVT_TIMER_PERIODIC: u64 = 1 << 17;
 const LVT_TIMER_TSC_DEADLINE: u64 = 2 << 17;
 
 pub const ICR_INIT: u64 = 5 << 8 | 1 << 14;
 pub const ICR_STARTUP: u64 = 6 << 8 | 1 << 14;
 
 static USE_DEADLINE: AtomicBool = AtomicBool::new(false);
-/// TSC ticks (deadline mode) or APIC timer counts (periodic mode) per timer tick.
-static PERIOD: AtomicU64 = AtomicU64::new(0);
-static NEXT_DEADLINE: AtomicU64 = AtomicU64::new(0);
-static TICKS: AtomicU64 = AtomicU64::new(0);
+/// APIC timer counts (divide by 16) per 2^32 TSC ticks, for one-shot mode.
+static COUNTS_PER_TSC: AtomicU64 = AtomicU64::new(0);
 
 pub fn id() -> u32 {
     rdmsr(X2_ID) as u32
@@ -74,7 +71,9 @@ pub fn init_local() {
         wrmsr(IA32_APIC_BASE, base | APIC_ENABLE);
         wrmsr(IA32_APIC_BASE, base | APIC_ENABLE | APIC_X2);
         wrmsr(X2_TPR, 0);
-        wrmsr(X2_LVT_TIMER, LVT_MASKED | TIMER as u64);
+        wrmsr(X2_TIMER_DIVIDE, 0b0011);
+        let mode = if USE_DEADLINE.load(Ordering::Relaxed) { LVT_TIMER_TSC_DEADLINE } else { 0 };
+        wrmsr(X2_LVT_TIMER, mode | TIMER as u64);
         wrmsr(X2_LVT_LINT0, LVT_MASKED);
         wrmsr(X2_LVT_LINT1, LVT_NMI);
         wrmsr(X2_LVT_ERROR, APIC_ERROR as u64);
@@ -114,101 +113,60 @@ pub fn init(acpi: &Acpi) {
             println!("apic: ioapic {} at {:#x}, gsi {}-{}, all masked", id, address, gsi_base, gsi_base + n - 1);
         }
     }
+    // x2APIC on first (the timer registers are MSRs), then the timer mode, then the final LVT.
     init_local();
-    println!("apic: cpu0 x2apic id {}, version {:#x}", id(), rdmsr(X2_VERSION) & 0xff);
+    timer_calibrate();
+    init_local();
+    println!(
+        "apic: cpu0 x2apic id {}, version {:#x}, timer {}",
+        id(),
+        rdmsr(X2_VERSION) & 0xff,
+        if USE_DEADLINE.load(Ordering::Relaxed) { "tsc deadline" } else { "one-shot" }
+    );
 }
 
-static LAST_TICK: AtomicU64 = AtomicU64::new(0);
-/// Shortest TSC interval between two ticks since the last `timer_start`.
-static MIN_INTERVAL: AtomicU64 = AtomicU64::new(u64::MAX);
-
-pub fn timer_tick() {
-    TICKS.fetch_add(1, Ordering::Relaxed);
-    let now = rdtsc();
-    let last = LAST_TICK.swap(now, Ordering::Relaxed);
-    if last != 0 {
-        MIN_INTERVAL.fetch_min(now - last, Ordering::Relaxed);
-    }
-    if USE_DEADLINE.load(Ordering::Relaxed) {
-        let next = NEXT_DEADLINE.fetch_add(PERIOD.load(Ordering::Relaxed), Ordering::Relaxed) + PERIOD.load(Ordering::Relaxed);
-        // SAFETY: arms the next deadline.
-        unsafe { wrmsr(IA32_TSC_DEADLINE, next) };
-    }
-}
-
-fn timer_start(hz: u64) {
-    LAST_TICK.store(0, Ordering::Relaxed);
-    MIN_INTERVAL.store(u64::MAX, Ordering::Relaxed);
+/// Chooses the timer mode: TSC deadline where the CPU has it (the Mac Pro), otherwise one-shot counts,
+/// calibrated against the TSC.
+fn timer_calibrate() {
     if Features::detect().tsc_deadline {
         USE_DEADLINE.store(true, Ordering::Relaxed);
-        let period = time::tsc_hz() / hz;
-        PERIOD.store(period, Ordering::Relaxed);
-        let first = rdtsc() + period;
-        NEXT_DEADLINE.store(first, Ordering::Relaxed);
-        // SAFETY: the LVT must be in deadline mode before the deadline MSR is written.
-        unsafe {
-            wrmsr(X2_LVT_TIMER, LVT_TIMER_TSC_DEADLINE | TIMER as u64);
-            core::arch::asm!("mfence");
-            wrmsr(IA32_TSC_DEADLINE, first);
-        }
-    } else {
-        // Count the APIC timer (divide by 16) against the TSC for 10 ms, then run it periodic.
-        // SAFETY: the local APIC timer registers.
-        unsafe {
-            wrmsr(X2_TIMER_DIVIDE, 0b0011);
-            wrmsr(X2_LVT_TIMER, LVT_MASKED | TIMER as u64);
-            wrmsr(X2_TIMER_INITIAL, u32::MAX as u64);
-            time::delay_us(10_000);
-            let counted = u32::MAX as u64 - rdmsr(X2_TIMER_CURRENT);
-            let period = counted * 100 / hz;
-            PERIOD.store(period, Ordering::Relaxed);
-            wrmsr(X2_LVT_TIMER, LVT_TIMER_PERIODIC | TIMER as u64);
-            wrmsr(X2_TIMER_INITIAL, period);
-        }
+        return;
+    }
+    // SAFETY: the local APIC timer registers, masked while counting.
+    unsafe {
+        wrmsr(X2_TIMER_DIVIDE, 0b0011);
+        wrmsr(X2_LVT_TIMER, LVT_MASKED | TIMER as u64);
+        let t0 = rdtsc();
+        wrmsr(X2_TIMER_INITIAL, u32::MAX as u64);
+        time::delay_us(10_000);
+        let counted = u32::MAX as u64 - rdmsr(X2_TIMER_CURRENT);
+        let ticks = rdtsc() - t0;
+        wrmsr(X2_TIMER_INITIAL, 0);
+        COUNTS_PER_TSC.store(((counted as u128) << 32) as u64 / ticks.max(1) as u64, Ordering::Relaxed);
     }
 }
 
-fn timer_stop() {
-    // SAFETY: masks the timer and clears both kinds of arming.
+/// Fires the timer interrupt at TSC `deadline` (or right away if it has passed).
+pub fn timer_arm(deadline: u64) {
+    if USE_DEADLINE.load(Ordering::Relaxed) {
+        // SAFETY: the LVT is in deadline mode.
+        unsafe { wrmsr(IA32_TSC_DEADLINE, deadline) };
+        return;
+    }
+    let now = rdtsc();
+    let ticks = deadline.saturating_sub(now) as u128;
+    let counts = ((ticks * COUNTS_PER_TSC.load(Ordering::Relaxed) as u128) >> 32).clamp(1, u32::MAX as u128);
+    // SAFETY: one-shot mode: writing the initial count starts it.
+    unsafe { wrmsr(X2_TIMER_INITIAL, counts as u64) };
+}
+
+pub fn timer_disarm() {
+    // SAFETY: zero stops either mode.
     unsafe {
-        wrmsr(X2_LVT_TIMER, LVT_MASKED | TIMER as u64);
-        wrmsr(X2_TIMER_INITIAL, 0);
         if USE_DEADLINE.load(Ordering::Relaxed) {
             wrmsr(IA32_TSC_DEADLINE, 0);
+        } else {
+            wrmsr(X2_TIMER_INITIAL, 0);
         }
-    }
-}
-
-/// Runs the timer at 1 kHz for 200 ms and checks the ticks against the TSC, then stops it (the kernel arms
-/// timers only when something waits). On hardware the count must be within 10% and no tick early. Under
-/// QEMU's TCG on macOS the host coalesces QEMU's timer wakeups: ticks come 2-18 ms late, missed ones are
-/// dropped and the next comes on the grid right after a late one. There the check is only that ticks arrive.
-pub fn timer_check() {
-    const HZ: u64 = 1000;
-    const MS: u64 = 200;
-    let h0 = time::hpet_count();
-    let t0 = TICKS.load(Ordering::Relaxed);
-    timer_start(HZ);
-    let end = rdtsc() + time::tsc_hz() * MS / 1000;
-    while rdtsc() < end {
-        x86_64::instructions::interrupts::enable_and_hlt();
-    }
-    timer_stop();
-    let ticks = TICKS.load(Ordering::Relaxed) - t0;
-    let hpet_us = (time::hpet_count() - h0) as u128 * time::hpet_fs() as u128 / 1_000_000_000;
-    let min_us = MIN_INTERVAL.load(Ordering::Relaxed).saturating_mul(1_000_000) / time::tsc_hz();
-    println!(
-        "apic: timer ({}) {} ticks at {} Hz in {} us of HPET time, shortest interval {} us",
-        if USE_DEADLINE.load(Ordering::Relaxed) { "tsc deadline" } else { "periodic" },
-        ticks,
-        HZ,
-        hpet_us,
-        min_us
-    );
-    let expect = MS * HZ / 1000;
-    assert!(ticks >= 2 && ticks <= expect * 11 / 10 + 1, "timer: {ticks} ticks, expected {expect}");
-    if !Features::detect().hypervisor {
-        assert!(ticks >= expect * 9 / 10, "timer: {ticks} ticks, expected {expect}");
-        assert!(min_us * HZ >= 900_000, "timer: a tick came after {min_us} us");
     }
 }

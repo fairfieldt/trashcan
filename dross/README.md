@@ -1,11 +1,13 @@
 # dross
 
-dross is the microkernel for the trashcan appliance: Mac Pro 6,1s running distributed inference, with the
-drivers (`driver/`: gpud for the D700s, tbd for Thunderbolt, the Ethernet driver) as userspace servers. It is
-written in Rust and developed in QEMU; Linux stays the harness for the drivers until dross can host them.
+dross is the kernel of Oscar, the operating system of the trashcan appliance: Mac Pro 6,1s running distributed
+inference, with the drivers (`driver/`: gpud for the D700s, tbd for Thunderbolt, ethd for Ethernet) as user
+programs. It is written in Rust and developed in QEMU; Linux stays the harness for the drivers until dross can
+host them.
 
-Status: dross boots from UEFI and brings one machine up: memory, ACPI tables, time, interrupt controllers and
-all CPUs. It has no user mode yet.
+Status: dross boots from UEFI, brings up all CPUs and the IOMMU, and runs user programs: processes, threads pinned
+to CPUs, channels and notifications, memory objects, and handles as capabilities, including device memory, I/O
+ports, MSIs and DMA domains. init starts a self-test of all of that at boot.
 
 | Path | What |
 |---|---|
@@ -14,6 +16,10 @@ all CPUs. It has no user mode yet.
 | `kernel/` | The kernel (`x86_64-unknown-none`) |
 | `acpi/` | Parsers for the static ACPI tables (RSDP, XSDT, MADT, MCFG, HPET, DMAR, FADT, `\_S5`); tested on the Mac Pro 6,1's own tables (`acpi/tests/macpro61`) |
 | `pmm/` | The physical frame allocator (a bitmap; contiguous, aligned and below-a-ceiling allocations) |
+| `abi/` | The system call interface (numbers, errors, rights, flags) |
+| `user/rt/` | `dross-rt`, the runtime of every program: system calls, entry, heap, threads, bootstrap messages |
+| `user/init/` | The first process: holds the root resources and starts the rest |
+| `user/selftest/` | Checks the kernel from user space at every boot |
 
 ## What the kernel does at boot
 
@@ -30,7 +36,30 @@ all CPUs. It has no user mode yet.
 7. SMP: each CPU in the MADT gets INIT and STARTUP IPIs; the trampoline goes from real mode straight to long
    mode on the kernel's page tables. Each CPU loads its own GDT/TSS/IDT and x2APIC, then takes a test IPI.
 
-Faults print the registers and stop the machine (in QEMU, end the run with a failure).
+8. The identity map goes; every process shares the kernel half of the page tables.
+9. VT-d: translation on with every device blocked until something attaches it to a DMA domain; reserved
+   regions (RMRRs) identity-mapped for their devices first.
+10. init starts from the `init` module with a bootstrap message: the other modules and the root resources.
+
+Faults in the kernel print the registers and stop the machine (in QEMU, end the run with a failure); faults in
+user mode end the process.
+
+## The kernel's interface
+
+System calls take handles: per-process integers naming kernel objects, each with rights (`abi/src/lib.rs`).
+
+- **Processes and threads.** `SPAWN` loads a static ELF from a memory object and passes one handle (a bootstrap
+  channel). Threads are pinned: each CPU has its own run queue, a time slice runs only when others wait, and a
+  CPU with nothing to do and no deadlines takes no timer interrupts. FPU/SSE/AVX state is saved with XSAVE.
+- **Memory objects.** Pinned and zeroed at creation, mapped with `VM_MAP` (read/write/execute) into any number
+  of places, and into DMA domains. `MEM_PHYSICAL` makes one from device memory (uncached), only outside RAM.
+- **Channels** carry bytes and handles (which move); writes don't block, reads wait with a deadline.
+  **Notifications** are 64 bits that signals OR in and a wait takes; a server binds its channels and interrupts
+  to one notification and waits there.
+- **Resources** are the root capabilities: physical address ranges, I/O ports (loaded into the TSS bitmap when the
+  process runs), interrupt vectors (`IRQ_MSI` gives the MSI address/data to program and signals a notification),
+  the IOMMU (creating DMA domains, attaching devices) and the system (ending a run). init narrows them with
+  `RESOURCE_SUB` before handing them on.
 
 ## Building and running
 
@@ -39,13 +68,15 @@ Needs the Rust targets `x86_64-unknown-uefi` and `x86_64-unknown-none` and, for 
 
 ```bash
 cargo test -p acpi-tables -p pmm        # host tests, including the Mac Pro tables
-./build.sh                              # target/esp: EFI/BOOT/BOOTX64.EFI and dross.elf
+./build.sh                              # target/esp: EFI/BOOT/BOOTX64.EFI, dross.elf, modules/
 ./run-qemu.sh                           # SMP=24 MEM=8G by default; PROFILE=release for an optimized build
 ```
 
 `run-qemu.sh` boots a q35 machine shaped like the Mac Pro (Ivy Bridge CPU, 12 cores x 2 threads, an Intel
-IOMMU without interrupt remapping) and exits 0 when the kernel reports `boot ok`. Measured on QEMU 11.1 (TCG on
-an arm64 Mac): 24 of 24 CPUs online and taking IPIs with 8 GiB and with 64 GiB, debug and release builds.
+IOMMU without interrupt remapping) and exits 0 when init reports that every check passed. Measured on QEMU 11.1
+(TCG on an arm64 Mac): 24 of 24 CPUs online; the self-test's 14 checks pass with 4 and 24 CPUs, debug and release
+builds. Its timings under TCG (a 20 ms deadline taking up to 90 ms, 50-460 us channel round trips between CPUs)
+reflect the emulator and the host's timer coalescing, not the kernel.
 
 Under TCG on macOS the host coalesces QEMU's timer wakeups: 1 kHz APIC timer ticks arrive 2-18 ms apart and the
 missed ones are dropped. The timer check is therefore strict (count within 10%, no early tick) only on hardware;
@@ -82,6 +113,5 @@ server.
 - **Data paths** (Thunderbolt streams, GPU submission and fences) run through shared-memory rings mapped into
   the engine, busy-polled on dedicated cores; the servers own setup, teardown and recovery.
 
-Next, in order: user mode (syscall entry, address spaces, threads, the scheduler), IPC and notifications,
-capabilities for device memory and interrupts, then VT-d. Then init and pcid, and a dross backend for
-`gpud-platform` so the existing drivers can run on it.
+Next: pcid and the driver side of the platform interface, a USB keyboard and mouse driver (xHCI, HID boot
+protocol), then a dross backend for `gpud-platform` so the existing drivers can run on it.
