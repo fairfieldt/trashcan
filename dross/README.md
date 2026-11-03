@@ -145,7 +145,10 @@ with `grub-reboot` from Linux's GRUB, which chainloads the loader on the EFI sys
   controller; usbd brings up the Fresco Logic FL1100;
 - ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux.
 
-Cross-CPU channel round trips take 116 us there (a halted CPU's wakeup); that is next to look at.
+Channel messages between threads on two CPUs: 2.7 us one way to a thread blocked in the kernel on a halted CPU
+(p50; p99 2.8 us), 1.4 us to one spinning on non-blocking reads, round trips 5.6 us (p99 6.4 us, max 6.7 us over
+1000). An earlier mean of 116 us was another thread busy on the same CPU (ethd bringing its link up) costing whole
+time slices; new threads now go to the CPU with the fewest threads.
 
 Without a serial console, the log comes over the network: ethd's `netlog` mode reads `/dev/kmsg` (dross's log
 from boot) and sends each line as a UDP datagram to the netconsole port, and `driver/ethd/netlog-listen.py` on
@@ -204,5 +207,5 @@ default) and has a dross backend. What it doesn't do yet: resets (pcid has none)
 memory by address into a DMA domain (`map_external`; peer BARs will come from pcid as memory objects), and
 counting interrupts (a notification reports one however often it fired).
 
-Next: the cross-CPU wakeup latency; then a network stack (ethd and tbd's ThunderboltIP), and the engine with
+Next: a network stack (ethd and tbd's ThunderboltIP), and the engine with
 RADV, which needs dynamic linking and glibc's ABI rather than a static musl program.

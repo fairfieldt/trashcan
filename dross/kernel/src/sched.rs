@@ -251,6 +251,7 @@ pub fn spawn_with(process: Arc<Process>, cpu_index: u32, mut regs: [u64; 22], fs
         xsave,
     });
     process.add_thread(&t);
+    THREADS[cpu_index as usize].fetch_add(1, Ordering::Relaxed);
     wake(&t);
     t
 }
@@ -264,11 +265,14 @@ pub fn set_fs_base(v: u64) {
     unsafe { cpu::wrmsr(0xc000_0100, v) };
 }
 
-/// The CPU for a new thread when the caller doesn't choose: round robin over the CPUs that are up.
+/// User threads living on each CPU.
+static THREADS: [core::sync::atomic::AtomicU32; cpu::MAX_CPUS] = [const { core::sync::atomic::AtomicU32::new(0) }; cpu::MAX_CPUS];
+
+/// The CPU for a thread whose creator doesn't choose: the one with the fewest threads, the highest-numbered on a
+/// tie (CPU 0 takes the boot work and most interrupts). Threads never move, so this decides for their lifetime.
 pub fn pick_cpu() -> u32 {
-    static NEXT: AtomicU64 = AtomicU64::new(0);
-    let n = crate::smp::online();
-    (NEXT.fetch_add(1, Ordering::Relaxed) % n as u64) as u32
+    let n = crate::smp::online() as usize;
+    (0..n).rev().min_by_key(|&c| THREADS[c].load(Ordering::Relaxed)).unwrap_or(0) as u32
 }
 
 /// Makes `t` runnable (or keeps it running if it hasn't left its CPU yet).
@@ -316,6 +320,7 @@ pub fn exit_current() -> ! {
     let me = current();
     if let Some(p) = &me.process {
         p.thread_exited(&me);
+        THREADS[me.cpu as usize].fetch_sub(1, Ordering::Relaxed);
     }
     me.set(State::Dead);
     drop(me);

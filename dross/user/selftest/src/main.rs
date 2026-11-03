@@ -53,6 +53,59 @@ fn main(boot: Handle) -> i32 {
     }
 }
 
+/// One-way latencies (ns, sorted) of 1000 messages from cpu 0 to a thread on cpu 1 that waits for each blocked
+/// in the kernel or spinning on non-blocking reads, of its replies (cpu 0 always blocks), and the round trips;
+/// `pause`: 50 us between messages, so both sides have settled. The TSCs agree to well under a microsecond.
+fn one_way(blocking: bool, pause: bool) -> (alloc::vec::Vec<u64>, alloc::vec::Vec<u64>, alloc::vec::Vec<u64>) {
+    let (p, q) = sys::channel_create().unwrap();
+    let out = Arc::new(dross_rt::Lock::new(alloc::vec::Vec::new()));
+    let o = out.clone();
+    thread::spawn(1, move || {
+        let mut b = [0u8; 8];
+        let mut h = [Handle(0); 1];
+        loop {
+            let r = sys::channel_read(q, &mut b, &mut h, if blocking { FOREVER } else { 0 });
+            let now = sys::clock();
+            match r {
+                Ok(_) => {
+                    o.with(|v| v.push(now - u64::from_le_bytes(b)));
+                    if sys::channel_write(q, &sys::clock().to_le_bytes(), &[]).is_err() {
+                        break;
+                    }
+                }
+                Err(Error::TimedOut) => core::hint::spin_loop(),
+                Err(_) => break,
+            }
+        }
+        sys::thread_exit();
+    })
+    .unwrap();
+    let mut b = [0u8; 8];
+    let mut h = [Handle(0); 1];
+    let (mut back, mut rt) = (alloc::vec::Vec::new(), alloc::vec::Vec::new());
+    for _ in 0..1000 {
+        if pause {
+            let until = sys::clock() + 50_000;
+            while sys::clock() < until {}
+        }
+        let t0 = sys::clock();
+        sys::channel_write(p, &t0.to_le_bytes(), &[]).unwrap();
+        sys::channel_read(p, &mut b, &mut h, FOREVER).unwrap();
+        let now = sys::clock();
+        back.push(now - u64::from_le_bytes(b));
+        rt.push(now - t0);
+    }
+    sys::close(p).unwrap();
+    let mut v = out.with(core::mem::take);
+    for l in [&mut v, &mut back, &mut rt] {
+        l.sort_unstable();
+        if l.is_empty() {
+            l.push(0);
+        }
+    }
+    (v, back, rt)
+}
+
 struct Tally {
     passed: u32,
     failed: u32,
@@ -176,16 +229,29 @@ fn run_all(b: &Bootstrap) -> i32 {
         })
         .unwrap();
         const N: u64 = 2000;
-        let t0 = sys::clock();
         let mut ok = true;
+        let mut each = alloc::vec::Vec::with_capacity(N as usize);
         for i in 0..N {
+            let t0 = sys::clock();
             sys::channel_write(p, &i.to_le_bytes(), &[]).unwrap();
             let (n, _) = sys::channel_read(p, &mut buf, &mut hs, FOREVER).unwrap();
+            each.push(sys::clock() - t0);
             ok &= n == 8 && buf[..8] == i.to_le_bytes();
         }
-        let ns = (sys::clock() - t0) / N;
-        t.check("round trips", ok, &alloc::format!("(cpu 0 <-> cpu 1: {}.{} us each)", ns / 1000, ns % 1000 / 100));
+        // The median: a mean would be dominated by the odd time slice lost to another thread on the CPU.
+        each.sort_unstable();
+        let ns = each[each.len() / 2];
+        t.check("round trips", ok, &alloc::format!("(cpu 0 <-> cpu 1: median {}.{} us)", ns / 1000, ns % 1000 / 100));
         sys::close(p).unwrap();
+        let pct = |l: &alloc::vec::Vec<u64>| alloc::format!("min {} p50 {} p99 {} max {} ns", l[0], l[l.len() / 2], l[l.len() * 99 / 100], l[l.len() - 1]);
+        for (blocking, pause) in [(true, true), (false, true), (true, false)] {
+            let (there, back, rt) = one_way(blocking, pause);
+            t.check(
+                &alloc::format!("latency {} {}", if blocking { "blocked" } else { "spinning" }, if pause { "paced" } else { "back to back" }),
+                there.len() == 1000,
+                &alloc::format!("(cpu 0 -> 1: {}; 1 -> 0: {}; round trip: {})", pct(&there), pct(&back), pct(&rt)),
+            );
+        }
     }
 
     // Extended state survives switches between threads on one CPU.
