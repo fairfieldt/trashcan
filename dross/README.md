@@ -11,6 +11,11 @@ ports, MSIs and DMA domains. init runs a self-test of all of that at boot, then 
 for QEMU's `edu` device checks the whole driver path (BAR, MSI, DMA through the IOMMU, and a blocked DMA), and
 usbd drives USB keyboards and mice on an xHCI controller.
 
+dross also runs static Linux executables: gpud, tbd and ethd run on it unchanged, built for
+`x86_64-unknown-linux-musl`, with gpud-platform choosing its dross backend at run time. Their unit tests pass on
+dross, and each driver reaches its device through pcid. In QEMU none of their hardware exists; they have not run
+on a Mac Pro under dross yet.
+
 | Path | What |
 |---|---|
 | `boot/` | `dross-boot`, the UEFI loader: loads `\dross.elf` from its own volume, builds the page tables, hands over (`x86_64-unknown-uefi`) |
@@ -27,6 +32,10 @@ usbd drives USB keyboards and mice on an xHCI controller.
 | `../driver/platform/src/dross.rs` | The dross backend of `gpud-platform` (feature `dross`, no `std`): the interface gpud, tbd and ethd use on Linux |
 | `user/edutest/` | A driver for QEMU's `edu` test device, written against `gpud-platform` as gpud is: the driver path end to end |
 | `user/usbd/` | xHCI driver for USB keyboards and mice (HID boot protocol) on root ports: logs keys and mouse movement |
+| `kernel/src/linux/` | The Linux system call interface for static Linux executables |
+| `linux/posixtest/` | A Rust `std` program that checks the Linux interface (its own workspace: it needs unwinding) |
+| `linux/rootfs/` | Files Linux programs see (packed into the `rootfs.tar` module) |
+| `linux/*.conf` | What init runs: `qemu-init.conf` for `run-qemu.sh`, `macpro-init.conf` for a first boot on a Mac Pro |
 
 ## What the kernel does at boot
 
@@ -93,7 +102,48 @@ Under TCG on macOS the host coalesces QEMU's timer wakeups: 1 kHz APIC timer tic
 missed ones are dropped. The timer check is therefore strict (count within 10%, no early tick) only on hardware;
 in a VM it checks that ticks arrive. TCG has no TSC-deadline timer, so QEMU runs the periodic path.
 
-## The Mac Pro 6,1, as dross sees it
+## Linux programs
+
+A process started with `SPAWN_LINUX` gets Linux's system call numbers; its native dross calls still work with
+`NATIVE` set in the number (`dross-rt` sets it, so gpud-platform's dross backend works inside a Linux program).
+The interface lives in the kernel for now (`kernel/src/linux/`):
+
+- memory: anonymous and memfd mappings, `munmap` and `mprotect` of any range (mappings split), reservations;
+- threads: `clone` for threads, futexes (waking the oldest waiters), TLS (the FS base is part of a thread's
+  state), clear-tid on exit; every thread is pinned where it was created (`sched_setaffinity` is accepted);
+- files: a read-only tree from the `rootfs.tar` module, the ACPI tables in `/sys/firmware/acpi/tables` (gpud
+  reads the VFCT there), `/dev/null`, `/dev/zero`, `/dev/urandom`, stdout and stderr into the kernel log;
+- Unix sockets (stream, datagram, seqpacket) with `SCM_RIGHTS`, pipes, memfd, eventfd, poll;
+- time, sleeping, `getrandom` (RDRAND);
+- an fd for a dross handle (`HANDLE_FD`): a notification polls readable while bits are pending (tbd polls its
+  interrupts with sockets), a memory object can be mapped (tbd hands its NHI's BAR to clients that way).
+
+Not there: fork and exec, signal delivery (handlers are accepted; an abort ends the process), epoll, file
+writes, and networking: ethd's and tbd's TAP interfaces need a network stack dross doesn't have yet, so ethd
+can't run its `run` mode and tbd runs streams only (`--net none`).
+
+```bash
+./build-linux.sh        # target/linux: posixtest, gpud, tbd, ethd, test-* and rootfs.tar (zig compiles gpud's C)
+./run-qemu.sh           # now also runs the unit tests, posixtest and the drivers' probes (linux/qemu-init.conf)
+```
+
+`build-linux.sh` builds static musl executables with `rust-lld` and Rust's own musl, and gpud's Linux C with
+`zig cc`; `FIRMWARE=DIR` adds `DIR` as `/lib/firmware` (gpud's `init` and `serve` need Tahiti's microcode there,
+from linux-firmware).
+
+## First boot on a Mac Pro
+
+Not done yet (it needs a way to power-cycle the machine). The plan, for incite:
+
+1. `./build-linux.sh && INIT_CONF=linux/macpro-init.conf PROFILE=release ./build.sh`: `target/esp` holds the
+   loader, the kernel, the modules and an init.conf that probes both D700s, an NHI and the spare Ethernet port
+   read-only.
+2. Copy `target/esp/dross.elf` and `target/esp/modules/` to the root of the EFI system partition and the loader
+   to `EFI/dross/BOOTX64.EFI`; add a GRUB entry that chainloads it and boot it once with `grub-reboot`, so a
+   power cycle returns to Linux.
+3. The log is on the screen (the firmware framebuffer). Things to watch: the TSC-deadline timer (QEMU has none),
+   whether the firmware leaves a free page below 1 MiB for the AP trampoline, VT-d on the real unit (the USB
+   RMRR), and the FL1100's MSI for usbd.
 
 From its ACPI tables (`acpi/tests/macpro61`) and Linux on the same machine:
 
@@ -133,5 +183,5 @@ default) and has a dross backend. What it doesn't do yet: resets (pcid has none)
 memory by address into a DMA domain (`map_external`; peer BARs will come from pcid as memory objects), and
 counting interrupts (a notification reports one however often it fired).
 
-Next: gpud, tbd and ethd themselves are `std` programs (threads, files, sockets, the C shim on libc); they need
-a `std` for dross before they run on it. That is the POSIX layer in the plan above.
+Next: the first boot on a Mac Pro; then a network stack (ethd and tbd's ThunderboltIP), and the engine with
+RADV, which needs dynamic linking and glibc's ABI rather than a static musl program.

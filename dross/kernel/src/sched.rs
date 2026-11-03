@@ -19,7 +19,8 @@ use crate::cpu::{self, PerCpu};
 use crate::process::Process;
 use crate::{apic, interrupts, mem, time};
 
-const KSTACK_PAGES: usize = 4;
+/// 64 KiB: debug builds take a lot of stack in the system call paths.
+const KSTACK_PAGES: usize = 16;
 /// Time slice when other threads wait for the CPU.
 const SLICE_NS: u64 = 10_000_000;
 
@@ -37,6 +38,12 @@ enum State {
 }
 
 pub struct Thread {
+    /// A number for Linux programs (`gettid`).
+    pub tid: u32,
+    /// The user FS base (thread-local storage), loaded at every switch.
+    pub fs_base: AtomicU64,
+    /// Linux `CLONE_CHILD_CLEARTID`: zeroed and woken (futex) when the thread exits.
+    pub clear_tid: AtomicU64,
     /// None for the idle threads.
     pub process: Option<Arc<Process>>,
     pub cpu: u32,
@@ -80,7 +87,7 @@ impl Thread {
 
 impl Drop for Thread {
     fn drop(&mut self) {
-        mem::free_virt(self.kstack, KSTACK_PAGES);
+        mem::free_stack(self.kstack, KSTACK_PAGES);
         if self.xsave != 0 {
             mem::free_virt(self.xsave, 1);
         }
@@ -142,6 +149,9 @@ pub fn current_process() -> Arc<Process> {
 pub fn init_cpu() {
     let pc = cpu::this();
     let idle = Arc::new(Thread {
+        tid: 0,
+        fs_base: AtomicU64::new(0),
+        clear_tid: AtomicU64::new(0),
         process: None,
         cpu: pc.index,
         kstack: 0,
@@ -195,26 +205,36 @@ unsafe extern "C" {
 /// Creates a user thread of `process` on `cpu`, starting at `rip` with `rsp` and `arg` in rdi, and makes it
 /// runnable.
 pub fn spawn_user(process: Arc<Process>, cpu_index: u32, rip: u64, rsp: u64, arg: u64) -> Arc<Thread> {
-    let kstack = mem::alloc_zeroed(KSTACK_PAGES, 4096);
+    let mut regs = [0u64; 22];
+    regs[9] = arg;
+    regs[17] = rip;
+    regs[20] = rsp;
+    spawn_with(process, cpu_index, regs, 0)
+}
+
+/// Creates a user thread that starts with the registers `regs` (`interrupts::Frame` layout; segment selectors
+/// and flags are set here) and FS base `fs_base`.
+pub fn spawn_with(process: Arc<Process>, cpu_index: u32, mut regs: [u64; 22], fs_base: u64) -> Arc<Thread> {
+    let kstack = mem::alloc_stack(KSTACK_PAGES);
     let xsave = mem::alloc_zeroed(1, 4096);
     let top = kstack + (KSTACK_PAGES * 4096) as u64;
-    // The user frame (interrupts::Frame layout), then switch_stack's six registers and its return address.
-    let frame_words: usize = 22;
-    let frame = top - (frame_words * 8) as u64;
+    regs[15] = 0x100; // vector: not an exception
+    regs[16] = 0;
+    regs[18] = cpu::USER_CODE as u64;
+    regs[19] = 0x202; // IF
+    regs[21] = cpu::USER_DATA as u64;
+    // The user frame, then switch_stack's six registers and its return address.
+    let frame = top - (regs.len() * 8) as u64;
     // SAFETY: inside the fresh stack.
     unsafe {
-        let f = frame as *mut u64;
-        f.add(9).write(arg); // rdi
-        f.add(15).write(0x100); // vector: not an exception
-        f.add(17).write(rip);
-        f.add(18).write(cpu::USER_CODE as u64);
-        f.add(19).write(0x202); // IF
-        f.add(20).write(rsp);
-        f.add(21).write(cpu::USER_DATA as u64);
+        core::ptr::copy_nonoverlapping(regs.as_ptr(), frame as *mut u64, regs.len());
         let sw = (frame - 7 * 8) as *mut u64;
         sw.add(6).write(thread_start as *const () as u64);
     }
     let t = Arc::new(Thread {
+        tid: NEXT_TID.fetch_add(1, Ordering::Relaxed),
+        fs_base: AtomicU64::new(fs_base),
+        clear_tid: AtomicU64::new(0),
         process: Some(process.clone()),
         cpu: cpu_index,
         kstack,
@@ -226,6 +246,15 @@ pub fn spawn_user(process: Arc<Process>, cpu_index: u32, rip: u64, rsp: u64, arg
     process.add_thread(&t);
     wake(&t);
     t
+}
+
+static NEXT_TID: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(100);
+
+/// Sets the current thread's FS base (Linux `arch_prctl(ARCH_SET_FS)`).
+pub fn set_fs_base(v: u64) {
+    current().fs_base.store(v, Ordering::Relaxed);
+    // SAFETY: IA32_FS_BASE; user code reads it through FS.
+    unsafe { cpu::wrmsr(0xc000_0100, v) };
 }
 
 /// The CPU for a new thread when the caller doesn't choose: round robin over the CPUs that are up.
@@ -256,13 +285,23 @@ pub fn wake(t: &Arc<Thread>) {
     }
 }
 
-/// Registers the current thread as about to block, with a deadline (TSC, `u64::MAX` for none).
-fn prepare_block(me: &Arc<Thread>, deadline_tsc: u64) {
+/// Registers the current thread as about to block, with a deadline (TSC, `u64::MAX` for none). Then either
+/// `schedule()` (blocks unless woken meanwhile) or `cancel_block()`.
+pub fn prepare_block(me: &Arc<Thread>, deadline_tsc: u64) {
     let mut rq = cpu::this().sched.rq.lock();
     me.set(State::Blocking);
     if deadline_tsc != u64::MAX {
         rq.timers.push((deadline_tsc, me.clone()));
     }
+}
+
+/// Takes back a `prepare_block` that turned out not to be needed.
+pub fn cancel_block(me: &Arc<Thread>) {
+    let mut rq = cpu::this().sched.rq.lock();
+    if matches!(me.state(), State::Blocking | State::Woken) {
+        me.set(State::Running);
+    }
+    rq.timers.retain(|(_, w)| !Arc::ptr_eq(w, me));
 }
 
 /// Leaves the CPU for good.
@@ -359,6 +398,8 @@ pub fn schedule() {
         unsafe { core::arch::asm!("mov cr3, {}", in(reg) cr3) };
     }
     if let Some(p) = &next.process {
+        // SAFETY: IA32_FS_BASE, the next thread's TLS pointer.
+        unsafe { cpu::wrmsr(0xc000_0100, next.fs_base.load(Ordering::Relaxed)) };
         let me = cpu::this();
         me.set_kernel_stack(next.kstack_top());
         let ports = p.ioports.lock();
@@ -449,6 +490,21 @@ impl<T> WaitCell<T> {
         r
     }
 
+    /// For waiting on several cells (poll): checks the state with `ready`; if it reports nothing (0), registers
+    /// `me` to be woken by the next `update`. The caller has called `prepare_block` already.
+    pub fn poll(&self, me: &Arc<Thread>, ready: impl FnOnce(&mut T) -> u16) -> u16 {
+        let mut g = self.inner.lock();
+        let r = ready(&mut g.0);
+        if r == 0 {
+            g.1.push(me.clone());
+        }
+        r
+    }
+
+    pub fn unregister(&self, me: &Arc<Thread>) {
+        self.inner.lock().1.retain(|t| !Arc::ptr_eq(t, me));
+    }
+
     /// Blocks until `f` returns `Some`, the deadline (TSC) passes or the thread is killed.
     pub fn wait<R>(&self, deadline_tsc: u64, mut f: impl FnMut(&mut T) -> Option<R>) -> Result<R, WaitError> {
         let me = current();
@@ -469,6 +525,17 @@ impl<T> WaitCell<T> {
             schedule();
             self.inner.lock().1.retain(|t| !Arc::ptr_eq(t, &me));
         }
+    }
+}
+
+/// Sleeps `ns` nanoseconds (or until killed).
+pub fn sleep_ns(ns: u64) -> Result<(), WaitError> {
+    static NOTHING: WaitCell<()> = WaitCell::new(());
+    let deadline = time::tsc_at_ns(time::now_ns().saturating_add(ns));
+    match NOTHING.wait(deadline, |_| None::<()>) {
+        Err(WaitError::TimedOut) => Ok(()),
+        Err(e) => Err(e),
+        Ok(()) => Ok(()),
     }
 }
 

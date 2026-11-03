@@ -19,6 +19,29 @@ use crate::dma::{iova_align, DmaAccess, DmaBuffer, DmaSpace};
 use crate::irq::{IrqEvent, IrqWait};
 use crate::{Error, Mmio, PciAddress, PciDevice, Region, RegionInfo, ResetCapability, Result};
 
+/// Set once a Linux program on dross opened a device: native objects then also get Linux fds.
+static LINUX: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
+/// dross starts Linux programs with `DROSS_BOOTSTRAP` naming their bootstrap channel (handle 1).
+#[cfg(feature = "std")]
+pub fn started_by_dross() -> bool {
+    std::env::var_os("DROSS_BOOTSTRAP").is_some()
+}
+
+/// Opens `address` through the pcid connection named `pci` in this program's bootstrap message.
+#[cfg(feature = "std")]
+pub fn open_from_env(address: PciAddress) -> Result<(DrossDevice, DrossDma)> {
+    static PCI: std::sync::OnceLock<Option<Pci>> = std::sync::OnceLock::new();
+    let pci = PCI.get_or_init(|| {
+        let h: u32 = std::env::var("DROSS_BOOTSTRAP").ok()?.parse().ok()?;
+        let b = dross_rt::bootstrap::Bootstrap::read(Handle(h)).ok()?;
+        b.handle("pci").map(Pci::new)
+    });
+    let pci = pci.as_ref().ok_or_else(|| Error::NotFound(String::from("no pcid connection in the bootstrap message")))?;
+    LINUX.store(true, core::sync::atomic::Ordering::Relaxed);
+    open(pci, address)
+}
+
 fn os(op: &'static str) -> impl Fn(dross_abi::Error) -> Error {
     move |e| Error::Os { op, errno: e as i64 as i32 }
 }
@@ -38,8 +61,8 @@ pub fn open(pci: &Pci, address: PciAddress) -> Result<(DrossDevice, DrossDma)> {
 pub struct DrossDevice {
     address: PciAddress,
     dev: Device,
-    /// Each BAR mapped once (address, length), on first use.
-    bars: Lock<[Option<(u64, usize)>; 6]>,
+    /// Each BAR mapped once (address, length, memory object), on first use.
+    bars: Lock<[Option<(u64, usize, Handle)>; 6]>,
 }
 
 impl DrossDevice {
@@ -52,7 +75,11 @@ impl DrossDevice {
     }
 
     fn mapped(&self, n: u8) -> Result<(u64, usize)> {
-        if let Some(m) = self.bars.with(|b| b[n as usize]) {
+        self.mapped_bar(n).map(|(a, l, _)| (a, l))
+    }
+
+    fn mapped_bar(&self, n: u8) -> Result<(u64, usize, Handle)> {
+        if let Some(m) = self.bars.with(|b| b.get(n as usize).copied().flatten()) {
             return Ok(m);
         }
         let bar = self.bar(n)?;
@@ -60,7 +87,7 @@ impl DrossDevice {
             return Err(Error::Unsupported(format!("{}: BAR{n} is I/O space", self.address)));
         }
         let mmio = self.dev.map_bar(n as usize).map_err(os("pcid map BAR"))?;
-        let m = (mmio.as_ptr() as u64, mmio.len());
+        let m = (mmio.as_ptr() as u64, mmio.len(), mmio.mem);
         // The mapping stays for the life of the process.
         core::mem::forget(mmio);
         self.bars.with(|b| b[n as usize] = Some(m));
@@ -70,7 +97,7 @@ impl DrossDevice {
     fn vector(&self, index: u32) -> Result<IrqEvent> {
         let n = sys::notify_create().map_err(os("notification"))?;
         let ev = self.dev.enable_vector(n, 1, index).map_err(os("pcid MSI"))?;
-        Ok(IrqEvent::new(Box::new(Notification { n: ev.notification, _irq: ev.irq })))
+        Ok(IrqEvent::new(Box::new(Notification { n: ev.notification, _irq: ev.irq, fd: core::sync::atomic::AtomicI32::new(-1) })))
     }
 }
 
@@ -171,12 +198,27 @@ impl PciDevice for DrossDevice {
     fn reset_capability(&self) -> ResetCapability {
         ResetCapability::None
     }
+
+    #[cfg(feature = "std")]
+    fn export_region(&self, region: Region) -> Result<(std::os::fd::OwnedFd, u64, u64)> {
+        use std::os::fd::FromRawFd;
+        let Region::Bar(n) = region else {
+            return Err(Error::Unsupported(format!("{}: exporting {region}", self.address)));
+        };
+        let bar = self.bar(n)?;
+        let (_, _, mem) = self.mapped_bar(n)?;
+        let fd = sys::handle_fd(mem).map_err(os("fd for a BAR"))?;
+        // SAFETY: a fresh descriptor from the kernel.
+        Ok((unsafe { std::os::fd::OwnedFd::from_raw_fd(fd) }, bar.phys & 0xfff, bar.size))
+    }
 }
 
 /// An interrupt as a notification. Notifications don't count: a wait reports 1 however often it fired.
 struct Notification {
     n: Handle,
     _irq: Handle,
+    /// The Linux fd for poll, made on first use (Linux programs only).
+    fd: core::sync::atomic::AtomicI32,
 }
 
 impl IrqWait for Notification {
@@ -195,6 +237,20 @@ impl IrqWait for Notification {
             Err(dross_abi::Error::TimedOut) => Ok(0),
             Err(e) => Err(os("notification wait")(e)),
         }
+    }
+
+    fn raw_fd(&self) -> Option<i32> {
+        use core::sync::atomic::Ordering;
+        if !LINUX.load(Ordering::Relaxed) {
+            return None;
+        }
+        let fd = self.fd.load(Ordering::Relaxed);
+        if fd >= 0 {
+            return Some(fd);
+        }
+        let fd = sys::handle_fd(self.n).ok()?;
+        self.fd.store(fd, Ordering::Relaxed);
+        Some(fd)
     }
 }
 

@@ -14,6 +14,7 @@ mod interrupts;
 mod iommu;
 mod ipc;
 mod irq;
+mod linux;
 mod log;
 mod mem;
 mod memory;
@@ -69,6 +70,14 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
         time::tsc_hz() / 1_000 % 1_000,
         time::ms_since(info.tsc_at_entry)
     );
+    // Linux programs' files: the rootfs module and the firmware tables.
+    if let Some(m) = info.modules().iter().find(|m| m.name() == "rootfs.tar") {
+        // SAFETY: the loader's module pages, which are never freed.
+        linux::init_rootfs(unsafe { core::slice::from_raw_parts(mem::virt(m.phys) as *const u8, m.size as usize) });
+    }
+    for t in [&Some(acpi.madt), &acpi.hpet, &acpi.mcfg, &acpi.dmar, &acpi.fadt, &acpi.dsdt, &acpi.vfct].into_iter().flatten() {
+        linux::publish_table(core::str::from_utf8(&t.header.signature).unwrap_or("?"), t.bytes);
+    }
     start_init(info, &acpi);
     sched::idle()
 }
@@ -90,7 +99,7 @@ fn start_init(info: &BootInfo, acpi: &firmware::Acpi) {
         text.push('\n');
         handles.push(Entry::new(o));
     };
-    for m in info.modules().iter().filter(|m| m.name() != "init") {
+    for m in info.modules().iter().filter(|m| m.name() != "init" && m.name() != "rootfs.tar") {
         add(&alloc::format!("module/{}", m.name()), Object::Memory(Arc::new(Memory::module(m.phys, m.size))), &mut text);
     }
     for (name, kind, size) in [

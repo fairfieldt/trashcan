@@ -99,9 +99,9 @@ fn run_init(address: &str, firmware_dir: &str) -> Result<()> {
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
-    let (container, dev) = gpud_platform::vfio::open(address.parse()?, 1 << 20..1 << 40)?;
+    let (dma, dev) = gpud_platform::open(address.parse()?, 1 << 20..1 << 40)?;
     hw::log("debug", "opened");
-    let device = hw::Device::create(Arc::new(dev), Arc::new(container), firmware_dir)?;
+    let device = hw::Device::create(Arc::from(dev), Arc::from(dma), firmware_dir)?;
     hw::log("debug", "created");
     let t0 = Instant::now();
     device.init()?;
@@ -124,8 +124,8 @@ fn run_init(address: &str, firmware_dir: &str) -> Result<()> {
 fn run_serve(address: &str, firmware_dir: &str, socket: &str) -> Result<()> {
     use std::sync::Arc;
 
-    let (container, dev) = gpud_platform::vfio::open(address.parse()?, 1 << 20..1 << 40)?;
-    serve::run(Arc::new(dev), Arc::new(container), firmware_dir, socket)
+    let (dma, dev) = gpud_platform::open(address.parse()?, 1 << 20..1 << 40)?;
+    serve::run(Arc::from(dev), Arc::from(dma), firmware_dir, socket)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -140,8 +140,8 @@ fn run_init(_: &str, _: &str) -> Result<()> {
 
 #[cfg(target_os = "linux")]
 fn run_dma_smoke(address: &str) -> Result<u32> {
-    let (container, dev) = gpud_platform::vfio::open(address.parse()?, 1 << 20..1 << 40)?;
-    dma_smoke::run(&mut std::io::stdout().lock(), &dev, &container)
+    let (dma, dev) = gpud_platform::open(address.parse()?, 1 << 20..1 << 40)?;
+    dma_smoke::run(&mut std::io::stdout().lock(), &*dev, &*dma)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -156,6 +156,12 @@ fn run_probe(address: &str, vfct: &PathBuf, dump_vbios: Option<PathBuf>, read_on
 
     let addr: PciAddress = address.parse()?;
     let mut out = std::io::stdout().lock();
+    if gpud_platform::on_dross() {
+        let (dma, dev) = gpud_platform::open(addr, 1 << 20..1 << 40)?;
+        writeln!(out, "dross      reset {:?}", dev.reset_capability())?;
+        let opts = probe::Options { vfct: std::fs::read(vfct).ok(), dump_vbios, read_only };
+        return probe::probe(&mut out, &*dev, &*dma, &opts);
+    }
     let group = vfio::iommu_group(addr)?;
     writeln!(out, "driver     {}", vfio::driver(addr).as_deref().unwrap_or("none"))?;
     for (a, d) in vfio::group_devices(group)? {

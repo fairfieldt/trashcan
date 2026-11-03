@@ -53,7 +53,7 @@ impl Tap {
             let fd = OwnedFd::from_raw_fd(fd);
             let mut req = sys::IfreqFlags { name: [0; 16], flags: sys::IFF_TAP | sys::IFF_NO_PI, pad: [0; 22] };
             req.name[..name.len().min(15)].copy_from_slice(&name.as_bytes()[..name.len().min(15)]);
-            if libc::ioctl(fd.as_raw_fd(), sys::TUNSETIFF, &mut req) < 0 {
+            if libc::ioctl(fd.as_raw_fd(), sys::TUNSETIFF as libc::Ioctl, &mut req) < 0 {
                 return Err(os("TUNSETIFF"));
             }
             let ifname = String::from_utf8_lossy(&req.name).trim_end_matches('\0').to_owned();
@@ -64,19 +64,19 @@ impl Tap {
             let sock = OwnedFd::from_raw_fd(sock);
             let mut hw = sys::IfreqHwaddr { name: req.name, family: libc::ARPHRD_ETHER, data: [0; 14], pad: [0; 8] };
             hw.data[..6].copy_from_slice(&mac);
-            if libc::ioctl(sock.as_raw_fd(), libc::SIOCSIFHWADDR, &hw) < 0 {
+            if libc::ioctl(sock.as_raw_fd(), libc::SIOCSIFHWADDR as libc::Ioctl, &hw) < 0 {
                 return Err(os("SIOCSIFHWADDR"));
             }
             let m = sys::IfreqMtu { name: req.name, mtu: mtu as libc::c_int, pad: [0; 20] };
-            if libc::ioctl(sock.as_raw_fd(), libc::SIOCSIFMTU, &m) < 0 {
+            if libc::ioctl(sock.as_raw_fd(), libc::SIOCSIFMTU as libc::Ioctl, &m) < 0 {
                 return Err(os("SIOCSIFMTU"));
             }
             let mut up = sys::IfreqFlags { name: req.name, flags: 0, pad: [0; 22] };
-            if libc::ioctl(sock.as_raw_fd(), libc::SIOCGIFFLAGS, &mut up) < 0 {
+            if libc::ioctl(sock.as_raw_fd(), libc::SIOCGIFFLAGS as libc::Ioctl, &mut up) < 0 {
                 return Err(os("SIOCGIFFLAGS"));
             }
             up.flags |= (libc::IFF_UP | libc::IFF_RUNNING) as libc::c_short;
-            if libc::ioctl(sock.as_raw_fd(), libc::SIOCSIFFLAGS, &up) < 0 {
+            if libc::ioctl(sock.as_raw_fd(), libc::SIOCSIFFLAGS as libc::Ioctl, &up) < 0 {
                 return Err(os("SIOCSIFFLAGS"));
             }
             Ok(Tap { name: ifname, fd })

@@ -38,7 +38,16 @@ pub mod sys {
     pub const PROCESS_WAIT: u64 = 29;
     /// (system resource, code): ends a QEMU run (0: success); halts on hardware for now.
     pub const SYSTEM_EXIT: u64 = 30;
+    /// (image, argv, argv_len, envp, envp_len, bootstrap): starts a static Linux executable (argv and envp are
+    /// NUL-separated strings); `bootstrap` (moved, 0 for none) becomes its native handle 1.
+    pub const SPAWN_LINUX: u64 = 31;
+    /// (handle) from a Linux process: an fd for the object. A notification's polls readable while bits are pending;
+    /// a memory object's can be mapped with `mmap` (a BAR handed to a client, for example).
+    pub const HANDLE_FD: u64 = 32;
 }
+
+/// Set in `rax` for a native dross call from a Linux process (whose plain numbers are Linux's).
+pub const NATIVE: u64 = 0x4000_0000;
 
 /// Negative status codes.
 #[repr(i64)]

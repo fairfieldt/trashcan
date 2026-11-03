@@ -11,7 +11,7 @@ use crate::firmware::Acpi;
 use crate::interrupts::IPI_TEST;
 use crate::{apic, mem, println, time};
 
-const AP_STACK_PAGES: usize = 4;
+const AP_STACK_PAGES: usize = 16;
 
 global_asm!(
     r#"
@@ -148,7 +148,7 @@ pub fn start_aps(info: &BootInfo, acpi: &Acpi) -> u32 {
             println!("smp: more than {MAX_CPUS} cpus, ignoring the rest");
             break;
         }
-        let stack = mem::alloc_zeroed(AP_STACK_PAGES, 4096);
+        let stack = mem::alloc_stack(AP_STACK_PAGES);
         set(unsafe { &AP_STACK }, stack + (AP_STACK_PAGES * 4096) as u64);
         set(unsafe { &AP_ARG }, index as u64);
         STARTED.store(false, Ordering::Release);

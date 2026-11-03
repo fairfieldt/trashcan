@@ -29,6 +29,15 @@ impl Notification {
         }
     }
 
+    /// For poll on a notification fd: POLLIN while bits are pending.
+    pub fn poll(&self, me: &alloc::sync::Arc<crate::sched::Thread>) -> u16 {
+        self.bits.poll(me, |b| if *b != 0 { 1 } else { 0 })
+    }
+
+    pub fn unpoll(&self, me: &alloc::sync::Arc<crate::sched::Thread>) {
+        self.bits.unregister(me);
+    }
+
     pub fn wait(&self, deadline_tsc: u64) -> Result<u64, WaitError> {
         self.bits.wait(deadline_tsc, |b| if *b != 0 { Some(core::mem::take(b)) } else { None })
     }

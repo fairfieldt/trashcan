@@ -83,12 +83,17 @@ fn insert(p: &Process, o: Object) -> u64 {
 
 #[unsafe(no_mangle)]
 extern "C" fn syscall_dispatch(f: &mut Frame) {
-    let (rax, rdx) = match dispatch(f.rax, [f.rdi, f.rsi, f.rdx, f.r10, f.r8, f.r9]) {
-        Ok(v) => (0, v),
-        Err(e) => (e as i64 as u64, 0),
-    };
-    f.rax = rax;
-    f.rdx = rdx;
+    let is_linux = sched::current_process().linux.is_some();
+    if is_linux && f.rax & dross_abi::NATIVE == 0 {
+        f.rax = crate::linux::syscall(f);
+    } else {
+        let (rax, rdx) = match dispatch(f.rax & !dross_abi::NATIVE, [f.rdi, f.rsi, f.rdx, f.r10, f.r8, f.r9]) {
+            Ok(v) => (0, v),
+            Err(e) => (e as i64 as u64, 0),
+        };
+        f.rax = rax;
+        f.rdx = rdx;
+    }
     let me = sched::current();
     if me.killed() {
         drop(me);
@@ -346,6 +351,38 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
         sys::DMA_UNMAP => {
             let d = get_obj!(p.handles.lock(), a[0] as u32, Domain, rights::MAP)?;
             d.unmap(a[1], a[2]).map(|_| 0)
+        }
+        sys::SPAWN_LINUX => {
+            let (image, boot) = {
+                let mut t = p.handles.lock();
+                let image = get_obj!(t, a[0] as u32, Memory, rights::READ)?;
+                let boot = if a[5] != 0 {
+                    if t.get(a[5] as u32)?.rights & rights::TRANSFER == 0 {
+                        return Err(Error::AccessDenied);
+                    }
+                    Some(t.remove(a[5] as u32)?)
+                } else {
+                    None
+                };
+                (image, boot)
+            };
+            let argv = copy_in(&p, a[1], a[2].min(64 << 10))?;
+            let envp = copy_in(&p, a[3], a[4].min(64 << 10))?;
+            let child = crate::linux::spawn(&image, &argv, &envp, boot)?;
+            Ok(insert(&p, Object::Process(child)))
+        }
+        sys::HANDLE_FD => {
+            if p.linux.is_none() {
+                return Err(Error::WrongType);
+            }
+            let o = p.handles.lock().get(a[0] as u32)?.clone();
+            match o.object {
+                Object::Notification(n) if o.rights & rights::WAIT != 0 => crate::linux::notification_fd(&p, n),
+                Object::Memory(m) if o.rights & rights::MAP != 0 => crate::linux::memory_fd(&p, m),
+                Object::Notification(_) | Object::Memory(_) => return Err(Error::AccessDenied),
+                _ => return Err(Error::WrongType),
+            }
+            .map_err(|_| Error::NoResources)
         }
         sys::SYSTEM_EXIT => {
             let r = get_obj!(p.handles.lock(), a[0] as u32, Resource, 0)?;

@@ -294,7 +294,7 @@ pub fn init_cpu(index: u32, apic_id: u32) {
     pc.iomap.fill(0xff);
     pc.tss.iomap_base = size_of::<TaskStateSegment>() as u16;
     for slot in [IST_DOUBLE_FAULT, IST_NMI, IST_MACHINE_CHECK] {
-        let stack = crate::mem::alloc_zeroed(IST_PAGES, 4096);
+        let stack = crate::mem::alloc_stack(IST_PAGES);
         pc.tss.interrupt_stack_table[slot as usize - 1] = VirtAddr::new(stack + (IST_PAGES * 4096) as u64);
     }
     // SAFETY: tss and iomap live as long as the CPU and are adjacent (repr(C)).

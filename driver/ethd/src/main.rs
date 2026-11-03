@@ -92,7 +92,7 @@ mod linux {
     use crate::phy;
     use crate::tap::Tap;
     use anyhow::{Context, bail, ensure};
-    use gpud_platform::{IrqEvent, vfio};
+    use gpud_platform::{DmaSpace, IrqEvent};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::time::{Duration, Instant};
@@ -113,13 +113,13 @@ mod linux {
 
     struct Port {
         hw: Arc<PciHw>,
-        container: vfio::Container,
+        container: Box<dyn DmaSpace>,
     }
 
     fn open_port(address: &str) -> Result<Port> {
         let addr = address.parse()?;
-        let (container, dev) = vfio::open(addr, 1 << 20..1 << 40).with_context(|| format!("VFIO open {address}"))?;
-        let hw = Arc::new(PciHw::new(Box::new(dev))?);
+        let (container, dev) = gpud_platform::open(addr, 1 << 20..1 << 40).with_context(|| format!("open {address}"))?;
+        let hw = Arc::new(PciHw::new(dev)?);
         nic::identify(&*hw)?;
         Ok(Port { hw, container })
     }
@@ -129,7 +129,7 @@ mod linux {
         let want = parse_mac(expect_mac)?;
         let irq = port.hw.dev.enable_msi()?;
         let hw: Arc<dyn Hw> = port.hw.clone();
-        let nic = Nic::open(hw, &port.container, Some(want), opts)?;
+        let nic = Nic::open(hw, &*port.container, Some(want), opts)?;
         Ok((nic, irq))
     }
 

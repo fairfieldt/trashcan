@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 SMP=${SMP:-24}
 MEM=${MEM:-8G}
 TIMEOUT=${TIMEOUT:-120}
-./build.sh >&2
+INIT_CONF=${INIT_CONF:-linux/qemu-init.conf} ./build.sh >&2
 esp=target/esp
 
 fw=""

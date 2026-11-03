@@ -21,4 +21,12 @@ mkdir -p "$esp/modules"
 for m in init selftest pcid edutest usbd; do
     cp "target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
 done
+# Linux programs and their files, if build-linux.sh made them.
+if [ -d target/linux ]; then
+    cp target/linux/* "$esp/modules/"
+fi
+# What init starts (INIT_CONF, e.g. linux/qemu-init.conf for run-qemu.sh).
+if [ -n "${INIT_CONF:-}" ]; then
+    cp "$INIT_CONF" "$esp/modules/init.conf"
+fi
 echo "$esp"

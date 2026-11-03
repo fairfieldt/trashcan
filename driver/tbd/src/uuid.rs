@@ -35,9 +35,9 @@ impl Uuid {
     /// A random (version 4) UUID.
     pub fn random() -> Self {
         let mut b = [0u8; 16];
-        // SAFETY: getentropy writes b.len() bytes into b.
-        let n = unsafe { libc::getentropy(b.as_mut_ptr().cast(), b.len()) };
-        assert_eq!(n, 0, "getentropy");
+        // The same on Linux (glibc and musl), macOS and dross.
+        use std::io::Read;
+        std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut b)).expect("/dev/urandom");
         b[6] = (b[6] & 0x0f) | 0x40;
         b[8] = (b[8] & 0x3f) | 0x80;
         Uuid(b)

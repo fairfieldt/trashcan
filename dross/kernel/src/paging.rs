@@ -4,6 +4,7 @@
 
 use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 use dross_abi::{vm, Error, USER_TOP};
 use spin::Mutex;
@@ -52,9 +53,15 @@ unsafe impl FrameAllocator<Size4KiB> for TableFrames {
     }
 }
 
+#[derive(Clone)]
 struct Mapping {
     len: u64,
-    mem: Arc<Memory>,
+    /// None: reserved address space with nothing behind it yet (Linux `PROT_NONE` reservations).
+    mem: Option<Arc<Memory>>,
+    /// Offset of the mapping's first byte in `mem`.
+    offset: u64,
+    /// `vm::READ | WRITE | EXECUTE`; 0 maps nothing (no access).
+    flags: u64,
 }
 
 struct Inner {
@@ -93,6 +100,59 @@ impl AddressSpace {
         unsafe { OffsetPageTable::new(&mut *(virt(self.pml4) as *mut PageTable), VirtAddr::new(bootinfo::DIRECT_MAP)) }
     }
 
+    /// Writes the page table entries of a mapping at `addr` (or none if it maps nothing).
+    fn install(&self, addr: u64, m: &Mapping) -> Result<(), Error> {
+        let Some(mem) = &m.mem else { return Ok(()) };
+        if m.flags & (vm::READ | vm::WRITE | vm::EXECUTE) == 0 {
+            return Ok(());
+        }
+        let mut pf = F::PRESENT | F::USER_ACCESSIBLE;
+        if m.flags & vm::WRITE != 0 {
+            pf |= F::WRITABLE;
+        }
+        if m.flags & vm::EXECUTE == 0 {
+            pf |= F::NO_EXECUTE;
+        }
+        if mem.uncached() {
+            pf |= F::NO_CACHE | F::WRITE_THROUGH;
+        }
+        let parent = F::PRESENT | F::WRITABLE | F::USER_ACCESSIBLE;
+        let mut mapper = self.mapper();
+        for i in 0..m.len / PAGE {
+            let page = Page::<Size4KiB>::containing_address(VirtAddr::new(addr + i * PAGE));
+            let frame = PhysFrame::containing_address(PhysAddr::new(mem.page_phys(((m.offset + i * PAGE) / PAGE) as usize)));
+            // SAFETY: a user-half page of a checked range, to a frame the memory object owns or may expose.
+            unsafe { mapper.map_to_with_table_flags(page, frame, pf, parent, &mut TableFrames).map_err(|_| Error::NoMemory)?.ignore() };
+        }
+        Ok(())
+    }
+
+    /// Removes the page table entries of [addr, addr+len); the caller shoots down other CPUs' TLBs.
+    fn uninstall(&self, addr: u64, len: u64) {
+        let mut mapper = self.mapper();
+        for i in 0..len / PAGE {
+            let page = Page::<Size4KiB>::containing_address(VirtAddr::new(addr + i * PAGE));
+            if let Ok((_, f)) = mapper.unmap(page) {
+                f.flush();
+            }
+        }
+    }
+
+    fn check_range(addr: u64, len: u64) -> Result<u64, Error> {
+        let end = addr.checked_add(len).ok_or(Error::OutOfRange)?;
+        if addr % PAGE != 0 || len % PAGE != 0 || len == 0 || end > USER_TOP || addr < PAGE {
+            return Err(Error::OutOfRange);
+        }
+        Ok(end)
+    }
+
+    /// Picks a free range of `len` bytes (with a guard page after it).
+    fn place(inner: &mut Inner, len: u64) -> u64 {
+        let a = inner.next;
+        inner.next = a + len + PAGE;
+        a
+    }
+
     /// Maps `len` bytes of `mem` from `offset` at `addr` (0: anywhere). Returns the address.
     pub fn map(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64) -> Result<u64, Error> {
         if len == 0 || offset % PAGE != 0 || len % PAGE != 0 || addr % PAGE != 0 {
@@ -101,81 +161,186 @@ impl AddressSpace {
         if offset.checked_add(len).is_none_or(|e| e > mem.size()) {
             return Err(Error::OutOfRange);
         }
-        let mut inner = self.inner.lock();
-        let addr = if addr == 0 {
-            let a = inner.next;
-            // A guard page between automatic mappings.
-            inner.next = a + len + PAGE;
-            a
-        } else {
-            addr
-        };
-        let end = addr.checked_add(len).ok_or(Error::OutOfRange)?;
-        if end > USER_TOP || addr < PAGE {
-            return Err(Error::OutOfRange);
-        }
-        // No overlap with the mapping before or after.
-        if let Some((&s, m)) = inner.mappings.range(..end).next_back() {
-            if s + m.len > addr {
-                return Err(Error::Busy);
-            }
-        }
-        let mut pf = F::PRESENT | F::USER_ACCESSIBLE;
-        if flags & vm::WRITE != 0 {
-            pf |= F::WRITABLE;
-        }
-        if flags & vm::EXECUTE == 0 {
-            pf |= F::NO_EXECUTE;
-        }
-        if mem.uncached() {
-            pf |= F::NO_CACHE | F::WRITE_THROUGH;
-        }
-        let parent = F::PRESENT | F::WRITABLE | F::USER_ACCESSIBLE;
-        let mut mapper = self.mapper();
-        for i in 0..len / PAGE {
-            let page = Page::<Size4KiB>::containing_address(VirtAddr::new(addr + i * PAGE));
-            let frame = PhysFrame::containing_address(PhysAddr::new(mem.page_phys((offset / PAGE + i) as usize)));
-            // SAFETY: user-half page in a checked free range, to a frame the memory object owns or may expose.
-            unsafe { mapper.map_to_with_table_flags(page, frame, pf, parent, &mut TableFrames).map_err(|_| Error::NoMemory)?.ignore() };
-        }
-        inner.mappings.insert(addr, Mapping { len, mem });
-        Ok(addr)
+        self.insert(Some(mem), offset, len, addr, flags, false)
     }
 
-    /// Removes the whole mapping that starts at `addr`.
+    /// Reserves address space with nothing behind it (no access until `protect` gives it memory).
+    pub fn reserve(&self, len: u64, addr: u64, replace: bool) -> Result<u64, Error> {
+        self.insert(None, 0, len, addr, 0, replace)
+    }
+
+    /// Maps, replacing whatever was in the range if `replace` (Linux `MAP_FIXED`).
+    pub fn map_replace(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64) -> Result<u64, Error> {
+        if offset.checked_add(len).is_none_or(|e| e > mem.size()) {
+            return Err(Error::OutOfRange);
+        }
+        self.insert(Some(mem), offset, len, addr, flags, true)
+    }
+
+    fn insert(&self, mem: Option<Arc<Memory>>, offset: u64, len: u64, addr: u64, flags: u64, replace: bool) -> Result<u64, Error> {
+        let mut inner = self.inner.lock();
+        let addr = if addr == 0 { Self::place(&mut inner, len) } else { addr };
+        let end = Self::check_range(addr, len)?;
+        let removed = if replace {
+            self.remove_locked(&mut inner, addr, len)
+        } else {
+            if let Some((&s, m)) = inner.mappings.range(..end).next_back() {
+                if s + m.len > addr {
+                    return Err(Error::Busy);
+                }
+            }
+            Vec::new()
+        };
+        let m = Mapping { len, mem, offset, flags };
+        let r = self.install(addr, &m);
+        if r.is_ok() {
+            inner.mappings.insert(addr, m);
+        }
+        drop(inner);
+        if !removed.is_empty() {
+            self.finish(removed);
+        }
+        r.map(|_| addr)
+    }
+
+    /// Splits the mapping containing `at` (if any) so that a mapping starts at `at`.
+    fn split(inner: &mut Inner, at: u64) {
+        let Some((&s, m)) = inner.mappings.range(..at).next_back() else { return };
+        if s + m.len <= at {
+            return;
+        }
+        let mut right = m.clone();
+        let left_len = at - s;
+        right.len = m.len - left_len;
+        right.offset = m.offset + left_len;
+        inner.mappings.get_mut(&s).unwrap().len = left_len;
+        inner.mappings.insert(at, right);
+    }
+
+    fn remove_locked(&self, inner: &mut Inner, addr: u64, len: u64) -> Vec<Mapping> {
+        let end = addr + len;
+        Self::split(inner, addr);
+        Self::split(inner, end);
+        let keys: Vec<u64> = inner.mappings.range(addr..end).map(|(&k, _)| k).collect();
+        let mut out = Vec::new();
+        for k in keys {
+            let m = inner.mappings.remove(&k).unwrap();
+            self.uninstall(k, m.len);
+            out.push(m);
+        }
+        out
+    }
+
+    /// After the page tables changed: flush the other CPUs' TLBs, then free what was unmapped. Called without
+    /// `inner` held, since another CPU may be spinning on it with interrupts off and couldn't take the IPI.
+    fn finish(&self, removed: Vec<Mapping>) {
+        shootdown(self.cpus.load(Ordering::Relaxed));
+        drop(removed);
+    }
+
+    /// Removes the whole mapping that starts at `addr` (dross `VM_UNMAP`).
     pub fn unmap(&self, addr: u64, len: u64) -> Result<(), Error> {
         let mut inner = self.inner.lock();
         match inner.mappings.get(&addr) {
             Some(m) if m.len == len => {}
             _ => return Err(Error::NotFound),
         }
-        let m = inner.mappings.remove(&addr).unwrap();
-        let mut mapper = self.mapper();
-        for i in 0..m.len / PAGE {
-            let page = Page::<Size4KiB>::containing_address(VirtAddr::new(addr + i * PAGE));
-            if let Ok((_, f)) = mapper.unmap(page) {
-                f.flush();
-            }
-        }
-        shootdown(self.cpus.load(Ordering::Relaxed));
+        let removed = self.remove_locked(&mut inner, addr, len);
         drop(inner);
-        drop(m);
+        self.finish(removed);
         Ok(())
     }
 
-    /// Runs `f` on user memory [ptr, ptr+len) if one mapping covers it with the needed access. The lock keeps
-    /// the mapping in place meanwhile. This space must be the loaded one.
+    /// Removes whatever is mapped in [addr, addr+len), splitting mappings at the edges (Linux `munmap`).
+    pub fn unmap_range(&self, addr: u64, len: u64) -> Result<(), Error> {
+        Self::check_range(addr, len)?;
+        let mut inner = self.inner.lock();
+        let removed = self.remove_locked(&mut inner, addr, len);
+        drop(inner);
+        self.finish(removed);
+        Ok(())
+    }
+
+    /// Changes the access of [addr, addr+len), which must be covered by mappings (Linux `mprotect`). Reserved
+    /// ranges get zeroed memory when they first become accessible.
+    pub fn protect(&self, addr: u64, len: u64, flags: u64) -> Result<(), Error> {
+        let end = Self::check_range(addr, len)?;
+        let mut inner = self.inner.lock();
+        // Covered without holes?
+        let mut at = addr;
+        for (&s, m) in inner.mappings.range(..end) {
+            if s + m.len <= at {
+                continue;
+            }
+            if s > at {
+                return Err(Error::NotFound);
+            }
+            at = s + m.len;
+            if at >= end {
+                break;
+            }
+        }
+        if at < end {
+            return Err(Error::NotFound);
+        }
+        Self::split(&mut inner, addr);
+        Self::split(&mut inner, end);
+        let keys: Vec<u64> = inner.mappings.range(addr..end).map(|(&k, _)| k).collect();
+        for k in keys {
+            let mut m = inner.mappings.get(&k).unwrap().clone();
+            if flags & vm::WRITE != 0 && m.mem.as_ref().is_some_and(|mm| !mm.writable()) {
+                return Err(Error::AccessDenied);
+            }
+            self.uninstall(k, m.len);
+            if m.mem.is_none() && flags != 0 {
+                m.mem = Some(Arc::new(Memory::anonymous(m.len, false, false)?));
+                m.offset = 0;
+            }
+            m.flags = flags;
+            let r = self.install(k, &m);
+            inner.mappings.insert(k, m);
+            r?;
+        }
+        drop(inner);
+        self.finish(Vec::new());
+        Ok(())
+    }
+
+    /// Runs `f` on user memory [ptr, ptr+len) if mappings cover all of it with the needed access. The lock
+    /// keeps them in place meanwhile. This space must be the loaded one.
     pub fn with_user<R>(&self, ptr: u64, len: u64, write: bool, f: impl FnOnce(*mut u8) -> R) -> Result<R, Error> {
         let inner = self.inner.lock();
         if len == 0 {
             return Ok(f(ptr as *mut u8));
         }
         let end = ptr.checked_add(len).ok_or(Error::InvalidArgs)?;
-        let (&s, m) = inner.mappings.range(..=ptr).next_back().ok_or(Error::InvalidArgs)?;
-        if end > s + m.len || (write && !m.mem.writable()) {
-            return Err(Error::InvalidArgs);
+        let need = if write { vm::WRITE } else { vm::READ };
+        let mut at = ptr;
+        let (&first, _) = inner.mappings.range(..=ptr).next_back().ok_or(Error::InvalidArgs)?;
+        for (&s, m) in inner.mappings.range(first..) {
+            if s > at {
+                return Err(Error::InvalidArgs);
+            }
+            let writable = m.mem.as_ref().is_some_and(|mm| mm.writable());
+            if m.flags & need == 0 || m.mem.is_none() || (write && !writable) {
+                return Err(Error::InvalidArgs);
+            }
+            at = s + m.len;
+            if at >= end {
+                return Ok(f(ptr as *mut u8));
+            }
         }
-        Ok(f(ptr as *mut u8))
+        Err(Error::InvalidArgs)
+    }
+
+    /// The memory object and offset behind a user address (for futexes keyed by memory, and checks).
+    pub fn lookup(&self, addr: u64) -> Option<(Arc<Memory>, u64)> {
+        let inner = self.inner.lock();
+        let (&s, m) = inner.mappings.range(..=addr).next_back()?;
+        if addr >= s + m.len {
+            return None;
+        }
+        Some((m.mem.clone()?, m.offset + (addr - s)))
     }
 }
 

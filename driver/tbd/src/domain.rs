@@ -801,13 +801,13 @@ impl Irqs {
     }
 }
 
-/// Opens the NHI at `addr` through VFIO and returns it with its interrupts (MSI-X if the platform routes it,
+/// Opens the NHI at `addr` (VFIO on Linux, pcid on dross) and returns it with its interrupts (MSI-X if the platform routes it,
 /// else MSI; `TBD_MSI=1` forces MSI).
 #[cfg(target_os = "linux")]
 pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>, Bar)> {
     use gpud_platform::pci::{COMMAND_BUS_MASTER, COMMAND_MEMORY, CONFIG_COMMAND, CONFIG_DEVICE_ID, CONFIG_VENDOR_ID};
-    use gpud_platform::{PciDevice, Region};
-    let (container, dev) = gpud_platform::vfio::open(addr.parse()?, 1 << 20..1 << 40)?;
+    use gpud_platform::Region;
+    let (container, dev) = gpud_platform::open(addr.parse()?, 1 << 20..1 << 40)?;
     let (vendor, device) = (dev.config_u16(CONFIG_VENDOR_ID)?, dev.config_u16(CONFIG_DEVICE_ID)?);
     nhi::check_supported(vendor, device)?;
     let cmd = dev.config_u16(CONFIG_COMMAND)?;
@@ -815,7 +815,7 @@ pub fn open_nhi(addr: &str) -> Result<(Arc<Nhi>, Irqs, Box<dyn std::any::Any>, B
     let mmio = dev.map(Region::Bar(0))?;
     let (fd, offset, size) = dev.export_region(Region::Bar(0))?;
     let bar = Bar { fd: Arc::new(fd), offset, size };
-    let dma: Arc<dyn gpud_platform::DmaSpace> = Arc::new(container);
+    let dma: Arc<dyn gpud_platform::DmaSpace> = Arc::from(container);
     let nhi = Nhi::new(mmio, dma, nhi::is_falcon_ridge(vendor, device))?;
     let msix = if std::env::var_os("TBD_MSI").is_some() { Err(gpud_platform::Error::Unsupported("TBD_MSI".into())) } else { dev.enable_msix(16) };
     let irqs = match msix {

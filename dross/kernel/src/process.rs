@@ -26,13 +26,31 @@ pub struct Process {
     /// The exit code, once every thread has gone.
     pub exit: WaitCell<Option<i64>>,
     code: Mutex<Option<i64>>,
+    /// Linux programs' state (fds, signal dispositions); None for dross programs.
+    pub linux: Option<crate::linux::Linux>,
+    /// The first thread's id (Linux `getpid`).
+    pid: AtomicU32,
     /// The I/O ports this process may use (one bit per port, clear = allowed), if any.
     pub ioports: Mutex<Option<Box<[u8; 8192]>>>,
 }
 
 impl Process {
     pub fn new(name: &str) -> Arc<Process> {
+        Self::create(name, None)
+    }
+
+    pub fn new_linux(name: &str) -> Arc<Process> {
+        Self::create(name, Some(crate::linux::Linux::new(name)))
+    }
+
+    pub fn pid(&self) -> u32 {
+        self.pid.load(Ordering::Relaxed)
+    }
+
+    fn create(name: &str, linux: Option<crate::linux::Linux>) -> Arc<Process> {
         Arc::new(Process {
+            linux,
+            pid: AtomicU32::new(0),
             name: String::from(name),
             aspace: AddressSpace::new(),
             handles: Mutex::new(HandleTable::new()),
@@ -45,6 +63,7 @@ impl Process {
     }
 
     pub fn add_thread(&self, t: &Arc<Thread>) {
+        let _ = self.pid.compare_exchange(0, t.tid, Ordering::Relaxed, Ordering::Relaxed);
         self.live.fetch_add(1, Ordering::AcqRel);
         let mut v = self.threads.lock();
         v.retain(|w| w.strong_count() > 0);
@@ -55,6 +74,9 @@ impl Process {
         if self.live.fetch_sub(1, Ordering::AcqRel) == 1 {
             let dropped = self.handles.lock().clear();
             drop(dropped);
+            if let Some(l) = &self.linux {
+                drop(l.files.clear());
+            }
             let code = self.code.lock().unwrap_or(0);
             self.exit.update(|c| *c = Some(code));
         }

@@ -1,6 +1,5 @@
 //! System calls (`dross-abi` describes the interface).
 
-use core::arch::asm;
 use dross_abi::{sys as n, Error};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -9,14 +8,22 @@ pub struct Handle(pub u32);
 
 pub type Result<T> = core::result::Result<T, Error>;
 
+#[cfg(not(target_arch = "x86_64"))]
+fn syscall(_: u64, _: [u64; 6]) -> Result<u64> {
+    // Host builds of crates that use this (gpud-platform's dross backend) never run on dross.
+    Err(Error::BadSyscall)
+}
+
+#[cfg(target_arch = "x86_64")]
 #[inline(always)]
 fn syscall(nr: u64, a: [u64; 6]) -> Result<u64> {
     let (status, value): (i64, u64);
     // SAFETY: the kernel's system call ABI; it preserves everything but rax, rdx, rcx and r11.
     unsafe {
-        asm!(
+        core::arch::asm!(
             "syscall",
-            inlateout("rax") nr as i64 => status,
+            // NATIVE: so the call also works from a Linux program (gpud-platform's backend in gpud, tbd, ethd).
+            inlateout("rax") (nr | dross_abi::NATIVE) as i64 => status,
             in("rdi") a[0], in("rsi") a[1], inlateout("rdx") a[2] => value, in("r10") a[3], in("r8") a[4], in("r9") a[5],
             out("rcx") _, out("r11") _,
             options(nostack),
@@ -160,6 +167,20 @@ pub fn dma_map(domain: Handle, mem: Handle, offset: u64, len: u64, iova: u64, fl
 
 pub fn dma_unmap(domain: Handle, iova: u64, len: u64) -> Result<()> {
     syscall(n::DMA_UNMAP, [domain.0 as u64, iova, len, 0, 0, 0]).map(|_| ())
+}
+
+/// Starts a static Linux executable with `argv` and `envp`; `bootstrap` (moved) becomes its native handle 1.
+pub fn spawn_linux(image: Handle, argv: &[&str], envp: &[&str], bootstrap: Option<Handle>) -> Result<Handle> {
+    let join = |v: &[&str]| v.iter().flat_map(|s| s.bytes().chain(core::iter::once(0))).collect::<alloc::vec::Vec<u8>>();
+    let (a, e) = (join(argv), join(envp));
+    syscall(n::SPAWN_LINUX, [image.0 as u64, a.as_ptr() as u64, a.len() as u64, e.as_ptr() as u64, e.len() as u64, bootstrap.map_or(0, |h| h.0 as u64)])
+        .map(|h| Handle(h as u32))
+}
+
+/// From a Linux program: an fd for a notification (polls readable while bits are pending) or a memory object
+/// (mappable).
+pub fn handle_fd(h: Handle) -> Result<i32> {
+    syscall(n::HANDLE_FD, [h.0 as u64, 0, 0, 0, 0, 0]).map(|fd| fd as i32)
 }
 
 pub fn system_exit(system: Handle, code: u64) -> ! {

@@ -42,13 +42,13 @@ fn open_path(path: &str, op: &'static str) -> Result<OwnedFd> {
 /// ioctl with a pointer argument.
 fn ioctl_ptr<T>(fd: RawFd, req: libc::c_ulong, arg: &mut T, op: &'static str) -> Result<i32> {
     // SAFETY: arg points to a struct of the layout `req` expects (sys.rs), large enough per its argsz.
-    let r = unsafe { libc::ioctl(fd, req, arg as *mut T) };
+    let r = unsafe { libc::ioctl(fd, req as libc::Ioctl, arg as *mut T) };
     if r < 0 { Err(Error::last_os(op)) } else { Ok(r) }
 }
 
 fn ioctl_val(fd: RawFd, req: libc::c_ulong, arg: libc::c_ulong, op: &'static str) -> Result<i32> {
     // SAFETY: requests that take an integer argument.
-    let r = unsafe { libc::ioctl(fd, req, arg) };
+    let r = unsafe { libc::ioctl(fd, req as libc::Ioctl, arg) };
     if r < 0 { Err(Error::last_os(op)) } else { Ok(r) }
 }
 
@@ -307,7 +307,7 @@ impl Group {
     pub fn open_device(self: &Arc<Self>, addr: PciAddress) -> Result<Device> {
         let name = CString::new(addr.to_string()).unwrap();
         // SAFETY: the request takes a C string.
-        let dfd = unsafe { libc::ioctl(self.fd.as_raw_fd(), VFIO_GROUP_GET_DEVICE_FD, name.as_ptr()) };
+        let dfd = unsafe { libc::ioctl(self.fd.as_raw_fd(), VFIO_GROUP_GET_DEVICE_FD as libc::Ioctl, name.as_ptr()) };
         if dfd < 0 {
             return Err(Error::last_os("VFIO_GROUP_GET_DEVICE_FD"));
         }
@@ -424,6 +424,10 @@ impl Device {
 }
 
 impl PciDevice for Device {
+    fn export_region(&self, region: Region) -> Result<(OwnedFd, u64, u64)> {
+        Device::export_region(self, region)
+    }
+
     fn address(&self) -> PciAddress {
         self.address
     }

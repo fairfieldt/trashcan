@@ -143,6 +143,47 @@ unsafe impl FrameAllocator<Size4KiB> for PageTableFrames {
 
 static MAPPER_LOCK: Mutex<()> = Mutex::new(());
 
+/// Kernel stacks live here (PML4 slot 416), each with an unmapped guard page below it, so an overflow faults
+/// instead of writing into whatever frame lies below.
+const STACK_BASE: u64 = 0xffff_d000_0000_0000;
+static STACK_NEXT: AtomicU64 = AtomicU64::new(STACK_BASE);
+
+fn kernel_mapper() -> OffsetPageTable<'static> {
+    let (pml4, _) = Cr3::read();
+    // SAFETY: the kernel half is shared by every PML4; MAPPER_LOCK serializes changes to it.
+    unsafe { OffsetPageTable::new(&mut *(virt(pml4.start_address().as_u64()) as *mut PageTable), VirtAddr::new(DIRECT_MAP)) }
+}
+
+/// A zeroed kernel stack of `pages` pages; returns its lowest address.
+pub fn alloc_stack(pages: usize) -> u64 {
+    let _guard = MAPPER_LOCK.lock();
+    let base = STACK_NEXT.fetch_add((pages as u64 + 1) * FRAME, Ordering::Relaxed) + FRAME;
+    let mut mapper = kernel_mapper();
+    for i in 0..pages as u64 {
+        let frame = alloc_phys(1, FRAME, u64::MAX).expect("out of physical memory");
+        zero_phys(frame, 1);
+        let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + i * FRAME));
+        let flags = F::PRESENT | F::WRITABLE | F::NO_EXECUTE;
+        // SAFETY: a fresh range of the stack window, to a fresh frame.
+        unsafe { mapper.map_to(page, PhysFrame::containing_address(PhysAddr::new(frame)), flags, &mut PageTableFrames).expect("stack map").flush() };
+    }
+    base
+}
+
+/// Frees a stack from `alloc_stack` (its addresses are not reused).
+pub fn free_stack(base: u64, pages: usize) {
+    let _guard = MAPPER_LOCK.lock();
+    let mut mapper = kernel_mapper();
+    for i in 0..pages as u64 {
+        let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + i * FRAME));
+        if let Ok((frame, flush)) = mapper.unmap(page) {
+            flush.flush();
+            free_phys(frame.start_address().as_u64(), 1);
+        }
+    }
+    // Other CPUs may hold the translation; the addresses are never reused, so stale entries do no harm.
+}
+
 /// Maps `size` bytes of device memory at `phys` uncached (PCD|PWT, no execute) and returns the virtual address
 /// of `phys`. Mappings are permanent.
 pub fn map_mmio(phys: u64, size: u64) -> u64 {
@@ -150,9 +191,7 @@ pub fn map_mmio(phys: u64, size: u64) -> u64 {
     let first = phys & !(FRAME - 1);
     let pages = (phys + size - first).div_ceil(FRAME);
     let base = MMIO_NEXT.fetch_add(pages * FRAME, Ordering::Relaxed);
-    let (pml4, _) = Cr3::read();
-    // SAFETY: the active PML4, through the direct map; MAPPER_LOCK serializes changes.
-    let mut mapper = unsafe { OffsetPageTable::new(&mut *(virt(pml4.start_address().as_u64()) as *mut PageTable), VirtAddr::new(DIRECT_MAP)) };
+    let mut mapper = kernel_mapper();
     for i in 0..pages {
         let page = Page::<Size4KiB>::containing_address(VirtAddr::new(base + i * FRAME));
         let frame = PhysFrame::containing_address(PhysAddr::new(first + i * FRAME));

@@ -115,6 +115,13 @@ pub trait PciDevice: Send + Sync {
 
     fn reset_capability(&self) -> ResetCapability;
 
+    /// A descriptor through which another process of the driver's can map `region` (`mmap(fd, offset)`), with
+    /// the offset and size: for handing a BAR to a trusted client.
+    #[cfg(feature = "std")]
+    fn export_region(&self, region: Region) -> Result<(std::os::fd::OwnedFd, u64, u64)> {
+        Err(Error::Unsupported(format!("{}: exporting {region}", self.address())))
+    }
+
     fn config_u8(&self, offset: u16) -> Result<u8> {
         let mut b = [0u8; 1];
         self.read(Region::Config, offset as u64, &mut b)?;

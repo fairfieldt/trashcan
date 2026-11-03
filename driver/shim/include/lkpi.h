@@ -207,6 +207,7 @@ static inline unsigned long rounddown_pow_of_two(unsigned long n) { return 1UL <
 #define SZ_2G 0x80000000ULL
 #define SZ_4G 0x100000000ULL
 #define PAGE_SHIFT 12
+#undef PAGE_SIZE /* musl's limits.h has one too */
 #define PAGE_SIZE (1UL << PAGE_SHIFT)
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 #define PAGE_ALIGN(x) ALIGN(x, PAGE_SIZE)
