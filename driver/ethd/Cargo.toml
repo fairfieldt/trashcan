@@ -1,0 +1,12 @@
+[package]
+name = "ethd"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Userspace Ethernet driver for the Mac Pro 6,1's Broadcom BCM57762 (tg3 family) ports"
+
+[dependencies]
+anyhow = "1.0.104"
+clap = { version = "4.6.7", features = ["derive"] }
+gpud-platform = { path = "../platform" }
+libc = "0.2"
