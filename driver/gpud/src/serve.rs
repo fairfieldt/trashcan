@@ -107,6 +107,19 @@ struct Client {
 }
 
 pub fn run(pci: Arc<dyn PciDevice>, dma: Arc<dyn DmaSpace>, firmware_dir: &str, socket: &str) -> Result<()> {
+    // SIGINT and SIGTERM run the teardown before exiting, so the next owner finds the engines stopped; SIGUSR1 logs
+    // the GPU's state (for a stuck submission). They are blocked before any thread starts (Device::create starts the
+    // interrupt thread): every thread inherits the mask, and only the waiter below sees them, after init.
+    // SAFETY: signal mask calls on a local set.
+    let signals = unsafe {
+        let mut set: libc::sigset_t = std::mem::zeroed();
+        libc::sigemptyset(&mut set);
+        libc::sigaddset(&mut set, libc::SIGINT);
+        libc::sigaddset(&mut set, libc::SIGTERM);
+        libc::sigaddset(&mut set, libc::SIGUSR1);
+        libc::pthread_sigmask(libc::SIG_BLOCK, &set, std::ptr::null_mut());
+        set
+    };
     let device = Device::create(pci.clone(), dma.clone(), firmware_dir)?;
     device.init()?;
     let failed = device.ib_tests(std::time::Duration::from_secs(1));
@@ -114,6 +127,21 @@ pub fn run(pci: Arc<dyn PciDevice>, dma: Arc<dyn DmaSpace>, firmware_dir: &str, 
         bail!("{failed} IB tests failed");
     }
     let shared = Arc::new(Shared { device, dma, pci, vmids: Mutex::new([false; 16]) });
+    let s = shared.clone();
+    std::thread::spawn(move || {
+        loop {
+            let mut sig = 0;
+            // SAFETY: waits on the set blocked above.
+            unsafe { libc::sigwait(&signals, &mut sig) };
+            if sig == libc::SIGUSR1 {
+                s.device.dump();
+                continue;
+            }
+            crate::hw::log("info", &format!("signal {sig}: stopping the GPU"));
+            s.device.shutdown();
+            std::process::exit(0);
+        }
+    });
 
     let listener = listen(socket)?;
     eprintln!("[info] gpud serving {} on {socket}", shared.pci.address());

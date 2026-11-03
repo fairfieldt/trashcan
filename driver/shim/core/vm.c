@@ -331,7 +331,7 @@ int gpud_fence_wait(struct amdgpu_device *adev, int ring_key, uint64_t seq, int6
 			return -ETIME;
 		/* spin briefly for short jobs, then back off */
 		if (++spins < 2000)
-			__asm__ __volatile__("pause" ::: "memory");
+			cpu_relax();
 		else
 			lkpi_udelay(spins < 20000 ? 5 : 50);
 	}

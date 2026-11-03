@@ -96,7 +96,9 @@ fn run_init(address: &str, firmware_dir: &str) -> Result<()> {
     use std::time::{Duration, Instant};
 
     let (container, dev) = gpud_platform::vfio::open(address.parse()?, 1 << 20..1 << 40)?;
+    hw::log("debug", "opened");
     let device = hw::Device::create(Arc::new(dev), Arc::new(container), firmware_dir)?;
+    hw::log("debug", "created");
     let t0 = Instant::now();
     device.init()?;
     println!("init: {:.0} ms", t0.elapsed().as_secs_f64() * 1000.0);
@@ -107,6 +109,7 @@ fn run_init(address: &str, firmware_dir: &str) -> Result<()> {
     std::thread::sleep(Duration::from_millis(100));
     println!("interrupts: {}", device.interrupts.load(std::sync::atomic::Ordering::Relaxed));
     drop(device);
+    hw::log("debug", "closed");
     if failed > 0 {
         anyhow::bail!("{failed} IB tests failed");
     }

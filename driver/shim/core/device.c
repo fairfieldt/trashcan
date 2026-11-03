@@ -5,6 +5,7 @@
  * device-level helpers the SI files call. Function bodies marked "Linux 7.3" are copied from the named file
  * (Copyright Advanced Micro Devices, Inc., MIT license).
  */
+#include <unistd.h>
 #include "amdgpu.h"
 #include "gpud_dropped_ip.h"
 #include "si.h"
@@ -14,6 +15,7 @@
 #include "gca/gfx_6_0_sh_mask.h"
 #include "gmc/gmc_6_0_sh_mask.h"
 #include "oss/oss_1_0_sh_mask.h"
+#include "bif/bif_3_0_d.h"
 #include <gpud_core.h>
 #include "amd_pcie.h"
 #include <linux/pci.h>
@@ -44,17 +46,44 @@ int amdgpu_dc = -1;
 int amdgpu_lockup_timeout;
 
 /* ---- registers (amdgpu_reg_access.c, without SR-IOV, KIQ and RAS) ---- */
+
+/*
+ * A GPU that stops answering MMIO makes every read a PCIe completion timeout; on the Mac Pro a burst of those ends in
+ * a slot power fault and the machine resetting itself. So the first all-ones read is checked against a register that
+ * is never all ones, and once the device is lost gpud touches it no more: the thread that saw it stops for good
+ * (kill the process to release the device), every other access is dropped.
+ */
+static volatile int gpud_lost;
+
+static void gpud_device_lost(struct amdgpu_device *adev, uint32_t reg)
+{
+	if (__atomic_exchange_n(&gpud_lost, 1, __ATOMIC_SEQ_CST))
+		return;
+	dev_err(adev->dev, "device lost: register %#x and CONFIG_MEMSIZE read all ones; no further MMIO\n", reg);
+	for (;;)
+		pause();
+}
+
 uint32_t amdgpu_device_rreg(struct amdgpu_device *adev, uint32_t reg, uint32_t acc_flags)
 {
+	uint32_t v;
+
 	(void)acc_flags;
-	if ((u64)reg * 4 < adev->rmmio_size)
-		return readl((u8 __iomem *)adev->rmmio + reg * 4);
-	return amdgpu_reg_pcie_rd32(adev, reg * 4);
+	if (gpud_lost)
+		return ~0u;
+	if ((u64)reg * 4 >= adev->rmmio_size)
+		return amdgpu_reg_pcie_rd32(adev, reg * 4);
+	v = readl((u8 __iomem *)adev->rmmio + reg * 4);
+	if (v == ~0u && readl((u8 __iomem *)adev->rmmio + mmCONFIG_MEMSIZE * 4) == ~0u)
+		gpud_device_lost(adev, reg);
+	return v;
 }
 
 void amdgpu_device_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v, uint32_t acc_flags)
 {
 	(void)acc_flags;
+	if (gpud_lost)
+		return;
 	if ((u64)reg * 4 < adev->rmmio_size)
 		writel(v, (u8 __iomem *)adev->rmmio + reg * 4);
 	else
@@ -214,6 +243,18 @@ void gpud_debug_dump(struct amdgpu_device *adev)
 	}
 }
 
+/* The GFX clock-gating state, for the step trace (GPUD_DEBUG only: no extra register reads otherwise). */
+static void gpud_cg_dump(struct amdgpu_device *adev, const char *when)
+{
+	if (lkpi_log_level < LKPI_DEBUG)
+		return;
+	dev_dbg(adev->dev,
+		"%s: RLC_CNTL %#x RLC_STAT %#x RLC_CGCG_CGLS_CTRL %#x RLC_CGTT_MGCG_OVERRIDE %#x CGTS_SM_CTRL_REG %#x "
+		"CP_INT_CNTL_RING0 %#x\n",
+		when, RREG32(mmRLC_CNTL), RREG32(mmRLC_STAT), RREG32(mmRLC_CGCG_CGLS_CTRL), RREG32(mmRLC_CGTT_MGCG_OVERRIDE),
+		RREG32(mmCGTS_SM_CTRL_REG), RREG32(mmCP_INT_CNTL_RING0));
+}
+
 /*
  * The register part of gfx_v6_0_soft_reset (Linux 7.3 gfx_v6_0.c), run before GFX init: the CP and the graphics
  * pipeline start from reset rather than from whatever the previous driver left when it halted them (a halted
@@ -231,6 +272,8 @@ static void gpud_gfx_soft_reset(struct amdgpu_device *adev)
 	u32 srbm = REG_SET_FIELD(0, SRBM_SOFT_RESET, SOFT_RESET_GRBM, 1) | REG_SET_FIELD(0, SRBM_SOFT_RESET, SOFT_RESET_SEM, 1);
 	u32 tmp;
 
+	dev_dbg(adev->dev, "GFX soft reset: GRBM_STATUS %#x GRBM_STATUS2 %#x SRBM_STATUS %#x GMCON_DEBUG %#x\n",
+		RREG32(mmGRBM_STATUS), RREG32(mmGRBM_STATUS2), RREG32(mmSRBM_STATUS), RREG32(mmGMCON_DEBUG));
 	/* Halt the CP first, as gfx_v6_0_cp_gfx_enable(false) does. */
 	WREG32(mmCP_ME_CNTL, CP_ME_CNTL__ME_HALT_MASK | CP_ME_CNTL__PFP_HALT_MASK | CP_ME_CNTL__CE_HALT_MASK);
 	udelay(50);
@@ -240,6 +283,7 @@ static void gpud_gfx_soft_reset(struct amdgpu_device *adev)
 	WREG32(mmGMCON_DEBUG, tmp);
 	udelay(100);
 
+	dev_dbg(adev->dev, "GFX soft reset: GRBM\n");
 	tmp = RREG32(mmGRBM_SOFT_RESET) | grbm;
 	WREG32(mmGRBM_SOFT_RESET, tmp);
 	tmp = RREG32(mmGRBM_SOFT_RESET);
@@ -248,6 +292,7 @@ static void gpud_gfx_soft_reset(struct amdgpu_device *adev)
 	RREG32(mmGRBM_SOFT_RESET);
 	udelay(100);
 
+	dev_dbg(adev->dev, "GFX soft reset: SRBM\n");
 	tmp = RREG32(mmSRBM_SOFT_RESET) | srbm;
 	WREG32(mmSRBM_SOFT_RESET, tmp);
 	tmp = RREG32(mmSRBM_SOFT_RESET);
@@ -262,6 +307,84 @@ static void gpud_gfx_soft_reset(struct amdgpu_device *adev)
 	WREG32(mmGMCON_DEBUG, tmp);
 	udelay(100);
 	dev_info(adev->dev, "GFX soft reset: GRBM_STATUS %#x, CP_STAT %#x\n", RREG32(mmGRBM_STATUS), RREG32(mmCP_STAT));
+	gpud_cg_dump(adev, "after soft reset");
+}
+
+/*
+ * Clock and power gating of the late-initialized blocks, in amdgpu's order: amdgpu_device_ip_late_init gates (clock
+ * gating first, forward), amdgpu_device_ip_fini_early ungates (power gating first, in reverse) before any hw_fini.
+ * The ungating is not optional: gfx_v6_0's hw_fini stops the RLC and then reads a GFX register, a read that never
+ * completes if the GFX clock is gated with the RLC halted, and the GPU then answers no MMIO at all.
+ */
+static void gpud_set_gating(struct amdgpu_device *adev, bool gate)
+{
+	for (int pass = 0; pass < 2; pass++) {
+		bool cg = (pass == 0) == gate;
+
+		for (int j = 0; j < adev->num_ip_blocks; j++) {
+			struct amdgpu_ip_block *b = &adev->ip_blocks[gate ? j : adev->num_ip_blocks - j - 1];
+
+			if (!b->status.late_initialized)
+				continue;
+			if (cg && b->version->funcs->set_clockgating_state)
+				b->version->funcs->set_clockgating_state(b, gate ? AMD_CG_STATE_GATE : AMD_CG_STATE_UNGATE);
+			if (!cg && b->version->funcs->set_powergating_state)
+				b->version->funcs->set_powergating_state(b, gate ? AMD_PG_STATE_GATE : AMD_PG_STATE_UNGATE);
+		}
+	}
+}
+
+/*
+ * Stops whatever a previous owner left running, before init touches the memory controller: a running CP or RLC is
+ * halted, enabled DMA rings and the interrupt ring are disabled, and then init waits for the GPU to go idle. After a
+ * clean teardown (amdgpu's or gpud's) everything is already stopped and nothing is written; after a gpud that died
+ * without its teardown this keeps init from reprogramming the MC under engines that are still fetching.
+ */
+static void gpud_quiesce(struct amdgpu_device *adev)
+{
+	const u32 halt = CP_ME_CNTL__ME_HALT_MASK | CP_ME_CNTL__PFP_HALT_MASK | CP_ME_CNTL__CE_HALT_MASK;
+	const u32 dma[2] = { mmDMA_GFX_RB_CNTL, mmDMA_GFX_RB_CNTL + 0x200 /* sid.h DMA1_REGISTER_OFFSET */ };
+	u32 me = RREG32(mmCP_ME_CNTL), rlc = RREG32(mmRLC_CNTL), ih = RREG32(mmIH_RB_CNTL);
+	u32 rb[2] = { RREG32(dma[0]), RREG32(dma[1]) };
+	bool stopped = false;
+	u64 deadline;
+
+	dev_dbg(adev->dev, "quiesce: CP_ME_CNTL %#x RLC_CNTL %#x DMA_GFX_RB_CNTL %#x %#x IH_RB_CNTL %#x GRBM_STATUS %#x\n",
+		me, rlc, rb[0], rb[1], ih, RREG32(mmGRBM_STATUS));
+	gpud_cg_dump(adev, "quiesce");
+	if ((me & halt) != halt) {
+		WREG32(mmCP_ME_CNTL, me | halt);
+		stopped = true;
+	}
+	if (rlc & RLC_CNTL__RLC_ENABLE_F32_MASK) {
+		/* As in gpud_device_fini: ungated while the RLC still runs. */
+		for (int i = 0; i < adev->num_ip_blocks; i++) {
+			struct amdgpu_ip_block *b = &adev->ip_blocks[i];
+
+			if (b->version->type == AMD_IP_BLOCK_TYPE_GFX && b->version->funcs->set_clockgating_state)
+				b->version->funcs->set_clockgating_state(b, AMD_CG_STATE_UNGATE);
+		}
+		WREG32(mmRLC_CNTL, rlc & ~RLC_CNTL__RLC_ENABLE_F32_MASK);
+		stopped = true;
+	}
+	for (int i = 0; i < 2; i++) {
+		if (rb[i] & DMA_GFX_RB_CNTL__RB_ENABLE_MASK) {
+			WREG32(dma[i], rb[i] & ~DMA_GFX_RB_CNTL__RB_ENABLE_MASK);
+			stopped = true;
+		}
+	}
+	if (ih & IH_RB_CNTL__RB_ENABLE_MASK) {
+		WREG32(mmIH_RB_CNTL, ih & ~IH_RB_CNTL__RB_ENABLE_MASK);
+		WREG32(mmIH_CNTL, RREG32(mmIH_CNTL) & ~IH_CNTL__ENABLE_INTR_MASK);
+		stopped = true;
+	}
+	if (!stopped)
+		return;
+	deadline = lkpi_ktime_ns() + 100 * NSEC_PER_MSEC;
+	while ((RREG32(mmGRBM_STATUS) & GRBM_STATUS__GUI_ACTIVE_MASK) && lkpi_ktime_ns() < deadline)
+		udelay(10);
+	dev_info(adev->dev, "stopped engines a previous owner left running: GRBM_STATUS %#x SRBM_STATUS %#x CP_STAT %#x\n",
+		 RREG32(mmGRBM_STATUS), RREG32(mmSRBM_STATUS), RREG32(mmCP_STAT));
 }
 
 static bool gpud_runs(const struct amdgpu_ip_block *b)
@@ -290,6 +413,7 @@ static int hw_init_block(struct amdgpu_ip_block *b)
 {
 	int r;
 
+	dev_dbg(b->adev->dev, "hw_init %s\n", b->version->funcs->name);
 	/* What the CPU wrote into VRAM through BAR0 (page tables, RLC buffers) reaches the GPU's view first. */
 	amdgpu_device_flush_hdp(b->adev, NULL);
 	r = b->version->funcs->hw_init ? b->version->funcs->hw_init(b) : 0;
@@ -309,6 +433,7 @@ int gpud_device_init(struct amdgpu_device *adev)
 	r = si_set_ip_blocks(adev);
 	if (r)
 		return r;
+	gpud_quiesce(adev);
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		struct amdgpu_ip_block *b = &adev->ip_blocks[i];
 
@@ -380,15 +505,17 @@ int gpud_device_init(struct amdgpu_device *adev)
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		struct amdgpu_ip_block *b = &adev->ip_blocks[i];
 
-		if (!b->status.hw || !b->version->funcs->late_init)
+		if (!b->status.hw)
 			continue;
-		r = b->version->funcs->late_init(b);
+		r = b->version->funcs->late_init ? b->version->funcs->late_init(b) : 0;
 		if (r) {
 			dev_err(adev->dev, "late_init of %s failed: %d\n", b->version->funcs->name, r);
 			return r;
 		}
 		b->status.late_initialized = true;
 	}
+	gpud_set_gating(adev, true);
+	gpud_cg_dump(adev, "gated");
 	gpud_vram_init(adev, gpud_client_vram_start);
 	adev->accel_working = !failed;
 	return failed;
@@ -396,11 +523,16 @@ int gpud_device_init(struct amdgpu_device *adev)
 
 void gpud_device_fini(struct amdgpu_device *adev)
 {
+	gpud_cg_dump(adev, "fini");
+	gpud_set_gating(adev, false);
+	gpud_cg_dump(adev, "ungated");
 	for (int i = adev->num_ip_blocks - 1; i >= 0; i--) {
 		struct amdgpu_ip_block *b = &adev->ip_blocks[i];
 
-		if (b->status.hw && b->version->funcs->hw_fini)
+		if (b->status.hw && b->version->funcs->hw_fini) {
+			dev_dbg(adev->dev, "hw_fini %s\n", b->version->funcs->name);
 			b->version->funcs->hw_fini(b);
+		}
 		b->status.hw = false;
 	}
 }
@@ -415,6 +547,9 @@ struct amdgpu_device *gpud_device_create(const struct gpud_platform *platform, c
 	if (!adev || !pdev)
 		return NULL;
 	lkpi_platform = platform;
+	/* GPUD_DEBUG: amdgpu's debug messages and gpud's step markers too. */
+	if (getenv("GPUD_DEBUG"))
+		lkpi_log_level = LKPI_DEBUG;
 	if (info->firmware_dir)
 		lkpi_firmware_dir = info->firmware_dir;
 	gpud_bus.number = info->bus;

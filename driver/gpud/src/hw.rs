@@ -6,8 +6,9 @@ use anyhow::{Result, bail};
 use gpud_platform::{DmaAccess, DmaBuffer, DmaSpace, Error, Mmio, PciDevice, Region};
 use std::collections::HashMap;
 use std::ffi::{CStr, CString, c_char, c_int, c_long, c_void};
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 #[repr(C)]
@@ -48,6 +49,7 @@ unsafe extern "C" {
     fn gpud_device_ib_tests(adev: *mut AmdgpuDevice, timeout_ms: c_long) -> c_int;
     fn gpud_irq_process(adev: *mut AmdgpuDevice) -> c_int;
     fn gpud_device_fini(adev: *mut AmdgpuDevice);
+    fn gpud_debug_dump(adev: *mut AmdgpuDevice);
     fn gpud_ring_count(adev: *mut AmdgpuDevice) -> c_int;
     fn gpud_ring_name(adev: *mut AmdgpuDevice, ring: c_int) -> *const c_char;
     fn gpud_ring_ready(adev: *mut AmdgpuDevice, ring: c_int) -> c_int;
@@ -61,6 +63,26 @@ struct Ctx {
     buffers: Mutex<HashMap<usize, DmaBuffer>>,
 }
 
+/// With GPUD_KMSG set, log lines also go to the kernel log, which netconsole carries off the machine as they are
+/// written: the last thing gpud did before a hang that takes the machine down. (Needs root, and
+/// `sysctl kernel.printk_devkmsg=on` so the kernel doesn't rate-limit them.)
+static KMSG: OnceLock<Option<Mutex<std::fs::File>>> = OnceLock::new();
+
+pub fn log(tag: &str, msg: &str) {
+    if tag == "debug" && std::env::var_os("GPUD_DEBUG").is_none() {
+        return;
+    }
+    eprintln!("[{tag}] {msg}");
+    let kmsg = KMSG.get_or_init(|| {
+        std::env::var_os("GPUD_KMSG")?;
+        std::fs::OpenOptions::new().write(true).open("/dev/kmsg").ok().map(Mutex::new)
+    });
+    if let Some(k) = kmsg {
+        // One write per record.
+        let _ = k.lock().unwrap().write_all(format!("gpud: [{tag}] {msg}").as_bytes());
+    }
+}
+
 extern "C" fn cb_log(_ctx: *mut c_void, level: c_int, msg: *const c_char) {
     // SAFETY: the C side passes a NUL-terminated string.
     let msg = unsafe { CStr::from_ptr(msg) }.to_string_lossy();
@@ -70,7 +92,7 @@ extern "C" fn cb_log(_ctx: *mut c_void, level: c_int, msg: *const c_char) {
         5 | 6 => "info",
         _ => "debug",
     };
-    eprintln!("[{tag}] {msg}");
+    log(tag, &msg);
 }
 
 extern "C" fn cb_dma_alloc(ctx: *mut c_void, size: usize, cpu: *mut *mut c_void, iova: *mut u64) -> c_int {
@@ -128,6 +150,7 @@ unsafe impl Send for AdevPtr {}
 
 pub struct Device {
     adev: *mut AmdgpuDevice,
+    down: AtomicBool,
     irq_stop: Arc<AtomicBool>,
     irq_thread: Option<std::thread::JoinHandle<()>>,
     pub interrupts: Arc<AtomicU64>,
@@ -204,6 +227,7 @@ impl Device {
         })?;
         Ok(Device {
             adev,
+            down: AtomicBool::new(false),
             irq_stop,
             irq_thread: Some(irq_thread),
             interrupts,
@@ -248,6 +272,28 @@ impl Device {
     pub fn adev(&self) -> *mut AmdgpuDevice {
         self.adev
     }
+
+    /// Logs the GPU's state for a stall: CP, RLC, ring pointers, GART and VM faults.
+    pub fn dump(&self) {
+        // SAFETY: adev is valid; the dump only reads registers and ring memory.
+        unsafe { gpud_debug_dump(self.adev) };
+    }
+
+    /// Stops the engines and interrupts (gating off, then hw_fini of every block), once. The GPU is left as
+    /// amdgpu's teardown leaves it, which is where the next init starts from.
+    pub fn shutdown(&self) {
+        if self.down.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        log("debug", "shutdown");
+        // The interrupt thread stops processing within one 50 ms wait.
+        self.irq_stop.store(true, Ordering::Relaxed);
+        std::thread::sleep(Duration::from_millis(60));
+        // SAFETY: adev is valid and nothing else uses it now.
+        unsafe { gpud_device_fini(self.adev) };
+        let _ = self._ctx.pci.disable_irqs();
+        log("debug", "shutdown done");
+    }
 }
 
 impl Drop for Device {
@@ -256,8 +302,6 @@ impl Drop for Device {
         if let Some(t) = self.irq_thread.take() {
             let _ = t.join();
         }
-        // SAFETY: adev is valid; the interrupt thread has stopped.
-        unsafe { gpud_device_fini(self.adev) };
-        let _ = self._ctx.pci.disable_irqs();
+        self.shutdown();
     }
 }

@@ -39,6 +39,15 @@ LD_PRELOAD=$PWD/libgpud_drm.so vulkaninfo --summary
 LD_PRELOAD=$PWD/libgpud_drm.so ./vkcompute
 ```
 
+`gpud serve` stops the engines on SIGINT or SIGTERM, and logs the GPU's state on SIGUSR1 (for a stuck submission).
+After a SIGKILL the next `init` or `serve` stops what was left running, with one exception: a kill in the middle of a
+dispatch can leave shader waves that never finish (their host memory is gone with the process), and SI can only
+clear those with an ASIC reset and a VBIOS re-POST, which `gpud` can't do yet. `init` and the IB tests still pass,
+but client dispatches hang; reboot. `GPUD_DEBUG=1` adds amdgpu's debug messages and a marker per bring-up and
+teardown step; `GPUD_KMSG=1` copies every log line to the kernel log (with `sysctl kernel.printk_devkmsg=on`), so
+netconsole shows the last step before a hang. If the GPU stops answering MMIO, `gpud` stops touching it at the first
+dead read and waits to be killed; the GPU then needs a reboot.
+
 `client/build.sh` builds `libgpud_drm.so` and `drminfo` (in the cross-compiling VM).
 
 ## Licenses

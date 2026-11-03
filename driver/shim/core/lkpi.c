@@ -55,7 +55,7 @@ void lkpi_udelay(unsigned long us)
 		return;
 	}
 	while (lkpi_ktime_ns() < end)
-		__asm__ __volatile__("pause" ::: "memory");
+		cpu_relax();
 }
 
 void lkpi_msleep(unsigned long ms)

@@ -259,6 +259,7 @@ static inline bool IS_ERR_OR_NULL(const void *ptr) { return !ptr || IS_ERR(ptr);
 
 /* ---- logging ---- */
 void lkpi_log(int level, const char *fmt, ...) __printf(2, 3);
+extern int lkpi_log_level;
 #define LKPI_ERR 3
 #define LKPI_WARN 4
 #define LKPI_NOTICE 5
@@ -471,7 +472,11 @@ void lkpi_msleep(unsigned long ms);
 #define msleep_interruptible(ms) (lkpi_msleep(ms), 0)
 #define usleep_range(lo, hi) lkpi_udelay(lo)
 #define fsleep(us) lkpi_udelay(us)
+#if defined(__x86_64__)
 #define cpu_relax() __asm__ __volatile__("pause" ::: "memory")
+#else
+#define cpu_relax() __asm__ __volatile__("" ::: "memory")
+#endif
 #define jiffies ((unsigned long)(lkpi_ktime_ns() / 1000000))
 #define jiffies_64 ((u64)jiffies)
 #define msecs_to_jiffies(ms) ((unsigned long)(ms))

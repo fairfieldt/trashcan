@@ -48,6 +48,8 @@ int gpud_device_ib_tests(struct amdgpu_device *adev, long timeout_ms);
 /* Drains the interrupt ring; call when the MSI fires. Returns how many entries were processed. */
 int gpud_irq_process(struct amdgpu_device *adev);
 void gpud_device_fini(struct amdgpu_device *adev);
+/* Logs the registers that tell why a ring stalled (CP, RLC, ring pointers, GART, VM faults) and the rings' state. */
+void gpud_debug_dump(struct amdgpu_device *adev);
 
 /* ---- clients ---- */
 struct gpud_vm;
