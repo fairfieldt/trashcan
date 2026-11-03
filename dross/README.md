@@ -3,6 +3,8 @@
 See [Native program interfaces](API.md) for handles, memory objects, messages,
 object-wait subscriptions and deadlines, and [Memory ownership and allocation](MEMORY.md)
 for reclamation and allocation budgets.
+See [Oscar application API design](API-DESIGN.md) for the proposed public SDK and
+service contracts, including process launch and service discovery.
 
 dross is the kernel of Oscar, the operating system of the trashcan appliance: Mac Pro 6,1s running distributed
 inference, with the drivers (`driver/`: gpud for the D700s, tbd for Thunderbolt, ethd for Ethernet) as user

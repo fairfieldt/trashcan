@@ -6,6 +6,11 @@ Rust wrappers. Linux programs can use the same wrappers through the native sysca
 namespace. Linux compatibility supplies its own file descriptors and conventions
 over these mechanisms.
 
+See [Oscar application API design](API-DESIGN.md) for the proposed Rust SDK,
+language-neutral service framing, capability ownership, environment subsystems,
+process launch and service discovery. This page describes the implemented kernel
+interface.
+
 ## Handles and authority
 
 A handle names one object in the calling process and carries rights. Its integer
