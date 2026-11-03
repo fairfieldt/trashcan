@@ -158,22 +158,86 @@ pub enum Kind {
     Kmsg(Mutex<u64>),
 }
 
+#[cfg(feature = "unix")]
+struct PositionGuard<'a>(&'a WaitCell<bool>);
+#[cfg(feature = "unix")]
+impl Drop for PositionGuard<'_> {
+    fn drop(&mut self) { self.0.update(|busy| *busy = false); }
+}
+
 pub struct File {
     pub kind: Kind,
     pub(super) pos: Mutex<u64>,
     pub flags: AtomicU32,
+    /// Rights retained by an fd created from a native memory capability.
+    memory_rights: Option<u32>,
     size: AtomicU64,
+    /// An open mounted file retains its backing independently of cache eviction.
+    #[cfg(feature = "unix")]
+    remote_content: Mutex<Option<Arc<Memory>>>,
+    #[cfg(feature = "unix")]
+    opened: Mutex<Option<Arc<super::unix::mount::OpenFile>>>,
+    #[cfg(feature = "unix")]
+    position_busy: WaitCell<bool>,
 }
 
 impl File {
     pub fn new(kind: Kind, flags: u32) -> Arc<File> {
+        Self::with_memory_rights(kind, flags, None)
+    }
+
+    fn with_memory_rights(kind: Kind, flags: u32, memory_rights: Option<u32>) -> Arc<File> {
         let size = match &kind {
             #[cfg(feature = "unix")]
             Kind::Node(node) => node.len(),
             Kind::Data(d) => d.len() as u64,
             _ => 0,
         };
-        Arc::new(File { kind, pos: Mutex::new(0), flags: AtomicU32::new(flags), size: AtomicU64::new(size) })
+        Arc::new(File { kind, pos: Mutex::new(0), flags: AtomicU32::new(flags), memory_rights, size: AtomicU64::new(size),
+            #[cfg(feature = "unix")]
+            remote_content: Mutex::new(None),
+            #[cfg(feature = "unix")]
+            opened: Mutex::new(None),
+            #[cfg(feature = "unix")]
+            position_busy: WaitCell::new(false),
+        })
+    }
+
+    #[cfg(feature = "unix")]
+    pub fn mounted(&self)->Option<Arc<super::unix::mount::OpenFile>>{self.opened.lock().clone()}
+    #[cfg(feature = "unix")]
+    pub fn open_mounted(&self)->Result<(),Errno>{
+        if let Kind::Node(node)=&self.kind{let opened=node.open_file(self.flags.load(Ordering::Relaxed))?;*self.opened.lock()=opened;}self.refresh()
+    }
+    #[cfg(feature = "unix")]
+    pub fn refresh(&self)->Result<(),Errno>{if let Kind::Node(node)=&self.kind{if let Some(fd)=self.mounted(){node.apply_info(fd.info()?);}else{node.refresh()?;}}Ok(())}
+    #[cfg(feature = "unix")]
+    pub fn sync(&self)->Result<(),Errno>{if let Some(fd)=self.mounted(){return fd.sync()}match &self.kind{Kind::Node(node)=>node.sync(),Kind::Dir(path)=>super::unix::vfs::lookup(&alloc::format!("/{path}"),true)?.1.sync(),_=>Ok(())}}
+
+    #[cfg(feature = "unix")]
+    fn position_guard(&self) -> Result<PositionGuard<'_>, Errno> {
+        self.position_busy.wait(u64::MAX, |busy| if *busy { None } else { *busy = true; Some(()) }).map_err(wait_errno)?;
+        Ok(PositionGuard(&self.position_busy))
+    }
+
+    #[cfg(feature = "unix")]
+    fn remote_content(&self) -> Result<Option<Arc<Memory>>, Errno> {
+        let Kind::Node(node) = &self.kind else { return Ok(None) };
+        if node.writable_remote()? { return Ok(None); }
+        if let Some(m) = self.remote_content.lock().clone() { return Ok(Some(m)); }
+        let Some(m) = node.content()? else { return Ok(None) };
+        Ok(Some(self.remote_content.lock().get_or_insert(m).clone()))
+    }
+
+    /// Native capability ceilings survive conversion to an fd and shared mmap.
+    pub fn memory_permissions(&self) -> Option<u64> {
+        self.memory_rights.map(|r| {
+            let mut flags = 0;
+            if r & dross_abi::rights::READ != 0 { flags |= vm::READ; }
+            if r & dross_abi::rights::WRITE != 0 { flags |= vm::WRITE; }
+            if r & dross_abi::rights::EXECUTE != 0 { flags |= vm::EXECUTE; }
+            flags
+        })
     }
 
     pub fn nonblocking(&self) -> bool {
@@ -186,7 +250,7 @@ impl File {
         match &self.kind {
             #[cfg(feature = "unix")]
             // A mounted file's contents (read-only) map directly; a RAM file maps as a copy.
-            Kind::Node(node) => Ok(node.content()?.filter(|m| off + len <= m.size())),
+            Kind::Node(node) => {let backing=if let Some(fd)=self.mounted(){Some(fd.snapshot()?)}else{node.content()?};Ok(backing.filter(|m|off+len<=m.size()))},
             Kind::Data(_) => Ok(None),
             Kind::Memfd(m) => {
                 let m = m.lock().clone().ok_or(EINVAL)?;
@@ -201,6 +265,7 @@ impl File {
 
     /// A copy of [off, off+len) of the file (zeros past its end), for a private mapping.
     pub fn copy(&self, off: u64, len: u64) -> Result<Memory, Errno> {
+        if self.memory_rights.is_some_and(|r| r & dross_abi::rights::READ == 0) { return Err(EACCES); }
         let m = Memory::anonymous(len, false, false).map_err(|_| ENOMEM)?;
         let put = |d: &[u8]| {
             let from = d.len().min(off as usize);
@@ -208,7 +273,7 @@ impl File {
         };
         match &self.kind {
             #[cfg(feature = "unix")]
-            Kind::Node(node) => match node.content()? {
+            Kind::Node(node) => match if let Some(fd)=self.mounted(){Some(fd.snapshot()?)}else{node.content()?} {
                 Some(c) => m.copy_from(0, &c, off, len.min(c.size().saturating_sub(off))).map_err(|_| EINVAL)?,
                 None => put(&node.data.lock())?,
             },
@@ -282,9 +347,17 @@ impl File {
             #[cfg(feature = "unix")]
             Kind::Node(node) => {
                 if self.flags.load(Ordering::Relaxed) & 3 == 1 { return Err(EBADF); }
-                let mut pos = self.pos.lock();
-                let out = node.read_at(at.unwrap_or(*pos), buf_len.min(1 << 20))?;
-                if at.is_none() { *pos += out.len() as u64; } Ok(out)
+                let _position = self.position_guard()?;
+                let offset = at.unwrap_or(*self.pos.lock());
+                let out = if let Some(fd)=self.mounted(){fd.read(offset,buf_len.min(1<<20))?}else if let Some(m) = self.remote_content()? {
+                    let n = (buf_len.min(1 << 20) as u64).min(node.len().saturating_sub(offset)) as usize;
+                    let mut out = Vec::new();
+                    out.try_reserve_exact(n).map_err(|_| ENOMEM)?;
+                    out.resize(n, 0);
+                    m.read(offset.min(node.len()), &mut out).map_err(|_| 5)?;
+                    out
+                } else { node.read_at(offset, buf_len.min(1 << 20))? };
+                if at.is_none() { *self.pos.lock() = offset + out.len() as u64; } Ok(out)
             }
             Kind::Null => Ok(Vec::new()),
             Kind::Zero => Ok(alloc::vec![0; buf_len]),
@@ -305,6 +378,7 @@ impl File {
                 Ok(v)
             }
             Kind::Memfd(m) => {
+                if self.memory_rights.is_some_and(|r| r & dross_abi::rights::READ == 0) { return Err(EBADF); }
                 let m = m.lock().clone();
                 let size = self.size.load(Ordering::Relaxed);
                 let mut pos = self.pos.lock();
@@ -371,9 +445,9 @@ impl File {
             #[cfg(feature = "unix")]
             Kind::Node(node) => {
                 let flags = self.flags.load(Ordering::Relaxed); if flags & 3 == 0 { return Err(EBADF); }
-                let mut pos = self.pos.lock(); let from = at.unwrap_or(*pos);
-                let end = super::unix::vfs::write(node, usize::try_from(from).map_err(|_| EINVAL)?, data, flags & 0x400 != 0)?;
-                if at.is_none() { *pos = end as u64; } Ok(data.len())
+                let _position = self.position_guard()?; let from = at.unwrap_or(*self.pos.lock());
+                let (written,end)=if let Some(fd)=self.mounted(){let(n,end)=fd.write(from,data,flags&0x400!=0)?;(n,usize::try_from(end).map_err(|_|EINVAL)?)}else{super::unix::vfs::write(node,usize::try_from(from).map_err(|_|EINVAL)?,data,flags&0x400!=0)?};
+                if at.is_none() { *self.pos.lock() = end as u64; } Ok(written)
             }
             Kind::Null | Kind::Zero | Kind::Random => Ok(data.len()),
             Kind::Log(l) => {
@@ -381,7 +455,9 @@ impl File {
                 Ok(data.len())
             }
             Kind::Memfd(m) => {
+                if self.memory_rights.is_some_and(|r| r & dross_abi::rights::WRITE == 0) { return Err(EBADF); }
                 let m = m.lock().clone().ok_or(EINVAL)?;
+                if !m.writable() { return Err(EACCES); }
                 let mut pos = self.pos.lock();
                 let from = at.unwrap_or(*pos);
                 if from + data.len() as u64 > m.size() {
@@ -443,6 +519,7 @@ impl Files {
         let mut closed = Vec::new();
         for entry in fds.iter_mut() { if entry.as_ref().is_some_and(|e| e.cloexec) { closed.push(entry.take()); } }
         drop(fds); drop(closed);
+        sock::collect_cycles();
     }
 
     pub fn get(&self, fd: i32) -> Result<Arc<File>, Errno> {
@@ -456,6 +533,38 @@ impl Files {
         self.insert_from(file, cloexec, 0)
     }
 
+    /// Reserve slots, copy their numbers out, then publish together. The short
+    /// user copy never waits; failures leave no partially installed descriptors.
+    pub fn insert_group(&self, files: &[Arc<File>], cloexec: bool,
+        publish: impl FnOnce(&[usize]) -> Result<(), Errno>) -> Result<(), Errno> {
+        if files.len() > sock::MAX_RIGHTS { return Err(EINVAL); }
+        if files.is_empty() { return publish(&[]); }
+        let mut slots = [0usize; sock::MAX_RIGHTS];
+        let mut count = 0;
+        let mut table = self.fds.lock();
+        for index in 0..4096 {
+            if table.get(index).is_none_or(Option::is_none) {
+                slots[count] = index;
+                count += 1;
+                if count == files.len() { break; }
+            }
+        }
+        if count != files.len() { return Err(EMFILE); }
+        let needed = slots[count - 1] + 1;
+        let extra = needed.saturating_sub(table.len());
+        table.try_reserve(extra).map_err(|_| ENOMEM)?;
+        while table.len() < needed { table.push(None); }
+        publish(&slots[..count])?;
+        for (file, &slot) in files.iter().zip(&slots[..count]) {
+            table[slot] = Some(Fd { file: file.clone(), cloexec });
+        }
+        Ok(())
+    }
+    pub fn insert_pair(&self, first: Arc<File>, second: Arc<File>, cloexec: bool,
+        publish: impl FnOnce(u64, u64) -> Result<(), Errno>) -> Result<(), Errno> {
+        self.insert_group(&[first, second], cloexec, |slots| publish(slots[0] as u64, slots[1] as u64))
+    }
+
     fn insert_from(&self, file: Arc<File>, cloexec: bool, min: usize) -> Result<u64, Errno> {
         if min >= 4096 { return Err(EMFILE); }
         let mut t = self.fds.lock();
@@ -465,6 +574,8 @@ impl Files {
                 if t.len() >= 4096 {
                     return Err(EMFILE);
                 }
+                let extra = min.max(t.len()) + 1 - t.len();
+                t.try_reserve(extra).map_err(|_| ENOMEM)?;
                 while t.len() < min {
                     t.push(None);
                 }
@@ -491,6 +602,7 @@ impl Files {
         let old = core::mem::replace(&mut e.file, file);
         drop(t);
         drop(old);
+        sock::collect_cycles();
         Ok(())
     }
 
@@ -501,12 +613,18 @@ impl Files {
         self.fds.lock().get_mut(fd as usize).and_then(|f| f.take()).map(|f| f.file).ok_or(EBADF)
     }
 
-    pub fn clear(&self) -> Vec<Arc<File>> {
-        self.fds.lock().drain(..).flatten().map(|f| f.file).collect()
+    pub fn release_all(&self) {
+        let old = core::mem::take(&mut *self.fds.lock());
+        drop(old);
+        sock::collect_cycles();
     }
+
+
 }
 
 pub(super) fn stat(p: &Process, f: &File, ptr: u64) -> R {
+    #[cfg(feature = "unix")]
+    f.refresh()?;
     let mut st = [0u8; 144];
     let size = match &f.kind {
         #[cfg(feature = "unix")]
@@ -519,22 +637,30 @@ pub(super) fn stat(p: &Process, f: &File, ptr: u64) -> R {
     // (st_dev, st_ino) it has seen for one it already loaded, and libgpud_drm finds its device's memfd that way.
     let ino = if let Kind::Data(d) = &f.kind { d.as_ptr() as u64 } else { f as *const File as u64 };
     #[cfg(feature = "unix")]
-    let ino = match &f.kind { Kind::Node(node) => node.ino, Kind::Pty(end) => end.pty.node.ino, _ => ino };
+    let ino = match &f.kind { Kind::Node(node) => node.inode(), Kind::Pty(end) => end.pty.node.ino, _ => ino };
     #[cfg(feature = "unix")]
     if let Some(node) = match &f.kind { Kind::Node(n) => Some(n), Kind::Pty(end) => Some(&end.pty.node), _ => None } {
+        st[0..8].copy_from_slice(&node.device().to_le_bytes());
         let attr = node.attr.lock(); st[28..32].copy_from_slice(&attr.uid.to_le_bytes()); st[32..36].copy_from_slice(&attr.gid.to_le_bytes());
     }
     st[8..16].copy_from_slice(&ino.to_le_bytes());
-    st[16..24].copy_from_slice(&1u64.to_le_bytes());
+    let links=1u64;
+    #[cfg(feature = "unix")]
+    let links=match &f.kind{Kind::Node(node)=>node.links(),_=>links};
+    st[16..24].copy_from_slice(&links.to_le_bytes());
     st[24..28].copy_from_slice(&f.mode().to_le_bytes());
     st[48..56].copy_from_slice(&size.to_le_bytes());
     st[56..64].copy_from_slice(&4096u64.to_le_bytes());
     st[64..72].copy_from_slice(&size.div_ceil(512).to_le_bytes());
+    #[cfg(feature = "unix")]
+    if let Kind::Node(node)=&f.kind{let attr=node.attr.lock();for(at,time)in[(72,attr.atime),(88,attr.mtime),(104,attr.ctime)]{st[at..at+8].copy_from_slice(&(time/1_000_000_000).to_le_bytes());st[at+8..at+16].copy_from_slice(&(time%1_000_000_000).to_le_bytes());}}
     write_user(p, ptr, &st).map(|_| 0)
 }
 
 /// A statx reply with the basic fields.
 pub(super) fn statx(p: &Process, f: &File, ptr: u64) -> R {
+    #[cfg(feature = "unix")]
+    f.refresh()?;
     let mut st = [0u8; 256];
     let size = match &f.kind {
         #[cfg(feature = "unix")]
@@ -549,6 +675,8 @@ pub(super) fn statx(p: &Process, f: &File, ptr: u64) -> R {
     st[28..30].copy_from_slice(&(f.mode() as u16).to_le_bytes());
     st[40..48].copy_from_slice(&size.to_le_bytes());
     st[48..56].copy_from_slice(&size.div_ceil(512).to_le_bytes());
+    #[cfg(feature = "unix")]
+    if let Kind::Node(node)=&f.kind{let attr=node.attr.lock();st[16..20].copy_from_slice(&(node.links()as u32).to_le_bytes());st[20..24].copy_from_slice(&attr.uid.to_le_bytes());st[24..28].copy_from_slice(&attr.gid.to_le_bytes());st[32..40].copy_from_slice(&node.inode().to_le_bytes());st[140..144].copy_from_slice(&(node.device()as u32).to_le_bytes());for(at,time)in[(64,attr.atime),(112,attr.mtime),(96,attr.ctime)]{st[at..at+8].copy_from_slice(&(time/1_000_000_000).to_le_bytes());st[at+8..at+12].copy_from_slice(&((time%1_000_000_000)as u32).to_le_bytes());}}
     write_user(p, ptr, &st).map(|_| 0)
 }
 
@@ -676,6 +804,7 @@ fn poll(p: &Process, ptr: u64, n: u64, deadline: u64) -> R {
 }
 
 pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
+    let _collect = sock::CollectOnReturn;
     let files = &linux(p).files;
     let fd = a[0] as i32;
     match n {
@@ -741,6 +870,10 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         8 => {
             let f = files.get(fd)?;
+            #[cfg(feature = "unix")]
+            let _position = f.position_guard()?;
+            #[cfg(feature = "unix")]
+            f.refresh()?;
             let size = match &f.kind {
                 #[cfg(feature = "unix")]
                 Kind::Node(node) => node.len() as i64,
@@ -783,11 +916,16 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         // pipe, pipe2
         22 | 293 => {
-            let (r, w) = Endpoint::pipe();
+            let (r, w) = Endpoint::pipe()?;
             let flags = if n == 293 { a[1] as u32 } else { 0 };
-            let rf = files.insert(File::new(Kind::Stream(r), flags & O_NONBLOCK), flags & O_CLOEXEC != 0)?;
-            let wf = files.insert(File::new(Kind::Stream(w), flags & O_NONBLOCK), flags & O_CLOEXEC != 0)?;
-            write_user(p, a[0], &[(rf as u32).to_le_bytes(), (wf as u32).to_le_bytes()].concat()).map(|_| 0)
+            files.insert_pair(File::new(Kind::Stream(r), flags & O_NONBLOCK),
+                File::new(Kind::Stream(w), flags & O_NONBLOCK), flags & O_CLOEXEC != 0,
+                |first, second| {
+                    let mut bytes = [0u8; 8];
+                    bytes[..4].copy_from_slice(&(first as u32).to_le_bytes());
+                    bytes[4..].copy_from_slice(&(second as u32).to_le_bytes());
+                    write_user(p, a[0], &bytes)
+                }).map(|()| 0)
         }
         32 => files.insert(files.get(fd)?, false),
         33 | 292 => {
@@ -824,6 +962,8 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         77 => {
             let f = files.get(fd)?;
             let Kind::Memfd(m) = &f.kind else { return Err(EINVAL) };
+            // Native memory objects have fixed backing; truncation must not replace it.
+            if f.memory_rights.is_some() { return Err(EACCES); }
             let size = a[1];
             if size > i64::MAX as u64 { return Err(EINVAL); }
             let rounded = size.checked_add(4095).ok_or(EINVAL)? & !4095;
@@ -871,11 +1011,11 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         7 => {
             let ms = a[2] as i64;
-            let deadline = if ms < 0 { u64::MAX } else { time::tsc_at_ns(time::now_ns() + ms as u64 * 1_000_000) };
+            let deadline = if ms < 0 { u64::MAX } else { time::tsc_at_ns(time::now_ns().saturating_add((ms as u64).saturating_mul(1_000_000))) };
             poll(p, a[0], a[1], deadline)
         }
         271 => {
-            let deadline = if a[2] == 0 { u64::MAX } else { time::tsc_at_ns(time::now_ns() + read_timespec(p, a[2])?) };
+            let deadline = if a[2] == 0 { u64::MAX } else { time::tsc_at_ns(time::now_ns().saturating_add(read_timespec(p, a[2])?)) };
             poll(p, a[0], a[1], deadline)
         }
         _ => Err(ENOSYS),
@@ -883,9 +1023,10 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
 }
 
 /// An fd for a dross memory object (memory or device memory such as a BAR): mappable, like a memfd.
-pub fn memory_fd(p: &Process, m: Arc<Memory>) -> R {
+pub fn memory_fd(p: &Process, m: Arc<Memory>, rights: u32) -> R {
     let size = m.size();
-    let f = File::new(Kind::Memfd(Mutex::new(Some(m))), 2);
+    let flags = if rights & dross_abi::rights::WRITE == 0 { 0 } else if rights & dross_abi::rights::READ == 0 { 1 } else { 2 };
+    let f = File::with_memory_rights(Kind::Memfd(Mutex::new(Some(m))), flags, Some(rights));
     f.size.store(size, Ordering::Relaxed);
     linux(p).files.insert(f, true)
 }

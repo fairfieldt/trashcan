@@ -81,13 +81,18 @@ pub fn open(p: &Process, path: &str, flags: u32, mode: u32) -> Result<Arc<File>,
         _ => return Err(EINVAL),
     };
     vfs::check(p, &node, need)?;
+    if need & 2 != 0 && node.remote.is_some() && !node.writable_remote()? { return Err(30); }
+    let node=if node.writable_remote()?{node.open_view()}else{node};
+    let file=File::new(Kind::Node(node.clone()),flags & !0x80000);
+    file.open_mounted()?;
+    vfs::check(p,&node,need)?;
     if flags & 0x200 != 0 {
         if need & 2 == 0 {
             return Err(EACCES);
         }
-        vfs::resize(&node, 0)?;
+        if let Some(fd)=file.mounted(){fd.truncate(0)?;file.refresh()?;}else{vfs::resize(&node,0)?;}
     }
-    Ok(File::new(Kind::Node(node), flags & !0x80000))
+    Ok(file)
 }
 fn node_of(p: &Process, fd: i32) -> Result<Arc<vfs::Node>, Errno> {
     match &linux(p).files.get(fd)?.kind {
@@ -111,15 +116,17 @@ fn stat(p: &Process, path: &str, follow: bool, ptr: u64, extended: bool) -> R {
     if extended {
         bytes[0..4].copy_from_slice(&0x7ffu32.to_le_bytes());
         bytes[4..8].copy_from_slice(&4096u32.to_le_bytes());
-        bytes[16..20].copy_from_slice(&1u32.to_le_bytes());
+        bytes[16..20].copy_from_slice(&(node.links()as u32).to_le_bytes());
         bytes[20..24].copy_from_slice(&attr.uid.to_le_bytes());
         bytes[24..28].copy_from_slice(&attr.gid.to_le_bytes());
         bytes[28..30].copy_from_slice(&(attr.mode as u16).to_le_bytes());
-        bytes[32..40].copy_from_slice(&node.ino.to_le_bytes());
+        bytes[32..40].copy_from_slice(&node.inode().to_le_bytes());
         bytes[40..48].copy_from_slice(&len.to_le_bytes());
+        bytes[140..144].copy_from_slice(&(node.device()as u32).to_le_bytes());
     } else {
-        bytes[8..16].copy_from_slice(&node.ino.to_le_bytes());
-        bytes[16..24].copy_from_slice(&1u64.to_le_bytes());
+        bytes[0..8].copy_from_slice(&node.device().to_le_bytes());
+        bytes[8..16].copy_from_slice(&node.inode().to_le_bytes());
+        bytes[16..24].copy_from_slice(&node.links().to_le_bytes());
         bytes[24..28].copy_from_slice(&attr.mode.to_le_bytes());
         bytes[28..32].copy_from_slice(&attr.uid.to_le_bytes());
         bytes[32..36].copy_from_slice(&attr.gid.to_le_bytes());
@@ -138,17 +145,23 @@ fn stat(p: &Process, path: &str, follow: bool, ptr: u64, extended: bool) -> R {
 }
 fn chmod(p: &Process, node: &vfs::Node, mode: u32) -> R {
     let uid = state(p).credentials.lock().uid[1];
-    let mut attr = node.attr.lock();
+    let attr = node.attr.lock();
     if uid != 0 && uid != attr.uid {
         return Err(1);
     }
-    attr.mode = attr.mode & 0o170000 | (mode & 0o7777);
+    let next = attr.mode & 0o170000 | (mode & 0o7777);
+    drop(attr);
+    node.persist_attr(next, u32::MAX, u32::MAX)?;
+    let mut attr = node.attr.lock();
+    attr.mode = next;
     Ok(0)
 }
 fn chown(p: &Process, node: &vfs::Node, uid: u32, gid: u32) -> R {
     if state(p).credentials.lock().uid[1] != 0 {
         return Err(1);
     }
+    let mode = node.attr.lock().mode & !0o6000;
+    node.persist_attr(mode, uid, gid)?;
     let mut attr = node.attr.lock();
     if uid != u32::MAX {
         attr.uid = uid;
@@ -181,7 +194,7 @@ fn dirents(p: &Process, fd: i32, ptr: u64, size: u64) -> R {
             break;
         }
         let mut entry = alloc::vec![0; len];
-        entry[..8].copy_from_slice(&node.ino.to_le_bytes());
+        entry[..8].copy_from_slice(&node.inode().to_le_bytes());
         entry[8..16].copy_from_slice(&(*offset + 1).to_le_bytes());
         entry[16..18].copy_from_slice(&(len as u16).to_le_bytes());
         entry[18] = (node.attr.lock().mode >> 12) as u8;
@@ -196,15 +209,22 @@ fn dirents(p: &Process, fd: i32, ptr: u64, size: u64) -> R {
     Ok(bytes.len() as u64)
 }
 pub fn dispatch(p: &Arc<Process>, n: u64, a: [u64; 6]) -> Option<R> {
-    if !matches!(n, 2 | 4 | 6 | 21 | 76..=95 | 257 | 258 | 260..=269 | 235 | 280 | 316 | 332 | 439 | 217 | 102 | 104..=108 | 113..=120 | 122 | 123)
+    if !matches!(n, 2 | 4 | 6 | 21 | 74 | 75 | 86 | 265 | 162 | 306 | 76..=95 | 257 | 258 | 260..=269 | 235 | 280 | 316 | 332 | 439 | 217 | 102 | 104..=108 | 113..=120 | 122 | 123)
     {
         return None;
     }
-    Some(inner(p, n, a))
+    Some(match vfs::namespace_guard(){Ok(_guard)=>inner(p,n,a),Err(e)=>Err(e)})
 }
 fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
     let files = &linux(p).files;
     match n {
+        74 | 75 | 306 => files.get(a[0]as i32)?.sync().map(|_|0),
+        86 | 265 => {
+            if n==265 && a[4]&!0x400!=0{return Err(EINVAL)}
+            let(old,new)=if n==86{(absolute(p,&read_cstr(p,a[0],4096)?),absolute(p,&read_cstr(p,a[1],4096)?))}else{(at(p,a[0]as i32,a[1])?,at(p,a[2]as i32,a[3])?)};
+            vfs::link(p,&old,&new,n==265 && a[4]&0x400!=0)
+        }
+        162 => vfs::sync_mounts().map(|_| 0),
         2 | 85 | 257 => {
             let (path, flags, mode) = if n == 257 {
                 (at(p, a[0] as i32, a[1])?, a[2] as u32, a[3] as u32)
@@ -361,6 +381,7 @@ fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             Ok(len as u64)
         }
         90 | 91 | 268 => {
+            if n==91{let file=files.get(a[0]as i32)?;if let Some(fd)=file.mounted(){file.refresh()?;let node=node_of(p,a[0]as i32)?;let uid=state(p).credentials.lock().uid[1];let attr=*node.attr.lock();if uid!=0 && uid!=attr.uid{return Err(1)}fd.setattr(attr.mode & 0o170000 | a[1]as u32 & 0o7777,u32::MAX,u32::MAX)?;file.refresh()?;return Ok(0)}}
             let node = if n == 91 {
                 node_of(p, a[0] as i32)?
             } else {
@@ -374,6 +395,7 @@ fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             chmod(p, &node, a[if n == 268 { 2 } else { 1 }] as u32)
         }
         92..=94 | 260 => {
+            if n==93{let file=files.get(a[0]as i32)?;if let Some(fd)=file.mounted(){if state(p).credentials.lock().uid[1]!=0{return Err(1)}file.refresh()?;let node=node_of(p,a[0]as i32)?;let mode=node.attr.lock().mode & !0o6000;fd.setattr(mode,a[1]as u32,a[2]as u32)?;file.refresh()?;return Ok(0)}}
             let node = if n == 93 {
                 node_of(p, a[0] as i32)?
             } else {
@@ -393,6 +415,7 @@ fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         95 => Ok(state(p).mask.swap(a[0] as u32 & 0o777, Ordering::Relaxed) as u64),
         76 | 77 => {
+            if n==77{let file=files.get(a[0]as i32)?;if let Some(fd)=file.mounted(){fd.truncate(a[1])?;file.refresh()?;return Ok(0)}}
             let node = if n == 77 {
                 match node_of(p, a[0] as i32) {
                     Ok(n) => n,
@@ -445,6 +468,8 @@ fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
                 values
             };
             vfs::check(p, &node, 2)?;
+            if n==280 && a[1]==0{let file=files.get(a[0]as i32)?;if let Some(fd)=file.mounted(){fd.times(values)?;file.refresh()?;return Ok(0)}}
+            node.persist_times(values)?;
             let mut attr = node.attr.lock();
             if let Some(v) = values[0] {
                 attr.atime = v;

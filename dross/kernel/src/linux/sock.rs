@@ -10,6 +10,28 @@ use spin::Mutex;
 use super::fs::{File, Kind, POLLERR, POLLHUP, POLLIN, POLLOUT};
 use super::*;
 use crate::sched::WaitCell;
+mod gc;
+#[cfg(feature = "audit-test")]
+pub(super) fn audit_cycles() {
+    gc::audit();
+}
+pub(super) fn has_deferred() -> bool {
+    gc::has_deferred()
+}
+pub(super) fn reap_deferred() -> usize {
+    gc::reap_deferred()
+}
+pub(super) fn collect_cycles() -> usize {
+    gc::collect()
+}
+pub(super) struct CollectOnReturn;
+impl Drop for CollectOnReturn {
+    fn drop(&mut self) {
+        if gc::needs_collection() {
+            gc::collect();
+        }
+    }
+}
 
 const SOCK_STREAM: u32 = 1;
 const SOCK_DGRAM: u32 = 2;
@@ -22,24 +44,41 @@ const MSG_DONTWAIT: u64 = 0x40;
 const MSG_CMSG_CLOEXEC: u64 = 0x4000_0000;
 /// Bytes a socket may hold unread before writers wait.
 const RX_LIMIT: usize = 8 << 20;
+/// Linux's per-message descriptor limit (include/net/scm.h).
+pub(super) const MAX_RIGHTS: usize = 253;
 
 struct Packet {
+    _charge: crate::account::Charge,
     data: Vec<u8>,
     off: usize,
     fds: Vec<Arc<File>>,
 }
 
 struct Rx {
+    _charge: crate::account::Charge,
     packets: VecDeque<Packet>,
     bytes: usize,
     /// The writer went away or shut down: reads end with EOF once the queue is empty.
     closed: bool,
 }
 
+fn trim_packets(rx: &mut Rx) {
+    let len = rx.packets.len();
+    if len == 0 {
+        rx.packets = VecDeque::new();
+    } else if rx.packets.capacity() > len.saturating_mul(4) {
+        let mut compact = VecDeque::new();
+        if compact.try_reserve_exact(len).is_ok() {
+            compact.append(&mut rx.packets);
+            rx.packets = compact;
+        }
+    }
+}
+
 /// One end of a connected socket pair or pipe: it receives into `rx`, sends into the peer's.
 pub struct Endpoint {
     ty: u32,
-    rx: WaitCell<Rx>,
+    rx: Arc<WaitCell<Rx>>,
     peer: Mutex<Weak<Endpoint>>,
     pipe: bool,
     /// A pipe's write end (its peer is the read end; a read end has no peer).
@@ -47,24 +86,43 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    fn new(ty: u32, pipe: bool, writer: bool) -> Endpoint {
-        Endpoint { ty, rx: WaitCell::new(Rx { packets: VecDeque::new(), bytes: 0, closed: false }), peer: Mutex::new(Weak::new()), pipe, writer }
+    fn new(ty: u32, pipe: bool, writer: bool, charge: crate::account::Charge) -> Endpoint {
+        Endpoint {
+            ty,
+            rx: Arc::new(WaitCell::new(Rx {
+                _charge: charge,
+                packets: VecDeque::new(),
+                bytes: 0,
+                closed: false,
+            })),
+            peer: Mutex::new(Weak::new()),
+            pipe,
+            writer,
+        }
     }
 
-    pub fn pair(ty: u32) -> (Arc<Endpoint>, Arc<Endpoint>) {
-        let a = Arc::new(Endpoint::new(ty, false, false));
-        let b = Arc::new(Endpoint::new(ty, false, false));
+    pub fn pair(ty: u32) -> Result<(Arc<Endpoint>, Arc<Endpoint>), Errno> {
+        let mut charge = crate::account::current()
+            .reserve(1024)
+            .map_err(|_| ENOMEM)?;
+        let a = Arc::new(Endpoint::new(ty, false, false, charge.split(512)));
+        let b = Arc::new(Endpoint::new(ty, false, false, charge));
         *a.peer.lock() = Arc::downgrade(&b);
         *b.peer.lock() = Arc::downgrade(&a);
-        (a, b)
+        gc::endpoints(&a, &b)?;
+        Ok((a, b))
     }
 
     /// (read end, write end).
-    pub fn pipe() -> (Arc<Endpoint>, Arc<Endpoint>) {
-        let r = Arc::new(Endpoint::new(SOCK_STREAM, true, false));
-        let w = Arc::new(Endpoint::new(SOCK_STREAM, true, true));
+    pub fn pipe() -> Result<(Arc<Endpoint>, Arc<Endpoint>), Errno> {
+        let mut charge = crate::account::current()
+            .reserve(1024)
+            .map_err(|_| ENOMEM)?;
+        let r = Arc::new(Endpoint::new(SOCK_STREAM, true, false, charge.split(512)));
+        let w = Arc::new(Endpoint::new(SOCK_STREAM, true, true, charge));
         *w.peer.lock() = Arc::downgrade(&r);
-        (r, w)
+        gc::endpoints(&r, &w)?;
+        Ok((r, w))
     }
 
     pub fn is_pipe(&self) -> bool {
@@ -72,80 +130,160 @@ impl Endpoint {
     }
 
     pub fn send(&self, data: &[u8], fds: Vec<Arc<File>>, nonblock: bool) -> Result<usize, Errno> {
-        let peer = self.peer.lock().upgrade().ok_or(EPIPE)?;
-        if peer.rx.with(|r| r.closed) {
-            return Err(EPIPE);
+        let _collect = CollectOnReturn;
+        // Stream control messages need a byte; otherwise they can never be
+        // received and must not retain descriptors indefinitely.
+        if self.ty == SOCK_STREAM && data.is_empty() {
+            return Ok(0);
         }
-        let mut item = Some(Packet { data: data.to_vec(), off: 0, fds });
-        let n = data.len();
-        let r = peer.rx.wait(if nonblock { 0 } else { u64::MAX }, |rx| {
-            if rx.bytes > 0 && rx.bytes + n > RX_LIMIT {
-                return None;
-            }
-            rx.bytes += n;
-            rx.packets.push_back(item.take().unwrap());
-            Some(())
+        let peer = self.peer.lock().clone();
+        let bytes = core::mem::size_of::<Packet>()
+            .checked_add(data.len())
+            .and_then(|bytes| bytes.checked_add(fds.capacity() * core::mem::size_of::<Arc<File>>()))
+            .ok_or(ENOMEM)?;
+        let charge = crate::account::current()
+            .reserve(bytes as u64)
+            .map_err(|_| ENOMEM)?;
+        let mut copied = Vec::new();
+        copied.try_reserve_exact(data.len()).map_err(|_| ENOMEM)?;
+        copied.extend_from_slice(data);
+        let mut item = Some(Packet {
+            _charge: charge,
+            data: copied,
+            off: 0,
+            fds,
         });
-        match r {
-            Ok(()) => {
-                // Wake readers (wait only wakes on update).
-                peer.rx.update(|_| {});
-                Ok(n)
+        let n = data.len();
+        loop {
+            let waiting = {
+                let _graph = gc::mutation();
+                let peer = peer.upgrade().ok_or(EPIPE)?;
+                let result = peer.rx.with(|rx| {
+                    if rx.closed {
+                        return Err(EPIPE);
+                    }
+                    if (rx.bytes > 0 && rx.bytes.saturating_add(n) > RX_LIMIT)
+                        || rx.packets.len() >= 4096
+                    {
+                        return Ok(false);
+                    }
+                    rx.packets.try_reserve(1).map_err(|_| ENOMEM)?;
+                    let packet = item.take().unwrap();
+                    gc::added_rights(packet.fds.len());
+                    rx.bytes += n;
+                    rx.packets.push_back(packet);
+                    Ok(true)
+                })?;
+                (result, peer.rx.clone())
+            };
+            if waiting.0 {
+                waiting.1.update(|_| {});
+                return Ok(n);
             }
-            Err(WaitError::TimedOut) => Err(EAGAIN),
-            Err(e) => Err(wait_errno(e)),
+            // A blocked sender owns the wait cell, not the receiver endpoint.
+            // Closing the last receiver therefore closes this queue and wakes us.
+            waiting
+                .1
+                .wait(if nonblock { 0 } else { u64::MAX }, |rx| {
+                    (rx.closed
+                        || ((rx.bytes == 0 || rx.bytes.saturating_add(n) <= RX_LIMIT)
+                            && rx.packets.len() < 4096))
+                        .then_some(())
+                })
+                .map_err(|error| {
+                    if error == WaitError::TimedOut {
+                        EAGAIN
+                    } else {
+                        wait_errno(error)
+                    }
+                })?;
         }
     }
 
     /// Receives up to `max` bytes and the fds of the packet they come from. Returns (data, fds, full length of
     /// the packet for datagram types).
-    pub fn recv(&self, max: usize, flags: u64, nonblock: bool, _: bool) -> Result<(Vec<u8>, Vec<Arc<File>>, usize), Errno> {
+    pub fn recv(
+        &self,
+        max: usize,
+        flags: u64,
+        nonblock: bool,
+        _: bool,
+    ) -> Result<(Vec<u8>, Vec<Arc<File>>, usize), Errno> {
+        let _collect = CollectOnReturn;
         let peek = flags & MSG_PEEK != 0;
         let stream = self.ty == SOCK_STREAM;
-        let r = self.rx.wait(if nonblock || flags & MSG_DONTWAIT != 0 { 0 } else { u64::MAX }, |rx| {
-            if rx.packets.is_empty() {
-                // EOF once the writer is gone (its drop sets `closed`) or shut down.
-                return if rx.closed { Some((Vec::new(), Vec::new(), 0)) } else { None };
+        let r = (|| loop {
+            let attempt = {
+                let _graph = gc::mutation();
+                self.rx.with(|rx| {
+                    if rx.packets.is_empty() {
+                        // EOF once the writer is gone (its drop sets `closed`) or shut down.
+                        return if rx.closed {
+                            Some((Vec::new(), Vec::new(), 0))
+                        } else {
+                            None
+                        };
+                    }
+                    if stream {
+                        let mut out = Vec::new();
+                        let mut fds = Vec::new();
+                        let mut i = 0;
+                        while out.len() < max && i < rx.packets.len() {
+                            let pk = &mut rx.packets[i];
+                            // fds arrive with the first byte of their packet; don't merge past a packet that has some.
+                            if i > 0 && !pk.fds.is_empty() {
+                                break;
+                            }
+                            let n = (max - out.len()).min(pk.data.len() - pk.off);
+                            out.extend_from_slice(&pk.data[pk.off..pk.off + n]);
+                            if !peek {
+                                gc::removed_rights(pk.fds.len());
+                                fds.append(&mut pk.fds);
+                                pk.off += n;
+                            }
+                            i += 1;
+                        }
+                        if !peek {
+                            rx.bytes -= out.len();
+                            while rx.packets.front().is_some_and(|p| p.off == p.data.len()) {
+                                rx.packets.pop_front();
+                            }
+                        }
+                        if !peek {
+                            trim_packets(rx);
+                        }
+                        let n = out.len();
+                        Some((out, fds, n))
+                    } else {
+                        let pk = if peek { None } else { rx.packets.pop_front() };
+                        let (data, fds) = match pk {
+                            Some(p) => {
+                                rx.bytes -= p.data.len();
+                                gc::removed_rights(p.fds.len());
+                                (p.data, p.fds)
+                            }
+                            None => (rx.packets.front().unwrap().data.clone(), Vec::new()),
+                        };
+                        let full = data.len();
+                        if !peek {
+                            trim_packets(rx);
+                        }
+                        Some((data[..full.min(max)].to_vec(), fds, full))
+                    }
+                })
+            };
+            if let Some(value) = attempt {
+                return Ok(value);
             }
-            if stream {
-                let mut out = Vec::new();
-                let mut fds = Vec::new();
-                let mut i = 0;
-                while out.len() < max && i < rx.packets.len() {
-                    let pk = &mut rx.packets[i];
-                    // fds arrive with the first byte of their packet; don't merge past a packet that has some.
-                    if i > 0 && !pk.fds.is_empty() {
-                        break;
-                    }
-                    let n = (max - out.len()).min(pk.data.len() - pk.off);
-                    out.extend_from_slice(&pk.data[pk.off..pk.off + n]);
-                    if !peek {
-                        fds.append(&mut pk.fds);
-                        pk.off += n;
-                    }
-                    i += 1;
-                }
-                if !peek {
-                    rx.bytes -= out.len();
-                    while rx.packets.front().is_some_and(|p| p.off == p.data.len()) {
-                        rx.packets.pop_front();
-                    }
-                }
-                let n = out.len();
-                Some((out, fds, n))
-            } else {
-                let pk = if peek { None } else { rx.packets.pop_front() };
-                let (data, fds) = match pk {
-                    Some(p) => {
-                        rx.bytes -= p.data.len();
-                        (p.data, p.fds)
-                    }
-                    None => (rx.packets.front().unwrap().data.clone(), Vec::new()),
-                };
-                let full = data.len();
-                Some((data[..full.min(max)].to_vec(), fds, full))
-            }
-        });
+            self.rx.wait(
+                if nonblock || flags & MSG_DONTWAIT != 0 {
+                    0
+                } else {
+                    u64::MAX
+                },
+                |rx| (!rx.packets.is_empty() || rx.closed).then_some(()),
+            )?;
+        })();
         match r {
             Ok(v) => {
                 // Writers waiting for room.
@@ -157,6 +295,21 @@ impl Endpoint {
             Err(WaitError::TimedOut) => Err(EAGAIN),
             Err(e) => Err(wait_errno(e)),
         }
+    }
+
+    pub fn shutdown_read(&self) {
+        let packets = {
+            let _graph = gc::mutation();
+            self.rx.with(|rx| {
+                rx.closed = true;
+                rx.bytes = 0;
+                let packets = core::mem::take(&mut rx.packets);
+                gc::removed_rights(packets.iter().map(|packet| packet.fds.len()).sum());
+                packets
+            })
+        };
+        self.rx.update(|_| {});
+        drop(packets);
     }
 
     pub fn shutdown_write(&self) {
@@ -193,6 +346,14 @@ impl Endpoint {
 
 impl Drop for Endpoint {
     fn drop(&mut self) {
+        gc::retired();
+        let packets = self.rx.update(|rx| {
+            rx.closed = true;
+            rx.bytes = 0;
+            core::mem::take(&mut rx.packets)
+        });
+        gc::removed_rights(packets.iter().map(|packet| packet.fds.len()).sum());
+        drop(packets);
         if let Some(peer) = self.peer.lock().upgrade() {
             peer.rx.update(|r| r.closed = true);
         }
@@ -200,6 +361,7 @@ impl Drop for Endpoint {
 }
 
 pub struct Listener {
+    _charge: crate::account::Charge,
     ty: u32,
     path: String,
     queue: WaitCell<VecDeque<Arc<Endpoint>>>,
@@ -207,7 +369,8 @@ pub struct Listener {
 
 impl Listener {
     pub fn poll(&self, me: &Arc<Thread>) -> u16 {
-        self.queue.poll(me, |q| if q.is_empty() { 0 } else { POLLIN })
+        self.queue
+            .poll(me, |q| if q.is_empty() { 0 } else { POLLIN })
     }
 
     pub fn unpoll(&self, me: &Arc<Thread>) {
@@ -217,6 +380,7 @@ impl Listener {
 
 impl Drop for Listener {
     fn drop(&mut self) {
+        gc::retired();
         let mut ns = NAMES.lock();
         if ns.get(&self.path).is_some_and(|w| w.strong_count() == 0) {
             ns.remove(&self.path);
@@ -242,7 +406,11 @@ fn read_path(p: &Process, addr: u64, len: u64) -> Result<String, Errno> {
     }
     let raw = &b[2..];
     // Abstract names (leading NUL) and paths share the namespace.
-    let raw = if raw.first() == Some(&0) { &raw[1..] } else { raw };
+    let raw = if raw.first() == Some(&0) {
+        &raw[1..]
+    } else {
+        raw
+    };
     let end = raw.iter().position(|&c| c == 0).unwrap_or(raw.len());
     String::from_utf8(raw[..end].to_vec()).map_err(|_| EINVAL)
 }
@@ -268,7 +436,11 @@ struct MsgHdr {
 fn read_msghdr(p: &Process, ptr: u64) -> Result<MsgHdr, Errno> {
     let b = read_user(p, ptr, 56)?;
     let u = |o: usize| u64::from_le_bytes(b[o..o + 8].try_into().unwrap());
-    Ok(MsgHdr { iov: read_iov(p, u(16), u(24))?, control: u(32), controllen: u(40) })
+    Ok(MsgHdr {
+        iov: read_iov(p, u(16), u(24))?,
+        control: u(32),
+        controllen: u(40),
+    })
 }
 
 /// The fds of every SCM_RIGHTS message in a control buffer.
@@ -281,14 +453,28 @@ fn rights_in(p: &Process, control: u64, len: u64) -> Result<Vec<Arc<File>>, Errn
     let mut at = 0;
     while at + 16 <= b.len() {
         let clen = u64::from_le_bytes(b[at..at + 8].try_into().unwrap()) as usize;
-        let (level, ty) = (i32::from_le_bytes(b[at + 8..at + 12].try_into().unwrap()), i32::from_le_bytes(b[at + 12..at + 16].try_into().unwrap()));
-        let Some(end) = at.checked_add(clen) else { return Err(EINVAL) };
+        let (level, ty) = (
+            i32::from_le_bytes(b[at + 8..at + 12].try_into().unwrap()),
+            i32::from_le_bytes(b[at + 12..at + 16].try_into().unwrap()),
+        );
+        let Some(end) = at.checked_add(clen) else {
+            return Err(EINVAL);
+        };
         if clen < 16 || end > b.len() {
             break;
         }
         if level == 1 && ty == 1 {
+            let count = (end - at - 16) / 4;
+            if fds.len() + count > MAX_RIGHTS {
+                return Err(EINVAL);
+            }
+            fds.try_reserve_exact(count).map_err(|_| ENOMEM)?;
             for c in b[at + 16..end].chunks_exact(4) {
-                fds.push(linux(p).files.get(i32::from_le_bytes(c.try_into().unwrap()))?);
+                fds.push(
+                    linux(p)
+                        .files
+                        .get(i32::from_le_bytes(c.try_into().unwrap()))?,
+                );
             }
         }
         at += clen.next_multiple_of(8);
@@ -297,6 +483,7 @@ fn rights_in(p: &Process, control: u64, len: u64) -> Result<Vec<Arc<File>>, Errn
 }
 
 pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
+    let _collect = CollectOnReturn;
     let files = &linux(p).files;
     let get = |fd: u64| files.get(fd as i32);
     match n {
@@ -310,7 +497,13 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             if ![SOCK_STREAM, SOCK_DGRAM, SOCK_SEQPACKET].contains(&base) {
                 return Err(EINVAL);
             }
-            files.insert(File::new(Kind::Socket(Mutex::new(State::Fresh { ty: base })), ty & SOCK_NONBLOCK), ty & SOCK_CLOEXEC != 0)
+            files.insert(
+                File::new(
+                    Kind::Socket(Mutex::new(State::Fresh { ty: base })),
+                    ty & SOCK_NONBLOCK,
+                ),
+                ty & SOCK_CLOEXEC != 0,
+            )
         }
         // socketpair
         53 => {
@@ -318,19 +511,37 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
                 return Err(EAFNOSUPPORT);
             }
             let ty = a[1] as u32;
-            let (x, y) = Endpoint::pair(ty & 0xf);
-            let fx = files.insert(File::new(Kind::Stream(x), ty & SOCK_NONBLOCK), ty & SOCK_CLOEXEC != 0)?;
-            let fy = files.insert(File::new(Kind::Stream(y), ty & SOCK_NONBLOCK), ty & SOCK_CLOEXEC != 0)?;
-            write_user(p, a[3], &[(fx as u32).to_le_bytes(), (fy as u32).to_le_bytes()].concat()).map(|_| 0)
+            let (x, y) = Endpoint::pair(ty & 0xf)?;
+            files
+                .insert_pair(
+                    File::new(Kind::Stream(x), ty & SOCK_NONBLOCK),
+                    File::new(Kind::Stream(y), ty & SOCK_NONBLOCK),
+                    ty & SOCK_CLOEXEC != 0,
+                    |first, second| {
+                        let mut bytes = [0u8; 8];
+                        bytes[..4].copy_from_slice(&(first as u32).to_le_bytes());
+                        bytes[4..].copy_from_slice(&(second as u32).to_le_bytes());
+                        write_user(p, a[3], &bytes)
+                    },
+                )
+                .map(|()| 0)
         }
         // bind
         49 => {
             let f = get(a[0])?;
             let path = read_path(p, a[1], a[2])?;
-            let Kind::Socket(s) = &f.kind else { return Err(EINVAL) };
+            let Kind::Socket(s) = &f.kind else {
+                return Err(EINVAL);
+            };
             let mut s = s.lock();
-            let State::Fresh { ty } = *s else { return Err(EINVAL) };
-            if NAMES.lock().get(&path).is_some_and(|w| w.strong_count() > 0) {
+            let State::Fresh { ty } = *s else {
+                return Err(EINVAL);
+            };
+            if NAMES
+                .lock()
+                .get(&path)
+                .is_some_and(|w| w.strong_count() > 0)
+            {
                 return Err(EADDRINUSE);
             }
             *s = State::Bound { ty, path };
@@ -339,23 +550,66 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         // listen: the fd becomes a listener in place.
         50 => {
             let f = get(a[0])?;
-            let Kind::Socket(s) = &f.kind else { return if matches!(f.kind, Kind::Listener(_)) { Ok(0) } else { Err(EINVAL) } };
-            let State::Bound { ty, path } = &*s.lock() else { return Err(EINVAL) };
-            let l = Arc::new(Listener { ty: *ty, path: path.clone(), queue: WaitCell::new(VecDeque::new()) });
+            let Kind::Socket(s) = &f.kind else {
+                return if matches!(f.kind, Kind::Listener(_)) {
+                    Ok(0)
+                } else {
+                    Err(EINVAL)
+                };
+            };
+            let State::Bound { ty, path } = &*s.lock() else {
+                return Err(EINVAL);
+            };
+            let charge = crate::account::current()
+                .reserve(512 + path.capacity() as u64)
+                .map_err(|_| ENOMEM)?;
+            let l = Arc::new(Listener {
+                _charge: charge,
+                ty: *ty,
+                path: path.clone(),
+                queue: WaitCell::new(VecDeque::new()),
+            });
+            gc::listener(&l)?;
+            let _graph = gc::mutation();
             NAMES.lock().insert(path.clone(), Arc::downgrade(&l));
-            let nf = File::new(Kind::Listener(l), f.flags.load(core::sync::atomic::Ordering::Relaxed));
+            let nf = File::new(
+                Kind::Listener(l),
+                f.flags.load(core::sync::atomic::Ordering::Relaxed),
+            );
             files.fds_replace(a[0] as i32, nf)?;
             Ok(0)
         }
         // accept, accept4
         43 | 288 => {
             let f = get(a[0])?;
-            let Kind::Listener(l) = &f.kind else { return Err(EINVAL) };
-            let r = l.queue.wait(if f.nonblocking() { 0 } else { u64::MAX }, |q| q.pop_front());
-            let e = match r {
-                Ok(e) => e,
-                Err(WaitError::TimedOut) => return Err(EAGAIN),
-                Err(e) => return Err(wait_errno(e)),
+            let Kind::Listener(l) = &f.kind else {
+                return Err(EINVAL);
+            };
+            let e = loop {
+                let endpoint = {
+                    let _graph = gc::mutation();
+                    l.queue.with(|queue| {
+                        let endpoint = queue.pop_front();
+                        if queue.is_empty() {
+                            *queue = VecDeque::new();
+                        }
+                        endpoint
+                    })
+                };
+                if let Some(endpoint) = endpoint {
+                    break endpoint;
+                }
+                l.queue
+                    .wait(if f.nonblocking() { 0 } else { u64::MAX }, |queue| {
+                        (!queue.is_empty()).then_some(())
+                    })
+                    .map_err(|error| {
+                        if error == WaitError::TimedOut {
+                            EAGAIN
+                        } else {
+                            wait_errno(error)
+                        }
+                    })?;
             };
             // The peer is unnamed: an address of just the family.
             if a[1] != 0 && a[2] != 0 {
@@ -363,88 +617,153 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
                 write_u32(p, a[2], 2)?;
             }
             let flags = if n == 288 { a[3] as u32 } else { 0 };
-            files.insert(File::new(Kind::Stream(e), flags & SOCK_NONBLOCK), flags & SOCK_CLOEXEC != 0)
+            files.insert(
+                File::new(Kind::Stream(e), flags & SOCK_NONBLOCK),
+                flags & SOCK_CLOEXEC != 0,
+            )
         }
         // connect
         42 => {
             let f = get(a[0])?;
             let path = read_path(p, a[1], a[2])?;
-            let Kind::Socket(s) = &f.kind else { return Err(EINVAL) };
+            let Kind::Socket(s) = &f.kind else {
+                return Err(EINVAL);
+            };
             let ty = match &*s.lock() {
                 State::Fresh { ty } | State::Bound { ty, .. } => *ty,
             };
-            let l = NAMES.lock().get(&path).and_then(|w| w.upgrade()).ok_or(ECONNREFUSED)?;
+            let (mine, theirs) = Endpoint::pair(ty)?;
+            let _graph = gc::mutation();
+            let l = NAMES
+                .lock()
+                .get(&path)
+                .and_then(|w| w.upgrade())
+                .ok_or(ECONNREFUSED)?;
             if l.ty != ty {
                 return Err(ECONNREFUSED);
             }
-            let (mine, theirs) = Endpoint::pair(ty);
-            l.queue.update(|q| q.push_back(theirs));
-            let nf = File::new(Kind::Stream(mine), f.flags.load(core::sync::atomic::Ordering::Relaxed));
+            l.queue.update(|q| {
+                q.try_reserve(1).map_err(|_| ENOMEM)?;
+                q.push_back(theirs);
+                Ok::<_, Errno>(())
+            })?;
+            let nf = File::new(
+                Kind::Stream(mine),
+                f.flags.load(core::sync::atomic::Ordering::Relaxed),
+            );
             files.fds_replace(a[0] as i32, nf)?;
             Ok(0)
         }
         // sendto, sendmsg
         44 | 46 => {
             let f = get(a[0])?;
-            let Kind::Stream(e) = &f.kind else { return Err(if socket_type(&f).is_some() { ENOTCONN } else { ENOTSOCK }) };
+            let Kind::Stream(e) = &f.kind else {
+                return Err(if socket_type(&f).is_some() {
+                    ENOTCONN
+                } else {
+                    ENOTSOCK
+                });
+            };
             let (data, fds, flags) = if n == 44 {
                 (read_user(p, a[1], a[2].min(16 << 20))?, Vec::new(), a[3])
             } else {
                 let h = read_msghdr(p, a[1])?;
-                (gather(p, &h.iov)?, rights_in(p, h.control, h.controllen)?, a[2])
+                (
+                    gather(p, &h.iov)?,
+                    rights_in(p, h.control, h.controllen)?,
+                    a[2],
+                )
             };
-            e.send(&data, fds, f.nonblocking() || flags & MSG_DONTWAIT != 0).map(|n| n as u64)
+            e.send(&data, fds, f.nonblocking() || flags & MSG_DONTWAIT != 0)
+                .map(|n| n as u64)
         }
         // recvfrom, recvmsg
         45 | 47 => {
             let f = get(a[0])?;
-            let Kind::Stream(e) = &f.kind else { return Err(if socket_type(&f).is_some() { ENOTCONN } else { ENOTSOCK }) };
+            let Kind::Stream(e) = &f.kind else {
+                return Err(if socket_type(&f).is_some() {
+                    ENOTCONN
+                } else {
+                    ENOTSOCK
+                });
+            };
             if n == 45 {
                 let (data, _, full) = e.recv(a[2] as usize, a[3], f.nonblocking(), false)?;
                 write_user(p, a[1], &data)?;
                 if a[4] != 0 && a[5] != 0 {
                     write_u32(p, a[5], 0)?;
                 }
-                return Ok(if a[3] & MSG_TRUNC != 0 { full } else { data.len() } as u64);
+                return Ok(if a[3] & MSG_TRUNC != 0 {
+                    full
+                } else {
+                    data.len()
+                } as u64);
             }
             let h = read_msghdr(p, a[1])?;
-            let total = h.iov.iter().try_fold(0u64, |sum, &(_, len)| sum.checked_add(len)).ok_or(EINVAL)?;
-            if total > i64::MAX as u64 { return Err(EINVAL); }
+            let total = h
+                .iov
+                .iter()
+                .try_fold(0u64, |sum, &(_, len)| sum.checked_add(len))
+                .ok_or(EINVAL)?;
+            if total > i64::MAX as u64 {
+                return Err(EINVAL);
+            }
             let (data, fds, full) = e.recv(total as usize, a[2], f.nonblocking(), false)?;
             scatter(p, &h.iov, &data)?;
             let mut out_flags = 0u32;
             if full > data.len() {
                 out_flags |= MSG_TRUNC as u32;
             }
-            // Control: one SCM_RIGHTS message with the received fds, if they fit.
-            let mut clen_written = 0u64;
+            let finish_header = |control_len: u64, flags: u32| -> Result<(), Errno> {
+                write_u64(p, a[1] + 40, control_len)?;
+                write_u32(p, a[1] + 48, flags)?;
+                write_u32(p, a[1] + 8, 0)
+            };
+            // Reserve/copy/publish the entire descriptor group. An exhausted
+            // table or failed copyout must not leave unreported descriptors.
             if !fds.is_empty() {
                 let need = 16 + fds.len() as u64 * 4;
                 if h.control != 0 && h.controllen >= need {
-                    let mut c = Vec::new();
-                    c.extend_from_slice(&need.to_le_bytes());
-                    c.extend_from_slice(&1i32.to_le_bytes());
-                    c.extend_from_slice(&1i32.to_le_bytes());
-                    for fl in fds {
-                        let fd = files.insert(fl, a[2] & MSG_CMSG_CLOEXEC != 0)?;
-                        c.extend_from_slice(&(fd as u32).to_le_bytes());
-                    }
-                    write_user(p, h.control, &c)?;
-                    clen_written = need.next_multiple_of(8).min(h.controllen);
-                } else {
-                    out_flags |= 8; // MSG_CTRUNC: the fds are dropped
+                    files.insert_group(&fds, a[2] & MSG_CMSG_CLOEXEC != 0, |slots| {
+                        let mut control = [0u8; 16 + MAX_RIGHTS * 4];
+                        control[..8].copy_from_slice(&need.to_le_bytes());
+                        control[8..12].copy_from_slice(&1i32.to_le_bytes());
+                        control[12..16].copy_from_slice(&1i32.to_le_bytes());
+                        for (i, &fd) in slots.iter().enumerate() {
+                            control[16 + i * 4..20 + i * 4]
+                                .copy_from_slice(&(fd as u32).to_le_bytes());
+                        }
+                        write_user(p, h.control, &control[..need as usize])?;
+                        finish_header(need.next_multiple_of(8).min(h.controllen), out_flags)
+                    })?;
+                    return Ok(if a[2] & MSG_TRUNC != 0 {
+                        full
+                    } else {
+                        data.len()
+                    } as u64);
                 }
+                out_flags |= 8; // MSG_CTRUNC: the fds are dropped.
             }
-            write_u64(p, a[1] + 40, clen_written)?;
-            write_u32(p, a[1] + 48, out_flags)?;
-            write_u32(p, a[1] + 8, 0)?;
-            Ok(if a[2] & MSG_TRUNC != 0 { full } else { data.len() } as u64)
+            finish_header(0, out_flags)?;
+            Ok(if a[2] & MSG_TRUNC != 0 {
+                full
+            } else {
+                data.len()
+            } as u64)
         }
         // shutdown
         48 => {
             let f = get(a[0])?;
-            let Kind::Stream(e) = &f.kind else { return Err(ENOTCONN) };
-            if a[1] >= 1 {
+            let Kind::Stream(e) = &f.kind else {
+                return Err(ENOTCONN);
+            };
+            if a[1] > 2 {
+                return Err(EINVAL);
+            }
+            if a[1] == 0 || a[1] == 2 {
+                e.shutdown_read();
+            }
+            if a[1] == 1 || a[1] == 2 {
                 e.shutdown_write();
             }
             Ok(0)

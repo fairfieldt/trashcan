@@ -1,0 +1,39 @@
+--- a/src/ext4_fs.c
++++ b/src/ext4_fs.c
+@@ -110,8 +110,9 @@
+ 
+ 
+ 	if (!fs->read_only) {
+-		/* Mark system as mounted */
+-		ext4_set16(&fs->sb, state, EXT4_SUPERBLOCK_STATE_ERROR_FS);
++		/* A mounted filesystem is unclean, not corrupt. Inventing ERROR_FS
++		 * prevents other ext4 implementations from trusting its orphan list. */
++		ext4_set16(&fs->sb, state, tmp & ~EXT4_SUPERBLOCK_STATE_VALID_FS);
+ 		r = ext4_sb_write(fs->bdev, &fs->sb);
+ 		if (r != EOK)
+ 			return r;
+--- a/src/ext4_journal.c
++++ b/src/ext4_journal.c
+@@ -906,8 +906,11 @@
+ 	if (r != EOK)
+ 		return;
+ 
+-	/* We need special treatment for ext4 superblock. */
+-	if (tag_info->block) {
++	/* The superblock is at byte 1024: block one for 1 KiB blocks, and
++	 * within block zero for larger filesystem blocks. Keep the in-memory
++	 * copy current so later recovery/start writes cannot undo replay. */
++	uint32_t block_size = jbd_get32(&jbd_fs->sb, blocksize);
++	if (tag_info->block != EXT4_SUPERBLOCK_OFFSET / block_size) {
+ 		r = ext4_block_get_noread(fs->bdev, &ext4_block, tag_info->block);
+ 		if (r != EOK) {
+ 			jbd_block_set(jbd_fs, &journal_block);
+@@ -930,7 +933,7 @@
+ 		state = ext4_get16(&fs->sb, state);
+ 
+ 		memcpy(&fs->sb,
+-			journal_block.data + EXT4_SUPERBLOCK_OFFSET,
++			journal_block.data + EXT4_SUPERBLOCK_OFFSET % block_size,
+ 			EXT4_SUPERBLOCK_SIZE);
+ 
+ 		/* Mark system as mounted */

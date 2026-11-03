@@ -27,41 +27,159 @@ pub struct Node {
     /// A file's contents, a symlink's target.
     pub data: Mutex<Vec<u8>>,
     pub ino: u64,
-    /// A node of a mounted filesystem (`mount.rs`): read-only.
+    links: AtomicU64,
+    /// A node served by a userspace filesystem (`mount.rs`).
     pub remote: Option<Remote>,
 }
 pub struct Remote {
     mount: Arc<super::mount::Mount>,
     /// Below the mount's root.
-    path: String,
-    size: u64,
+    path: Mutex<String>,
+    size: AtomicU64,
+    inode: AtomicU64,
+    links: AtomicU64,
     /// A directory whose entries are in the tree.
     listed: core::sync::atomic::AtomicBool,
-    /// A file's contents, once opened.
-    content: Mutex<Option<Arc<crate::memory::Memory>>>,
+    /// Active users retain backing; the node alone must not pin the file in RAM.
+    content: Mutex<Weak<crate::memory::Memory>>,
+}
+// Cache-owned references are separate from open descriptions and mappings.
+// An oversized file remains usable but is never retained just for caching.
+const CONTENT_CACHE_BYTES: u64 = 32 << 20;
+const CONTENT_CACHE_ENTRIES: usize = 64;
+struct CachedContent {
+    ino: u64,
+    memory: Arc<crate::memory::Memory>,
+}
+struct ContentCache {
+    entries: [Option<CachedContent>; CONTENT_CACHE_ENTRIES],
+    next: usize,
+    bytes: u64,
+    limit: u64,
+}
+impl ContentCache {
+    const fn new(limit: u64) -> Self {
+        Self { entries: [const { None }; CONTENT_CACHE_ENTRIES], next: 0, bytes: 0, limit }
+    }
+    fn retain(&mut self, ino: u64, memory: Arc<crate::memory::Memory>) {
+        let size = memory.size();
+        if size > self.limit || self.entries.iter().flatten().any(|e| e.ino == ino) { return; }
+        // FIFO bounds both bytes and metadata without allocating cache metadata.
+        loop {
+            if let Some(old) = self.entries[self.next].take() { self.bytes -= old.memory.size(); }
+            if self.bytes + size <= self.limit { break; }
+            self.next = (self.next + 1) % CONTENT_CACHE_ENTRIES;
+        }
+        self.entries[self.next] = Some(CachedContent { ino, memory });
+        self.bytes += size;
+        self.next = (self.next + 1) % CONTENT_CACHE_ENTRIES;
+    }
+}
+static CONTENT_CACHE: Mutex<ContentCache> = Mutex::new(ContentCache::new(CONTENT_CACHE_BYTES));
+
+/// Drops cache ownership; open descriptions and mappings remain valid.
+pub fn reclaim_content_cache() -> u64 {
+    let (entries, bytes) = {
+        let mut cache = CONTENT_CACHE.lock();
+        let entries = core::mem::replace(&mut cache.entries, [const { None }; CONTENT_CACHE_ENTRIES]);
+        let bytes = cache.bytes;
+        cache.bytes = 0;
+        cache.next = 0;
+        (entries, bytes)
+    };
+    // Freeing many pages must not hold the cache registry lock.
+    drop(entries);
+    bytes
+}
+
+#[cfg(feature = "audit-test")]
+pub fn audit_content_cache() {
+    use crate::memory::Memory;
+    let mut cache = ContentCache::new(8192);
+    let a = Arc::new(Memory::anonymous(4096, false, false).unwrap());
+    let weak = Arc::downgrade(&a);
+    cache.retain(1, a);
+    cache.retain(2, Arc::new(Memory::anonymous(4096, false, false).unwrap()));
+    let live = Arc::new(Memory::anonymous(4096, false, false).unwrap());
+    cache.retain(3, live.clone());
+    assert!(weak.upgrade().is_none());
+    assert_eq!(cache.bytes, 8192);
+    cache.retain(4, Arc::new(Memory::anonymous(12288, false, false).unwrap()));
+    assert_eq!(cache.bytes, 8192);
+    drop(cache);
+    assert_eq!(live.size(), 4096);
+    crate::println!("vfs: bounded content cache tests passed");
 }
 impl Node {
+    pub fn open_view(&self)->Arc<Self>{
+        let remote=self.remote.as_ref().map(|r|Remote{mount:r.mount.clone(),path:Mutex::new(r.path.lock().clone()),size:AtomicU64::new(r.size.load(Ordering::Acquire)),inode:AtomicU64::new(r.inode.load(Ordering::Acquire)),links:AtomicU64::new(r.links.load(Ordering::Acquire)),listed:false.into(),content:Mutex::new(Weak::new())});
+        // Writable regular files keep no bytes in Node.data; this detached view
+        // prevents an old open target's metadata from changing its replacement.
+        Arc::new(Self{attr:Mutex::new(*self.attr.lock()),data:Mutex::new(Vec::new()),ino:self.ino,links:AtomicU64::new(self.links()),remote})
+    }
+    pub fn mount_root(&self)->bool{self.remote.as_ref().is_some_and(|r|*r.path.lock()=="/")}
+    pub fn device(&self)->u64{self.remote.as_ref().map_or(1,|r|r.mount.device)}
+    pub fn inode(&self)->u64{self.remote.as_ref().map_or(self.ino,|r|r.inode.load(Ordering::Acquire))}
+    pub fn links(&self)->u64{self.remote.as_ref().map_or_else(||self.links.load(Ordering::Acquire),|r|r.links.load(Ordering::Acquire))}
+    pub fn apply_info(&self,info:super::mount::Info){
+        if let Some(r)=&self.remote{r.inode.store(info.inode,Ordering::Release);r.size.store(info.size,Ordering::Release);r.links.store(info.links as u64,Ordering::Release);}
+        *self.attr.lock()=Attr{mode:info.mode,uid:info.uid,gid:info.gid,atime:info.atime,mtime:info.mtime,ctime:info.ctime};
+    }
+    pub fn refresh(&self)->Result<(),Errno>{if let Some(r)=&self.remote{let path=r.path.lock().clone();let info=r.mount.info(&path)?;self.apply_info(info);}Ok(())}
+    pub fn open_file(&self,flags:u32)->Result<Option<Arc<super::mount::OpenFile>>,Errno>{
+        let Some(r)=&self.remote else{return Ok(None)};
+        if !r.mount.writable()?{return Ok(None)}
+        let path=r.path.lock().clone();r.mount.open_file(&path,flags).map(Some)
+    }
     /// A file's size.
     pub fn len(&self) -> u64 {
         match &self.remote {
-            Some(r) if self.attr.lock().mode & 0o170000 == REG => r.size,
+            Some(r) if self.attr.lock().mode & 0o170000 == REG => r.size.load(Ordering::Acquire),
             _ => self.data.lock().len() as u64,
         }
     }
-    /// A mounted file's contents (read from the filesystem the first time).
+    pub fn writable_remote(&self) -> Result<bool, Errno> {
+        self.remote.as_ref().map_or(Ok(false), |r| r.mount.writable())
+    }
+    pub fn persist_attr(&self, mode: u32, uid: u32, gid: u32) -> Result<(), Errno> {
+        if let Some(r) = &self.remote { let path = r.path.lock().clone(); r.mount.setattr(&path, mode, uid, gid)?; }
+        Ok(())
+    }
+    pub fn persist_times(&self, times: [Option<u64>; 2]) -> Result<(), Errno> {
+        if let Some(r) = &self.remote { let path = r.path.lock().clone(); r.mount.times(&path, times)?; }
+        Ok(())
+    }
+    pub fn sync(&self) -> Result<(), Errno> {
+        self.remote.as_ref().map_or(Ok(()), |r| r.mount.sync())
+    }
+    /// A mounted file's contents, shared with active readers and the bounded cache.
     pub fn content(&self) -> Result<Option<Arc<crate::memory::Memory>>, Errno> {
         let Some(r) = self.remote.as_ref().filter(|_| self.attr.lock().mode & 0o170000 == REG) else {
             return Ok(None);
         };
-        if let Some(m) = r.content.lock().clone() {
+        if r.mount.writable()? { let path = r.path.lock().clone(); return r.mount.open(&path).map(Some); }
+        if let Some(m) = r.content.lock().upgrade() {
             return Ok(Some(m));
         }
-        // Read outside the lock; a concurrent open may read it too, and one copy is kept.
-        let m = r.mount.open(&r.path)?;
-        Ok(Some(r.content.lock().get_or_insert(m).clone()))
+        // RPC can block: do not hold a spinlock across it. Concurrent opens may
+        // load twice, but all subsequent users share the first published backing.
+        let path = r.path.lock().clone();
+        let loaded = r.mount.open(&path)?;
+        let m = {
+            let mut content = r.content.lock();
+            if let Some(m) = content.upgrade() { m } else {
+                *content = Arc::downgrade(&loaded);
+                loaded
+            }
+        };
+        CONTENT_CACHE.lock().retain(self.ino, m.clone());
+        Ok(Some(m))
     }
     /// `len` bytes of a file from `offset`.
     pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, Errno> {
+        if let Some(r) = self.remote.as_ref().filter(|_| self.attr.lock().mode & 0o170000 == REG) {
+            if r.mount.writable()? { let path = r.path.lock().clone(); return r.mount.read(&path, offset, len); }
+        }
         if let Some(m) = self.content()? {
             let from = offset.min(self.len());
             let n = len.min((self.len() - from) as usize);
@@ -84,6 +202,11 @@ static TREE: Mutex<Tree> = Mutex::new(Tree {
     nodes: BTreeMap::new(),
     next: 1,
 });
+
+static NAMESPACE_BUSY:WaitCell<bool>=WaitCell::new(false);
+pub struct NamespaceGuard;
+impl Drop for NamespaceGuard{fn drop(&mut self){NAMESPACE_BUSY.update(|busy|*busy=false);}}
+pub fn namespace_guard()->Result<NamespaceGuard,Errno>{NAMESPACE_BUSY.wait_uninterruptible(u64::MAX,|busy|(!*busy).then(||*busy=true)).map_err(|_|EINTR)?;Ok(NamespaceGuard)}
 
 pub fn normalize(path: &str) -> String {
     let mut parts = Vec::new();
@@ -128,10 +251,11 @@ fn new_node(tree: &mut Tree, attr: Attr, data: Vec<u8>, remote: Option<Remote>) 
     BYTES.fetch_add(data.len(), Ordering::Relaxed);
     let ino = tree.next;
     tree.next += 1;
-    Arc::new(Node { attr: Mutex::new(attr), data: Mutex::new(data), ino, remote })
+    Arc::new(Node { attr: Mutex::new(attr), data: Mutex::new(data), ino, links: AtomicU64::new(if attr.mode & 0o170000 == DIR { 2 } else { 1 }), remote })
 }
 /// Puts the filesystem `mount` serves at `path` (an empty directory, made if missing).
 pub fn mount(path: &str, mount: Arc<super::mount::Mount>) -> Result<(), Errno> {
+    let _namespace=namespace_guard()?;
     let path = normalize(path);
     if path == "/" {
         return Err(EBUSY);
@@ -142,7 +266,7 @@ pub fn mount(path: &str, mount: Arc<super::mount::Mount>) -> Result<(), Errno> {
         return Err(EBUSY);
     }
     let now = clock_ns(0);
-    let remote = Remote { mount, path: String::from("/"), size: 0, listed: false.into(), content: Mutex::new(None) };
+    let remote = Remote { mount, path: Mutex::new(String::from("/")), size: AtomicU64::new(0), inode: AtomicU64::new(2), links: AtomicU64::new(2), listed: false.into(), content: Mutex::new(Weak::new()) };
     let node = new_node(&mut tree, Attr { mode: DIR | 0o755, uid: 0, gid: 0, atime: now, mtime: now, ctime: now }, Vec::new(), Some(remote));
     tree.nodes.insert(path, node);
     Ok(())
@@ -152,15 +276,17 @@ fn list(dir: &Arc<Node>, at: &str) -> Result<(), Errno> {
     let Some(r) = dir.remote.as_ref().filter(|r| !r.listed.load(Ordering::Acquire)) else {
         return Ok(());
     };
-    let entries = r.mount.list(&r.path)?;
+    let path = r.path.lock().clone();
+    let entries = r.mount.list(&path)?;
     let mut tree = TREE.lock();
     for e in entries {
         let path = if at == "/" { alloc::format!("/{}", e.name) } else { alloc::format!("{at}/{}", e.name) };
         if tree.nodes.contains_key(&path) {
             continue;
         }
-        let remote_path = if r.path == "/" { alloc::format!("/{}", e.name) } else { alloc::format!("{}/{}", r.path, e.name) };
-        let remote = Remote { mount: r.mount.clone(), path: remote_path, size: e.size, listed: false.into(), content: Mutex::new(None) };
+        let base = r.path.lock();
+        let remote_path = if *base == "/" { alloc::format!("/{}", e.name) } else { alloc::format!("{}/{}", *base, e.name) };
+        let remote = Remote { mount: r.mount.clone(), path: Mutex::new(remote_path), size: AtomicU64::new(e.size), inode: AtomicU64::new(e.inode), links: AtomicU64::new(1), listed: false.into(), content: Mutex::new(Weak::new()) };
         let attr = Attr { mode: e.mode, uid: e.uid, gid: e.gid, atime: e.mtime, mtime: e.mtime, ctime: e.mtime };
         let node = new_node(&mut tree, attr, e.target, Some(remote));
         tree.nodes.insert(path, node);
@@ -267,7 +393,7 @@ pub fn lookup(path: &str, follow: bool) -> Result<(String, Arc<Node>), Errno> {
     lookup_listing(None, path, follow)
 }
 pub fn lookup_as(p: &Process, path: &str, follow: bool) -> Result<(String, Arc<Node>), Errno> {
-    lookup_listing(Some(p), path, follow)
+    let found=lookup_listing(Some(p),path,follow)?;found.1.refresh()?;Ok(found)
 }
 /// Why a lookup stopped: an error, or a mounted directory whose entries aren't in the tree yet.
 enum Miss {
@@ -392,9 +518,7 @@ fn writable_parent(p: &Process, path: &str) -> Result<(), Errno> {
     if node.attr.lock().mode & 0o170000 != DIR {
         return Err(ENOTDIR);
     }
-    if node.remote.is_some() || lookup(path, false).is_ok_and(|(_, n)| n.remote.is_some()) {
-        return Err(EROFS);
-    }
+    if let Some(r) = &node.remote { if !r.mount.writable()? { return Err(EROFS); } }
     check(p, &node, 3)
 }
 pub fn create(p: &Process, path: &str, mode: u32, data: Vec<u8>) -> Result<Arc<Node>, Errno> {
@@ -404,15 +528,29 @@ pub fn create(p: &Process, path: &str, mode: u32, data: Vec<u8>) -> Result<Arc<N
         let credentials = state(p).credentials.lock();
         (credentials.uid[1], credentials.gid[1])
     };
-    let mut tree = TREE.lock();
-    if tree.nodes.contains_key(&path) {
-        return Err(EEXIST);
+    let (_, parent_node) = lookup_as(p, parent(&path), true)?;
+    if let Some(r) = &parent_node.remote {
+        let name = path.rsplit('/').next().ok_or(EINVAL)?;
+        let remote_path = alloc::format!("{}/{}", r.path.lock().trim_end_matches('/'), name);
+        r.mount.create(&remote_path, mode, uid, gid, &data)?;
+        let now = clock_ns(0);
+        let remote = Remote { mount: r.mount.clone(), path: Mutex::new(remote_path), size: AtomicU64::new(data.len() as u64), inode: AtomicU64::new(0), links: AtomicU64::new(1), listed: false.into(), content: Mutex::new(Weak::new()) };
+        let mut tree = TREE.lock();
+        let node = new_node(&mut tree, Attr { mode, uid, gid, atime: now, mtime: now, ctime: now }, data, Some(remote));
+        tree.nodes.insert(path, node.clone());
+        return Ok(node);
     }
+    let mut tree = TREE.lock();
+    if tree.nodes.contains_key(&path) { return Err(EEXIST); }
     insert(&mut tree, path, mode, uid, gid, data)
 }
 pub fn resize(node: &Node, size: usize) -> Result<(), Errno> {
-    if node.remote.is_some() {
-        return Err(EROFS);
+    if let Some(r) = &node.remote {
+        if !r.mount.writable()? { return Err(EROFS); }
+        let path = r.path.lock().clone();
+        r.mount.truncate(&path, size as u64)?;
+        r.size.store(size as u64, Ordering::Release);
+        return Ok(());
     }
     if size > MAX_FILE {
         return Err(28);
@@ -439,9 +577,13 @@ pub fn resize(node: &Node, size: usize) -> Result<(), Errno> {
     }
     Ok(())
 }
-pub fn write(node: &Node, offset: usize, bytes: &[u8], append: bool) -> Result<usize, Errno> {
-    if node.remote.is_some() {
-        return Err(EROFS);
+pub fn write(node: &Node, offset: usize, bytes: &[u8], append: bool) -> Result<(usize, usize), Errno> {
+    if let Some(r) = &node.remote {
+        if !r.mount.writable()? { return Err(EROFS); }
+        let path = r.path.lock().clone();
+        let (written, end) = r.mount.write(&path, offset as u64, bytes, append)?;
+        if written != 0 { r.size.fetch_max(end, Ordering::AcqRel); }
+        return Ok((written, usize::try_from(end).map_err(|_| EINVAL)?));
     }
     let _tree = TREE.lock();
     let mut data = node.data.lock();
@@ -461,7 +603,7 @@ pub fn write(node: &Node, offset: usize, bytes: &[u8], append: bool) -> Result<u
         BYTES.fetch_add(extra, Ordering::Relaxed);
     }
     data[offset..end].copy_from_slice(bytes);
-    Ok(end)
+    Ok((bytes.len(), end))
 }
 pub fn entries(path: &str) -> Vec<(String, Arc<Node>)> {
     let prefix = if path == "/" {
@@ -481,9 +623,7 @@ pub fn entries(path: &str) -> Vec<(String, Arc<Node>)> {
 }
 pub fn remove(p: &Process, path: &str, directory: bool) -> R {
     let (path, node) = lookup_as(p, path, false)?;
-    if path == "/" {
-        return Err(16);
-    }
+    if path == "/" || node.mount_root() { return Err(EBUSY); }
     writable_parent(p, &path)?;
     if directory {
         if node.attr.lock().mode & 0o170000 != DIR {
@@ -505,31 +645,45 @@ pub fn remove(p: &Process, path: &str, directory: bool) -> R {
     {
         return Err(1);
     }
+    if let Some(r) = &node.remote {
+        let path = r.path.lock().clone();
+        r.mount.remove(&path, directory)?;
+    }
     TREE.lock().nodes.remove(&path);
+    if node.remote.is_none(){node.links.fetch_sub(1,Ordering::AcqRel);}
     Ok(0)
 }
 pub fn rename(p: &Process, old: &str, new: &str) -> R {
     let (old, node) = lookup_as(p, old, false)?;
     let new = destination(p, new)?;
+    if node.mount_root(){return Err(EBUSY)}
     if old == "/" || new.starts_with(&alloc::format!("{old}/")) {
         return Err(EINVAL);
     }
     writable_parent(p, &old)?;
     writable_parent(p, &new)?;
-    let mut tree = TREE.lock();
-    if let Some(existing) = tree.nodes.get(&new) {
-        let isdir = node.attr.lock().mode & 0o170000 == DIR;
-        if isdir != (existing.attr.lock().mode & 0o170000 == DIR) {
-            return Err(if isdir { ENOTDIR } else { EISDIR });
-        }
-        if tree
-            .nodes
-            .keys()
-            .any(|k| k.starts_with(&alloc::format!("{new}/")))
-        {
-            return Err(39);
-        }
+    if old == new { return Ok(0); }
+    if let Ok((_,existing))=lookup(&new,false){
+        if existing.mount_root(){return Err(EBUSY)}
+        if existing.device()==node.device() && existing.inode()==node.inode(){return Ok(0)}
+        let isdir=node.attr.lock().mode & 0o170000 == DIR;
+        if isdir != (existing.attr.lock().mode & 0o170000 == DIR){return Err(if isdir{ENOTDIR}else{EISDIR})}
+        if isdir {ensure_listed(p,&new)?;if !entries(&new).is_empty(){return Err(39)}}
     }
+    let (_, new_parent) = lookup_as(p, parent(&new), true)?;
+    match (&node.remote, &new_parent.remote) {
+        (Some(src), Some(dst)) if Arc::ptr_eq(&src.mount, &dst.mount) => {
+            if lookup(&new,false).is_ok_and(|(_,target)|target.inode()==node.inode()){return Ok(0)}
+            let next = alloc::format!("{}/{}", dst.path.lock().trim_end_matches('/'), new.rsplit('/').next().ok_or(EINVAL)?);
+            let path = src.path.lock().clone();
+            let directory = node.attr.lock().mode & 0o170000 == DIR;
+            src.mount.rename(&path, &next, directory)?;
+        }
+        (None, None) => {}
+        _ => return Err(18),
+    }
+    let mut tree = TREE.lock();
+    if let Some(replaced)=tree.nodes.remove(&new){if replaced.remote.is_none(){replaced.links.fetch_sub(1,Ordering::AcqRel);}}
     let prefix = alloc::format!("{old}/");
     let names: Vec<_> = tree
         .nodes
@@ -539,12 +693,29 @@ pub fn rename(p: &Process, old: &str, new: &str) -> R {
         .collect();
     for name in names {
         let n = tree.nodes.remove(&name).unwrap();
-        tree.nodes
-            .insert(alloc::format!("{new}{}", &name[old.len()..]), n);
+        if let (Some(r), Some(dst)) = (&n.remote, &new_parent.remote) {
+            *r.path.lock() = alloc::format!("{}/{}{}", dst.path.lock().trim_end_matches('/'), new.rsplit('/').next().unwrap(), &name[old.len()..]);
+        }
+        tree.nodes.insert(alloc::format!("{new}{}", &name[old.len()..]), n);
     }
     Ok(0)
 }
+pub fn link(p:&Process,old:&str,new:&str,follow:bool)->R{
+    let(_,source)=lookup_as(p,old,follow)?;if source.attr.lock().mode & 0o170000 == DIR{return Err(1)}
+    let new=destination(p,new)?;writable_parent(p,&new)?;if lookup(&new,false).is_ok(){return Err(EEXIST)}
+    let(_,parent_node)=lookup_as(p,parent(&new),true)?;
+    match(&source.remote,&parent_node.remote){
+        (Some(src),Some(dst))if Arc::ptr_eq(&src.mount,&dst.mount)=>{
+            let old=src.path.lock().clone();let next=alloc::format!("{}/{}",dst.path.lock().trim_end_matches('/'),new.rsplit('/').next().ok_or(EINVAL)?);src.mount.link(&old,&next)?;
+            let remote=Remote{mount:src.mount.clone(),path:Mutex::new(next),size:AtomicU64::new(source.len()),inode:AtomicU64::new(source.inode()),links:AtomicU64::new(source.links()+1),listed:false.into(),content:Mutex::new(Weak::new())};
+            let attr=*source.attr.lock();let mut tree=TREE.lock();let node=new_node(&mut tree,attr,source.data.lock().clone(),Some(remote));tree.nodes.insert(new,node);drop(tree);source.refresh()?;
+        }
+        (None,None)=>{source.links.fetch_add(1,Ordering::AcqRel);TREE.lock().nodes.insert(new,source);}
+        _=>return Err(18),
+    }Ok(0)
+}
 pub fn read_executable(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
+    let _namespace=namespace_guard()?;
     let (_, node) = lookup_as(p, path, true)?;
     if node.attr.lock().mode & 0o170000 != REG {
         return Err(EACCES);
@@ -588,4 +759,19 @@ fn destination(p: &Process, path: &str) -> Result<String, Errno> {
     } else {
         alloc::format!("{parent}/{name}")
     })
+}
+
+pub fn sync_mounts() -> Result<(), Errno> {
+    let mounts = {
+        let tree = TREE.lock();
+        let mut mounts: Vec<Arc<super::mount::Mount>> = Vec::new();
+        for node in tree.nodes.values() {
+            if let Some(r) = &node.remote {
+                if !mounts.iter().any(|m| Arc::ptr_eq(m, &r.mount)) { mounts.push(r.mount.clone()); }
+            }
+        }
+        mounts
+    };
+    for mount in mounts { mount.sync()?; }
+    Ok(())
 }

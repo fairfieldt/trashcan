@@ -53,11 +53,11 @@ fn fork(p: &Arc<Process>, f: &Frame, stack: u64, shared: bool) -> R {
             return Err(EAGAIN);
         }
     }
-    let child = Process::new_linux(&p.name);
+    let child = Process::new_linux(&p.name).map_err(|_| ENOMEM)?;
     if shared {
         p.aspace.vfork_into(&child.aspace)
     } else {
-        p.aspace.fork_into(&child.aspace)
+        p.aspace.fork_into(&child.aspace, child.account.clone())
     }
     .map_err(|_| ENOMEM)?;
     let gate = if shared {
@@ -85,7 +85,7 @@ fn fork(p: &Arc<Process>, f: &Frame, stack: u64, shared: bool) -> R {
         cpu::index(),
         regs,
         sched::current().fs_base.load(Ordering::Relaxed),
-    );
+    ).map_err(|_| ENOMEM)?;
     sched::copy_fpu_to(&thread);
     state(p).children.update(|v| v.push(child.clone()));
     track(p);
@@ -182,7 +182,7 @@ fn exec(p: &Arc<Process>, frame: &mut Frame, a: [u64; 6]) -> R {
             c.gid[0] as u64,
             c.gid[1] as u64,
         ]
-    })
+    }, Some(p.account.clone()))
     // A missing interpreter is ENOENT, as on Linux.
     .map_err(|e| if e == dross_abi::Error::NotFound { ENOENT } else { 8 })?;
     // Nothing changes until the full image has been validated and loaded.

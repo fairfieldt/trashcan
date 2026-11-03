@@ -5,7 +5,7 @@ use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicU32, Ordering};
+use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use dross_abi::{vm, Error, USER_TOP};
 use spin::Mutex;
 
@@ -22,9 +22,15 @@ pub struct Process {
     pub aspace: AddressSpace,
     pub handles: Mutex<HandleTable>,
     threads: Mutex<Vec<Weak<Thread>>>,
+    /// Read and changed only while `threads` is locked, alongside publication.
+    dying: AtomicBool,
     live: AtomicU32,
+    /// Threads which have not yet switched away from their execution resources.
+    stopping: AtomicU32,
+    pub account: Arc<crate::account::Account>,
     /// The exit code, once every thread has gone.
     pub exit: WaitCell<Option<i64>>,
+    pub signals: Arc<crate::events::Signals>,
     code: Mutex<Option<i64>>,
     /// Linux programs' state (fds, signal dispositions); None for dross programs.
     pub linux: Option<crate::linux::Linux>,
@@ -35,12 +41,20 @@ pub struct Process {
 }
 
 impl Process {
-    pub fn new(name: &str) -> Arc<Process> {
-        Self::create(name, None)
+    pub fn new(name: &str) -> Result<Arc<Process>, Error> {
+        Self::new_in(name, crate::account::Account::inherited()?)
     }
 
-    pub fn new_linux(name: &str) -> Arc<Process> {
-        Self::create(name, Some(crate::linux::Linux::new(name)))
+    pub fn new_in(name: &str, account: Arc<crate::account::Account>) -> Result<Arc<Process>, Error> {
+        Self::create(name, None, account)
+    }
+
+    pub fn new_linux(name: &str) -> Result<Arc<Process>, Error> {
+        Self::new_linux_in(name, crate::account::Account::inherited()?)
+    }
+
+    pub fn new_linux_in(name: &str, account: Arc<crate::account::Account>) -> Result<Arc<Process>, Error> {
+        Self::create(name, Some(crate::linux::Linux::new(name)), account)
     }
 
     #[cfg(feature = "unix")]
@@ -50,38 +64,72 @@ impl Process {
         self.pid.load(Ordering::Relaxed)
     }
 
-    fn create(name: &str, linux: Option<crate::linux::Linux>) -> Arc<Process> {
-        Arc::new(Process {
+    fn create(name: &str, linux: Option<crate::linux::Linux>, account: Arc<crate::account::Account>) -> Result<Arc<Process>, Error> {
+        Ok(Arc::new(Process {
             linux,
             pid: AtomicU32::new(0),
             name: String::from(name),
-            aspace: AddressSpace::new(),
-            handles: Mutex::new(HandleTable::new()),
+            aspace: AddressSpace::new_in(account.clone())?,
+            handles: Mutex::new(HandleTable::new(account.clone())),
             threads: Mutex::new(Vec::new()),
+            dying: AtomicBool::new(false),
             live: AtomicU32::new(0),
+            stopping: AtomicU32::new(0),
+            account,
             exit: WaitCell::new(None),
+            signals: crate::events::Signals::new(0),
             code: Mutex::new(None),
             ioports: Mutex::new(None),
-        })
+        }))
     }
 
-    pub fn add_thread(&self, t: &Arc<Thread>) {
+    pub fn add_thread(&self, t: &Arc<Thread>) -> Result<(), Error> {
+        let mut v = self.threads.lock();
+        if self.dying.load(Ordering::Relaxed) { return Err(Error::PeerClosed); }
+        v.retain(|w| w.strong_count() > 0);
+        v.try_reserve(1).map_err(|_| Error::NoMemory)?;
         let _ = self.pid.compare_exchange(0, t.tid, Ordering::Relaxed, Ordering::Relaxed);
         self.live.fetch_add(1, Ordering::AcqRel);
-        let mut v = self.threads.lock();
-        v.retain(|w| w.strong_count() > 0);
+        self.stopping.fetch_add(1, Ordering::AcqRel);
         v.push(Arc::downgrade(t));
+        Ok(())
     }
 
     pub fn thread_exited(&self, _t: &Thread) {
-        if self.live.fetch_sub(1, Ordering::AcqRel) == 1 {
+        let last = {
+            let _threads = self.threads.lock();
+            let last = self.live.fetch_sub(1, Ordering::AcqRel) == 1;
+            if last { self.dying.store(true, Ordering::Relaxed); }
+            last
+        };
+        if last {
             let dropped = self.handles.lock().clear();
             drop(dropped);
+            crate::ipc::collect_cycles();
             if let Some(l) = &self.linux {
-                drop(l.files.clear());
+                l.files.release_all();
+            }
+        }
+    }
+
+    /// Called only after a dead thread has switched to another stack and address space.
+    pub fn thread_stopped(&self) {
+        if self.stopping.fetch_sub(1, Ordering::AcqRel) == 1 && self.live.load(Ordering::Acquire) == 0 {
+            self.aspace.clear();
+            let threads = core::mem::take(&mut *self.threads.lock());
+            drop(threads);
+            self.ioports.lock().take();
+            #[cfg(feature = "unix")]
+            if self.linux.is_some() {
+                let state = crate::linux::unix::state(self);
+                state.ctty.lock().take();
+                let saved = core::mem::take(&mut *state.saved_signals.lock());
+                drop(saved);
+                let children = state.children.with(core::mem::take);
+                drop(children);
             }
             let code = self.code.lock().unwrap_or(0);
-            self.exit.update(|c| *c = Some(code));
+            self.exit.update(|c| { *c = Some(code); self.signals.set(dross_abi::event::EXITED, dross_abi::event::EXITED); });
             #[cfg(feature = "unix")]
             crate::linux::unix::exited(self);
         }
@@ -90,9 +138,21 @@ impl Process {
     /// Ends the process: every thread leaves at its next return from the kernel.
     pub fn kill(&self, code: i64) {
         self.code.lock().get_or_insert(code);
-        let threads: Vec<_> = self.threads.lock().iter().filter_map(|w| w.upgrade()).collect();
-        for t in threads {
-            t.kill();
+        {
+            let _threads = self.threads.lock();
+            self.dying.store(true, Ordering::Relaxed);
+        }
+        // Publication is closed, so the list cannot grow or be compacted. Visit
+        // without allocating, and release the process lock before waking a CPU.
+        let mut index = 0;
+        loop {
+            let thread = {
+                let threads = self.threads.lock();
+                let Some(thread) = threads.get(index) else { break };
+                thread.upgrade()
+            };
+            if let Some(thread) = thread { thread.kill(); }
+            index += 1;
         }
     }
 
@@ -124,6 +184,9 @@ fn u64_at(b: &[u8], o: usize) -> u64 {
 /// Loads the ELF executable in `image` into a new process, gives it `bootstrap` as handle 1 and starts its
 /// first thread on `cpu`.
 pub fn spawn(name: &str, image: &Memory, cpu: u32, bootstrap: Option<Entry>) -> Result<Arc<Process>, Error> {
+    spawn_in(name, image, cpu, bootstrap, None)
+}
+pub fn spawn_in(name: &str, image: &Memory, cpu: u32, bootstrap: Option<Entry>, account: Option<Arc<crate::account::Account>>) -> Result<Arc<Process>, Error> {
     let mut hdr = [0u8; 64];
     image.read(0, &mut hdr).map_err(|_| Error::BadElf)?;
     if &hdr[..4] != b"\x7fELF" || hdr[4] != 2 || hdr[5] != 1 || u16_at(&hdr, 16) != 2 || u16_at(&hdr, 18) != 0x3e {
@@ -134,7 +197,7 @@ pub fn spawn(name: &str, image: &Memory, cpu: u32, bootstrap: Option<Entry>) -> 
     if phentsize < 56 || phnum > 64 {
         return Err(Error::BadElf);
     }
-    let p = Process::new(name);
+    let p = match account { Some(account) => Process::new_in(name, account)?, None => Process::new(name)? };
     for i in 0..phnum {
         let mut ph = [0u8; 56];
         let phaddr = phoff.checked_add(i * phentsize).ok_or(Error::BadElf)?;
@@ -149,7 +212,7 @@ pub fn spawn(name: &str, image: &Memory, cpu: u32, bootstrap: Option<Entry>) -> 
             || offset.checked_add(filesz).is_none_or(|end| end > image.size()) {
             return Err(Error::BadElf);
         }
-        let seg = Memory::anonymous(end - start, false, false)?;
+        let seg = Memory::anonymous_in(end - start, false, false, p.account.clone())?;
         seg.copy_from(vaddr - start, image, offset, filesz).map_err(|_| Error::BadElf)?;
         let mut f = vm::READ;
         if flags & 2 != 0 {
@@ -160,13 +223,13 @@ pub fn spawn(name: &str, image: &Memory, cpu: u32, bootstrap: Option<Entry>) -> 
         }
         p.aspace.map(Arc::new(seg), 0, end - start, start, f)?;
     }
-    let stack = Memory::anonymous(STACK_SIZE, false, false)?;
+    let stack = Memory::anonymous_in(STACK_SIZE, false, false, p.account.clone())?;
     p.aspace.map(Arc::new(stack), 0, STACK_SIZE, STACK_TOP - STACK_SIZE, vm::READ | vm::WRITE)?;
     let arg = match bootstrap {
-        Some(e) => p.handles.lock().insert(e) as u64,
+        Some(e) => p.handles.lock().insert(e)? as u64,
         None => 0,
     };
     // As if called: the return address slot keeps rsp 8 mod 16 at entry.
-    sched::spawn_user(p.clone(), cpu, entry, STACK_TOP - 8, arg);
+    sched::spawn_user(p.clone(), cpu, entry, STACK_TOP - 8, arg)?;
     Ok(p)
 }

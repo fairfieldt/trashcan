@@ -70,10 +70,7 @@ impl Stream {
             return Ok(0);
         }
         loop {
-            match self.end.write(Message {
-                bytes: bytes[..count].to_vec(),
-                handles: Vec::new(),
-            }) {
+            match self.end.write(Message::new(bytes[..count].to_vec(), Vec::new())) {
                 Ok(()) => return Ok(count),
                 Err((dross_abi::Error::ShouldWait, _)) if !nb => {
                     sched::sleep_ns(1_000_000).map_err(|_| EINTR)?;
@@ -101,4 +98,8 @@ pub fn fd(p: &Process, end: Arc<ChannelEnd>) -> R {
         ),
         true,
     )
+}
+
+impl Drop for Stream {
+    fn drop(&mut self) { crate::ipc::request_collection(); }
 }

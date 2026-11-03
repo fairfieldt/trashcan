@@ -330,6 +330,17 @@ impl Pcid {
                 self.functions[i].irqs.push(irq);
                 Ok((0, Vec::new()))
             }
+            op::RELEASE => {
+                let result = (|| {
+                    let i = self.owned(r.bdf, client)?;
+                    if sent.len() != 1 { return Err(Error::InvalidArgs); }
+                    if sys::process_wait(sent[0], sys::clock())? != 0 { return Err(Error::Busy); }
+                    self.release_function(i)?;
+                    Ok((0, Vec::new()))
+                })();
+                for &handle in sent { let _ = sys::close(handle); }
+                result
+            }
             op::DISABLE_IRQS => {
                 let i = self.owned(r.bdf, client)?;
                 self.disable_irqs(i);
@@ -354,23 +365,32 @@ impl Pcid {
         }
     }
 
+    /// Stop DMA and interrupts before the last retained domain can be freed.
+    fn release_function(&mut self, i: usize) -> Result<(), Error> {
+        let bdf = self.functions[i].info.bdf;
+        let cmd = self.read(bdf, 4, 2);
+        self.write(bdf, 4, 2, cmd & !4);
+        self.disable_irqs(i);
+        // Read back posted configuration writes before DMA backing can go away.
+        if self.read(bdf, 4, 2) & 4 != 0
+            || self.functions[i].msi_cap.is_some_and(|c| self.read(bdf, c + 2, 2) & 1 != 0)
+            || self.functions[i].msix_cap.is_some_and(|c| self.read(bdf, c + 2, 2) & (1 << 15) != 0) {
+            return Err(Error::Busy);
+        }
+        if let Some(d) = self.functions[i].domain.take() { let _ = sys::close(d); }
+        self.functions[i].owner = None;
+        println!("{} released", pci::bdf_string(bdf));
+        Ok(())
+    }
     /// The client is gone: quiesce its functions.
     fn release(&mut self, client: usize) {
         for i in 0..self.functions.len() {
-            if self.functions[i].owner != Some(client) {
-                continue;
+            if self.functions[i].owner == Some(client) {
+                if self.release_function(i).is_err() { println!("{} remains quarantined", pci::bdf_string(self.functions[i].info.bdf)); }
             }
-            let bdf = self.functions[i].info.bdf;
-            let cmd = self.read(bdf, 4, 2);
-            self.write(bdf, 4, 2, cmd & !4);
-            self.disable_irqs(i);
-            if let Some(d) = self.functions[i].domain.take() {
-                let _ = sys::close(d);
-            }
-            self.functions[i].owner = None;
-            println!("{} released", pci::bdf_string(bdf));
         }
     }
+
 }
 
 fn class_name(class: u32) -> &'static str {

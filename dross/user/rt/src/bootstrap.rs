@@ -76,7 +76,9 @@ impl Builder {
     /// Writes the message to a new channel; returns the end for the child.
     pub fn send(self) -> sys::Result<Handle> {
         let (mine, theirs) = sys::channel_create()?;
-        sys::channel_write(mine, self.text.as_bytes(), &self.handles)?;
+        if let Err(error) = sys::channel_write(mine, self.text.as_bytes(), &self.handles) {
+            let _ = sys::close(mine); let _ = sys::close(theirs); return Err(error);
+        }
         let _ = sys::close(mine);
         Ok(theirs)
     }
@@ -85,5 +87,16 @@ impl Builder {
 /// Spawns module `image` with a bootstrap message on `cpu` (`u64::MAX`: any).
 pub fn spawn(image: Handle, name: &str, b: Builder, cpu: u64) -> sys::Result<Handle> {
     let ch = b.send()?;
-    sys::spawn(image, name, Some(ch), cpu)
+    match sys::spawn(image, name, Some(ch), cpu) {
+        Ok(process) => Ok(process),
+        Err(error) => { let _ = sys::close(ch); Err(error) }
+    }
+}
+
+pub fn spawn_in(account: Handle, image: Handle, name: &str, b: Builder, cpu: u64) -> sys::Result<Handle> {
+    let ch = b.send()?;
+    match sys::spawn_in(account, image, name, Some(ch), cpu) {
+        Ok(process) => Ok(process),
+        Err(error) => { let _ = sys::close(ch); Err(error) }
+    }
 }

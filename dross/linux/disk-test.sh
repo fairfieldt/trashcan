@@ -24,7 +24,9 @@ set -e
 ! touch /disk/test/new 2>/dev/null
 echo "disk test: ok"
 EOF
-"$mkfs" -q -L oscar -d "$d/tree" "$d/fs.img" 64M
+cp linux/disk-write.sh "$d/tree/test/write.sh"
+cp linux/disk-verify.sh "$d/tree/test/verify.sh"
+"$mkfs" -q -b 4096 -O ^orphan_file,^metadata_csum_seed -L oscar -d "$d/tree" "$d/fs.img" 64M
 # A GPT around it: protective MBR, header, entries, the partition from sector 2048, backup entries and header.
 python3 - "$d/fs.img" "$d/disk.img" <<'PY'
 import struct, sys, uuid, zlib
@@ -49,5 +51,6 @@ img[(total - 33) * S:(total - 33) * S + len(entries)] = entries
 img[(total - 1) * S:(total - 1) * S + 92] = header(total - 1, 1, total - 33)
 open(sys.argv[2], 'wb').write(img)
 PY
+[ "${DISK_PREPARE_ONLY:-0}" = 1 ] && exit 0
 KERNEL_FEATURES=unix INIT_CONF=linux/qemu-disk.conf ./run-qemu.sh \
     -drive if=none,id=stick,format=raw,file="$d/disk.img" -device usb-storage,bus=xhci.0,drive=stick

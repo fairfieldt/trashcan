@@ -1,9 +1,13 @@
 # dross
 
+See [Native program interfaces](API.md) for handles, memory objects, messages,
+object-wait subscriptions and deadlines, and [Memory ownership and allocation](MEMORY.md)
+for reclamation and allocation budgets.
+
 dross is the kernel of Oscar, the operating system of the trashcan appliance: Mac Pro 6,1s running distributed
 inference, with the drivers (`driver/`: gpud for the D700s, tbd for Thunderbolt, ethd for Ethernet) as user
-programs. It is written in Rust and developed in QEMU; Linux stays the harness for the drivers until dross can
-host them.
+programs. It is written in Rust. QEMU provides repeatable kernel tests; the Mac Pro
+provides the hardware checks for its drivers.
 
 Status: dross boots from UEFI, brings up all CPUs and the IOMMU, and runs user programs: processes, threads pinned
 to CPUs, channels and notifications, memory objects, and handles as capabilities, including device memory, I/O
@@ -13,8 +17,10 @@ usbd drives USB keyboards and mice on an xHCI controller.
 
 dross also runs Linux executables on musl, static or dynamically linked: gpud, tbd and ethd run on it unchanged,
 built for `x86_64-unknown-linux-musl`, with gpud-platform choosing its dross backend at run time. Their unit tests
-pass on dross, and each driver reaches its device through pcid. In QEMU none of their hardware exists; they have
-not run on a Mac Pro under dross yet.
+pass on dross, and each driver reaches its device through pcid. gpud and ethd also
+run on a physical Mac Pro under dross. Vulkan rendering through gpud has passed
+exact-pixel checks there. This does not establish that every driver or graphics
+path has been tested on hardware.
 
 | Path | What |
 |---|---|
@@ -73,6 +79,10 @@ System calls take handles: per-process integers naming kernel objects, each with
 - **Channels** carry bytes and handles (which move); writes don't block, reads wait with a deadline.
   **Notifications** are 64 bits that signals OR in and a wait takes; a server binds its channels and interrupts
   to one notification and waits there.
+- **Event queues** observe object conditions through explicit subscriptions. Each
+  subscription reserves room for one event and must be rearmed after delivery.
+  **Timers** signal expiration at an absolute monotonic deadline. The contracts
+  and examples are in [Native program interfaces](API.md).
 - **Resources** are the root capabilities: physical address ranges, I/O ports (loaded into the TSS bitmap when the
   process runs), interrupt vectors (`IRQ_MSI` gives the MSI address/data to program and signals a notification),
   the IOMMU (creating DMA domains, attaching devices) and the system (ending a run). init narrows them with
@@ -80,7 +90,8 @@ System calls take handles: per-process integers naming kernel objects, each with
 
 ## Building and running
 
-Needs the Rust targets `x86_64-unknown-uefi` and `x86_64-unknown-none` and, for `run-qemu.sh`, QEMU with OVMF
+Needs the Rust targets `x86_64-unknown-uefi` and `x86_64-unknown-none`, Zig for fsd's freestanding lwext4 build,
+and, for `run-qemu.sh`, QEMU with OVMF
 (Homebrew's `qemu` has both).
 
 ```bash
@@ -95,9 +106,10 @@ a high-speed mouse. Once usbd reports its devices ready, the script types "ab", 
 through QEMU's monitor. It exits 0 when init reports that every check passed (usbd saw the input) and the kernel
 logged the IOMMU fault for the edu driver's deliberate DMA to an unmapped address. The log is in
 `target/qemu.log`. Measured on QEMU 11.1
-(TCG on an arm64 Mac): 24 of 24 CPUs online; the self-test's 14 checks pass with 4 and 24 CPUs, debug and release
-builds. Its timings under TCG (a 20 ms deadline taking up to 90 ms, 50-460 us channel round trips between CPUs)
-reflect the emulator and the host's timer coalescing, not the kernel.
+(TCG on an arm64 Mac): the current audit build passes 55 native and 28 POSIX checks
+with one CPU, and 60 native and 28 POSIX checks with four CPUs. The same 60 native
+and 28 POSIX checks pass on a physical 12-CPU Mac Pro 6,1. Timings under TCG reflect
+the emulator and the host's timer coalescing; use hardware runs for latency work.
 
 Under TCG on macOS the host coalesces QEMU's timer wakeups: 1 kHz APIC timer ticks arrive 2-18 ms apart and the
 missed ones are dropped. The timer check is therefore strict (count within 10%, no early tick) only on hardware;
@@ -207,12 +219,12 @@ reset it (its mask of the port bits to keep lacked port power; QEMU's controller
 
 ### Disks
 
-usbd also drives one USB mass storage device (bulk-only transport, SCSI READ) and serves it as a block device on
-its `block` channel; the reads land in a 1 MiB DMA buffer it shares with the client. fsd reads ext4 from it,
-read-only, with the `ext4-view` crate (journal included): the first Linux filesystem partition of a GPT disk
-(or `%partition=N`), else the whole disk. The kernel's Linux layer asks fsd for a directory's entries the first
-time a path goes through it and keeps them, and for a file's contents (a memory object, kept and shared by
-`read`, `exec` and `mmap`) the first time it is opened. Writes fail with `EROFS`.
+usbd drives one USB mass storage device through bulk-only transport and serves READ, WRITE and FLUSH on its
+`block` channel, with a shared 1 MiB DMA window. fsd runs lwext4 outside the kernel and selects the first Linux
+filesystem GPT partition (or `%partition=N`), else the whole disk. Mounts default to read-only. Add `%writable=1`
+to fsd's bootstrap to enable supported journaled ext4 writes. Writable reads use bounded range requests;
+read-only model/library access retains shared snapshots with a bounded kernel cache. Filesystem features,
+persistence rules, supported operations and current limits are in [fsd/README](user/fsd/README.md).
 
 ```
 channel disk
@@ -221,8 +233,9 @@ native usbd @disk=block
 native fsd @disk=block @root=service
 ```
 
-`linux/disk-test.sh` checks it in QEMU (a GPT disk with an ext4 partition as a USB stick). On the Mac Pro, from a
-SanDisk Extreme Pro on the FL1100's SuperSpeed port, formatted on Linux: the listings, a 50 MB file's hash, and a
+`linux/disk-test.sh` checks read-only access in QEMU; `linux/disk-write-test.sh` checks writes and persistence
+across two boots of the same disposable USB image. The earlier read-only implementation was measured on the
+Mac Pro, from a SanDisk Extreme Pro on the FL1100's SuperSpeed port, formatted on Linux: the listings, a 50 MB file's hash, and a
 7 GB GGUF (6652 MiB in 22.6 s, 308 MB/s, its SHA-256 as on Linux).
 
 ### Vulkan
@@ -265,7 +278,9 @@ A test machine boots the newest build over the network, so a deploy is a build a
 
 ```bash
 ./build-linux.sh && INIT_CONF=YOUR.conf PROFILE=release NETBOOT=1 ./build.sh   # target/netboot/dross.efi
-./netboot.sh dross     # or linux: what the machine boots next
+./netboot.sh dross     # publish the completed image; linux selects the normal default
+# An isolated, already tested image can be published directly:
+./netboot.sh dross target/my-test/BOOTX64.EFI
 ```
 
 `NETBOOT=1` builds the loader with the kernel and modules (stripped, 18 MB) built in, since a network boot has no
@@ -278,17 +293,30 @@ if [ -z "${boot_once}" ]; then          # not after grub-reboot
     insmod efinet
     insmod http
     insmod chain
-    net_bootp efinet1 || net_bootp      # the cabled port; all of them if it fails
+    net_ls_cards
+    net_bootp                           # configure the firmware's network cards
+    sleep 1
     net_add_dns ROUTER                  # DHCP gave GRUB no DNS server
     set dross_server=SERVER:PORT
     source (http,${dross_server})/boot.cfg
 fi
 ```
 
-`netboot.sh dross` writes a `boot.cfg` that adds a "dross-net" entry chainloading `dross.efi` and makes it the
-default; `netboot.sh linux` empties it, and without the server the machine boots its normal default. On the Mac
+`netboot.sh dross` copies the completed loader to a path named by its SHA-256 hash,
+then atomically publishes `boot.cfg` pointing to it. An optional image argument
+selects a separate tested build. A boot cannot fetch a half-written replacement.
+`netboot.sh linux` atomically empties the configuration; without the server the
+machine boots its normal default. On the Mac
 Pro (Apple's firmware gives GRUB the BCM57762 through SNP), GRUB fetches the image in a second; from `reboot -f`
 to dross's "boot ok" takes 59 s, most of it the firmware.
+
+Linux is not part of the normal iteration loop. Keep SSH running in the dross
+test configuration and omit its `reboot` line to inspect completed checks. Upload
+and run changed applications over SSH. Close GPU clients before restarting their
+driver so its fence and buffer retirement can finish. For a kernel change,
+publish the new image on the host, then run `reboot -f` from dross. GRUB loads the
+published image directly. Select `linux` before a reboot when recovery or an
+independent disk check is needed.
 
 Without the server, copy `target/esp/dross.elf` and `target/esp/modules/` to the root of the EFI system partition
 and the loader to `EFI/dross/BOOTX64.EFI`, add a GRUB entry that chainloads it and `grub-reboot` into it.

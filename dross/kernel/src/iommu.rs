@@ -204,7 +204,7 @@ pub fn init(acpi: &Acpi) {
     for s in d.structures().flatten() {
         if let Remapping::Reserved { base, limit, scopes: sc, .. } = s {
             let len = (limit + 1 - base).next_multiple_of(PAGE);
-            let dom = Arc::new(Domain::new());
+            let dom = Arc::new(Domain::new().expect("boot reserved DMA domain"));
             let m = Arc::new(Memory::device(base, len));
             dom.map(m, 0, len, base, dma::READ | dma::WRITE).expect("rmrr map");
             for sc in scopes(sc) {
@@ -267,34 +267,65 @@ pub struct Domain {
 }
 
 impl Domain {
-    pub fn new() -> Domain {
+    pub fn new() -> Result<Domain, Error> {
         let levels = UNIT.lock().as_ref().map_or(4, |u| u.levels);
-        Domain {
-            id: NEXT_DOMAIN.fetch_add(1, Ordering::Relaxed),
-            root: mem::alloc_phys_zeroed(1),
+        let root = mem::try_alloc_phys_zeroed(1)?;
+        let id = match NEXT_DOMAIN.try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1)) {
+            Ok(id) => id,
+            Err(_) => { mem::free_phys(root, 1); return Err(Error::NoResources); }
+        };
+        Ok(Domain {
+            id,
+            root,
             levels,
             inner: Mutex::new(DomainInner { mappings: BTreeMap::new(), devices: Vec::new() }),
-        }
+        })
     }
 
     pub fn iova_limit(&self) -> u64 {
         1 << (12 + 9 * self.levels)
     }
 
-    fn leaf(&self, u: &Unit, iova: u64) -> *mut u64 {
+    /// Prepare a path without granting device access. The caller rolls back every
+    /// newly installed table on failure before returning the backing memory.
+    fn prepare_leaf(&self, u: &Unit, iova: u64, added: &mut Vec<(u64, u64)>) -> Result<(), Error> {
         let mut t = self.root;
         for level in (1..self.levels).rev() {
             let idx = (iova >> (12 + 9 * level) & 511) as usize;
             let e = &mut table(t)[idx];
             if *e & 3 == 0 {
-                let n = mem::alloc_phys_zeroed(1);
+                added.try_reserve(1).map_err(|_| Error::NoMemory)?;
+                let n = mem::try_alloc_phys_zeroed(1)?;
                 u.flush(mem::virt(n), PAGE);
                 *e = n | 3;
                 u.flush(e as *mut u64 as u64, 8);
+                added.push((e as *mut u64 as u64, n));
             }
             t = *e & 0x000f_ffff_ffff_f000;
         }
+        Ok(())
+    }
+
+    /// Existing paths only: neither unmap nor the commit half of map allocates.
+    fn leaf(&self, iova: u64) -> *mut u64 {
+        let mut t = self.root;
+        for level in (1..self.levels).rev() {
+            let e = table(t)[(iova >> (12 + 9 * level) & 511) as usize];
+            assert!(e & 3 != 0, "missing DMA page table");
+            t = e & 0x000f_ffff_ffff_f000;
+        }
         &mut table(t)[(iova >> 12 & 511) as usize]
+    }
+
+    fn rollback_tables(u: &Unit, added: Vec<(u64, u64)>) {
+        for &(entry, _) in added.iter().rev() {
+            // SAFETY: unpublished leaf access; UNIT and the domain lock exclude writers.
+            unsafe { *(entry as *mut u64) = 0 };
+            u.flush(entry, 8);
+        }
+        // Hardware may have walked the new, empty branches already.
+        if !added.is_empty() { u.flush_iotlb(); }
+        for (_, frame) in added { mem::free_phys(frame, 1); }
     }
 
     /// Maps `len` bytes of `m` from `offset` at device address `iova`.
@@ -319,8 +350,15 @@ impl Domain {
         if u.snoop_control() {
             perm |= 1 << 11;
         }
+        let mut added = Vec::new();
         for i in 0..len / PAGE {
-            let e = self.leaf(u, iova + i * PAGE);
+            if let Err(e) = self.prepare_leaf(u, iova + i * PAGE, &mut added) {
+                Self::rollback_tables(u, added);
+                return Err(e);
+            }
+        }
+        for i in 0..len / PAGE {
+            let e = self.leaf(iova + i * PAGE);
             // SAFETY: an entry of this domain's tables.
             unsafe { *e = m.page_phys(((offset + i * PAGE) / PAGE) as usize) | perm };
             u.flush(e as u64, 8);
@@ -341,7 +379,7 @@ impl Domain {
             _ => return Err(Error::NotFound),
         }
         for i in 0..len / PAGE {
-            let e = self.leaf(u, iova + i * PAGE);
+            let e = self.leaf(iova + i * PAGE);
             // SAFETY: as in `map`.
             unsafe { *e = 0 };
             u.flush(e as u64, 8);
@@ -359,9 +397,11 @@ impl Domain {
     pub fn attach(&self, bdf: u16) -> Result<(), Error> {
         let mut g = UNIT.lock();
         let u = g.as_mut().ok_or(Error::NotFound)?;
+        let mut inner = self.inner.lock();
+        inner.devices.try_reserve(1).map_err(|_| Error::NoMemory)?;
         let bus = (bdf >> 8) as usize;
         if u.context[bus] == 0 {
-            let ct = mem::alloc_phys_zeroed(1);
+            let ct = mem::try_alloc_phys_zeroed(1)?;
             u.flush(mem::virt(ct), PAGE);
             u.context[bus] = ct;
             let root = table(u.root);
@@ -378,7 +418,7 @@ impl Domain {
         ctx[i] = self.root | 1;
         u.flush(&ctx[i] as *const u64 as u64, 16);
         u.invalidate_all();
-        self.inner.lock().devices.push(bdf);
+        inner.devices.push(bdf);
         Ok(())
     }
 }
@@ -409,4 +449,22 @@ impl Drop for Domain {
         }
         free(self.root, self.levels);
     }
+}
+
+#[cfg(feature = "audit-test")]
+pub fn audit_test() {
+    if UNIT.lock().is_none() { return; }
+    let domain = Domain::new().unwrap();
+    let memory = Arc::new(Memory::anonymous(PAGE, false, false).unwrap());
+    let before = mem::free_bytes();
+    // Fail after installing one new branch, then verify the detached table is
+    // reclaimed and retry on the same domain.
+    mem::fail_after(1);
+    assert!(matches!(domain.map(memory.clone(), 0, PAGE, PAGE, dma::READ | dma::WRITE), Err(Error::NoMemory)));
+    mem::fail_after(-1);
+    assert_eq!(mem::free_bytes(), before);
+    assert!(domain.inner.lock().mappings.is_empty());
+    domain.map(memory, 0, PAGE, PAGE, dma::READ | dma::WRITE).unwrap();
+    domain.unmap(PAGE, PAGE).unwrap();
+    crate::println!("iommu: allocation failure rollback passed");
 }

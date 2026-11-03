@@ -30,8 +30,15 @@ mod runtime {
 
     #[unsafe(no_mangle)]
     extern "C" fn _start(bootstrap: u64) -> ! {
-        let m = sys::mem_create(HEAP_SIZE, 0).expect("heap");
-        let at = sys::vm_map(m, 0, HEAP_SIZE, 0, dross_abi::vm::READ | dross_abi::vm::WRITE).expect("heap map");
+        let m = match sys::mem_create(HEAP_SIZE, 0) {
+            Ok(memory) => memory,
+            Err(_) => { sys::log("out of memory for program heap"); sys::exit(-1); }
+        };
+        let at = match sys::vm_map(m, 0, HEAP_SIZE, 0, dross_abi::vm::READ | dross_abi::vm::WRITE) {
+            Ok(address) => address,
+            Err(_) => { let _ = sys::close(m); sys::log("out of memory for program heap mapping"); sys::exit(-1); }
+        };
+        let _ = sys::close(m);
         // SAFETY: a fresh private mapping, used for nothing else.
         unsafe { HEAP.lock().init(at as *mut u8, HEAP_SIZE as usize) };
         // SAFETY: defined by the program through `main!`.

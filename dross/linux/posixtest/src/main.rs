@@ -9,6 +9,10 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+mod memory_rights;
+mod socket_cycles;
+mod account_budget;
+
 struct Tally(u32, u32);
 
 impl Tally {
@@ -75,9 +79,36 @@ fn recv_fd(sock: i32) -> Option<OwnedFd> {
 }
 
 fn main() {
+    if account_budget::run(&std::env::args().collect::<Vec<_>>()) { return; }
     let mut t = Tally(0, 0);
+    memory_rights::check();
+    t.check("native memory rights through Linux adapters", true, "mapping ceilings, descriptor rights, private copies".into());
+    memory_rights::deadline_saturation();
+    t.check("large relative deadline saturates", true, "ppoll wakes for data instead of overflowing".into());
     let args: Vec<String> = std::env::args().collect();
     t.check("args and environment", args.get(1).map(String::as_str) == Some("--check") && std::env::var("DROSS_BOOTSTRAP").as_deref() == Ok("1"), format!("{args:?}"));
+
+    // A partial Linux unmap must release unused backing, while surviving pages retain data.
+    let charged = || dross_rt::sys::account_info(dross_rt::Handle(0)).unwrap()[0];
+    let baseline = charged();
+    // SAFETY: checked anonymous mapping, then disjoint page-aligned unmaps.
+    let reclaimed = unsafe {
+        let size = 16 * 4096;
+        let p = libc::mmap(std::ptr::null_mut(), size, libc::PROT_READ | libc::PROT_WRITE,
+            libc::MAP_PRIVATE | libc::MAP_ANONYMOUS, -1, 0);
+        assert_ne!(p, libc::MAP_FAILED);
+        let first = p.cast::<u8>();
+        let last = first.add(size - 4096);
+        first.write_volatile(17); last.write_volatile(93);
+        let allocated = charged() >= baseline + size as u64 && charged() <= baseline + size as u64 + 3 * 4096;
+        assert_eq!(libc::munmap(first.add(4096).cast(), size - 8192), 0);
+        let partial = charged() >= baseline + 8192 && charged() <= baseline + 8192 + 3 * 4096
+            && first.read_volatile() == 17 && last.read_volatile() == 93;
+        assert_eq!(libc::munmap(first.cast(), 4096), 0);
+        assert_eq!(libc::munmap(last.cast(), 4096), 0);
+        allocated && partial && charged() == baseline
+    };
+    t.check("partial unmap releases backing", reclaimed, String::new());
 
     // Threads.
     let sum: u64 = (0..8u64).map(|i| std::thread::spawn(move || (0..1000).map(|j| i * j).sum::<u64>())).collect::<Vec<_>>().into_iter().map(|h| h.join().unwrap()).sum();
@@ -241,6 +272,9 @@ fn main() {
         u64::from_ne_bytes(b)
     };
     t.check("eventfd", v == 3, String::new());
+
+    socket_cycles::check();
+    t.check("SCM_RIGHTS lifetimes and peer-close races", true, String::new());
 
     // Unwinding.
     let caught = std::panic::catch_unwind(|| panic!("expected panic")).is_err();

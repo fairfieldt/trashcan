@@ -12,12 +12,41 @@ use dross_abi::{dma, rights, vm, Error};
 use dross_rt::bootstrap::{self, Bootstrap, Builder};
 use dross_rt::{println, sys, thread, Handle, FOREVER};
 
+mod event_tests;
+mod timer_tests;
+mod join_tests;
+mod account_tests;
+mod channel_cycles;
+
 dross_rt::main!(main);
 
 fn main(boot: Handle) -> i32 {
     let b = Bootstrap::read(boot).expect("bootstrap");
     match b.value("mode").unwrap_or("main") {
         "exit42" => 42,
+        "budget-probe" => account_tests::probe(&b),
+        "budget-hold" => account_tests::hold(&b),
+        "event-child" => {
+            sys::channel_read(b.handle("control").unwrap(), &mut [0], &mut [], FOREVER).unwrap();
+            42
+        },
+        "share-account-memory" => {
+            let account = b.handle("account").unwrap();
+            let memory = sys::mem_create_in(account, 4096, 0).unwrap();
+            sys::channel_write(b.handle("reply").unwrap(), b"memory", &[memory]).unwrap();
+            0
+        }
+        "reclaim" => {
+            let memory = b.handle("memory").unwrap();
+            let size = sys::mem_size(memory).unwrap();
+            let _ = sys::vm_map(memory, 0, size, 0, vm::READ | vm::WRITE).unwrap();
+            sys::close(memory).unwrap();
+            let worker = thread::spawn((sys::cpu_count() - 1) as u64, || loop { sys::yield_now(); }).unwrap();
+            let reply = b.handle("reply").unwrap();
+            sys::channel_write(reply, b"ready", &[worker]).unwrap();
+            sys::channel_read(reply, &mut [0u8; 1], &mut [], FOREVER).unwrap();
+            0
+        }
         "page-fault" => {
             // SAFETY: deliberately touches an unmapped address.
             unsafe { (0x10 as *mut u64).write_volatile(1) };
@@ -127,6 +156,60 @@ fn run_all(b: &Bootstrap) -> i32 {
     let mut t = Tally { passed: 0, failed: 0 };
     let me = b.handle("module/selftest").expect("own image");
     let cpus = sys::cpu_count();
+    event_tests::run(&mut t, b);
+    timer_tests::run(&mut t);
+    join_tests::run(&mut t);
+    account_tests::run(&mut t, b);
+    channel_cycles::run(&mut t, b);
+
+    if let Some(account) = b.handle("account/test") {
+        let full = sys::mem_create_in(account, 8192, 0).unwrap();
+        let exhausted = sys::mem_create_in(account, 4096, 0) == Err(Error::NoMemory);
+        let reader = sys::dup(account, rights::READ | rights::DUPLICATE).unwrap();
+        let denied = sys::mem_create_in(reader, 4096, 0) == Err(Error::AccessDenied);
+        sys::close(full).unwrap();
+        let recovered = sys::mem_create_in(account, 4096, 0).unwrap();
+        sys::close(recovered).unwrap();
+        t.check("backing budget failure and recovery", exhausted && denied && sys::account_info(account).unwrap()[0] == 0, "");
+        sys::close(reader).unwrap();
+
+        let (reply, child_reply) = sys::channel_create().unwrap();
+        let child = bootstrap::spawn(me, "share-account-memory", Builder::default().value("mode", "share-account-memory")
+            .handle("account", sys::dup(account, rights::ALL).unwrap()).handle("reply", child_reply), 0).unwrap();
+        let mut memory = [Handle(0); 1];
+        let received = sys::channel_read(reply, &mut [0u8; 6], &mut memory, sys::after_ms(5000));
+        let exited = sys::process_wait(child, sys::after_ms(5000));
+        let survives = sys::account_info(account).unwrap()[0] == 4096;
+        let duplicate = sys::dup(memory[0], rights::ALL).unwrap();
+        let mapped = sys::vm_map(memory[0], 0, 4096, 0, vm::READ | vm::WRITE).unwrap();
+        let once = sys::account_info(account).unwrap()[0] == 4096;
+        sys::close(memory[0]).unwrap();
+        sys::close(duplicate).unwrap();
+        let kept_by_mapping = sys::account_info(account).unwrap()[0] == 4096;
+        sys::vm_unmap(mapped, 4096).unwrap();
+        let released = sys::account_info(account).unwrap()[0] == 0;
+        t.check("shared backing charged once through creator exit", received == Ok((6, 1)) && exited == Ok(0) && survives && once && kept_by_mapping && released, "");
+        sys::close(child).unwrap();
+        sys::close(reply).unwrap();
+    }
+
+    // Keep both child identities after exit. Only status should survive, not its
+    // address space, even when another process retains a handle to a dead thread.
+    let before = backing_bytes();
+    let (reply, child_reply) = sys::channel_create().unwrap();
+    let payload = sys::mem_create(8 << 20, 0).unwrap();
+    let child = bootstrap::spawn(me, "reclaim", Builder::default().value("mode", "reclaim")
+        .handle("memory", payload).handle("reply", child_reply), 0).unwrap();
+    let mut retained_thread = [Handle(0); 1];
+    let ready = sys::channel_read(reply, &mut [0u8; 5], &mut retained_thread, sys::after_ms(5000));
+    let allocated = backing_bytes() >= before + (8 << 20);
+    sys::channel_write(reply, b"x", &[]).unwrap();
+    let status = sys::process_wait(child, sys::after_ms(5000));
+    let released = backing_bytes() <= before + 8192;
+    t.check("exited process releases backing with retained handles", ready == Ok((5, 1)) && allocated && status == Ok(0) && released, "");
+    sys::close(retained_thread[0]).unwrap();
+    sys::close(child).unwrap();
+    sys::close(reply).unwrap();
 
     // Memory: two mappings of one object see the same bytes.
     let m = sys::mem_create(64 << 10, 0).unwrap();
@@ -141,6 +224,18 @@ fn run_all(b: &Bootstrap) -> i32 {
     };
     let unmapped = sys::vm_unmap(a, 64 << 10).is_ok() && sys::vm_unmap(a, 64 << 10) == Err(Error::NotFound);
     t.check("memory", same && unmapped, "");
+    let no_read = sys::dup(m, rights::ALL & !rights::READ).unwrap();
+    let no_execute = sys::dup(m, rights::ALL & !rights::EXECUTE).unwrap();
+    let denied = sys::vm_map(no_read, 0, 4096, 0, vm::READ) == Err(Error::AccessDenied)
+        && sys::vm_map(no_execute, 0, 4096, 0, vm::READ | vm::EXECUTE) == Err(Error::AccessDenied)
+        && sys::vm_map(m, 0, 4096, 0, vm::WRITE) == Err(Error::AccessDenied)
+        && sys::vm_map(m, 0, 4096, 0, 1 << 20) == Err(Error::InvalidArgs);
+    let (derived, _, _) = sys::vm_memory(c).unwrap();
+    let exact = sys::vm_map(derived, 0, 4096, 0, vm::READ | vm::WRITE) == Err(Error::AccessDenied)
+        && sys::vm_map(derived, 0, 4096, 0, vm::READ | vm::EXECUTE) == Err(Error::AccessDenied);
+    t.check("native mapping rights and exact VM_MEMORY authority", denied && exact, "");
+    for h in [no_read, no_execute, derived] { sys::close(h).unwrap(); }
+
 
     if let Some(iommu) = b.handle("resource/iommu") {
         if let Ok(domain) = sys::dma_domain_create(iommu) {
@@ -152,6 +247,11 @@ fn run_all(b: &Bootstrap) -> i32 {
                     in("r10") 0u64, in("r8") 0u64, in("r9") 0u64, out("rcx") _, out("r11") _, options(nostack));
             }
             t.check("oversized DMA device rejected", status == Error::InvalidArgs as i64, "");
+            let unreadable = sys::dup(m, rights::ALL & !rights::READ).unwrap();
+            let denied_read = sys::dma_map(domain, unreadable, 0, 4096, 0x100000, dma::READ) == Err(Error::AccessDenied);
+            let invalid = sys::dma_map(domain, m, 0, 4096, 0x100000, 1 << 20) == Err(Error::InvalidArgs);
+            t.check("DMA read authority and valid flags", denied_read && invalid, "");
+            sys::close(unreadable).unwrap();
             let readonly = sys::dup(m, rights::ALL & !rights::WRITE).unwrap();
             let denied = sys::dma_map(domain, readonly, 0, 4096, 0x100000, dma::WRITE) == Err(Error::AccessDenied)
                 && sys::dma_map(domain, me, 0, 4096, 0x100000, dma::WRITE) == Err(Error::AccessDenied);
@@ -480,4 +580,8 @@ fn run_all(b: &Bootstrap) -> i32 {
 
     println!("{} passed, {} failed", t.passed, t.failed);
     if t.failed == 0 { 0 } else { 1 }
+}
+
+fn backing_bytes() -> u64 {
+    sys::account_info(Handle(0)).unwrap()[0]
 }

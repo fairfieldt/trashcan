@@ -66,12 +66,72 @@ pub fn cpu_count() -> u32 {
     syscall(n::CPU_COUNT, [0; 6]).unwrap_or(1) as u32
 }
 
+/// Supervisor collection of unreachable native queued-capability cycles.
+pub fn channel_collect(system: Handle) -> Result<u64> { syscall(n::CHANNEL_COLLECT, [system.0 as u64, 0, 0, 0, 0, 0]) }
+
 pub fn close(h: Handle) -> Result<()> {
     syscall(n::HANDLE_CLOSE, [h.0 as u64, 0, 0, 0, 0, 0]).map(|_| ())
 }
 
 pub fn dup(h: Handle, rights: u32) -> Result<Handle> {
     syscall(n::HANDLE_DUP, [h.0 as u64, rights as u64, 0, 0, 0, 0]).map(|h| Handle(h as u32))
+}
+
+/// Creates a child of the current default budget; requires the system resource.
+pub fn account_create(system: Handle, limit: u64) -> Result<Handle> {
+    syscall(n::ACCOUNT_CREATE, [system.0 as u64, limit, 0, 0, 0, 0]).map(|h| Handle(h as u32))
+}
+
+/// Charged backing bytes, peak bytes, limit. Handle 0 queries this process's default account.
+pub fn account_child(parent: Handle, limit: u64) -> Result<Handle> {
+    syscall(n::ACCOUNT_CHILD, [parent.0 as u64, limit, 0, 0, 0, 0]).map(|h| Handle(h as u32))
+}
+
+pub fn account_info(account: Handle) -> Result<[u64; 3]> {
+    let mut info = [0u64; 3];
+    syscall(n::ACCOUNT_INFO, [account.0 as u64, info.as_mut_ptr() as u64, 0, 0, 0, 0])?;
+    Ok(info)
+}
+
+pub fn mem_create_in(account: Handle, size: u64, flags: u64) -> Result<Handle> {
+    syscall(n::MEM_CREATE_IN, [account.0 as u64, size, flags, 0, 0, 0]).map(|h| Handle(h as u32))
+}
+
+/// A thread whose user stack is allocated and reclaimed by the kernel.
+pub fn thread_start(entry: u64, arg: u64, cpu: u64, stack_bytes: u64) -> Result<Handle> {
+    syscall(n::THREAD_START, [entry, arg, cpu, stack_bytes, 0, 0]).map(|h| Handle(h as u32))
+}
+pub fn thread_wait(thread: Handle, deadline_ns: u64) -> Result<()> {
+    syscall(n::THREAD_WAIT, [thread.0 as u64, deadline_ns, 0, 0, 0, 0]).map(|_| ())
+}
+
+pub fn timer_create() -> Result<Handle> {
+    syscall(n::TIMER_CREATE, [0; 6]).map(|h| Handle(h as u32))
+}
+/// Arm/reset a monotonic absolute deadline. FOREVER disarms and clears EXPIRED.
+pub fn timer_arm(timer: Handle, deadline_ns: u64) -> Result<()> {
+    syscall(n::TIMER_ARM, [timer.0 as u64, deadline_ns, 0, 0, 0, 0]).map(|_| ())
+}
+pub fn timer_cancel(timer: Handle) -> Result<()> {
+    syscall(n::TIMER_CANCEL, [timer.0 as u64, 0, 0, 0, 0, 0]).map(|_| ())
+}
+
+pub fn event_queue_create(capacity: usize) -> Result<Handle> {
+    syscall(n::EVENT_QUEUE_CREATE, [capacity as u64, 0, 0, 0, 0, 0]).map(|h| Handle(h as u32))
+}
+pub fn object_subscribe(queue: Handle, source: Handle, signals: u64, key: u64) -> Result<u64> {
+    syscall(n::OBJECT_SUBSCRIBE, [queue.0 as u64, source.0 as u64, signals, key, 0, 0])
+}
+pub fn subscription_rearm(queue: Handle, subscription: u64) -> Result<()> {
+    syscall(n::SUBSCRIPTION_REARM, [queue.0 as u64, subscription, 0, 0, 0, 0]).map(|_| ())
+}
+pub fn subscription_cancel(queue: Handle, subscription: u64) -> Result<()> {
+    syscall(n::SUBSCRIPTION_CANCEL, [queue.0 as u64, subscription, 0, 0, 0, 0]).map(|_| ())
+}
+pub fn event_queue_wait(queue: Handle, deadline_ns: u64) -> Result<dross_abi::event::Event> {
+    let mut event = dross_abi::event::Event::default();
+    syscall(n::EVENT_QUEUE_WAIT, [queue.0 as u64, &mut event as *mut _ as u64, deadline_ns, 0, 0, 0])?;
+    Ok(event)
 }
 
 pub fn mem_create(size: u64, flags: u64) -> Result<Handle> {
@@ -105,6 +165,11 @@ pub fn vm_memory(addr: u64) -> Result<(Handle, u64, u64)> {
 /// Starts the ELF image in `image` as a new process with `bootstrap` (moved) as its handle 1.
 pub fn spawn(image: Handle, name: &str, bootstrap: Option<Handle>, cpu: u64) -> Result<Handle> {
     syscall(n::SPAWN, [image.0 as u64, name.as_ptr() as u64, name.len() as u64, bootstrap.map_or(0, |h| h.0 as u64), cpu, 0]).map(|h| Handle(h as u32))
+}
+
+/// Select an existing account as the child's shared/default funding account.
+pub fn spawn_in(account: Handle, image: Handle, name: &str, bootstrap: Option<Handle>, cpu: u64) -> Result<Handle> {
+    syscall(n::SPAWN, [image.0 as u64, name.as_ptr() as u64, name.len() as u64, bootstrap.map_or(0, |h| h.0 as u64), cpu, account.0 as u64]).map(|h| Handle(h as u32))
 }
 
 /// Waits for a process to end; returns its exit code.
@@ -184,6 +249,14 @@ pub fn spawn_linux(image: Handle, argv: &[&str], envp: &[&str], bootstrap: Optio
         .map(|h| Handle(h as u32))
 }
 
+pub fn spawn_linux_in(account: Handle, image: Handle, argv: &[&str], envp: &[&str], bootstrap: Option<Handle>) -> Result<Handle> {
+    let join = |v: &[&str]| v.iter().flat_map(|s| s.bytes().chain(core::iter::once(0))).collect::<alloc::vec::Vec<u8>>();
+    let (argv, envp) = (join(argv), join(envp));
+    let args = dross_abi::LinuxSpawnArgs { image: image.0 as u64, argv: argv.as_ptr() as u64, argv_bytes: argv.len() as u64,
+        envp: envp.as_ptr() as u64, envp_bytes: envp.len() as u64, bootstrap: bootstrap.map_or(0, |h| h.0 as u64) };
+    syscall(n::SPAWN_LINUX_IN, [account.0 as u64, &args as *const _ as u64, 0, 0, 0, 0]).map(|h| Handle(h as u32))
+}
+
 /// From a Linux program: an fd for a notification (polls readable while bits are pending) or a memory object
 /// (mappable).
 pub fn handle_fd(h: Handle) -> Result<i32> {
@@ -197,7 +270,7 @@ pub fn system_exit(system: Handle, code: u64) -> ! {
 
 /// Deadline `ms` milliseconds from now.
 pub fn after_ms(ms: u64) -> u64 {
-    clock() + ms * 1_000_000
+    clock().saturating_add(ms.saturating_mul(1_000_000))
 }
 
 /// Secure entropy from a kernel built with the Unix feature. No fallback to time.

@@ -28,8 +28,14 @@ use crate::process::Process;
 use crate::sched::{self, Thread, WaitCell, WaitError};
 use crate::{cpu, time};
 
-pub use exec::spawn;
+pub use exec::spawn_in;
 pub use fs::{init_rootfs, memory_fd, notification_fd, publish_table, Files};
+
+pub fn reclaim_socket_cycles() -> usize { sock::collect_cycles() }
+pub fn socket_cycles_deferred() -> bool { sock::has_deferred() }
+pub fn reap_socket_cycles() -> usize { sock::reap_deferred() }
+#[cfg(feature = "audit-test")]
+pub fn audit_socket_cycles() { sock::audit_cycles(); }
 
 pub type Errno = i64;
 pub const ENOENT: Errno = 2;
@@ -213,11 +219,78 @@ struct Futex {
 type FutexKey = (usize, u64);
 static FUTEXES: Mutex<alloc::collections::BTreeMap<FutexKey, Arc<Mutex<Futex>>>> = Mutex::new(alloc::collections::BTreeMap::new());
 
-/// Futexes are keyed by the memory object and offset behind the address, so shared mappings work too.
-fn futex_of(p: &Process, addr: u64) -> Result<Arc<Mutex<Futex>>, Errno> {
+/// A caller keeps the backing alive, preventing physical page reuse while a futex is
+/// active. Lookup and removal share the registry lock, so an entry cannot split
+/// into two cells while another caller is preparing to wait or wake.
+struct FutexRef {
+    key: FutexKey,
+    cell: Option<Arc<Mutex<Futex>>>,
+    _memory: Arc<crate::memory::Memory>,
+}
+impl FutexRef {
+    fn lock(&self) -> spin::MutexGuard<'_, Futex> { self.cell.as_ref().unwrap().lock() }
+}
+impl Drop for FutexRef {
+    fn drop(&mut self) {
+        let mut registry = FUTEXES.lock();
+        // Registry + this caller only. All sleepers and pending wake recipients
+        // hold a FutexRef until they remove their ticket and finish the call.
+        let cell = self.cell.take().unwrap();
+        if Arc::strong_count(&cell) == 2 {
+            registry.remove(&self.key);
+        }
+        // Release our reference before another exiting caller tests the count.
+        drop(cell);
+    }
+}
+fn futex_for_memory(mem: Arc<crate::memory::Memory>, off: u64) -> FutexRef {
+    let key = (mem.page_phys((off / 4096) as usize) as usize, off % 4096);
+    let cell = FUTEXES.lock().entry(key)
+        .or_insert_with(|| Arc::new(Mutex::new(Futex { waiters: Default::default(), woken: Vec::new(), next: 0 })))
+        .clone();
+    FutexRef { key, cell: Some(cell), _memory: mem }
+}
+
+/// Physical backing identity survives mapping splits and aliases. The lease
+/// keeps that page resident until all pending wait/wake operations finish.
+fn futex_of(p: &Process, addr: u64) -> Result<FutexRef, Errno> {
     let (mem, off) = p.aspace.lookup(addr).ok_or(EFAULT)?;
-    let key = (Arc::as_ptr(&mem) as usize, off);
-    Ok(FUTEXES.lock().entry(key).or_insert_with(|| Arc::new(Mutex::new(Futex { waiters: Default::default(), woken: Vec::new(), next: 0 }))).clone())
+    let page = off & !4095;
+    let held = mem.slice(page, 4096).map_err(|_| ENOMEM)?;
+    Ok(match held {
+        Some(view) => futex_for_memory(Arc::new(view), off % 4096),
+        None => futex_for_memory(mem, off),
+    })
+}
+
+#[cfg(feature = "audit-test")]
+pub fn audit_futex() {
+    let baseline = FUTEXES.lock().len();
+    let memory = Arc::new(crate::memory::Memory::anonymous(4096, false, false).unwrap());
+    let first = futex_for_memory(memory.clone(), 0);
+    let second = futex_for_memory(memory.clone(), 0);
+    assert!(Arc::ptr_eq(first.cell.as_ref().unwrap(), second.cell.as_ref().unwrap()));
+    drop(first);
+    let third = futex_for_memory(memory.clone(), 0);
+    assert!(Arc::ptr_eq(second.cell.as_ref().unwrap(), third.cell.as_ref().unwrap()));
+    drop(second);
+    drop(third);
+    assert_eq!(FUTEXES.lock().len(), baseline);
+    for off in (0..4096).step_by(4) { drop(futex_for_memory(memory.clone(), off)); }
+    assert_eq!(FUTEXES.lock().len(), baseline);
+    let weak = Arc::downgrade(&memory);
+    let held = futex_for_memory(memory, 0);
+    assert!(weak.upgrade().is_some());
+    drop(held);
+    assert!(weak.upgrade().is_none());
+    let memory = Arc::new(crate::memory::Memory::anonymous_paged(8192).unwrap());
+    let view = Arc::new(memory.slice(4096, 4096).unwrap().unwrap());
+    let original = futex_for_memory(memory, 4100);
+    let sliced = futex_for_memory(view, 4);
+    assert!(Arc::ptr_eq(original.cell.as_ref().unwrap(), sliced.cell.as_ref().unwrap()));
+    drop(original); drop(sliced);
+    assert_eq!(FUTEXES.lock().len(), baseline);
+    crate::println!("futex: registry lifetime tests passed");
 }
 
 /// Wakes up to `n` waiters, oldest first. Returns how many.
@@ -267,14 +340,15 @@ fn futex_wait(p: &Process, addr: u64, val: u32, deadline_tsc: u64) -> R {
     }
 }
 
-/// Ends the calling thread the Linux way: clear-tid, then exit.
-pub fn exit_thread(p: &Process, me: &Thread) -> ! {
+/// Clear-tid, then defer exit until syscall locals have released their references.
+fn exit_thread(p: &Process, me: &Arc<Thread>) -> R {
     let ct = me.clear_tid.load(core::sync::atomic::Ordering::Relaxed);
     if ct != 0 {
         let _ = write_u32(p, ct, 0);
         let _ = futex_wake(p, ct, u64::MAX);
     }
-    sched::exit_current()
+    me.kill();
+    Ok(0)
 }
 
 #[cfg(not(feature = "unix"))]
@@ -336,30 +410,37 @@ fn mmap(p: &Process, addr: u64, len: u64, prot: u64, flags: u64, fd: u64, off: u
             map(0, false)
         }
     };
-    let map_memory = |mem: Arc<crate::memory::Memory>, off: u64| {
-        place(&|at, replace| if replace { p.aspace.map_replace(mem.clone(), off, len, at, f) } else { p.aspace.map(mem.clone(), off, len, at, f) })
+    let map_memory = |mem: Arc<crate::memory::Memory>, off: u64, max_flags: u64| {
+        place(&|at, replace| if replace { p.aspace.map_replace_restricted(mem.clone(), off, len, at, f, max_flags) }
+            else { p.aspace.map_restricted(mem.clone(), off, len, at, f, max_flags) })
     };
+    let all_permissions = vm::READ | vm::WRITE | vm::EXECUTE;
     let r = if flags & MAP_ANONYMOUS != 0 {
         if f == 0 {
             place(&|at, replace| p.aspace.reserve(len, at, replace))
         } else {
-            map_memory(Arc::new(crate::memory::Memory::anonymous(len, false, false).map_err(|_| ENOMEM)?), 0)
+            map_memory(Arc::new(crate::memory::Memory::anonymous_paged(len).map_err(|_| ENOMEM)?), 0, all_permissions)
         }
     } else {
         let file = linux(p).files.get(fd as i32)?;
+        let mut max_flags = file.memory_permissions().unwrap_or(all_permissions);
+        // Reading a private copy is still an access to its source backing.
+        if max_flags & vm::READ == 0 { return Err(EACCES); }
+        if flags & MAP_SHARED != 0 && file.flags.load(core::sync::atomic::Ordering::Relaxed) & 3 == 0 { max_flags &= !vm::WRITE; }
         match file.backing(off, len)? {
             // Read-only memory (a mounted file's contents) can't be written through any mapping, so a private
             // read-only mapping shares it too (a 7 GB model file isn't copied).
             Some(mem) if !mem.writable() && prot & 2 != 0 && flags & MAP_SHARED != 0 => return Err(EACCES),
-            Some(mem) if flags & MAP_SHARED != 0 || (!mem.writable() && prot & 2 == 0) => map_memory(mem, off),
+            Some(mem) if flags & MAP_SHARED != 0 || (!mem.writable() && prot & 2 == 0) => map_memory(mem, off, max_flags),
             // Nothing writes a copy back: a shared mapping of a regular file is only a copy if read-only.
             None if flags & MAP_SHARED != 0 && prot & 2 != 0 => return Err(EACCES),
-            _ => map_memory(Arc::new(file.copy(off, len)?), 0),
+            _ => map_memory(Arc::new(file.copy(off, len)?), 0, all_permissions),
         }
     };
     r.map_err(|e| match e {
         dross_abi::Error::Busy => EEXIST,
-        dross_abi::Error::OutOfRange => EINVAL,
+        dross_abi::Error::OutOfRange | dross_abi::Error::InvalidArgs => EINVAL,
+        dross_abi::Error::AccessDenied => EACCES,
         _ => ENOMEM,
     })
 }
@@ -384,7 +465,7 @@ fn clone(p: &Arc<Process>, f: &Frame, flags: u64, stack: u64, ptid: u64, ctid: u
     regs[19] = f.r11; // flags
     regs[20] = stack;
     let fs = if flags & CLONE_SETTLS != 0 { tls } else { sched::current().fs_base.load(core::sync::atomic::Ordering::Relaxed) };
-    let t = sched::spawn_with(p.clone(), sched::pick_cpu(), regs, fs);
+    let t = sched::spawn_with(p.clone(), sched::pick_cpu(), regs, fs).map_err(|_| ENOMEM)?;
     if flags & CLONE_CHILD_CLEARTID != 0 {
         t.clear_tid.store(ctid, core::sync::atomic::Ordering::Relaxed);
     }
@@ -429,7 +510,11 @@ fn dispatch(p: &Arc<Process>, f: &Frame, n: u64, a: [u64; 6]) -> R {
             if a[0] % 4096 != 0 { return Err(EINVAL); }
             if a[1] == 0 { return Ok(0); }
             let len = a[1].checked_add(4095).ok_or(ENOMEM)? & !4095;
-            p.aspace.protect(a[0], len, prot_flags(a[2])).map(|_| 0).map_err(|_| ENOMEM)
+            p.aspace.protect(a[0], len, prot_flags(a[2])).map(|_| 0).map_err(|e| match e {
+                dross_abi::Error::AccessDenied => EACCES,
+                dross_abi::Error::InvalidArgs => EINVAL,
+                _ => ENOMEM,
+            })
         }
         11 => {
             let len = a[1].checked_add(4095).ok_or(EINVAL)? & !4095;
@@ -486,7 +571,7 @@ fn dispatch(p: &Arc<Process>, f: &Frame, n: u64, a: [u64; 6]) -> R {
         }
         // rt_sigtimedwait, pause, rt_sigsuspend: no signal ever comes; sleep until the deadline or a kill.
         128 | 34 | 130 => {
-            let deadline = if n == 128 && a[2] != 0 { time::tsc_at_ns(time::now_ns() + read_timespec(p, a[2])?) } else { u64::MAX };
+            let deadline = if n == 128 && a[2] != 0 { time::tsc_at_ns(time::now_ns().saturating_add(read_timespec(p, a[2])?)) } else { u64::MAX };
             static NOTHING: WaitCell<()> = WaitCell::new(());
             match NOTHING.wait(deadline, |_| None::<()>) {
                 Err(WaitError::TimedOut) => Err(EAGAIN),
@@ -542,7 +627,7 @@ fn dispatch(p: &Arc<Process>, f: &Frame, n: u64, a: [u64; 6]) -> R {
                         if op == 9 {
                             // Absolute, on the monotonic clock (or realtime with FUTEX_CLOCK_REALTIME).
                             let now = if a[1] & 256 != 0 { clock_ns(0) } else { time::now_ns() };
-                            time::tsc_at_ns(time::now_ns() + ts.saturating_sub(now))
+                            time::tsc_at_ns(time::now_ns().saturating_add(ts.saturating_sub(now)))
                         } else {
                             time::tsc_at_ns(time::now_ns().saturating_add(ts))
                         }

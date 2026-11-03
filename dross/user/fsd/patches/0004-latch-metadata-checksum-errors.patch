@@ -1,0 +1,176 @@
+--- a/src/ext4_balloc.c
++++ b/src/ext4_balloc.c
+@@ -177,6 +177,7 @@
+ 	}
+ 
+ 	if (!ext4_balloc_verify_bitmap_csum(sb, bg, bitmap_block.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_BALLOC,
+ 			DBG_WARN "Bitmap checksum failed."
+ 			"Group: %" PRIu32"\n",
+@@ -278,6 +279,7 @@
+ 		}
+ 
+ 		if (!ext4_balloc_verify_bitmap_csum(sb, bg, blk.data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_BALLOC,
+ 				DBG_WARN "Bitmap checksum failed."
+ 				"Group: %" PRIu32"\n",
+@@ -399,6 +401,7 @@
+ 	}
+ 
+ 	if (!ext4_balloc_verify_bitmap_csum(sb, bg, b.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_BALLOC,
+ 			DBG_WARN "Bitmap checksum failed."
+ 			"Group: %" PRIu32"\n",
+@@ -501,6 +504,7 @@
+ 		}
+ 
+ 		if (!ext4_balloc_verify_bitmap_csum(sb, bg, b.data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_BALLOC,
+ 				DBG_WARN "Bitmap checksum failed."
+ 				"Group: %" PRIu32"\n",
+@@ -611,6 +615,7 @@
+ 	}
+ 
+ 	if (!ext4_balloc_verify_bitmap_csum(sb, bg_ref.block_group, b.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_BALLOC,
+ 			DBG_WARN "Bitmap checksum failed."
+ 			"Group: %" PRIu32"\n",
+--- a/src/ext4_ialloc.c
++++ b/src/ext4_ialloc.c
+@@ -179,6 +179,7 @@
+ 		return rc;
+ 
+ 	if (!ext4_ialloc_verify_bitmap_csum(sb, bg, b.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_IALLOC,
+ 			DBG_WARN "Bitmap checksum failed."
+ 			"Group: %" PRIu32"\n",
+@@ -272,6 +273,7 @@
+ 			}
+ 
+ 			if (!ext4_ialloc_verify_bitmap_csum(sb, bg, b.data)) {
++				ext4_metadata_csum_error(__FILE__, __LINE__);
+ 				ext4_dbg(DEBUG_IALLOC,
+ 					DBG_WARN "Bitmap checksum failed."
+ 					"Group: %" PRIu32"\n",
+--- a/src/ext4_fs.c
++++ b/src/ext4_fs.c
+@@ -590,6 +590,7 @@
+ 	struct ext4_bgroup *bg = ref->block_group;
+ 
+ 	if (!ext4_fs_verify_bg_csum(&fs->sb, bgid, bg)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_FS,
+ 			 DBG_WARN "Block group descriptor checksum failed."
+ 			 "Block group index: %" PRIu32"\n",
+@@ -772,6 +773,7 @@
+ 	ref->dirty = false;
+ 
+ 	if (initialized && !ext4_fs_verify_inode_csum(ref)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_FS,
+ 			DBG_WARN "Inode checksum failed."
+ 			"Inode: %" PRIu32"\n",
+--- a/src/ext4_dir.c
++++ b/src/ext4_dir.c
+@@ -387,6 +387,7 @@
+ 			return r;
+ 
+ 		if (!ext4_dir_csum_verify(parent, (void *)block.data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_DIR,
+ 				 DBG_WARN "Leaf block checksum failed."
+ 				 "Inode: %" PRIu32", "
+@@ -497,6 +498,7 @@
+ 			return r;
+ 
+ 		if (!ext4_dir_csum_verify(parent, (void *)b.data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_DIR,
+ 				 DBG_WARN "Leaf block checksum failed."
+ 				 "Inode: %" PRIu32", "
+--- a/src/ext4_dir_idx.c
++++ b/src/ext4_dir_idx.c
+@@ -620,6 +620,7 @@
+ 		}
+ 
+ 		if (!ext4_dir_dx_csum_verify(inode_ref, (void *)tmp_blk->data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_DIR_IDX,
+ 					DBG_WARN "HTree checksum failed."
+ 					"Inode: %" PRIu32", "
+@@ -688,6 +689,7 @@
+ 			return r;
+ 
+ 		if (!ext4_dir_dx_csum_verify(inode_ref, (void *)b.data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_DIR_IDX,
+ 					DBG_WARN "HTree checksum failed."
+ 					"Inode: %" PRIu32", "
+@@ -731,6 +733,7 @@
+ 		return rc;
+ 
+ 	if (!ext4_dir_dx_csum_verify(inode_ref, (void *)root_block.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_DIR_IDX,
+ 			 DBG_WARN "HTree root checksum failed."
+ 			 "Inode: %" PRIu32", "
+@@ -779,6 +782,7 @@
+ 			goto cleanup;
+ 
+ 		if (!ext4_dir_csum_verify(inode_ref, (void *)b.data)) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_DIR_IDX,
+ 				 DBG_WARN "HTree leaf block checksum failed."
+ 				 "Inode: %" PRIu32", "
+@@ -1247,6 +1251,7 @@
+ 		return r;
+ 
+ 	if (!ext4_dir_dx_csum_verify(parent, (void*)root_blk.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_DIR_IDX,
+ 			 DBG_WARN "HTree root checksum failed."
+ 			 "Inode: %" PRIu32", "
+@@ -1299,6 +1304,7 @@
+ 		goto release_index;
+ 
+ 	if (!ext4_dir_csum_verify(parent,(void *)target_block.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_DIR_IDX,
+ 				DBG_WARN "HTree leaf block checksum failed."
+ 				"Inode: %" PRIu32", "
+@@ -1377,6 +1383,7 @@
+ 		return rc;
+ 
+ 	if (!ext4_dir_dx_csum_verify(dir, (void *)block.data)) {
++		ext4_metadata_csum_error(__FILE__, __LINE__);
+ 		ext4_dbg(DEBUG_DIR_IDX,
+ 			 DBG_WARN "HTree root checksum failed."
+ 			 "Inode: %" PRIu32", "
+--- a/src/ext4_extent.c
++++ b/src/ext4_extent.c
+@@ -757,6 +757,7 @@
+ 	if (ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
+ 		if (tail->et_checksum !=
+ 		    to_le32(ext4_ext_block_csum(inode_ref, eh))) {
++			ext4_metadata_csum_error(__FILE__, __LINE__);
+ 			ext4_dbg(DEBUG_EXTENT,
+ 				 DBG_WARN "Extent block checksum failed."
+ 					  "Blocknr: %" PRIu64 "\n",
+--- a/include/ext4_crc32.h
++++ b/include/ext4_crc32.h
+@@ -47,6 +47,9 @@
+ 
+ #include <stdint.h>
+ 
++/* Port hook: latch a metadata-integrity error even when debug logging is off. */
++void ext4_metadata_csum_error(const char *file, unsigned line);
++
+ /**@brief	CRC32 algorithm.
+  * @param	crc input feed
+  * @param 	buf input buffer

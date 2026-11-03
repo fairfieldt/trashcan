@@ -46,19 +46,26 @@ pub fn init_kernel_space() {
     crate::println!("paging: identity map gone, kernel half shared from {:#x}", pml4);
 }
 
-struct TableFrames;
+struct TableAllocation { phys: u64, retired: u64, _charge: crate::account::Charge }
+struct TableFrames<'a>(&'a AddressSpace);
+static NEXT_RETIREMENT: AtomicU64 = AtomicU64::new(1);
 
 #[cfg(feature = "audit-test")]
 static TABLES_BEFORE_FAILURE: core::sync::atomic::AtomicI64 = core::sync::atomic::AtomicI64::new(-1);
 
 // SAFETY: hands out unused frames; the mapper zeroes the tables it makes from them.
-unsafe impl FrameAllocator<Size4KiB> for TableFrames {
+unsafe impl FrameAllocator<Size4KiB> for TableFrames<'_> {
     fn allocate_frame(&mut self) -> Option<PhysFrame<Size4KiB>> {
         #[cfg(feature = "audit-test")]
         if TABLES_BEFORE_FAILURE.load(Ordering::Relaxed) >= 0 {
             if TABLES_BEFORE_FAILURE.fetch_sub(1, Ordering::Relaxed) == 0 { return None; }
         }
-        mem::alloc_phys(1, PAGE, u64::MAX).map(|p| PhysFrame::containing_address(PhysAddr::new(p)))
+        let mut tables = self.0.tables.lock();
+        tables.try_reserve(1).ok()?;
+        let charge = self.0.account.reserve(PAGE).ok()?;
+        let phys = mem::alloc_phys(1, PAGE, u64::MAX)?;
+        tables.push(TableAllocation { phys, retired: 0, _charge: charge });
+        Some(PhysFrame::containing_address(PhysAddr::new(phys)))
     }
 }
 
@@ -71,6 +78,8 @@ struct Mapping {
     offset: u64,
     /// `vm::READ | WRITE | EXECUTE`; 0 maps nothing (no access).
     flags: u64,
+    /// Maximum permissions granted when backing entered this address space.
+    max_flags: u64,
     /// Held while the framebuffer is mapped: the kernel log stays off it.
     _display: Option<crate::fbcon::Claim>,
 }
@@ -83,6 +92,9 @@ struct Inner {
 
 pub struct AddressSpace {
     pml4: u64,
+    _root_charge: crate::account::Charge,
+    account: Arc<crate::account::Account>,
+    tables: Mutex<Vec<TableAllocation>>,
     inner: Mutex<Inner>,
     /// CPUs that have had this space loaded (TLB shootdowns go to them).
     cpus: AtomicU64,
@@ -95,7 +107,7 @@ const AUTO_BASE: u64 = 0x0000_1000_0000_0000;
 pub fn audit_test() {
     use x86_64::structures::paging::{Translate, mapper::TranslateResult};
     let present = |space: &AddressSpace, addr| space.mapper().translate_addr(VirtAddr::new(addr)).is_some();
-    let s = AddressSpace::new();
+    let s = AddressSpace::new().unwrap();
     let m = Arc::new(Memory::anonymous(2 * PAGE, false, false).unwrap());
     TABLES_BEFORE_FAILURE.store(3, Ordering::Relaxed);
     assert!(matches!(s.map(m, 0, 2 * PAGE, 0x3ff000, vm::READ), Err(Error::NoMemory)));
@@ -103,7 +115,7 @@ pub fn audit_test() {
     assert!(s.lookup(0x3ff000).is_none());
     TABLES_BEFORE_FAILURE.store(-1, Ordering::Relaxed);
 
-    let s = AddressSpace::new();
+    let s = AddressSpace::new().unwrap();
     let m = Arc::new(Memory::anonymous(PAGE, false, false).unwrap());
     s.map(m, 0, PAGE, 0x3ff000, vm::READ).unwrap();
     s.reserve(PAGE, 0x400000, false).unwrap();
@@ -117,38 +129,176 @@ pub fn audit_test() {
     s.protect(0x3ff000, 2 * PAGE, vm::READ | vm::WRITE).unwrap();
     assert!(present(&s, 0x400000));
     assert!(matches!(s.mapper().translate(VirtAddr::new(0x3ff000)), TranslateResult::Mapped { flags, .. } if flags.contains(F::WRITABLE)));
+    let account = crate::account::Account::new(4 * PAGE);
+    let space = AddressSpace::new().unwrap();
+    let memory = Memory::anonymous_paged_in(4 * PAGE, account.clone()).unwrap();
+    space.map(Arc::new(memory), 0, 4 * PAGE, 0x100000, vm::READ | vm::WRITE).unwrap();
+    space.unmap_range(0x101000, 2 * PAGE).unwrap();
+    assert_eq!(account.stats()[0], 2 * PAGE);
+    assert!(space.lookup(0x100000).is_some() && space.lookup(0x103000).is_some());
+    assert!(space.lookup(0x101000).is_none());
+    space.clear();
+    assert_eq!(account.stats()[0], 0);
+    let explicit = Arc::new(Memory::anonymous_in(4 * PAGE, false, false, account.clone()).unwrap());
+    space.map(explicit.clone(), 0, 4 * PAGE, 0x100000, vm::READ).unwrap();
+    space.unmap_range(0x101000, 2 * PAGE).unwrap();
+    assert_eq!(account.stats()[0], 4 * PAGE);
+    space.clear();
+    assert_eq!(account.stats()[0], 4 * PAGE);
+    drop(explicit);
+    assert_eq!(account.stats()[0], 0);
+    #[cfg(feature = "unix")]
+    {
+        let a = AddressSpace::new().unwrap();
+        let child = AddressSpace::new().unwrap();
+        let parent_account = crate::account::Account::new(4 * PAGE);
+        let child_account = crate::account::Account::new(4 * PAGE);
+        let memory = Arc::new(Memory::anonymous_paged_in(4 * PAGE, parent_account.clone()).unwrap());
+        a.map(memory.clone(), 0, 4 * PAGE, 0x100000, vm::READ | vm::WRITE).unwrap();
+        a.map(memory, 0, PAGE, 0x200000, vm::READ | vm::WRITE).unwrap();
+        a.unmap_range(0x102000, 2 * PAGE).unwrap();
+        a.fork_into(&child, child_account.clone()).unwrap();
+        let (first, off) = child.lookup(0x100000).unwrap();
+        let (alias, alias_off) = child.lookup(0x200000).unwrap();
+        assert_eq!(first.page_phys((off / PAGE) as usize), alias.page_phys((alias_off / PAGE) as usize));
+        assert_eq!(child_account.stats()[0], 4 * PAGE);
+        child.clear();
+        drop(first); drop(alias);
+        assert_eq!(child_account.stats()[0], 0);
+        a.clear();
+        assert_eq!(parent_account.stats()[0], 0);
+    }
+    let account = crate::account::Account::new(128 << 10);
+    let sparse = AddressSpace::new_in(account.clone()).unwrap();
+    let page = Arc::new(Memory::anonymous_in(PAGE, false, false, account.clone()).unwrap());
+    for index in 1..=16 {
+        let addr = index * (1u64 << 39);
+        sparse.map(page.clone(), 0, PAGE, addr, vm::READ).unwrap();
+        assert!(account.stats()[0] > 2 * PAGE);
+        sparse.unmap(addr, PAGE).unwrap();
+        assert_eq!(account.stats()[0], 2 * PAGE);
+    }
+    drop(page); drop(sparse); assert_eq!(account.stats()[0], 0);
+    #[cfg(feature = "unix")]
+    {
+        let account = crate::account::Account::new(128 << 10);
+        let running = AddressSpace::new_in(account.clone()).unwrap();
+        let image = AddressSpace::new_in(account.clone()).unwrap();
+        let memory = Arc::new(Memory::anonymous_in(PAGE, false, false, account.clone()).unwrap());
+        running.map(memory.clone(), 0, PAGE, 0x100000, vm::READ).unwrap();
+        image.map(memory.clone(), 0, PAGE, 0x4000000000, vm::READ).unwrap();
+        running.replace_from(&image);
+        drop(image);
+        assert!(present(&running, 0x4000000000));
+        running.unmap(0x4000000000, PAGE).unwrap();
+        assert_eq!(account.stats()[0], 2 * PAGE);
+        drop(memory); drop(running);
+        assert_eq!(account.stats()[0], 0);
+        crate::println!("paging: exec replacement retains live table ownership");
+    }
+    crate::println!("paging: physical overhead charged and empty branches reclaimed");
+    crate::println!("paging: partial anonymous unmap reclamation tests passed");
+    let restricted = AddressSpace::new().unwrap();
+    let memory = Arc::new(Memory::anonymous(3 * PAGE, false, false).unwrap());
+    restricted.map_restricted(memory, 0, 3 * PAGE, 0x100000, vm::READ, vm::READ).unwrap();
+    restricted.protect(0x101000, PAGE, 0).unwrap();
+    assert!(matches!(restricted.protect(0x100000, 3 * PAGE, vm::READ | vm::WRITE), Err(Error::AccessDenied)));
+    assert!(matches!(restricted.protect(0x101000, PAGE, vm::EXECUTE), Err(Error::AccessDenied)));
+    restricted.protect(0x100000, 3 * PAGE, vm::READ).unwrap();
+    #[cfg(feature = "unix")]
+    {
+        let child = AddressSpace::new().unwrap();
+        restricted.fork_into(&child, crate::account::Account::new(3 * PAGE)).unwrap();
+        assert!(matches!(child.protect(0x100000, PAGE, vm::READ | vm::WRITE), Err(Error::AccessDenied)));
+        let borrowed = AddressSpace::new().unwrap();
+        restricted.vfork_into(&borrowed).unwrap();
+        assert!(matches!(borrowed.protect(0x101000, PAGE, vm::READ | vm::EXECUTE), Err(Error::AccessDenied)));
+    }
+    crate::println!("paging: delegated mapping permission checks passed");
     crate::println!("paging: allocation failure rollback tests passed");
 }
 
 impl AddressSpace {
-    pub fn new() -> AddressSpace {
-        let pml4 = mem::alloc_phys_zeroed(1);
+    #[cfg(feature = "audit-test")]
+    pub fn new() -> Result<AddressSpace, Error> { Self::new_in(crate::account::current()) }
+    pub fn new_in(account: Arc<crate::account::Account>) -> Result<AddressSpace, Error> {
+        let charge = account.reserve(PAGE)?;
+        let pml4 = mem::try_alloc_phys_zeroed(1)?;
         let k = table(kernel_pml4());
         table(pml4)[256..].copy_from_slice(&k[256..]);
-        AddressSpace { pml4, inner: Mutex::new(Inner { mappings: BTreeMap::new(), next: AUTO_BASE }), cpus: AtomicU64::new(0) }
+        Ok(AddressSpace { pml4, _root_charge: charge, account, tables: Mutex::new(Vec::new()),
+            inner: Mutex::new(Inner { mappings: BTreeMap::new(), next: AUTO_BASE }), cpus: AtomicU64::new(0) })
+    }
+
+    /// Every thread has switched away. Only the root/status page remains.
+    pub fn clear(&self) {
+        let mappings = core::mem::take(&mut self.inner.lock().mappings);
+        table(self.pml4)[..256].fill(0);
+        let tables = core::mem::take(&mut *self.tables.lock());
+        for allocation in tables { mem::free_phys(allocation.phys, 1); }
+        drop(mappings);
+    }
+
+    /// Unlink empty user table branches while mappings are serialized. Frames
+    /// stay reserved until this batch's own cross-CPU invalidation completes.
+    fn prune_tables(&self) -> u64 {
+        let Ok(batch) = NEXT_RETIREMENT.try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1)) else { return 0 };
+        let _inner = self.inner.lock();
+        let mut allocations = self.tables.lock();
+        fn empty(phys: u64, level: u32, allocations: &mut [TableAllocation], batch: u64) -> bool {
+            let mut unused = true;
+            for entry in table(phys).iter_mut() {
+                if *entry & 1 == 0 { continue; }
+                if level > 1 && *entry & F::HUGE_PAGE.bits() == 0 {
+                    let child = *entry & 0x000f_ffff_ffff_f000;
+                    if empty(child, level - 1, allocations, batch) {
+                        *entry = 0;
+                        allocations.iter_mut().find(|a| a.phys == child).unwrap().retired = batch;
+                        continue;
+                    }
+                }
+                unused = false;
+            }
+            unused
+        }
+        for entry in &mut table(self.pml4)[..256] {
+            if *entry & 1 == 0 { continue; }
+            let child = *entry & 0x000f_ffff_ffff_f000;
+            if empty(child, 3, &mut allocations, batch) {
+                *entry = 0;
+                allocations.iter_mut().find(|a| a.phys == child).unwrap().retired = batch;
+            }
+        }
+        batch
+    }
+    fn release_tables(&self, batch: u64) {
+        if batch == 0 { return; }
+        let mut allocations = self.tables.lock();
+        let mut index = 0;
+        while index < allocations.len() {
+            if allocations[index].retired == batch {
+                let allocation = allocations.swap_remove(index);
+                mem::free_phys(allocation.phys, 1);
+                drop(allocation);
+            } else { index += 1; }
+        }
     }
 
     /// Eager fork for small Unix processes. Shared mappings keep their memory object;
     /// private aliases of the same object share one copy in the child.
     #[cfg(feature = "unix")]
-    pub fn fork_into(&self, child: &Self) -> Result<(), Error> {
+    pub fn fork_into(&self, child: &Self, account: Arc<crate::account::Account>) -> Result<(), Error> {
         let inner = self.inner.lock();
-        let mut copies: BTreeMap<usize, Arc<Memory>> = BTreeMap::new();
+        let mut copies = crate::memory::PageCopies::new();
         for (&addr, m) in &inner.mappings {
             match &m.mem {
                 None => { child.reserve(m.len, addr, false)?; }
                 Some(mem) => {
                     if !mem.is_ram() { return Err(Error::AccessDenied); }
                     let backing = if m.flags & FORK_SHARED != 0 { mem.clone() } else {
-                        let key = Arc::as_ptr(mem) as usize;
-                        if let Some(copy) = copies.get(&key) { copy.clone() } else {
-                            let copy = Arc::new(Memory::anonymous(mem.size(), false, false)?);
-                            let mut buffer = alloc::vec![0; 4096];
-                            for off in (0..mem.size()).step_by(4096) { mem.read(off, &mut buffer)?; copy.write(off, &buffer)?; }
-                            copies.insert(key, copy.clone()); copy
-                        }
+                        Arc::new(mem.copy_for_fork(account.clone(), &mut copies)?)
                     };
-                    child.map(backing, m.offset, m.len, addr, m.flags)?;
+                    child.map_restricted(backing, m.offset, m.len, addr, m.flags, m.max_flags)?;
                 }
             }
         }
@@ -164,7 +314,7 @@ impl AddressSpace {
         for (&addr, m) in &inner.mappings {
             if let Some(mem) = &m.mem {
                 if !mem.is_ram() { return Err(Error::AccessDenied); }
-                child.map(mem.clone(), m.offset, m.len, addr, m.flags)?;
+                child.map_restricted(mem.clone(), m.offset, m.len, addr, m.flags, m.max_flags)?;
             } else { child.reserve(m.len, addr, false)?; }
         }
         child.inner.lock().next = inner.next;
@@ -179,6 +329,9 @@ impl AddressSpace {
         let mut new = image.inner.lock();
         for index in 0..256 { core::mem::swap(&mut table(self.pml4)[index], &mut table(image.pml4)[index]); }
         core::mem::swap(&mut *old, &mut *new);
+        // Table ownership must follow the entries. Otherwise dropping the
+        // temporary image frees the new live tables after a successful exec.
+        core::mem::swap(&mut *self.tables.lock(), &mut *image.tables.lock());
         drop(new); drop(old);
         x86_64::instructions::tlb::flush_all();
         shootdown(self.cpus.load(Ordering::Relaxed));
@@ -219,7 +372,7 @@ impl AddressSpace {
             let page = Page::<Size4KiB>::containing_address(VirtAddr::new(addr + i * PAGE));
             let frame = PhysFrame::containing_address(PhysAddr::new(mem.page_phys(((m.offset + i * PAGE) / PAGE) as usize)));
             // SAFETY: a user-half page of a checked range, to a frame the memory object owns or may expose.
-            if unsafe { mapper.map_to_with_table_flags(page, frame, pf, parent, &mut TableFrames) }.map(|f| f.ignore()).is_err() {
+            if unsafe { mapper.map_to_with_table_flags(page, frame, pf, parent, &mut TableFrames(self)) }.map(|f| f.ignore()).is_err() {
                 // A partially installed mapping must not outlive its backing object.
                 drop(mapper);
                 self.uninstall(addr, i * PAGE);
@@ -262,36 +415,49 @@ impl AddressSpace {
         Ok(a)
     }
 
-    /// Maps `len` bytes of `mem` from `offset` at `addr` (0: anywhere). Returns the address.
+    /// Maps owned backing with its full permission ceiling.
     pub fn map(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64) -> Result<u64, Error> {
-        if len == 0 || offset % PAGE != 0 || len % PAGE != 0 || addr % PAGE != 0 {
+        self.map_restricted(mem, offset, len, addr, flags, vm::READ | vm::WRITE | vm::EXECUTE)
+    }
+
+    /// Maps delegated backing without permitting later protection changes to add authority.
+    pub fn map_restricted(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64, max_flags: u64) -> Result<u64, Error> {
+        self.map_with_limit(mem, offset, len, addr, flags, max_flags, false)
+    }
+
+    /// Reserves address space with nothing behind it (no access until `protect` gives it memory).
+    pub fn reserve(&self, len: u64, addr: u64, replace: bool) -> Result<u64, Error> {
+        self.insert(None, 0, len, addr, 0, vm::READ | vm::WRITE | vm::EXECUTE, replace)
+    }
+
+    /// Maps delegated backing, replacing the range (Linux `MAP_FIXED`).
+    pub fn map_replace_restricted(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64, max_flags: u64) -> Result<u64, Error> {
+        self.map_with_limit(mem, offset, len, addr, flags, max_flags, true)
+    }
+
+    fn map_with_limit(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64, mut max_flags: u64, replace: bool) -> Result<u64, Error> {
+        if len == 0 || offset % PAGE != 0 || len % PAGE != 0 || addr % PAGE != 0
+            || flags & !(vm::READ | vm::WRITE | vm::EXECUTE | FORK_SHARED) != 0
+            || max_flags & !(vm::READ | vm::WRITE | vm::EXECUTE) != 0 {
             return Err(Error::InvalidArgs);
         }
         if offset.checked_add(len).is_none_or(|e| e > mem.size()) {
             return Err(Error::OutOfRange);
         }
-        self.insert(Some(mem), offset, len, addr, flags, false)
+        if !mem.writable() { max_flags &= !vm::WRITE; }
+        // x86 present user pages are readable even when only WRITE/EXECUTE was requested.
+        let requested = flags & (vm::READ | vm::WRITE | vm::EXECUTE);
+        let effective = requested | if requested != 0 { vm::READ } else { 0 };
+        if effective & !max_flags != 0 { return Err(Error::AccessDenied); }
+        self.insert(Some(mem), offset, len, addr, flags, max_flags, replace)
     }
 
-    /// Reserves address space with nothing behind it (no access until `protect` gives it memory).
-    pub fn reserve(&self, len: u64, addr: u64, replace: bool) -> Result<u64, Error> {
-        self.insert(None, 0, len, addr, 0, replace)
-    }
-
-    /// Maps, replacing whatever was in the range if `replace` (Linux `MAP_FIXED`).
-    pub fn map_replace(&self, mem: Arc<Memory>, offset: u64, len: u64, addr: u64, flags: u64) -> Result<u64, Error> {
-        if offset.checked_add(len).is_none_or(|e| e > mem.size()) {
-            return Err(Error::OutOfRange);
-        }
-        self.insert(Some(mem), offset, len, addr, flags, true)
-    }
-
-    fn insert(&self, mem: Option<Arc<Memory>>, offset: u64, len: u64, addr: u64, flags: u64, replace: bool) -> Result<u64, Error> {
+    fn insert(&self, mem: Option<Arc<Memory>>, offset: u64, len: u64, addr: u64, flags: u64, max_flags: u64, replace: bool) -> Result<u64, Error> {
         let mut inner = self.inner.lock();
         let addr = if addr == 0 { Self::place(&mut inner, len)? } else { addr };
         let end = Self::check_range(addr, len)?;
         let removed = if replace {
-            self.remove_locked(&mut inner, addr, len)
+            self.remove_locked(&mut inner, addr, len)?
         } else {
             if let Some((&s, m)) = inner.mappings.range(..end).next_back() {
                 if s + m.len > addr {
@@ -301,7 +467,7 @@ impl AddressSpace {
             Vec::new()
         };
         let _display = mem.as_ref().filter(|m| m.is_display()).map(|_| crate::fbcon::Claim::new());
-        let m = Mapping { len, mem, offset, flags, _display };
+        let m = Mapping { len, mem, offset, flags, max_flags, _display };
         let r = self.install(addr, &m);
         if r.is_ok() {
             inner.mappings.insert(addr, m);
@@ -314,23 +480,34 @@ impl AddressSpace {
     }
 
     /// Splits the mapping containing `at` (if any) so that a mapping starts at `at`.
-    fn split(inner: &mut Inner, at: u64) {
-        let Some((&s, m)) = inner.mappings.range(..at).next_back() else { return };
+    fn split(inner: &mut Inner, at: u64) -> Result<(), Error> {
+        let Some((&s, m)) = inner.mappings.range(..at).next_back() else { return Ok(()) };
         if s + m.len <= at {
-            return;
+            return Ok(());
         }
         let mut right = m.clone();
         let left_len = at - s;
         right.len = m.len - left_len;
         right.offset = m.offset + left_len;
-        inner.mappings.get_mut(&s).unwrap().len = left_len;
+        let mut left = m.clone();
+        left.len = left_len;
+        if let Some(mem) = &m.mem {
+            let left_view = mem.slice(m.offset, left.len)?;
+            let right_view = mem.slice(right.offset, right.len)?;
+            if let (Some(l), Some(r)) = (left_view, right_view) {
+                left.mem = Some(Arc::new(l)); left.offset = 0;
+                right.mem = Some(Arc::new(r)); right.offset = 0;
+            }
+        }
+        inner.mappings.insert(s, left);
         inner.mappings.insert(at, right);
+        Ok(())
     }
 
-    fn remove_locked(&self, inner: &mut Inner, addr: u64, len: u64) -> Vec<Mapping> {
+    fn remove_locked(&self, inner: &mut Inner, addr: u64, len: u64) -> Result<Vec<Mapping>, Error> {
         let end = addr + len;
-        Self::split(inner, addr);
-        Self::split(inner, end);
+        Self::split(inner, addr)?;
+        Self::split(inner, end)?;
         let keys: Vec<u64> = inner.mappings.range(addr..end).map(|(&k, _)| k).collect();
         let mut out = Vec::new();
         for k in keys {
@@ -338,14 +515,38 @@ impl AddressSpace {
             self.uninstall(k, m.len);
             out.push(m);
         }
-        out
+        Ok(out)
     }
 
     /// After the page tables changed: flush the other CPUs' TLBs, then free what was unmapped. Called without
     /// `inner` held, since another CPU may be spinning on it with interrupts off and couldn't take the IPI.
     fn finish(&self, removed: Vec<Mapping>) {
-        shootdown(self.cpus.load(Ordering::Relaxed));
+        let batch = self.prune_tables();
+        shootdown(self.cpus.load(Ordering::Acquire));
+        self.release_tables(batch);
         drop(removed);
+    }
+
+    /// Release only surviving mappings of this thread-owned backing. Holding
+    /// `memory` keeps every frame alive until the final TLB shootdown, without
+    /// allocating a temporary removal list. Reused addresses are left alone.
+    pub fn release_stack(&self, base: u64, len: u64, memory: &Arc<Memory>) {
+        let end = base + len;
+        let mut inner = self.inner.lock();
+        let mut changed = false;
+        loop {
+            let key = inner.mappings.range(base..end).find_map(|(&addr, map)| {
+                (addr + map.len <= end && map.offset == addr - base
+                    && map.mem.as_ref().is_some_and(|m| Arc::ptr_eq(m, memory))).then_some(addr)
+            });
+            let Some(key) = key else { break };
+            let mapping = inner.mappings.remove(&key).unwrap();
+            self.uninstall(key, mapping.len);
+            drop(mapping);
+            changed = true;
+        }
+        drop(inner);
+        if changed { self.finish(Vec::new()); }
     }
 
     /// Removes the whole mapping that starts at `addr` (dross `VM_UNMAP`).
@@ -355,7 +556,7 @@ impl AddressSpace {
             Some(m) if m.len == len => {}
             _ => return Err(Error::NotFound),
         }
-        let removed = self.remove_locked(&mut inner, addr, len);
+        let removed = self.remove_locked(&mut inner, addr, len)?;
         drop(inner);
         self.finish(removed);
         Ok(())
@@ -365,7 +566,7 @@ impl AddressSpace {
     pub fn unmap_range(&self, addr: u64, len: u64) -> Result<(), Error> {
         Self::check_range(addr, len)?;
         let mut inner = self.inner.lock();
-        let removed = self.remove_locked(&mut inner, addr, len);
+        let removed = self.remove_locked(&mut inner, addr, len)?;
         drop(inner);
         self.finish(removed);
         Ok(())
@@ -393,20 +594,23 @@ impl AddressSpace {
         if at < end {
             return Err(Error::NotFound);
         }
-        // Validate the entire range before changing any of its mappings.
-        if flags & vm::WRITE != 0 && inner.mappings.range(..end).any(|(&s, m)| {
-            s + m.len > addr && m.mem.as_ref().is_some_and(|mm| !mm.writable())
+        // Validate every mapping's ceiling before changing any part of the range.
+        if flags & !(vm::READ | vm::WRITE | vm::EXECUTE) != 0 { return Err(Error::InvalidArgs); }
+        let effective = flags | if flags != 0 { vm::READ } else { 0 };
+        if inner.mappings.range(..end).any(|(&s, m)| {
+            s + m.len > addr && (effective & !m.max_flags != 0
+                || (flags & vm::WRITE != 0 && m.mem.as_ref().is_some_and(|mm| !mm.writable())))
         }) {
             return Err(Error::AccessDenied);
         }
-        Self::split(&mut inner, addr);
-        Self::split(&mut inner, end);
+        Self::split(&mut inner, addr)?;
+        Self::split(&mut inner, end)?;
         let keys: Vec<u64> = inner.mappings.range(addr..end).map(|(&k, _)| k).collect();
         let mut prepared = Vec::new();
         for &k in &keys {
             let mut m = inner.mappings.get(&k).unwrap().clone();
             if m.mem.is_none() && flags != 0 {
-                m.mem = Some(Arc::new(Memory::anonymous(m.len, false, false)?));
+                m.mem = Some(Arc::new(Memory::anonymous_paged(m.len)?));
                 m.offset = 0;
             }
             m.flags = flags | (m.flags & FORK_SHARED);
@@ -415,7 +619,7 @@ impl AddressSpace {
         for (index, (k, m)) in prepared.iter().enumerate() {
             self.uninstall(*k, m.len);
             if let Err(e) = self.install(*k, m) {
-                // Page tables are retained on unmap, so restoring the old entries
+                // Page tables are retained until this transaction finishes, so restoring the old entries
                 // requires no new table frames. Keep new backing alive through the
                 // shootdown before returning it to the allocator.
                 for (old_k, new) in &prepared[..=index] {
@@ -482,30 +686,22 @@ impl AddressSpace {
 }
 
 impl Drop for AddressSpace {
-    fn drop(&mut self) {
-        // Free the user half's page tables; the frames they map belong to memory objects.
-        fn free(table_phys: u64, level: u32) {
-            if level > 1 {
-                for e in table(table_phys).iter() {
-                    if e & 1 != 0 && e & F::HUGE_PAGE.bits() == 0 {
-                        free(e & 0x000f_ffff_ffff_f000, level - 1);
-                    }
-                }
-            }
-            mem::free_phys(table_phys, 1);
-        }
-        for e in table(self.pml4)[..256].iter() {
-            if e & 1 != 0 {
-                free(e & 0x000f_ffff_ffff_f000, 3);
-            }
-        }
-        mem::free_phys(self.pml4, 1);
-    }
+    fn drop(&mut self) { self.clear(); mem::free_phys(self.pml4, 1); }
 }
 
 /// Flushes the TLBs of the CPUs in `mask` (other than this one) and waits until they have. While waiting,
 /// serves requests aimed at this CPU, so two CPUs shooting at each other don't deadlock.
+static SHOOTDOWN_LOCK: Mutex<()> = Mutex::new(());
 pub fn shootdown(mask: u64) {
+    let _serial = loop {
+        if let Some(guard) = SHOOTDOWN_LOCK.try_lock() { break guard; }
+        serve_shootdown();
+        core::hint::spin_loop();
+    };
+    // Leaf invalidations performed while unlinking mappings precede pruning
+    // their empty parent tables. Flush the local paging-structure caches too,
+    // before those table frames can be reused for unrelated data or mappings.
+    x86_64::instructions::tlb::flush_all();
     let me = cpu::this().index;
     let mut sent = 0u64;
     for i in 0..cpu::MAX_CPUS {

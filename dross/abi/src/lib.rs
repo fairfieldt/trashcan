@@ -56,6 +56,27 @@ pub mod sys {
     /// the mapping has (write only if it is writable); written: the address's offset in it and how many bytes of
     /// the mapping follow the address (for DMA to memory a program mapped by address, such as a memfd).
     pub const VM_MEMORY: u64 = 36;
+    /// (system resource, byte limit): new child of the caller's default budget; no RAM is reserved.
+    pub const ACCOUNT_CREATE: u64 = 37;
+    /// (account, output): writes charged bytes, peak charged bytes, byte limit (three u64s).
+    /// Account 0 means the caller's default backing account.
+    pub const ACCOUNT_INFO: u64 = 38;
+    /// (account, size, flags): MEM_CREATE funded by an explicitly supplied account.
+    pub const MEM_CREATE_IN: u64 = 39;
+    pub const EVENT_QUEUE_CREATE: u64 = 40;
+    pub const OBJECT_SUBSCRIBE: u64 = 41;
+    pub const SUBSCRIPTION_REARM: u64 = 42;
+    pub const SUBSCRIPTION_CANCEL: u64 = 43;
+    pub const EVENT_QUEUE_WAIT: u64 = 44;
+    pub const TIMER_CREATE: u64 = 45;
+    pub const TIMER_ARM: u64 = 46;
+    pub const TIMER_CANCEL: u64 = 47;
+    pub const THREAD_START: u64 = 48;
+    pub const THREAD_WAIT: u64 = 49;
+    pub const ACCOUNT_CHILD: u64 = 50;
+    pub const SPAWN_LINUX_IN: u64 = 51;
+    /// (system resource): trace unreachable native channel queues; returns packets reclaimed.
+    pub const CHANNEL_COLLECT: u64 = 52;
 }
 
 /// Set in `rax` for a native dross call from a Linux process (whose plain numbers are Linux's).
@@ -146,4 +167,37 @@ pub const FOREVER: u64 = u64::MAX;
 pub mod dma {
     pub const READ: u64 = 1 << 0;
     pub const WRITE: u64 = 1 << 1;
+}
+
+/// Bounded registrations per queue, active observers per object, and registrations per source handle.
+pub const EVENT_LIMIT: usize = 256;
+pub mod event {
+    pub const READABLE: u64 = 1 << 0;
+    pub const WRITABLE: u64 = 1 << 1;
+    pub const PEER_CLOSED: u64 = 1 << 2;
+    pub const PENDING: u64 = 1 << 3;
+    pub const EXITED: u64 = 1 << 4;
+    pub const EXPIRED: u64 = 1 << 5;
+    #[repr(C)]
+    #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+    pub struct Event {
+        pub subscription: u64,
+        pub key: u64,
+        pub observed: u64,
+    }
+}
+
+/// Timer objects reserved on each CPU. Expiry is processed in bounded interrupt batches.
+pub const TIMER_LIMIT: usize = 256;
+
+/// SPAWN_LINUX_IN(account, &args): selected default/shared funding for a Linux image.
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct LinuxSpawnArgs {
+    pub image: u64,
+    pub argv: u64,
+    pub argv_bytes: u64,
+    pub envp: u64,
+    pub envp_bytes: u64,
+    pub bootstrap: u64,
 }

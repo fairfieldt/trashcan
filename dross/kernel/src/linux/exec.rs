@@ -30,11 +30,11 @@ fn u64_at(b: &[u8], o: usize) -> u64 {
 }
 
 /// `argv` and `envp` are NUL-separated strings. `bootstrap` becomes native handle 1.
-pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>) -> Result<Arc<Process>, Error> {
+pub fn spawn_in(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>, account: Option<Arc<crate::account::Account>>) -> Result<Arc<Process>, Error> {
     let execfn = argv.split(|&b| b == 0).next().unwrap_or_default();
-    let (p, entry, sp) = load(image, execfn, argv, envp, [0; 4])?;
-    if let Some(e) = bootstrap { let h = p.handles.lock().insert(e); debug_assert_eq!(h, 1); }
-    sched::spawn_user(p.clone(), sched::pick_cpu(), entry, sp, 0);
+    let (p, entry, sp) = load(image, execfn, argv, envp, [0; 4], account)?;
+    if let Some(e) = bootstrap { let h = p.handles.lock().insert(e)?; debug_assert_eq!(h, 1); }
+    sched::spawn_user(p.clone(), sched::pick_cpu(), entry, sp, 0)?;
     Ok(p)
 }
 
@@ -94,7 +94,7 @@ fn map_image(p: &Process, image: &Memory, pie_base: u64) -> Result<Image, Error>
         if filesz > memsz || offset.checked_add(filesz).is_none_or(|end| end > image.size()) || end > USER_TOP || start == 0 {
             return Err(Error::BadElf);
         }
-        let seg = Memory::anonymous(end - start, false, false)?;
+        let seg = Memory::anonymous_in(end - start, false, false, p.account.clone())?;
         seg.copy_from(va - start, image, offset, filesz).map_err(|_| Error::BadElf)?;
         let mut f = vm::READ;
         if flags & 2 != 0 {
@@ -127,14 +127,14 @@ fn interpreter(path: &str) -> Result<Memory, Error> {
 }
 
 /// `execfn` is the path the program was started by (AT_EXECFN).
-pub(super) fn load(image: &Memory, execfn: &[u8], argv: &[u8], envp: &[u8], ids: [u64; 4]) -> Result<(Arc<Process>, u64, u64), Error> {
+pub(super) fn load(image: &Memory, execfn: &[u8], argv: &[u8], envp: &[u8], ids: [u64; 4], account: Option<Arc<crate::account::Account>>) -> Result<(Arc<Process>, u64, u64), Error> {
     let packed = |bytes: &[u8]| -> Vec<Vec<u8>> {
         if bytes.is_empty() { Vec::new() } else { bytes.strip_suffix(&[0]).unwrap_or(bytes).split(|&b| b == 0).map(|s| s.to_vec()).collect() }
     };
     let args = packed(argv); let envs = packed(envp);
     let name = args.first().and_then(|a| core::str::from_utf8(a).ok()).map(|a| a.rsplit('/').next().unwrap_or(a)).unwrap_or("linux");
 
-    let p = Process::new_linux(name);
+    let p = match account { Some(account) => Process::new_linux_in(name, account)?, None => Process::new_linux(name)? };
     let prog = map_image(&p, image, PIE_BASE)?;
     // A dynamically linked program starts in its interpreter, which finds the program by AT_PHDR.
     let (entry, interp_base) = match &prog.interp {
@@ -149,7 +149,7 @@ pub(super) fn load(image: &Memory, execfn: &[u8], argv: &[u8], envp: &[u8], ids:
     };
 
     // The stack, built in a kernel buffer and copied into its top page(s).
-    let stack = Arc::new(Memory::anonymous(STACK_SIZE, false, false)?);
+    let stack = Arc::new(Memory::anonymous_in(STACK_SIZE, false, false, p.account.clone())?);
     p.aspace.map(stack.clone(), 0, STACK_SIZE, STACK_TOP - STACK_SIZE, vm::READ | vm::WRITE)?;
     let mut strings: Vec<u8> = Vec::new();
     fn place(strings: &mut Vec<u8>, s: &[u8]) -> u64 {

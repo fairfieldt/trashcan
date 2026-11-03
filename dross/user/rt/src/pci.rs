@@ -20,6 +20,8 @@ pub mod op {
     /// a: bits, b: CPU (`u64::MAX`: any), c: MSI-X vector index (ignored for MSI); one notification handle.
     pub const MSI: u32 = 8;
     pub const DISABLE_IRQS: u32 = 9;
+    /// Same-owner release after a transferred Process handle proves successful exit.
+    pub const RELEASE: u32 = 10;
 }
 
 pub const REQUEST_LEN: usize = 32;
@@ -182,6 +184,25 @@ impl Pci {
     pub fn find_class(&self, class: u32) -> sys::Result<u16> {
         let (r, _) = self.call(Request { op: op::FIND, a: 1 << 63 | class as u64, ..Default::default() }, &[])?;
         Ok(Self::value(&r) as u16)
+    }
+
+    /// Release a quiesced function after the driver exited successfully. The
+    /// server verifies the process handle before dropping its retained domain.
+    pub fn release(&self, bdf: u16, exited: Handle) -> sys::Result<()> {
+        self.ch.with(|&mut ch| {
+            let process = sys::dup(exited, dross_abi::rights::WAIT | dross_abi::rights::TRANSFER)?;
+            let request = Request { op: op::RELEASE, bdf: bdf as u32, ..Default::default() }.encode();
+            if let Err(error) = sys::channel_write(ch, &request, &[process]) {
+                let _ = sys::close(process);
+                return Err(error);
+            }
+            let mut bytes = [0u8; 16]; let mut handles = [Handle(0); 4];
+            let (n, nh) = sys::channel_read(ch, &mut bytes, &mut handles, sys::after_ms(2000))?;
+            for &handle in &handles[..nh] { let _ = sys::close(handle); }
+            if n != 16 || nh != 0 { return Err(Error::InvalidArgs); }
+            let status = i64::from_le_bytes(bytes[..8].try_into().unwrap());
+            if status == 0 { Ok(()) } else { Err(Error::from_status(status).unwrap_or(Error::BadSyscall)) }
+        })
     }
 
     /// Takes ownership of a function: nobody else can open it until this connection closes.

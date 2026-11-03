@@ -7,6 +7,8 @@ description = "Checks dross's Linux interface with an ordinary Rust std program 
 
 [dependencies]
 libc = "0.2"
+dross-rt = { path = "../../user/rt", default-features = false }
+dross-abi = { path = "../../abi" }
 
 # Its own workspace: dross's profiles abort on panic, and this checks unwinding.
 [workspace]

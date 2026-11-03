@@ -64,6 +64,8 @@ python3 -I -c 'import hashlib, sys; sys.exit(hashlib.sha256(open(sys.argv[1], "r
 stage=$PWD/target/rootfs
 rm -rf "$stage"
 cp -R linux/rootfs "$stage"
+mkdir -p "$stage/usr/bin"
+cp "$out/posixtest" "$stage/usr/bin/dross-budget-probe"
 tar -xzf "target/alpine/$alpine" -C "$stage" ./lib/ld-musl-x86_64.so.1
 # oscar-chat (also as ocsar-chat) for the shell, and the chat window as a module.
 (cd desktop && CARGO_PROFILE_RELEASE_STRIP=true CARGO_TARGET_DIR=$PWD/../target/chat cargo build --release --target $musl -p oscar-chat --features gui)

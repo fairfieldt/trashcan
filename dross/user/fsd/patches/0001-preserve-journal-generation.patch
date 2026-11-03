@@ -1,0 +1,13 @@
+--- a/src/ext4_journal.c
++++ b/src/ext4_journal.c
+@@ -1443,7 +1443,9 @@
+ 		return r;
+ 
+ 	journal->start = 0;
+-	journal->trans_id = 0;
++	/* Preserve the next transaction generation across clean mounts. Resetting
++	 * this to zero lets recovery accept stale records from a prior session. */
++	journal->trans_id = journal->alloc_trans_id;
+ 	jbd_journal_write_sb(journal);
+ 	return jbd_write_sb(journal->jbd_fs);
+ }

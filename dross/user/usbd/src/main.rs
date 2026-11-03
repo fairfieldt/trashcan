@@ -615,6 +615,14 @@ fn main(boot: Handle) -> i32 {
     let b = Bootstrap::read(boot).expect("bootstrap");
     let pci = Pci::new(b.handle("pci").expect("pci"));
     let report = b.handle("report");
+    let block_view=match(b.value("block-start"),b.value("block-count")){
+        (None,None)=>None,
+        (Some(start),Some(count))=>match(start.parse::<u64>(),count.parse::<u64>()){
+            (Ok(start),Ok(count))if count!=0 && start.checked_add(count).is_some()=>Some((start,count)),
+            _=>{println!("invalid block range");return 1}
+        },
+        _=>{println!("supply block-start and block-count together");return 1}
+    };
     let Ok(bdf) = pci.find_class(0x0c0330) else {
         println!("no xHCI controller");
         return 0;
@@ -657,7 +665,7 @@ fn main(boot: Handle) -> i32 {
             reported = true;
         }
         if let Some(ch) = block {
-            if let Err(e) = x.storage_serve(ch, &mut window_shared) {
+            if let Err(e) = x.storage_serve(ch, &mut window_shared, block_view) {
                 println!("block: {e:?}; closing");
                 block = None;
             }

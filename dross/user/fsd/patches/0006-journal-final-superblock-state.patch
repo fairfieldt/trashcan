@@ -1,0 +1,75 @@
+--- a/include/ext4_super.h
++++ b/include/ext4_super.h
+@@ -53,6 +53,8 @@
+ /* Metadata CRCs use the stored seed when CSUM_SEED is enabled. Superblock
+  * and journal CRCs retain their own independent initialization rules. */
+ uint32_t ext4_sb_metadata_csum_seed(struct ext4_sblock *s);
++/* Record current summary counters and orphan head in the active transaction. */
++int ext4_sb_write_trans(struct ext4_blockdev *bdev, struct ext4_sblock *s);
+ 
+ /**@brief   Blocks count get stored in superblock.
+  * @param   s superblock descriptor
+--- a/include/ext4_trans.h
++++ b/include/ext4_trans.h
+@@ -42,6 +42,8 @@
+ #endif
+ 
+ #include <ext4_config.h>
++/* Port hook: failures must reach callers whose upstream API ignores stop errors. */
++void ext4_port_trans_error(int error);
+ #include <ext4_types.h>
+ 
+ 
+--- a/src/ext4_super.c
++++ b/src/ext4_super.c
+@@ -47,6 +47,8 @@
+ 
+ #include <ext4_super.h>
+ #include <ext4_crc32.h>
++#include <ext4_trans.h>
++#include <string.h>
+ 
+ uint32_t ext4_sb_metadata_csum_seed(struct ext4_sblock *s)
+ {
+@@ -120,6 +122,20 @@
+ 		return;
+ 
+ 	s->checksum = to_le32(ext4_sb_csum(s));
++}
++
++int ext4_sb_write_trans(struct ext4_blockdev *bdev, struct ext4_sblock *s)
++{
++	struct ext4_block block;
++	uint32_t block_size = ext4_sb_get_block_size(s);
++	int r = ext4_trans_block_get(bdev, &block, EXT4_SUPERBLOCK_OFFSET / block_size);
++	if (r != EOK)
++		return r;
++	ext4_sb_set_csum(s);
++	memcpy(block.data + EXT4_SUPERBLOCK_OFFSET % block_size, s, EXT4_SUPERBLOCK_SIZE);
++	r = ext4_trans_set_block_dirty(block.buf);
++	int put = ext4_block_set(bdev, &block);
++	return r != EOK ? r : put;
+ }
+ 
+ int ext4_sb_write(struct ext4_blockdev *bdev, struct ext4_sblock *s)
+--- a/src/ext4.c
++++ b/src/ext4.c
+@@ -639,8 +639,17 @@
+ 	if (mp->fs.jbd_journal && mp->fs.curr_trans) {
+ 		struct jbd_journal *journal = mp->fs.jbd_journal;
+ 		struct jbd_trans *trans = mp->fs.curr_trans;
+-		r = jbd_journal_commit_trans(journal, trans);
++		/* Allocation bitmaps/group counters and the superblock summaries must
++		 * recover together, including the final orphan unlink/free update.
++		 * Saving only at clean unmount leaves valid commits with stale counts. */
++		r = ext4_sb_write_trans(mp->fs.bdev, &mp->fs.sb);
++		if (r == EOK)
++			r = jbd_journal_commit_trans(journal, trans);
++		else
++			jbd_journal_free_trans(journal, trans, true);
+ 		mp->fs.curr_trans = NULL;
++		if (r != EOK)
++			ext4_port_trans_error(r);
+ 	}
+ 	return r;
+ }

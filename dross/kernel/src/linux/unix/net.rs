@@ -31,13 +31,9 @@ impl Drop for Guard<'_> {
 impl Socket {
     fn new() -> Result<Arc<Self>, Errno> {
         let service = SERVICE.lock().clone().ok_or(EAFNOSUPPORT)?;
-        let (a, b) = ChannelEnd::pair();
-        let endpoint = Arc::new(a);
+        let (endpoint, b) = ChannelEnd::try_pair().map_err(|_| ENOMEM)?;
         service
-            .write(Message {
-                bytes: b"ONET\x01\0\0\0".to_vec(),
-                handles: alloc::vec![Entry::new(Object::Channel(Arc::new(b)))],
-            })
+            .write(Message::new(b"ONET\x01\0\0\0".to_vec(), alloc::vec![Entry::new(Object::Channel(b))]))
             .map_err(|_| EAGAIN)?;
         let socket = Arc::new(Self {
             endpoint,
@@ -66,10 +62,7 @@ impl Socket {
         let mut request = op.to_le_bytes().to_vec();
         request.extend_from_slice(bytes);
         self.endpoint
-            .write(Message {
-                bytes: request,
-                handles: Vec::new(),
-            })
+            .write(Message::new(request, Vec::new()))
             .map_err(|_| EPIPE)?;
         let reply = match self
             .endpoint
@@ -278,4 +271,8 @@ fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         _ => Err(ENOSYS),
     }
+}
+
+impl Drop for Socket {
+    fn drop(&mut self) { crate::ipc::request_collection(); }
 }

@@ -17,12 +17,13 @@ pub struct Seat {
     down: bool,
     /// The newest held key, its modifiers and when it repeats next.
     held: Option<(Key, Mods, u64)>,
+    pending_keyboard: Option<Input>,
 }
 
 impl Seat {
     pub fn new(ch: Handle, width: u32, height: u32) -> Seat {
         let (width, height) = (width.max(1) as i32, height.max(1) as i32);
-        Seat { ch, width, height, x: width / 2, y: height / 2, down: false, held: None }
+        Seat { ch, width, height, x: width / 2, y: height / 2, down: false, held: None, pending_keyboard: None }
     }
 
     fn send(&self, input: Input) {
@@ -35,6 +36,12 @@ impl Seat {
     /// A boot keyboard report: modifiers, then up to six pressed usages. Sends the newly pressed keys.
     pub fn keyboard(&mut self, report: &[u8; 8], last: &[u8; 8]) {
         let mods = mods(report[0]);
+        // Retain the newest complete physical state until the channel accepts it.
+        // Coalescing snapshots cannot strand a released game key after backpressure.
+        if report[2..].iter().all(|k| *k == 0 || (4..=0xdf).contains(k)) {
+            self.pending_keyboard = Some(Input::KeyboardState { modifiers:report[0],keys:report[2..8].try_into().unwrap() });
+            self.flush_keyboard();
+        }
         let mut newest = None;
         for &k in &report[2..8] {
             if k != 0 && !last[2..8].contains(&k) {
@@ -66,15 +73,27 @@ impl Seat {
     }
 
     /// Sends a repeat if one is due; the time of the next one, if a key is held.
-    pub fn repeat(&mut self) -> Option<u64> {
-        let (key, mods, at) = self.held?;
-        let now = sys::clock();
-        if now >= at {
-            self.send(Input::Key { key, mods });
-            self.held = Some((key, mods, now + REPEAT_EVERY_NS));
+    fn flush_keyboard(&mut self) {
+        if let Some(input)=self.pending_keyboard {
+            if let Ok(bytes)=Packet::new(0,0,Message::Input(input)).encode() {
+                if sys::channel_write(self.ch,&bytes,&[]).is_ok() { self.pending_keyboard=None; }
+            }
         }
-        self.held.map(|(.., at)| at)
     }
+    pub fn repeat(&mut self) -> Option<u64> {
+        self.flush_keyboard();
+        let now=sys::clock();
+        if let Some((key,mods,at))=self.held {
+            if now>=at { self.send(Input::Key { key,mods }); self.held=Some((key,mods,now+REPEAT_EVERY_NS)); }
+        }
+        let repeat=self.held.map(|(..,at)|at);
+        match (repeat,self.pending_keyboard.is_some()) {
+            (Some(at),true)=>Some(at.min(now+1_000_000)),
+            (None,true)=>Some(now+1_000_000),
+            (at,false)=>at,
+        }
+    }
+
 }
 
 fn mods(m: u8) -> Mods {

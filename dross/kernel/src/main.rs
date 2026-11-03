@@ -5,8 +5,10 @@
 
 extern crate alloc;
 
+mod account;
 mod apic;
 mod cpu;
+mod events;
 mod fbcon;
 mod firmware;
 mod heap;
@@ -27,6 +29,7 @@ mod sched;
 mod smp;
 mod syscall;
 mod time;
+mod timer;
 
 use alloc::sync::Arc;
 use alloc::vec::Vec;
@@ -64,8 +67,14 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
     #[cfg(feature = "audit-test")]
     paging::audit_test();
     #[cfg(feature = "audit-test")]
+    { heap::audit_test(); mem::audit_test(); account::audit_test(); sched::audit_test(); linux::audit_futex(); linux::audit_socket_cycles(); events::audit_lifetimes(); }
+    #[cfg(all(feature = "audit-test", feature = "unix"))]
+    linux::unix::vfs::audit_content_cache();
+    #[cfg(feature = "audit-test")]
     object::audit_test();
     iommu::init(&acpi);
+    #[cfg(feature = "audit-test")]
+    iommu::audit_test();
     firmware::power_on_after_power_loss(&acpi);
 
     println!(
@@ -134,10 +143,10 @@ fn start_init(info: &BootInfo, acpi: &firmware::Acpi) {
     if let Some(v) = &acpi.vfct {
         text.push_str(&alloc::format!("vfct {:#x} {}\n", v.bytes.as_ptr() as u64 - bootinfo::DIRECT_MAP, v.bytes.len()));
     }
-    if let Err((e, _)) = mine.write(Message { bytes: text.into_bytes(), handles }) {
+    if let Err((e, _)) = mine.write(Message::new(text.into_bytes(), handles)) {
         panic!("init bootstrap: {e:?}");
     }
-    match process::spawn("init", &image, 0, Some(Entry::new(Object::Channel(Arc::new(theirs))))) {
+    match process::spawn("init", &image, 0, Some(Entry::new(Object::Channel(theirs)))) {
         Ok(_) => println!("init started"),
         Err(e) => panic!("init: {e:?}"),
     }

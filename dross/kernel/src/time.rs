@@ -40,7 +40,24 @@ pub fn now_ns() -> u64 {
 }
 
 pub fn ns_to_tsc(ns: u64) -> u64 {
-    (ns as u128 * tsc_hz() as u128 / 1_000_000_000) as u64
+    ticks_for_ns(ns, tsc_hz())
+}
+
+/// Round up so a deadline cannot expire early due to conversion. Far-future
+/// values saturate rather than wrapping into an already expired deadline.
+fn ticks_for_ns(ns: u64, hz: u64) -> u64 {
+    (ns as u128 * hz as u128).div_ceil(1_000_000_000).min(u64::MAX as u128) as u64
+}
+
+#[cfg(feature = "audit-test")]
+fn audit_deadlines() {
+    assert_eq!(ticks_for_ns(0, 3_000_000_000), 0);
+    assert_eq!(ticks_for_ns(1, 1_500_000_000), 2);
+    assert_eq!(ticks_for_ns(1_000_000_000, 3_000_000_000), 3_000_000_000);
+    assert_eq!(ticks_for_ns(u64::MAX - 1, 3_000_000_000), u64::MAX);
+    assert_eq!(ticks_for_ns(u64::MAX, u64::MAX), u64::MAX);
+    assert!(tsc_at_ns(u64::MAX - 1) >= tsc_at_ns(1_000_000_000));
+    println!("time: deadline rounding and overflow checks passed");
 }
 
 /// The TSC value at `ns` on the `now_ns` clock.
@@ -93,6 +110,8 @@ pub fn init(acpi: &Acpi) {
     m.sort_unstable();
     TSC_ZERO.store(rdtsc(), Ordering::Relaxed);
     TSC_HZ.store(m[1], Ordering::Relaxed);
+    #[cfg(feature = "audit-test")]
+    audit_deadlines();
     println!(
         "time: hpet {:#x}, {} timers, {}.{:06} MHz; tsc {} Hz (spread {} Hz)",
         h.base.address,

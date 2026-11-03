@@ -18,7 +18,7 @@ args=['qemu-system-x86_64','-machine','q35,i8042=off','-accel','tcg,thread=multi
 known=out/'known_hosts';known.write_text(f'[127.0.0.1]:{port} '+(out/'test-hostkey.pub').read_text())
 ssh=['ssh','-F','/dev/null','-o','BatchMode=yes','-o','IdentitiesOnly=yes','-o','IdentityAgent=none','-o','AddKeysToAgent=no','-o','StrictHostKeyChecking=yes','-o',f'UserKnownHostsFile={known}','-o','ConnectTimeout=3','-i',str(out/'test-client'),'-p',str(port),'root@127.0.0.1']
 def run(command, data=None, expected=0):
- p=subprocess.run(ssh+[command],input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
+ p=subprocess.run(ssh+[command],input=data,stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=45)
  if p.returncode!=expected:raise AssertionError((command,p.returncode,p.stdout,p.stderr))
  return p.stdout
 (out/'qemu.log').write_text('')
@@ -43,10 +43,13 @@ with open(out/'qemu-stderr.log','wb') as err:
   assert result.startswith(hashlib.sha256(payload).hexdigest().encode()),result
   assert run('cat /tmp/upload')==payload
   print('ok 256 KiB upload/download and hash',flush=True)
-  big=os.urandom(4<<20);t0=time.time()
+  big=os.urandom(8<<20);t0=time.time()
   assert run('cat > /tmp/big; sha256sum /tmp/big',big).startswith(hashlib.sha256(big).hexdigest().encode())
   t1=time.time();assert run('cat /tmp/big; rm /tmp/big')==big;t2=time.time()
-  print(f'ok 4 MiB upload {4/(t1-t0):.2f} MiB/s, download {4/(t2-t1):.2f} MiB/s',flush=True)
+  print(f'ok 8 MiB upload {8/(t1-t0):.2f} MiB/s, download {8/(t2-t1):.2f} MiB/s',flush=True)
+  run('cat > /tmp/too-big', os.urandom(10<<20), expected=1)
+  assert run('wc -c < /tmp/too-big; rm /tmp/too-big').strip()==b'8388608'
+  print('ok file limit returns ENOSPC at 8 MiB and SSH remains usable',flush=True)
   # A real local PTY gives OpenSSH meaningful dimensions and keeps its input open.
   master,slave=pty.openpty();fcntl.ioctl(slave,termios.TIOCSWINSZ,struct.pack('HHHH',31,107,0,0))
   child=subprocess.Popen(ssh[:-1]+['-tt',ssh[-1],'stty size; read x; stty size; printf "TTY:%s\\n" "$x"; exit 7'],stdin=slave,stdout=slave,stderr=slave,close_fds=True)

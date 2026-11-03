@@ -15,6 +15,7 @@
 /target/
 /driver/target/
 /dross/target/
+/dross/linux/posixtest/target/
 /lights/build/
 /tools/dump-activations/dump
 
