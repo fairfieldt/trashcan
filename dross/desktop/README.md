@@ -74,7 +74,7 @@ assets. Controls have concrete actions; the UI carries no infrastructure labels.
 `chat/` talks to Oscar the Grouch through a trashcan server's Responses API: `oscar-chat` in a terminal, and
 `oscar-chat-gui`, the chat window (`core/src/chat.rs`), a Linux program on dross that connects to windowd as a
 `client/NAME` that `oscar-session` passes through. Enter sends; Page Up and Page Down scroll; Clear starts a new
-conversation. The server comes from `--server HOST:PORT` (or the window's `server` value), `OSCAR_CHAT_SERVER`,
+conversation. Arguments to either are an opening message, said first. The server comes from `--server HOST:PORT` (or the window's `server` value), `OSCAR_CHAT_SERVER`,
 a `server HOST:PORT` line in `/etc/oscar-chat.conf`, else 127.0.0.1:8000.
 
 ```sh

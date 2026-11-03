@@ -1,7 +1,7 @@
 //! oscar-chat-gui: the chat window on Oscar's desktop. A Linux program on dross: the window server on its
 //! `window` channel (bootstrap), the trashcan server over TCP from a second thread, which wakes the window's loop
 //! through a dross notification. Bootstrap values: `width`, `height` (the window's), `server` (HOST:PORT; else
-//! as for oscar-chat).
+//! as for oscar-chat). Arguments, if any, are an opening message, sent once the window is open.
 
 use dross_rt::{Error, Handle, bootstrap::Bootstrap, sys};
 use oscar_chat::{Chat, plain, server_address};
@@ -68,6 +68,7 @@ fn main() {
         }
     });
 
+    let mut opening = Some(std::env::args().skip(1).collect::<Vec<_>>().join(" ")).filter(|m| !m.is_empty());
     send(window, &app.create()).expect("create window");
     let mut bytes = vec![0u8; MAX_PACKET];
     let mut handles = [Handle(0); dross_abi::MSG_HANDLES];
@@ -105,6 +106,11 @@ fn main() {
                 Event::Text(t) => app.reply_text(&t),
                 Event::Done => app.reply_done(),
                 Event::Failed(why) => app.reply_failed(&why),
+            }
+        }
+        if app.window != 0 {
+            if let Some(m) = opening.take() {
+                app.say(&m);
             }
         }
         for r in app.take_requests() {

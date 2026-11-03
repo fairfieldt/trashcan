@@ -1,8 +1,9 @@
 //! oscar-chat: talk to Oscar the Grouch in a terminal.
 //!
-//!   oscar-chat [--server HOST:PORT]
+//!   oscar-chat [--server HOST:PORT] [MESSAGE...]
 //!
-//! Type a message and press Enter. `/reset` starts a new conversation; `/quit` or Ctrl-D leaves.
+//! Type a message and press Enter. `/reset` starts a new conversation; `/quit` or Ctrl-D leaves. MESSAGE, if
+//! given, is said first.
 
 use oscar_chat::{Chat, plain, server_address};
 use std::io::{BufRead, Write};
@@ -10,17 +11,19 @@ use std::io::{BufRead, Write};
 fn main() {
     let mut args = std::env::args().skip(1);
     let mut server = None;
+    let mut opening = Vec::new();
     while let Some(a) = args.next() {
         match a.as_str() {
             "--server" => server = args.next(),
             "-h" | "--help" => {
-                println!("usage: oscar-chat [--server HOST:PORT]\n/reset starts over, /quit leaves");
+                println!("usage: oscar-chat [--server HOST:PORT] [MESSAGE...]\n/reset starts over, /quit leaves");
                 return;
             }
-            other => {
-                eprintln!("oscar-chat: unknown argument {other} (try --help)");
+            other if other.starts_with("--") => {
+                eprintln!("oscar-chat: unknown option {other} (try --help)");
                 std::process::exit(2);
             }
+            word => opening.push(word.to_string()),
         }
     }
     let color = std::env::var("TERM").is_ok_and(|t| !t.is_empty() && t != "dumb");
@@ -34,11 +37,15 @@ fn main() {
     let stdin = std::io::stdin();
     let mut out = std::io::stdout();
     let mut line = String::new();
+    let mut opening = Some(opening.join(" ")).filter(|m| !m.is_empty());
     loop {
         print!("{you}you>{off} ");
         let _ = out.flush();
         line.clear();
-        if stdin.lock().read_line(&mut line).unwrap_or(0) == 0 {
+        if let Some(m) = opening.take() {
+            println!("{m}");
+            line = m;
+        } else if stdin.lock().read_line(&mut line).unwrap_or(0) == 0 {
             println!();
             return;
         }

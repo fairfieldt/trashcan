@@ -170,6 +170,13 @@ impl ChatWindow {
         self.dirty = true;
     }
 
+    /// Sends `text` as if typed (an opening message).
+    pub fn say(&mut self, text: &str) {
+        self.input = String::from(text);
+        self.send();
+        self.dirty = true;
+    }
+
     fn send(&mut self) {
         let text = String::from(self.input.trim());
         if self.busy || text.is_empty() {

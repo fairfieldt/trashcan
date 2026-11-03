@@ -66,3 +66,11 @@ fn frames_upload_after_creation() {
     .unwrap();
     assert!(packets > 1);
 }
+
+#[test]
+fn an_opening_message_sends_like_typing() {
+    let mut w = opened();
+    w.say("hello there");
+    assert_eq!(w.take_requests(), [Request::Send("hello there".into())]);
+    assert!(w.busy);
+}
