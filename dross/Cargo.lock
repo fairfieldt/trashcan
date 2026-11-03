@@ -7,6 +7,14 @@ name = "acpi-tables"
 version = "0.1.0"
 
 [[package]]
+name = "audiod"
+version = "0.1.0"
+dependencies = [
+ "dross-abi",
+ "dross-rt",
+]
+
+[[package]]
 name = "bit_field"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

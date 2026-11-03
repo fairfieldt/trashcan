@@ -139,20 +139,36 @@ pub fn bdf_string(bdf: u16) -> alloc::string::String {
 /// A connection to pcid; clones share it (requests are serialized).
 #[derive(Clone)]
 pub struct Pci {
-    ch: Arc<crate::Lock<Handle>>,
+    ch: Arc<crate::Lock<Option<Handle>>>,
+    timeout_ms: Option<u64>,
 }
 
 impl Pci {
     pub fn new(ch: Handle) -> Pci {
-        Pci { ch: Arc::new(crate::Lock::new(ch)) }
+        Pci { ch: Arc::new(crate::Lock::new(Some(ch))), timeout_ms: None }
+    }
+
+    /// Bound each reply wait after serialization, not the whole caller operation.
+    /// A timeout closes the shared endpoint: pcid replies have no
+    /// transaction ID, so the connection cannot safely be reused after a late reply.
+    /// Existing `new` callers retain their original unbounded startup behavior.
+    pub fn with_timeout(ch: Handle, timeout_ms: u64) -> Pci {
+        Pci { ch: Arc::new(crate::Lock::new(Some(ch))), timeout_ms: Some(timeout_ms) }
     }
 
     fn call(&self, r: Request, send: &[Handle]) -> sys::Result<(Vec<u8>, Vec<Handle>)> {
         let mut buf = alloc::vec![0u8; 64 * 1024];
         let mut hs = [Handle(0); 4];
-        let (n, nh) = self.ch.with(|&mut ch| {
+        let (n, nh) = self.ch.with(|slot| {
+            let ch = (*slot).ok_or(Error::PeerClosed)?;
             sys::channel_write(ch, &r.encode(), send)?;
-            sys::channel_read(ch, &mut buf, &mut hs, crate::FOREVER)
+            let deadline = self.timeout_ms.map_or(crate::FOREVER, sys::after_ms);
+            let result = sys::channel_read(ch, &mut buf, &mut hs, deadline);
+            if result == Err(Error::TimedOut) {
+                *slot = None;
+                let _ = sys::close(ch);
+            }
+            result
         })?;
         if n < 16 {
             return Err(Error::InvalidArgs);
@@ -189,7 +205,8 @@ impl Pci {
     /// Release a quiesced function after the driver exited successfully. The
     /// server verifies the process handle before dropping its retained domain.
     pub fn release(&self, bdf: u16, exited: Handle) -> sys::Result<()> {
-        self.ch.with(|&mut ch| {
+        self.ch.with(|slot| {
+            let ch = (*slot).ok_or(Error::PeerClosed)?;
             let process = sys::dup(exited, dross_abi::rights::WAIT | dross_abi::rights::TRANSFER)?;
             let request = Request { op: op::RELEASE, bdf: bdf as u32, ..Default::default() }.encode();
             if let Err(error) = sys::channel_write(ch, &request, &[process]) {
@@ -197,7 +214,12 @@ impl Pci {
                 return Err(error);
             }
             let mut bytes = [0u8; 16]; let mut handles = [Handle(0); 4];
-            let (n, nh) = sys::channel_read(ch, &mut bytes, &mut handles, sys::after_ms(2000))?;
+            let result = sys::channel_read(ch, &mut bytes, &mut handles, sys::after_ms(self.timeout_ms.unwrap_or(2000)));
+            if result == Err(Error::TimedOut) {
+                *slot = None;
+                let _ = sys::close(ch);
+            }
+            let (n, nh) = result?;
             for &handle in &handles[..nh] { let _ = sys::close(handle); }
             if n != 16 || nh != 0 { return Err(Error::InvalidArgs); }
             let status = i64::from_le_bytes(bytes[..8].try_into().unwrap());

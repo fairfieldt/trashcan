@@ -1,0 +1,35 @@
+[package]
+name = "audiod"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Native userspace HDA PCM playback service"
+
+[features]
+default = []
+native = ["dep:dross-rt", "dross-rt/runtime"]
+
+[dependencies]
+dross-abi = { path = "../../abi" }
+dross-rt = { path = "../rt", default-features = false, optional = true }
+
+[[bin]]
+name = "audiod"
+path = "src/bin/audiod.rs"
+required-features = ["native"]
+test = false
+bench = false
+
+[[bin]]
+name = "audiotest"
+path = "src/bin/audiotest.rs"
+required-features = ["native"]
+test = false
+bench = false
+
+[[bin]]
+name = "audio-test-init"
+path = "src/bin/audio-test-init.rs"
+required-features = ["native"]
+test = false
+bench = false
