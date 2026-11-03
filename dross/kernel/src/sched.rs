@@ -217,6 +217,13 @@ pub fn spawn_user(process: Arc<Process>, cpu_index: u32, rip: u64, rsp: u64, arg
 pub fn spawn_with(process: Arc<Process>, cpu_index: u32, mut regs: [u64; 22], fs_base: u64) -> Arc<Thread> {
     let kstack = mem::alloc_stack(KSTACK_PAGES);
     let xsave = mem::alloc_zeroed(1, 4096);
+    // The state a new thread starts with: x87 and SSE in their initial state (XSTATE_BV 0), except that XRSTOR
+    // always loads MXCSR from memory, so it must hold the default (all exceptions masked), not zero.
+    // SAFETY: the fresh XSAVE page.
+    unsafe {
+        (xsave as *mut u16).write(0x037f);
+        ((xsave + 24) as *mut u32).write(0x1f80);
+    }
     let top = kstack + (KSTACK_PAGES * 4096) as u64;
     regs[15] = 0x100; // vector: not an exception
     regs[16] = 0;

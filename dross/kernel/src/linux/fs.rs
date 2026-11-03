@@ -136,6 +136,8 @@ pub enum Kind {
     Listener(Arc<Listener>),
     EventFd(WaitCell<u64>),
     Notify(Arc<Notification>),
+    /// Reading /dev/kmsg: the kernel log from the oldest record kept, one record per read.
+    Kmsg(Mutex<u64>),
 }
 
 pub struct File {
@@ -271,6 +273,19 @@ impl File {
                 }
             }
             Kind::Socket(_) | Kind::Listener(_) => Err(ENOTCONN),
+            Kind::Kmsg(cursor) => loop {
+                // The log has no waiters to wake (it is written from anywhere, with any lock held): poll it.
+                if let Some(r) = crate::log::read_record(&mut cursor.lock()) {
+                    if r.len() > buf_len {
+                        return Err(EINVAL);
+                    }
+                    return Ok(r);
+                }
+                if self.nonblocking() {
+                    return Err(EAGAIN);
+                }
+                sched::sleep_ns(50_000_000).map_err(|_| EINTR)?;
+            },
         }
     }
 
@@ -308,7 +323,7 @@ impl File {
                 n.signal(1);
                 Ok(data.len().min(8))
             }
-            Kind::Data(_) | Kind::Dir(_) => Err(EBADF),
+            Kind::Data(_) | Kind::Dir(_) | Kind::Kmsg(_) => Err(EBADF),
             Kind::Socket(_) | Kind::Listener(_) => Err(ENOTCONN),
         }
     }
@@ -434,6 +449,7 @@ fn open_path(path: &str, flags: u32) -> Result<Arc<File>, Errno> {
         "dev/null" => Kind::Null,
         "dev/zero" => Kind::Zero,
         "dev/urandom" | "dev/random" => Kind::Random,
+        "dev/kmsg" if flags & O_ACCMODE == 0 => Kind::Kmsg(Mutex::new(0)),
         "dev/kmsg" | "dev/console" | "dev/tty" => Kind::Log(Arc::new(Log { name: String::from("console"), line: Mutex::new(Vec::new()) })),
         _ => {
             let data = TREE.lock().get(&n).copied();

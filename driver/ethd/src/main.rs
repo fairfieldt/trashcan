@@ -6,6 +6,7 @@
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
 
 mod hw;
+mod netlog;
 mod nic;
 mod phy;
 mod regs;
@@ -57,6 +58,22 @@ enum Command {
         /// Also dump the registers after bring-up to this file.
         #[arg(long)]
         regs_out: Option<std::path::PathBuf>,
+    },
+    /// Send the kernel log (/dev/kmsg) to the LAN as UDP datagrams to PORT, from the start of the log, until
+    /// SIGINT or SIGTERM: a console for machines without one (like Linux's netconsole, whose port it uses).
+    Netlog {
+        address: String,
+        /// The source IPv4 address in the datagrams (macOS drops broadcasts from 0.0.0.0).
+        #[arg(long, default_value = "0.0.0.0")]
+        ip: std::net::Ipv4Addr,
+        /// The receiver (default: broadcast).
+        #[arg(long, default_value = "255.255.255.255")]
+        to: std::net::Ipv4Addr,
+        /// The receiver's MAC address (default: broadcast).
+        #[arg(long, default_value = "ff:ff:ff:ff:ff:ff")]
+        to_mac: String,
+        #[arg(long, default_value_t = 6666)]
+        port: u16,
     },
     /// Run the driver: frames between the port and a TAP interface until SIGINT or SIGTERM.
     Run {
@@ -147,7 +164,88 @@ mod linux {
                 selftest(&address, &expect_mac, &peer, count, size, window, regs_out)
             }
             Command::Run { address, expect_mac, tap, all_multi } => run(&address, &expect_mac, &tap, all_multi),
+            Command::Netlog { address, ip, to, to_mac, port } => netlog(&address, ip, to, &to_mac, port),
         }
+    }
+
+    fn netlog(
+        address: &str,
+        ip: std::net::Ipv4Addr,
+        to: std::net::Ipv4Addr,
+        to_mac: &str,
+        udp_port: u16,
+    ) -> Result<()> {
+        use std::io::Read;
+        use std::sync::mpsc;
+        let dst = (parse_mac(to_mac)?, to.octets());
+        catch_signals();
+        let port = open_port(address)?;
+        let mac = nic::station_address(&*port.hw)?;
+        let opts = Options { all_multi: false, link_wait: Duration::from_secs(10) };
+        let (nic, irq) = start(&port, &fmt_mac(&mac), opts)?;
+        ensure!(nic.link().up, "no link");
+        eprintln!("netlog: {} up ({}), sending from {ip} to {to}:{udp_port}", fmt_mac(&mac), nic.link());
+
+        // A thread reads the log, one record per read; the main thread batches and sends.
+        let (tx, rx) = mpsc::channel::<Vec<u8>>();
+        std::thread::spawn(move || {
+            let Ok(mut kmsg) = std::fs::File::open("/dev/kmsg") else { return };
+            let mut buf = vec![0u8; 8192];
+            while let Ok(n) = kmsg.read(&mut buf) {
+                if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
+                    break;
+                }
+            }
+        });
+        let mut id = 0u16;
+        let mut batch: Vec<u8> = Vec::new();
+        let mut sent = 0u64;
+        while !STOP.load(Ordering::SeqCst) {
+            let first = rx.recv_timeout(Duration::from_millis(20));
+            let records = first.into_iter().chain(rx.try_iter());
+            for r in records {
+                if let Some(m) = netlog::kmsg_message(&r) {
+                    if batch.len() + m.len() + 1 > 1400 && !batch.is_empty() {
+                        flush(&nic, &mac, ip, dst, udp_port, &mut batch, &mut id, &mut sent)?;
+                    }
+                    batch.extend_from_slice(&m[..m.len().min(1400)]);
+                    batch.push(b'\n');
+                }
+            }
+            if !batch.is_empty() {
+                flush(&nic, &mac, ip, dst, udp_port, &mut batch, &mut id, &mut sent)?;
+            }
+            nic.service(&mut |_| {})?;
+            let _ = irq.take();
+        }
+        eprintln!("netlog: {sent} datagrams");
+        nic.halt()?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn flush(
+        nic: &Nic,
+        mac: &[u8; 6],
+        ip: std::net::Ipv4Addr,
+        dst: ([u8; 6], [u8; 4]),
+        port: u16,
+        batch: &mut Vec<u8>,
+        id: &mut u16,
+        sent: &mut u64,
+    ) -> Result<()> {
+        let frame = netlog::udp_frame(mac, ip.octets(), &dst.0, dst.1, port, batch, *id);
+        // A full ring drains as the chip sends; wait for room rather than drop log lines.
+        let t0 = Instant::now();
+        while !nic.send(&frame)? {
+            nic.service(&mut |_| {})?;
+            ensure!(t0.elapsed() < Duration::from_secs(2), "send ring stuck");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        *id = id.wrapping_add(1);
+        *sent += 1;
+        batch.clear();
+        Ok(())
     }
 
     fn probe(address: &str) -> Result<()> {

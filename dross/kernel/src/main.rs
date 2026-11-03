@@ -57,10 +57,12 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
     time::init(&acpi);
     apic::init(&acpi);
     sched::init_cpu();
+    println!("apic: cpu 0: 1 ms timer took {:?} us", apic::timer_selftest());
     let cpus = smp::start_aps(info, &acpi);
     smp::ipi_check();
     paging::init_kernel_space();
     iommu::init(&acpi);
+    firmware::power_on_after_power_loss(&acpi);
 
     println!(
         "boot ok: {} cpus, {} MiB free, tsc {}.{:03} MHz, {:.1} ms since loader",

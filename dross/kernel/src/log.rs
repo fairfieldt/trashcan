@@ -56,6 +56,72 @@ pub fn init(fb: &bootinfo::Framebuffer) {
 fn line(w: &mut Serial, args: fmt::Arguments) {
     let us = crate::time::now_ns() / 1000;
     let _ = write!(w, "[{:5}.{:06}] {}\n", us / 1_000_000, us % 1_000_000, args);
+    if let Some(mut r) = RING.try_lock() {
+        r.record(us, args);
+    }
+}
+
+/// The last MiB of the log as records in Linux's /dev/kmsg format ("6,SEQ,USEC,-;MESSAGE\n"), for programs that
+/// read /dev/kmsg (ethd's network log sends it to the LAN).
+const RING_BYTES: usize = 1 << 20;
+
+pub struct Ring {
+    buf: [u8; RING_BYTES],
+    /// Bytes ever written.
+    written: u64,
+    seq: u64,
+}
+
+static RING: Mutex<Ring> = Mutex::new(Ring { buf: [0; RING_BYTES], written: 0, seq: 0 });
+
+impl Ring {
+    fn put(&mut self, b: u8) {
+        self.buf[(self.written % RING_BYTES as u64) as usize] = b;
+        self.written += 1;
+    }
+
+    fn record(&mut self, us: u64, args: fmt::Arguments) {
+        struct W<'a>(&'a mut Ring);
+        impl Write for W<'_> {
+            fn write_str(&mut self, s: &str) -> fmt::Result {
+                // One record is one line.
+                for b in s.bytes() {
+                    self.0.put(if b == b'\n' { b' ' } else { b });
+                }
+                Ok(())
+            }
+        }
+        let seq = self.seq;
+        self.seq += 1;
+        let _ = write!(W(self), "6,{seq},{us},-;{args}");
+        self.put(b'\n');
+    }
+}
+
+/// The record at `cursor` (a byte position, 0 for the oldest kept), with the cursor moved past it.
+pub fn read_record(cursor: &mut u64) -> Option<alloc::vec::Vec<u8>> {
+    let r = RING.lock();
+    let oldest = r.written.saturating_sub(RING_BYTES as u64);
+    if *cursor < oldest {
+        // Overwritten: resume at the first whole record still there.
+        let mut at = oldest;
+        while at < r.written && r.buf[(at % RING_BYTES as u64) as usize] != b'\n' {
+            at += 1;
+        }
+        *cursor = at + 1;
+    }
+    let mut out = alloc::vec::Vec::new();
+    let mut at = *cursor;
+    while at < r.written {
+        let b = r.buf[(at % RING_BYTES as u64) as usize];
+        out.push(b);
+        at += 1;
+        if b == b'\n' {
+            *cursor = at;
+            return Some(out);
+        }
+    }
+    None
 }
 
 pub fn print(args: fmt::Arguments) {

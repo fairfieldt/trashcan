@@ -89,6 +89,9 @@ impl Acpi {
             );
         }
         if let Some(f) = self.fadt.as_ref().and_then(|f| Fadt::parse(f).ok()) {
+            if let Some((g, v)) = f.reset.filter(|(g, _)| g.space == acpi::Gas::IO) {
+                crate::qemu::set_reset(g.address as u16, v);
+            }
             let s5 = self.dsdt.as_ref().and_then(|d| acpi::s5_sleep_type(d.bytes));
             println!("acpi: fadt: sci {}, pm1a {:#x}, reset {:?}, s5 {:?}", f.sci_irq, f.pm1a_control, f.reset.map(|(g, v)| (g.space, g.address, v)), s5);
         }
@@ -106,5 +109,30 @@ impl core::fmt::Display for Names<'_> {
             f.write_str(core::str::from_utf8(n).unwrap_or("?"))?;
         }
         Ok(())
+    }
+}
+
+/// On a Mac Pro 6,1 (Intel C600 LPC bridge at 00:1f.0), power on when AC power returns: clears AFTERG3_EN in
+/// GEN_PMCON_3, so a test machine on a switched outlet comes back when the switch does.
+pub fn power_on_after_power_loss(acpi: &Acpi) {
+    let Some(r) = acpi.mcfg.as_ref().and_then(|t| mcfg::ranges(t).ok()).and_then(|mut r| r.next()) else {
+        return;
+    };
+    let Some(phys) = r.function(0, 0x1f, 0) else {
+        return;
+    };
+    let cfg = crate::mem::map_mmio(phys, 4096);
+    // SAFETY: the LPC bridge's config space, just mapped.
+    unsafe {
+        let id = (cfg as *const u32).read_volatile();
+        if id != 0x1d41_8086 {
+            return;
+        }
+        let reg = (cfg + 0xa4) as *mut u8;
+        let v = reg.read_volatile();
+        if v & 1 != 0 {
+            reg.write_volatile(v & !1);
+        }
+        println!("chipset: power on after power loss (GEN_PMCON_3 {:#x} -> {:#x})", v, reg.read_volatile());
     }
 }

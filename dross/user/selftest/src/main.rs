@@ -135,6 +135,32 @@ fn run_all(b: &Bootstrap) -> i32 {
     }
     t.check("threads", got == want, &alloc::format!("({} cpus in {} us)", cpus, (sys::clock() - t0) / 1000));
 
+    // Every CPU's timer: a 10 ms deadline on each.
+    let waits = Arc::new((0..cpus).map(|_| AtomicU64::new(0)).collect::<alloc::vec::Vec<_>>());
+    let tdone = sys::notify_create().unwrap();
+    for cpu in 0..cpus {
+        let (w, d) = (waits.clone(), sys::dup(tdone, rights::ALL).unwrap());
+        thread::spawn(cpu as u64, move || {
+            let n = sys::notify_create().unwrap();
+            let t0 = sys::clock();
+            let r = sys::notify_wait(n, sys::after_ms(10));
+            w[cpu as usize].store(if r == Err(Error::TimedOut) { (sys::clock() - t0) / 1000 } else { u64::MAX - 1 }, Ordering::Relaxed);
+            sys::notify_signal(d, 1 << cpu).unwrap();
+        })
+        .unwrap();
+    }
+    let mut got = 0;
+    let t_end = sys::after_ms(2000);
+    while got != want && sys::clock() < t_end {
+        got |= sys::notify_wait(tdone, t_end).unwrap_or(0);
+    }
+    let us: alloc::vec::Vec<u64> = waits.iter().map(|w| w.load(Ordering::Relaxed)).collect();
+    // On hardware within 5 ms; under QEMU on macOS the host delays timers by tens of ms, so only that they fire.
+    let vm = core::arch::x86_64::__cpuid(1).ecx & 1 << 31 != 0;
+    let late = if vm { 1_000_000 } else { 15_000 };
+    let fine = got == want && us.iter().all(|&u| (10_000..late).contains(&u));
+    t.check("timers", fine, &alloc::format!("(10 ms on each cpu took {:?} us; 0 = never woke)", us));
+
     // Round trips to a thread on another CPU.
     if cpus > 1 {
         let (p, q) = sys::channel_create().unwrap();

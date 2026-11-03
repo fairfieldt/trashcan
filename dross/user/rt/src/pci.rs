@@ -300,6 +300,11 @@ pub struct DmaSpace {
 }
 
 impl DmaSpace {
+    /// The domain, for callers that place mappings themselves.
+    pub fn domain(&self) -> Handle {
+        self.domain
+    }
+
     /// IOVAs start above 1 MiB (a zero or tiny device address is more often a bug than a buffer).
     pub const FIRST: u64 = 1 << 20;
 

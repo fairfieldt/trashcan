@@ -178,7 +178,11 @@ impl Pcid {
             return false;
         }
         if let Some(c) = f.msi_cap {
-            if overlaps(c, c + 24) {
+            // 10 bytes, 14 with 64-bit addresses, 10 more with per-vector masking: device registers may follow
+            // right after it (the BCM57762's MISC_HOST_CTRL does).
+            let ctl = self.read(f.info.bdf, c + 2, 2);
+            let len = if ctl & 0x80 != 0 { 14 } else { 10 } + if ctl & 0x100 != 0 { 10 } else { 0 };
+            if overlaps(c, c + len) {
                 return false;
             }
         }

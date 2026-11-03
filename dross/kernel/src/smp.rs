@@ -98,6 +98,9 @@ fn off(label: &u8) -> usize {
 }
 
 static STARTED: AtomicBool = AtomicBool::new(false);
+/// The starting AP's TSC as it reports in, and how long its timer self-test took (us, MAX: never fired).
+static AP_TSC: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
+static TIMER_US: core::sync::atomic::AtomicU64 = core::sync::atomic::AtomicU64::new(0);
 static ONLINE: AtomicU32 = AtomicU32::new(1);
 static IPIS: [AtomicU32; MAX_CPUS] = [const { AtomicU32::new(0) }; MAX_CPUS];
 
@@ -107,7 +110,9 @@ extern "sysv64" fn ap_main(index: u64) -> ! {
     apic::init_local();
     assert_eq!(apic::id(), apic_id);
     crate::sched::init_cpu();
+    TIMER_US.store(apic::timer_selftest().unwrap_or(u64::MAX), Ordering::Relaxed);
     ONLINE.fetch_add(1, Ordering::AcqRel);
+    AP_TSC.store(cpu::rdtsc(), Ordering::Release);
     STARTED.store(true, Ordering::Release);
     crate::sched::idle()
 }
@@ -158,12 +163,17 @@ pub fn start_aps(info: &BootInfo, acpi: &Acpi) -> u32 {
         for _ in 0..2 {
             apic::send_ipi(apic_id, apic::ICR_STARTUP | page >> 12);
             // Up to 100 ms per STARTUP (an AP takes microseconds; QEMU's TCG longer).
-            for _ in 0..1000 {
+            let deadline = cpu::rdtsc() + time::tsc_hz() / 2;
+            while cpu::rdtsc() < deadline {
                 if STARTED.load(Ordering::Acquire) {
+                    // The AP's TSC against ours at (nearly) the same moment.
+                    let skew = AP_TSC.load(Ordering::Acquire) as i64 - cpu::rdtsc() as i64;
+                    let t = TIMER_US.load(Ordering::Relaxed);
+                    println!("smp: cpu {index} apic id {apic_id}: tsc {skew:+} vs cpu 0, 1 ms timer took {}", if t == u64::MAX { alloc::string::String::from("forever") } else { alloc::format!("{t} us") });
                     up = true;
                     break;
                 }
-                time::delay_us(100);
+                core::hint::spin_loop();
             }
             if up {
                 break;

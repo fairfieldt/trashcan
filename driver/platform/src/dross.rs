@@ -10,7 +10,7 @@ use crate::prelude::*;
 use core::ops::Range;
 use core::ptr::NonNull;
 use core::time::Duration;
-use dross_abi::dma;
+use dross_abi::{dma, vm};
 use dross_rt::pci::{Bar, Device, Pci};
 use dross_rt::sys::{self, Handle};
 use dross_rt::Lock;
@@ -54,7 +54,8 @@ pub fn open(pci: &Pci, address: PciAddress) -> Result<(DrossDevice, DrossDma)> {
     let bdf = (address.bus as u16) << 8 | (address.device as u16) << 3 | address.function as u16;
     let dev = pci.open(bdf).map_err(os("pcid open"))?;
     let space = dev.dma_space().map_err(os("pcid domain"))?;
-    let dma = DrossDma { space: Lock::new(space) };
+    let iova = alloc::sync::Arc::new(Lock::new(crate::iova::IovaAllocator::new(&[dross_rt::pci::DmaSpace::FIRST..IOVA_END])));
+    let dma = DrossDma { domain: space.domain(), iova };
     Ok((DrossDevice { address, dev, bars: Lock::new(Default::default()) }, dma))
 }
 
@@ -254,9 +255,13 @@ impl IrqWait for Notification {
     }
 }
 
-/// The function's IOMMU domain.
+/// Device addresses handed out (the domain has 4-level tables; 39 bits keeps to what 3-level units have too).
+const IOVA_END: u64 = 1 << 39;
+
+/// The function's IOMMU domain; device addresses come from a first-fit allocator, so freed ones are reused.
 pub struct DrossDma {
-    space: Lock<dross_rt::pci::DmaSpace>,
+    domain: Handle,
+    iova: alloc::sync::Arc<Lock<crate::iova::IovaAllocator>>,
 }
 
 impl DmaSpace for DrossDma {
@@ -267,13 +272,27 @@ impl DmaSpace for DrossDma {
             DmaAccess::DeviceWrites => dma::WRITE,
             DmaAccess::ReadWrite => dma::READ | dma::WRITE,
         };
-        let b = self.space.with(|s| s.alloc_with(size, flags)).map_err(os("DMA allocation"))?;
-        let (ptr, len, iova, mem, domain) = (b.ptr, b.len, b.iova, b.mem, b.domain);
-        core::mem::forget(b);
+        let size64 = size as u64;
+        let iova = self.iova.with(|a| a.alloc(size64, iova_align(size)))?;
+        let mapped = (|| {
+            let mem = sys::mem_create(size64, 0)?;
+            let ptr = sys::vm_map(mem, 0, size64, 0, vm::READ | vm::WRITE)?;
+            sys::dma_map(self.domain, mem, 0, size64, iova, flags)?;
+            Ok::<_, dross_abi::Error>((mem, ptr))
+        })();
+        let (mem, ptr) = match mapped {
+            Ok(v) => v,
+            Err(e) => {
+                self.iova.with(|a| a.release(iova..iova + size64));
+                return Err(os("DMA allocation")(e));
+            }
+        };
+        let (domain, len, allocator) = (self.domain, size, self.iova.clone());
         let release = move || {
-            let _ = sys::dma_unmap(domain, iova, len as u64);
-            let _ = sys::vm_unmap(ptr, len as u64);
+            let _ = sys::dma_unmap(domain, iova, size64);
+            let _ = sys::vm_unmap(ptr, size64);
             let _ = sys::close(mem);
+            allocator.with(|a| a.release(iova..iova + size64));
         };
         // SAFETY: the memory object is mapped here and for the device until `release`.
         Ok(unsafe { DmaBuffer::from_raw(NonNull::new(ptr as *mut u8).unwrap(), len, iova, Box::new(release)) })
@@ -285,7 +304,7 @@ impl DmaSpace for DrossDma {
     }
 
     fn iova_ranges(&self) -> Vec<Range<u64>> {
-        vec![dross_rt::pci::DmaSpace::FIRST..1 << 39]
+        vec![dross_rt::pci::DmaSpace::FIRST..IOVA_END]
     }
 
     fn page_sizes(&self) -> u64 {

@@ -134,6 +134,14 @@ fn main() {
     let vfct = std::fs::metadata("/sys/firmware/acpi/tables/APIC").map(|m| m.len()).unwrap_or(0);
     t.check("firmware tables", vfct > 44, format!("(APIC {vfct} bytes)"));
 
+    // The kernel log, as /dev/kmsg records from the oldest kept.
+    let first = std::fs::File::open("/dev/kmsg").and_then(|mut f| {
+        let mut b = vec![0u8; 8192];
+        let n = f.read(&mut b)?;
+        Ok(String::from_utf8_lossy(&b[..n]).into_owned())
+    });
+    t.check("kernel log", first.as_deref().is_ok_and(|r| r.starts_with("6,0,") && r.contains(";dross")), format!("{first:?}"));
+
     // Unix sockets.
     let path = "/run/posixtest.sock";
     let listener = UnixListener::bind(path).unwrap();

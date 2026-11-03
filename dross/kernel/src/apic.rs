@@ -66,10 +66,13 @@ pub fn send_ipi(apic_id: u32, icr: u64) {
 /// errors to `APIC_ERROR`, timer masked.
 pub fn init_local() {
     let base = rdmsr(IA32_APIC_BASE);
-    // SAFETY: xAPIC enable then x2APIC (the order the SDM requires), then the local vector table.
+    // SAFETY: xAPIC enable then x2APIC (the order the SDM requires), then software enable, then the local vector
+    // table: while software-disabled (as an AP is after INIT) the APIC keeps every LVT entry masked and ignores
+    // writes that unmask one, so a timer set up before the enable never fires.
     unsafe {
         wrmsr(IA32_APIC_BASE, base | APIC_ENABLE);
         wrmsr(IA32_APIC_BASE, base | APIC_ENABLE | APIC_X2);
+        wrmsr(X2_SVR, 1 << 8 | SPURIOUS as u64);
         wrmsr(X2_TPR, 0);
         wrmsr(X2_TIMER_DIVIDE, 0b0011);
         let mode = if USE_DEADLINE.load(Ordering::Relaxed) { LVT_TIMER_TSC_DEADLINE } else { 0 };
@@ -77,7 +80,6 @@ pub fn init_local() {
         wrmsr(X2_LVT_LINT0, LVT_MASKED);
         wrmsr(X2_LVT_LINT1, LVT_NMI);
         wrmsr(X2_LVT_ERROR, APIC_ERROR as u64);
-        wrmsr(X2_SVR, 1 << 8 | SPURIOUS as u64);
         wrmsr(X2_ESR, 0);
     }
 }
@@ -144,6 +146,29 @@ fn timer_calibrate() {
         wrmsr(X2_TIMER_INITIAL, 0);
         COUNTS_PER_TSC.store(((counted as u128) << 32) as u64 / ticks.max(1) as u64, Ordering::Relaxed);
     }
+}
+
+/// Timer interrupts taken by each CPU.
+pub static TIMER_IRQS: [AtomicU64; crate::cpu::MAX_CPUS] = [const { AtomicU64::new(0) }; crate::cpu::MAX_CPUS];
+
+/// Arms this CPU's timer 1 ms ahead and halts until it fires: microseconds it took, or None after 100 ms.
+pub fn timer_selftest() -> Option<u64> {
+    let me = crate::cpu::index() as usize;
+    let c0 = TIMER_IRQS[me].load(Ordering::Relaxed);
+    let t0 = rdtsc();
+    let hz = time::tsc_hz();
+    timer_arm(t0 + hz / 1000);
+    // Spin with interrupts on (halting would hang this CPU if the timer is broken).
+    x86_64::instructions::interrupts::enable();
+    while TIMER_IRQS[me].load(Ordering::Relaxed) == c0 && rdtsc() - t0 < hz / 10 {
+        core::hint::spin_loop();
+    }
+    x86_64::instructions::interrupts::disable();
+    if TIMER_IRQS[me].load(Ordering::Relaxed) == c0 {
+        timer_disarm();
+        return None;
+    }
+    Some((rdtsc() - t0) * 1_000_000 / hz)
 }
 
 /// Fires the timer interrupt at TSC `deadline` (or right away if it has passed).

@@ -131,21 +131,42 @@ can't run its `run` mode and tbd runs streams only (`--net none`).
 `zig cc`; `FIRMWARE=DIR` adds `DIR` as `/lib/firmware` (gpud's `init` and `serve` need Tahiti's microcode there,
 from linux-firmware).
 
-## First boot on a Mac Pro
+## On a Mac Pro
 
-Not done yet (it needs a way to power-cycle the machine). The plan, for incite:
+dross runs on a Mac Pro 6,1 (E5-1650 v2, 6 cores x 2 threads, 48 GiB). Measured there (release build, booted once
+with `grub-reboot` from Linux's GRUB, which chainloads the loader on the EFI system partition):
 
-1. `./build-linux.sh && INIT_CONF=linux/macpro-init.conf PROFILE=release ./build.sh`: `target/esp` holds the
-   loader, the kernel, the modules and an init.conf that probes both D700s, an NHI and the spare Ethernet port
-   read-only.
-2. Copy `target/esp/dross.elf` and `target/esp/modules/` to the root of the EFI system partition and the loader
-   to `EFI/dross/BOOTX64.EFI`; add a GRUB entry that chainloads it and boot it once with `grub-reboot`, so a
-   power cycle returns to Linux.
-3. The log is on the screen (the firmware framebuffer). Things to watch: the TSC-deadline timer (QEMU has none),
-   whether the firmware leaves a free page below 1 MiB for the AP trampoline, VT-d on the real unit (the USB
-   RMRR), and the FL1100's MSI for usbd.
+- "boot ok" 390 ms after the loader: 12 of 12 CPUs, each CPU's 1 ms TSC-deadline timer fires after 1000 us, the
+  TSCs agree within 300 cycles, VT-d on with the USB controllers' reserved region identity-mapped;
+- the self-test's 15 checks pass; 10 ms deadlines take 10.00 ms on every CPU; preemption shares a CPU evenly;
+- the drivers' 42 unit tests pass as Linux programs;
+- gpud's read-only probe passes on both D700s through pcid (config space, BARs, each card's VBIOS from the VFCT,
+  memory controller registers, DMA buffers in the GPU's IOMMU domain); tbd's probe passes on a Thunderbolt
+  controller; usbd brings up the Fresco Logic FL1100;
+- ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux.
 
-From its ACPI tables (`acpi/tests/macpro61`) and Linux on the same machine:
+Cross-CPU channel round trips take 116 us there (a halted CPU's wakeup); that is next to look at.
+
+Without a serial console, the log comes over the network: ethd's `netlog` mode reads `/dev/kmsg` (dross's log
+from boot) and sends each line as a UDP datagram to the netconsole port, and `driver/ethd/netlog-listen.py` on
+another machine prints them. `init.conf` starts it before anything else: `start ethd netlog 0000:0c:00.0 --ip
+ADDR --to RECEIVER --to-mac MAC` (macOS drops broadcasts from 0.0.0.0, so give real addresses). On hardware a
+panic, a fatal kernel fault or `reboot` resets the machine after 5 s (the FADT reset register), and dross clears
+the chipset's "stay off after power loss" bit, so a machine on a switched outlet can always be power-cycled back
+into Linux.
+
+To run it: `./build-linux.sh && INIT_CONF=YOUR.conf PROFILE=release ./build.sh`; copy `target/esp/dross.elf` and
+`target/esp/modules/` to the root of the EFI system partition and the loader to `EFI/dross/BOOTX64.EFI`; add a
+GRUB entry that chainloads it (`/boot/grub/custom.cfg`) and `grub-reboot` into it.
+
+Bugs only the hardware showed, now fixed: an AP's local APIC ignores unmasking LVT entries while it is software
+disabled (its timer never fired, so timed waits hung); new threads started with MXCSR 0 (every floating-point
+exception unmasked: gpud's tests died of a SIMD exception); pcid protected the largest possible MSI capability and
+so refused the BCM57762's MISC_HOST_CTRL right after it; the dross DMA backend never reused device addresses.
+
+## The Mac Pro 6,1, as dross sees it
+
+From the 12-core model's ACPI tables (`acpi/tests/macpro61`) and Linux on the same machine:
 
 - 24 CPUs, x2APIC IDs 0-11 and 16-27; two I/O APICs (GSIs 0-23 and 24-47); LINT1 is NMI on every CPU.
 - One VT-d unit for all devices, 46-bit DMA, **no interrupt remapping**: a device that can DMA can also
@@ -183,5 +204,5 @@ default) and has a dross backend. What it doesn't do yet: resets (pcid has none)
 memory by address into a DMA domain (`map_external`; peer BARs will come from pcid as memory objects), and
 counting interrupts (a notification reports one however often it fired).
 
-Next: the first boot on a Mac Pro; then a network stack (ethd and tbd's ThunderboltIP), and the engine with
+Next: the cross-CPU wakeup latency; then a network stack (ethd and tbd's ThunderboltIP), and the engine with
 RADV, which needs dynamic linking and glibc's ABI rather than a static musl program.

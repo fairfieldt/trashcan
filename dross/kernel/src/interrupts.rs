@@ -107,6 +107,7 @@ extern "C" fn isr_dispatch(f: &mut Frame) {
         v @ 0..32 if from_user => user_fault(f, EXCEPTIONS[v as usize]),
         v @ 0..32 => fatal(f, EXCEPTIONS[v as usize]),
         TIMER => {
+            apic::TIMER_IRQS[cpu::index() as usize].fetch_add(1, core::sync::atomic::Ordering::Relaxed);
             apic::eoi();
             sched::timer_interrupt();
         }
