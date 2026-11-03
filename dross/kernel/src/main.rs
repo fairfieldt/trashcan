@@ -102,7 +102,7 @@ fn start_init(info: &BootInfo, acpi: &firmware::Acpi) {
     ] {
         add(&alloc::format!("resource/{name}"), Object::Resource(Arc::new(Resource::root(kind, size))), &mut text);
     }
-    text.push_str(&alloc::format!("rsdp {:#x}\ncpus {}\n", info.rsdp, smp::online()));
+    text.push_str(&alloc::format!("rsdp {:#x}\ncpus {}\nhypervisor {}\n", info.rsdp, smp::online(), cpu::Features::detect().hypervisor as u8));
     if let Some(r) = acpi.mcfg.as_ref().and_then(|t| ::acpi::mcfg::ranges(t).ok()).and_then(|mut r| r.next()) {
         text.push_str(&alloc::format!("ecam {:#x}\necam-buses {} {}\n", r.base, r.start_bus, r.end_bus));
     }

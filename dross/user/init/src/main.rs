@@ -41,7 +41,7 @@ fn main(boot: Handle) -> i32 {
         .handle("resource/iommu", sys::dup(b.handle("resource/iommu").unwrap(), rights::ALL).unwrap())
         .value("ecam", &alloc::format!("{ecam:#x}"))
         .value("ecam-buses", buses);
-    let drivers = ["edutest"];
+    let drivers = ["edutest", "usbd"];
     let mut driver_ends = alloc::vec::Vec::new();
     for d in drivers {
         let (mine, theirs) = sys::channel_create().unwrap();
@@ -49,12 +49,36 @@ fn main(boot: Handle) -> i32 {
         driver_ends.push(theirs);
     }
     bootstrap::spawn(pcid, "pcid", pb, u64::MAX).expect("spawn pcid");
+    // Under QEMU the run's harness types on the emulated keyboard and moves the mouse; usbd reports when it saw
+    // both, and init waits for that.
+    let test = b.value("hypervisor") == Some("1");
+    let mut usb_report = None;
     for (d, end) in drivers.iter().zip(driver_ends) {
         let Some(img) = b.handle(&alloc::format!("module/{d}")) else { continue };
-        let p = bootstrap::spawn(img, d, Builder::default().handle("pci", end), u64::MAX).expect("spawn driver");
-        let code = sys::process_wait(p, dross_rt::FOREVER);
-        println!("{d} exited with {code:?}");
-        ok &= code == Ok(0);
+        let mut db = Builder::default().handle("pci", end);
+        if *d == "usbd" && test {
+            let (mine, theirs) = sys::channel_create().unwrap();
+            db = db.handle("report", theirs);
+            usb_report = Some(mine);
+        }
+        let p = bootstrap::spawn(img, d, db, u64::MAX).expect("spawn driver");
+        if *d == "edutest" {
+            let code = sys::process_wait(p, dross_rt::FOREVER);
+            println!("{d} exited with {code:?}");
+            ok &= code == Ok(0);
+        }
+    }
+    if let Some(r) = usb_report {
+        let mut buf = [0u8; 64];
+        let mut hs = [Handle(0); 1];
+        let got = sys::channel_read(r, &mut buf, &mut hs, sys::after_ms(120_000));
+        println!("usbd: {:?}", got.map(|(n, _)| core::str::from_utf8(&buf[..n]).unwrap_or("?")));
+        ok &= got.is_ok();
+    }
+    if !test {
+        println!("{}", if ok { "all checks passed" } else { "checks FAILED" });
+        let n = sys::notify_create().unwrap();
+        let _ = sys::notify_wait(n, dross_rt::FOREVER);
     }
     println!("{}", if ok { "all checks passed" } else { "checks FAILED" });
     sys::system_exit(system, if ok { 0 } else { 1 })

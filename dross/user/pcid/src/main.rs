@@ -1,8 +1,9 @@
 //! pcid: owns PCI configuration space (ECAM) and hands PCI functions to drivers.
 //!
 //! Each client (a channel from init) can open functions it then owns: their config space through filtered
-//! reads and writes, their BARs as memory objects, a DMA domain with only the function attached, and MSIs
-//! programmed by pcid. A driver can't move its BARs, retarget its MSIs or touch another function. When a client
+//! reads and writes, their BARs as memory objects, a DMA domain with only the function attached, and MSIs or
+//! MSI-X vectors programmed by pcid. (A driver maps the BAR that holds its MSI-X table, so it could rewrite it;
+//! without interrupt remapping a device can write any MSI anyway, so this is no further exposure.) A driver can't move its BARs, retarget its MSIs or touch another function. When a client
 //! goes away, pcid stops its functions' bus mastering and MSIs and drops their domains, which blocks their DMA.
 #![no_std]
 #![no_main]
@@ -22,7 +23,9 @@ struct Function {
     info: Info,
     owner: Option<usize>,
     domain: Option<Handle>,
-    irq: Option<Handle>,
+    irqs: Vec<Handle>,
+    /// pcid's own mapping of the MSI-X table.
+    msix_table: Option<u64>,
     msi_cap: Option<u16>,
     msix_cap: Option<u16>,
 }
@@ -146,7 +149,7 @@ impl Pcid {
                     let bars = if header & 0x7f == 0 { self.bars(bdf) } else { [Bar::default(); 6] };
                     let info = Info { bdf, vendor: id as u16, device: (id >> 16) as u16, class, bars };
                     let (msi_cap, msix_cap) = (self.capability(bdf, 0x05), self.capability(bdf, 0x11));
-                    self.functions.push(Function { info, owner: None, domain: None, irq: None, msi_cap, msix_cap });
+                    self.functions.push(Function { info, owner: None, domain: None, irqs: Vec::new(), msix_table: None, msi_cap, msix_cap });
                     if f == 0 && header & 0x80 == 0 {
                         break;
                     }
@@ -259,31 +262,68 @@ impl Pcid {
                 Ok((0, Vec::new()))
             }
             op::MSI => {
+                // a: bits, b: CPU, c: MSI-X vector index.
                 let i = self.owned(r.bdf, client)?;
                 let notification = *sent.first().ok_or(Error::InvalidArgs)?;
                 let bdf = self.functions[i].info.bdf;
-                let cap = self.functions[i].msi_cap.ok_or(Error::NotFound)?;
-                if let Some(old) = self.functions[i].irq.take() {
-                    let _ = sys::close(old);
-                }
                 let (irq, addr, data) = sys::irq_msi(self.irq, notification, r.a, r.b)?;
                 let _ = sys::close(notification);
-                let ctl = self.read(bdf, cap + 2, 2);
-                // Address, upper address if 64-bit, data; one vector; enable; INTx off.
-                self.write(bdf, cap + 2, 2, ctl & !(1 | 0x70));
-                self.w32(bdf, cap + 4, addr as u32);
-                let data_off = if ctl & 0x80 != 0 {
-                    self.w32(bdf, cap + 8, (addr >> 32) as u32);
-                    cap + 12
+                if let Some(cap) = self.functions[i].msi_cap {
+                    for old in self.functions[i].irqs.drain(..) {
+                        let _ = sys::close(old);
+                    }
+                    let ctl = self.read(bdf, cap + 2, 2);
+                    // Address, upper address if 64-bit, data; one vector; enable.
+                    self.write(bdf, cap + 2, 2, ctl & !(1 | 0x70));
+                    self.w32(bdf, cap + 4, addr as u32);
+                    let data_off = if ctl & 0x80 != 0 {
+                        self.w32(bdf, cap + 8, (addr >> 32) as u32);
+                        cap + 12
+                    } else {
+                        cap + 8
+                    };
+                    self.write(bdf, data_off, 2, data);
+                    self.write(bdf, cap + 2, 2, ctl & !0x70 | 1);
+                } else if let Some(cap) = self.functions[i].msix_cap {
+                    let ctl = self.read(bdf, cap + 2, 2);
+                    if r.c > (ctl & 0x7ff) as u64 {
+                        let _ = sys::close(irq);
+                        return Err(Error::OutOfRange);
+                    }
+                    let table = match self.functions[i].msix_table {
+                        Some(t) => t,
+                        None => {
+                            let t = self.r32(bdf, cap + 4);
+                            let bar = self.functions[i].info.bars[(t & 7) as usize];
+                            let at = bar.phys + (t & !7) as u64;
+                            let base = at & !0xfff;
+                            let size = (at + ((ctl & 0x7ff) as u64 + 1) * 16 - base).next_multiple_of(4096);
+                            let m = sys::mem_physical(self.physical, base, size)?;
+                            let v = sys::vm_map(m, 0, size, 0, vm::READ | vm::WRITE)? + (at - base);
+                            self.functions[i].msix_table = Some(v);
+                            v
+                        }
+                    };
+                    // Enabled with every vector masked, then this entry programmed and unmasked.
+                    self.write(bdf, cap + 2, 2, ctl | 1 << 15 | 1 << 14);
+                    let e = (table + r.c * 16) as *mut u32;
+                    // SAFETY: entry r.c of the table pcid mapped above.
+                    unsafe {
+                        e.add(3).write_volatile(1);
+                        e.write_volatile(addr as u32);
+                        e.add(1).write_volatile((addr >> 32) as u32);
+                        e.add(2).write_volatile(data);
+                        e.add(3).write_volatile(0);
+                    }
+                    self.write(bdf, cap + 2, 2, (ctl | 1 << 15) & !(1 << 14));
                 } else {
-                    cap + 8
-                };
-                self.write(bdf, data_off, 2, data);
-                self.write(bdf, cap + 2, 2, ctl & !0x70 | 1);
+                    let _ = sys::close(irq);
+                    return Err(Error::NotFound);
+                }
                 let cmd = self.read(bdf, 4, 2);
                 self.write(bdf, 4, 2, cmd | 1 << 10);
-                self.functions[i].irq = Some(irq);
                 out.push(sys::dup(irq, rights::ALL)?);
+                self.functions[i].irqs.push(irq);
                 Ok((0, Vec::new()))
             }
             _ => Err(Error::BadSyscall),
@@ -303,8 +343,12 @@ impl Pcid {
                 let ctl = self.read(bdf, c + 2, 2);
                 self.write(bdf, c + 2, 2, ctl & !1);
             }
+            if let Some(c) = self.functions[i].msix_cap {
+                let ctl = self.read(bdf, c + 2, 2);
+                self.write(bdf, c + 2, 2, ctl & !(1 << 15));
+            }
             let f = &mut self.functions[i];
-            for h in [f.irq.take(), f.domain.take()].into_iter().flatten() {
+            for h in f.irqs.drain(..).chain(f.domain.take()) {
                 let _ = sys::close(h);
             }
             f.owner = None;

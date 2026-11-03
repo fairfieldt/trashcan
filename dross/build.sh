@@ -11,14 +11,14 @@ flag=""
 [ "$PROFILE" = release ] && flag=--release
 cargo build -p dross-boot --target x86_64-unknown-uefi $flag
 cargo build -p dross --target x86_64-unknown-none $flag
-cargo build -p init -p selftest -p pcid -p edutest --target x86_64-unknown-none $flag
+cargo build -p init -p selftest -p pcid -p edutest -p usbd --target x86_64-unknown-none $flag
 esp=target/esp
 rm -rf "$esp"
 mkdir -p "$esp/EFI/BOOT"
 cp "target/x86_64-unknown-uefi/$PROFILE/dross-boot.efi" "$esp/EFI/BOOT/BOOTX64.EFI"
 cp "target/x86_64-unknown-none/$PROFILE/dross" "$esp/dross.elf"
 mkdir -p "$esp/modules"
-for m in init selftest pcid edutest; do
+for m in init selftest pcid edutest usbd; do
     cp "target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
 done
 echo "$esp"
