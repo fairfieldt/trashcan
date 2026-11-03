@@ -117,6 +117,26 @@ impl ChannelEnd {
         }
     }
 
+    /// Internal RPC receive: consume the response before exposing ordinary signals.
+    #[cfg(feature = "unix")]
+    pub fn read_transaction(&self, max_bytes: usize, max_handles: usize, deadline: u64) -> Result<Message, ReadError> {
+        let closed = &self.pair.closed[self.peer()];
+        self.pair.sides[self.side].wait_uninterruptible(deadline, |s| match s.queue.front() {
+            Some(m) if m.bytes.len() > max_bytes || m.handles.len() > max_handles => Some(Err(ReadError::TooSmall(m.bytes.len(), m.handles.len()))),
+            Some(_) => Some(Ok(s.queue.pop_front().unwrap())),
+            None if closed.load(Ordering::Acquire) => Some(Err(ReadError::PeerClosed)),
+            None => None,
+        }).map_err(ReadError::Wait)?
+    }
+
+    #[cfg(feature = "unix")]
+    pub fn readiness(&self) -> u16 {
+        let readable = self.pair.sides[self.side].with(|s| !s.queue.is_empty());
+        let closed = self.pair.closed[self.peer()].load(Ordering::Acquire);
+        let writable = !closed && self.pair.sides[self.peer()].with(|s| s.queue.len() < CHANNEL_DEPTH);
+        (if readable || closed { 1 } else { 0 }) | (if writable { 4 } else { 0 }) | (if closed { 16 } else { 0 })
+    }
+
     /// Signals `bits` on `n` whenever a message arrives at this end or the peer closes (now too, if one waits).
     pub fn bind(&self, n: Arc<Notification>, bits: u64) {
         let pending = self.pair.sides[self.side].with(|s| {

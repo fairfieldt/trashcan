@@ -43,6 +43,9 @@ impl Process {
         Self::create(name, Some(crate::linux::Linux::new(name)))
     }
 
+    #[cfg(feature = "unix")]
+    pub fn live_threads(&self) -> u32 { self.live.load(Ordering::Acquire) }
+
     pub fn pid(&self) -> u32 {
         self.pid.load(Ordering::Relaxed)
     }
@@ -79,6 +82,8 @@ impl Process {
             }
             let code = self.code.lock().unwrap_or(0);
             self.exit.update(|c| *c = Some(code));
+            #[cfg(feature = "unix")]
+            crate::linux::unix::exited(self);
         }
     }
 
@@ -89,6 +94,12 @@ impl Process {
         for t in threads {
             t.kill();
         }
+    }
+
+    #[cfg(feature = "unix")]
+    pub fn wake_threads(&self) {
+        let threads: Vec<_> = self.threads.lock().iter().filter_map(Weak::upgrade).collect();
+        for t in threads { sched::wake(&t); }
     }
 
     pub fn enable_ports(&self, first: u16, count: u32) {

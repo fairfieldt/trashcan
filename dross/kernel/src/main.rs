@@ -91,6 +91,8 @@ fn start_init(info: &BootInfo, acpi: &firmware::Acpi) {
         println!("no init module: nothing to run");
         qemu::exit(false);
     };
+    #[cfg(feature = "unix")]
+    linux::unix::entropy::initialize(info.modules().iter().find(|m| m.name() == "entropy.seed").map(|m| Memory::module(m.phys, m.size)));
     let image = Memory::module(m.phys, m.size);
     let (mine, theirs) = ChannelEnd::pair();
     let mut text = alloc::string::String::new();

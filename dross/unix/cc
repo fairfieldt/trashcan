@@ -1,0 +1,7 @@
+#!/bin/sh
+# Zig's ELF linker does not implement GNU ld's diagnostic-only --warn-common.
+for arg in "$@"; do
+    shift
+    case "$arg" in -Wl,--verbose|-Wl,--warn-common|-Wl,-Map,*) ;; *) set -- "$@" "$arg" ;; esac
+done
+exec zig cc -target x86_64-linux-musl "$@"

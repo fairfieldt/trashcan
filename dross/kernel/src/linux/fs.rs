@@ -39,6 +39,8 @@ static TREE: Mutex<BTreeMap<String, &'static [u8]>> = Mutex::new(BTreeMap::new()
 
 /// Indexes a ustar archive (regular files and directories) into the tree.
 pub fn init_rootfs(data: &'static [u8]) {
+    #[cfg(feature = "unix")]
+    super::unix::vfs::archive(data);
     let mut t = TREE.lock();
     let mut at = 0;
     let mut n = 0;
@@ -73,6 +75,8 @@ pub fn init_rootfs(data: &'static [u8]) {
 
 /// Adds a firmware table as /sys/firmware/acpi/tables/SIG.
 pub fn publish_table(sig: &str, data: &'static [u8]) {
+    #[cfg(feature = "unix")]
+    super::unix::vfs::import(&alloc::format!("/sys/firmware/acpi/tables/{sig}"), 0o100444, data);
     TREE.lock().insert(alloc::format!("sys/firmware/acpi/tables/{sig}"), data);
 }
 
@@ -125,6 +129,14 @@ impl Drop for Log {
 
 pub enum Kind {
     Log(Arc<Log>),
+    #[cfg(feature = "unix")]
+    Node(Arc<super::unix::vfs::Node>),
+    #[cfg(feature = "unix")]
+    Pty(Arc<super::unix::pty::End>),
+    #[cfg(feature = "unix")]
+    Net(Arc<super::unix::net::Socket>),
+    #[cfg(feature = "unix")]
+    Channel(Arc<super::unix::channel::Stream>),
     Null,
     Zero,
     Random,
@@ -142,7 +154,7 @@ pub enum Kind {
 
 pub struct File {
     pub kind: Kind,
-    pos: Mutex<u64>,
+    pub(super) pos: Mutex<u64>,
     pub flags: AtomicU32,
     size: AtomicU64,
 }
@@ -150,6 +162,8 @@ pub struct File {
 impl File {
     pub fn new(kind: Kind, flags: u32) -> Arc<File> {
         let size = match &kind {
+            #[cfg(feature = "unix")]
+            Kind::Node(node) => node.data.lock().len() as u64,
             Kind::Data(d) => d.len() as u64,
             _ => 0,
         };
@@ -163,6 +177,12 @@ impl File {
     /// The memory behind a mapping of this file at `off` (shared mappings only work for memfds).
     pub fn backing(&self, off: u64, len: u64) -> Result<(Arc<Memory>, bool), Errno> {
         match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Node(node) => {
+                let data = node.data.lock(); let size = (data.len() as u64).next_multiple_of(4096).max(4096);
+                let mem = Arc::new(Memory::anonymous(size, false, false).map_err(|_| ENOMEM)?);
+                mem.write(0, &data).map_err(|_| EINVAL)?; Ok((mem, false))
+            }
             Kind::Memfd(m) => {
                 let m = m.lock().clone().ok_or(EINVAL)?;
                 if off + len > m.size() {
@@ -183,7 +203,16 @@ impl File {
 
     fn mode(&self) -> u32 {
         match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Node(node) => node.attr.lock().mode,
+            #[cfg(feature = "unix")]
+            Kind::Pty(end) => end.pty.node.attr.lock().mode,
+            #[cfg(feature = "unix")]
+            Kind::Net(_) => S_IFSOCK | 0o600,
             Kind::Data(_) | Kind::Memfd(_) => S_IFREG | 0o644,
+            #[cfg(feature = "unix")]
+            Kind::Dir(path) => super::unix::vfs::lookup(&alloc::format!("/{path}"), true).map(|(_, n)| n.attr.lock().mode).unwrap_or(S_IFDIR | 0o755),
+            #[cfg(not(feature = "unix"))]
             Kind::Dir(_) => S_IFDIR | 0o755,
             Kind::Stream(e) if e.is_pipe() => S_IFIFO | 0o600,
             Kind::Stream(_) | Kind::Socket(_) | Kind::Listener(_) => S_IFSOCK | 0o777,
@@ -194,6 +223,12 @@ impl File {
     /// Readiness for poll; registers `me` with whatever would change it if nothing is ready.
     pub fn poll(&self, me: &Arc<Thread>, events: u16) -> u16 {
         match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Pty(end) => end.poll(me, events),
+            #[cfg(feature = "unix")]
+            Kind::Net(socket) => socket.poll(events),
+            #[cfg(feature = "unix")]
+            Kind::Channel(stream) => stream.poll(events),
             Kind::Stream(e) => e.poll(me, events),
             Kind::Listener(l) => l.poll(me),
             Kind::EventFd(c) => c.poll(me, |v| if *v > 0 { POLLIN } else { 0 } | POLLOUT) & (events | POLLERR | POLLHUP),
@@ -205,6 +240,8 @@ impl File {
 
     pub fn unpoll(&self, me: &Arc<Thread>) {
         match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Pty(end) => end.unpoll(me),
             Kind::Stream(e) => e.unpoll(me),
             Kind::Listener(l) => l.unpoll(me),
             Kind::EventFd(c) => c.unregister(me),
@@ -215,6 +252,20 @@ impl File {
 
     pub fn read(&self, _p: &Process, buf_len: usize, at: Option<u64>) -> Result<Vec<u8>, Errno> {
         match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Pty(end) => end.read(buf_len, self.nonblocking()),
+            #[cfg(feature = "unix")]
+            Kind::Net(socket) => socket.read(buf_len, self.nonblocking(), false),
+            #[cfg(feature = "unix")]
+            Kind::Channel(stream) => stream.read(buf_len, self.nonblocking()),
+            #[cfg(feature = "unix")]
+            Kind::Node(node) => {
+                if self.flags.load(Ordering::Relaxed) & 3 == 1 { return Err(EBADF); }
+                let mut pos = self.pos.lock(); let data = node.data.lock();
+                let from = at.unwrap_or(*pos).min(data.len() as u64) as usize;
+                let len = buf_len.min(data.len() - from); let out = data[from..from + len].to_vec();
+                if at.is_none() { *pos += len as u64; } Ok(out)
+            }
             Kind::Null => Ok(Vec::new()),
             Kind::Zero => Ok(alloc::vec![0; buf_len]),
             Kind::Random => {
@@ -291,6 +342,19 @@ impl File {
 
     pub fn write(&self, data: &[u8], at: Option<u64>) -> Result<usize, Errno> {
         match &self.kind {
+            #[cfg(feature = "unix")]
+            Kind::Pty(end) => end.write(data, self.nonblocking()),
+            #[cfg(feature = "unix")]
+            Kind::Net(socket) => socket.write(data, self.nonblocking()),
+            #[cfg(feature = "unix")]
+            Kind::Channel(stream) => stream.write(data, self.nonblocking()),
+            #[cfg(feature = "unix")]
+            Kind::Node(node) => {
+                let flags = self.flags.load(Ordering::Relaxed); if flags & 3 == 0 { return Err(EBADF); }
+                let mut pos = self.pos.lock(); let from = at.unwrap_or(*pos);
+                let end = super::unix::vfs::write(node, usize::try_from(from).map_err(|_| EINVAL)?, data, flags & 0x400 != 0)?;
+                if at.is_none() { *pos = end as u64; } Ok(data.len())
+            }
             Kind::Null | Kind::Zero | Kind::Random => Ok(data.len()),
             Kind::Log(l) => {
                 l.write(data);
@@ -329,6 +393,7 @@ impl File {
     }
 }
 
+#[derive(Clone)]
 struct Fd {
     file: Arc<File>,
     cloexec: bool,
@@ -349,6 +414,17 @@ impl Files {
         Files { fds: Mutex::new(fds) }
     }
 
+    #[cfg(feature = "unix")]
+    pub fn inherit(&self, source: &Files) { *self.fds.lock() = source.fds.lock().clone(); }
+
+    #[cfg(feature = "unix")]
+    pub fn exec_close(&self) {
+        let mut fds = self.fds.lock();
+        let mut closed = Vec::new();
+        for entry in fds.iter_mut() { if entry.as_ref().is_some_and(|e| e.cloexec) { closed.push(entry.take()); } }
+        drop(fds); drop(closed);
+    }
+
     pub fn get(&self, fd: i32) -> Result<Arc<File>, Errno> {
         if fd < 0 {
             return Err(EBADF);
@@ -361,6 +437,7 @@ impl Files {
     }
 
     fn insert_from(&self, file: Arc<File>, cloexec: bool, min: usize) -> Result<u64, Errno> {
+        if min >= 4096 { return Err(EMFILE); }
         let mut t = self.fds.lock();
         let i = match t.iter().enumerate().skip(min).position(|(_, f)| f.is_none()) {
             Some(i) => i + min,
@@ -412,10 +489,18 @@ impl Files {
 fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
     let mut st = [0u8; 144];
     let size = match &f.kind {
+        #[cfg(feature = "unix")]
+        Kind::Node(node) => node.data.lock().len() as u64,
         Kind::Data(d) => d.len() as u64,
         Kind::Memfd(_) => f.size.load(Ordering::Relaxed),
         _ => 0,
     };
+    #[cfg(feature = "unix")]
+    let ino = match &f.kind { Kind::Node(node) => node.ino, Kind::Pty(end) => end.pty.node.ino, _ => ino };
+    #[cfg(feature = "unix")]
+    if let Some(node) = match &f.kind { Kind::Node(n) => Some(n), Kind::Pty(end) => Some(&end.pty.node), _ => None } {
+        let attr = node.attr.lock(); st[28..32].copy_from_slice(&attr.uid.to_le_bytes()); st[32..36].copy_from_slice(&attr.gid.to_le_bytes());
+    }
     st[8..16].copy_from_slice(&ino.to_le_bytes());
     st[16..24].copy_from_slice(&1u64.to_le_bytes());
     st[24..28].copy_from_slice(&f.mode().to_le_bytes());
@@ -429,6 +514,8 @@ fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
 fn statx(p: &Process, f: &File, ptr: u64) -> R {
     let mut st = [0u8; 256];
     let size = match &f.kind {
+        #[cfg(feature = "unix")]
+        Kind::Node(node) => node.data.lock().len() as u64,
         Kind::Data(d) => d.len() as u64,
         Kind::Memfd(_) => f.size.load(Ordering::Relaxed),
         _ => 0,
@@ -443,7 +530,7 @@ fn statx(p: &Process, f: &File, ptr: u64) -> R {
 }
 
 /// Opens a path in the tree or a device.
-fn open_path(path: &str, flags: u32) -> Result<Arc<File>, Errno> {
+pub(super) fn open_path(path: &str, flags: u32) -> Result<Arc<File>, Errno> {
     let n = normalize(path);
     let kind = match n.as_str() {
         "dev/null" => Kind::Null,
@@ -632,6 +719,8 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         8 => {
             let f = files.get(fd)?;
             let size = match &f.kind {
+                #[cfg(feature = "unix")]
+                Kind::Node(node) => node.data.lock().len() as i64,
                 Kind::Data(d) => d.len() as i64,
                 Kind::Memfd(_) => f.size.load(Ordering::Relaxed) as i64,
                 Kind::Dir(_) => 0,
@@ -652,6 +741,8 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         16 => {
             let f = files.get(fd)?;
+            #[cfg(feature = "unix")]
+            if let Kind::Pty(end) = &f.kind { return end.ioctl(p, a[1] as u32 as u64, a[2]); }
             match a[1] {
                 // FIONBIO
                 0x5421 => {
@@ -660,7 +751,10 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
                     Ok(0)
                 }
                 // FIOCLEX, FIONCLEX
-                0x5451 | 0x5450 => Ok(0),
+                0x5451 | 0x5450 => {
+                    let mut table=files.fds.lock();let entry=table.get_mut(fd as usize).and_then(Option::as_mut).ok_or(EBADF)?;
+                    entry.cloexec=a[1]==0x5451;Ok(0)
+                },
                 _ => Err(ENOTTY),
             }
         }
@@ -674,7 +768,9 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         }
         32 => files.insert(files.get(fd)?, false),
         33 | 292 => {
+            if a[1] >= 4096 { return Err(EBADF); }
             let f = files.get(fd)?;
+            if n == 33 && a[0] == a[1] { files.get(fd)?; return Ok(a[1]); }
             if n == 292 && a[0] == a[1] {
                 return Err(EINVAL);
             }

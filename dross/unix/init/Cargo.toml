@@ -1,0 +1,11 @@
+[package]
+name = "unix-init"
+version = "0.1.0"
+edition = "2024"
+[[bin]]
+name = "unix-init"
+test = false
+bench = false
+[dependencies]
+dross-rt = { path = "../../user/rt" }
+dross-abi = { path = "../../abi" }

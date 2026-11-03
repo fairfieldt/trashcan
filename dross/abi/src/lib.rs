@@ -43,7 +43,12 @@ pub mod sys {
     pub const SPAWN_LINUX: u64 = 31;
     /// (handle) from a Linux process: an fd for the object. A notification's polls readable while bits are pending;
     /// a memory object's can be mapped with `mmap` (a BAR handed to a client, for example).
+    /// With the Unix feature, a read/write channel becomes a duplex byte-stream fd.
     pub const HANDLE_FD: u64 = 32;
+    /// Opt-in Unix IP service registration: (system resource, channel). Supervisor only.
+    pub const UNIX_NET_REGISTER: u64 = 33;
+    /// (buffer, length): cryptographically secure bytes, or ShouldWait before seeding.
+    pub const RANDOM: u64 = 34;
 }
 
 /// Set in `rax` for a native dross call from a Linux process (whose plain numbers are Linux's).

@@ -94,6 +94,8 @@ extern "C" fn syscall_dispatch(f: &mut Frame) {
         f.rax = rax;
         f.rdx = rdx;
     }
+    #[cfg(feature = "unix")]
+    crate::linux::unix::user_return(f);
     let me = sched::current();
     if me.killed() {
         drop(me);
@@ -106,6 +108,21 @@ extern "C" fn syscall_dispatch(f: &mut Frame) {
 fn dispatch(n: u64, a: [u64; 6]) -> R {
     let p = sched::current_process();
     match n {
+        #[cfg(feature = "unix")]
+        sys::UNIX_NET_REGISTER => {
+            let t = p.handles.lock();
+            let resource = get_obj!(t, a[0] as u32, Resource, rights::WRITE)?;
+            resource.check(Kind::System, 0, 1)?;
+            let ch = get_obj!(t, a[1] as u32, Channel, rights::READ | rights::WRITE)?;
+            drop(t); crate::linux::unix::net::register(ch).map(|_| 0)
+        }
+        #[cfg(feature = "unix")]
+        sys::RANDOM => {
+            if a[1] > MSG_BYTES as u64 { return Err(Error::InvalidArgs); }
+            let mut bytes = alloc::vec![0; a[1] as usize];
+            crate::linux::unix::entropy::fill(&mut bytes).map_err(|_| Error::ShouldWait)?;
+            copy_out(&p, a[0], &bytes).map(|_| a[1])
+        }
         sys::LOG => {
             let b = copy_in(&p, a[0], a[1].min(4096))?;
             println!("{}: {}", p.name, core::str::from_utf8(&b).unwrap_or("(not utf-8)").trim_end());
@@ -377,6 +394,8 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             }
             let o = p.handles.lock().get(a[0] as u32)?.clone();
             match o.object {
+                #[cfg(feature = "unix")]
+                Object::Channel(ch) if o.rights & (rights::READ | rights::WRITE) == (rights::READ | rights::WRITE) => crate::linux::unix::channel::fd(&p, ch),
                 Object::Notification(n) if o.rights & rights::WAIT != 0 => crate::linux::notification_fd(&p, n),
                 Object::Memory(m) if o.rights & rights::MAP != 0 => crate::linux::memory_fd(&p, m),
                 Object::Notification(_) | Object::Memory(_) => return Err(Error::AccessDenied),
