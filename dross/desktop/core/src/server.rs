@@ -154,9 +154,18 @@ impl Server {
             let pending = Canvas::new(width, height)?;
             let id = self.next_id;
             self.next_id += 1;
-            let step = self.windows.len() as u32 * 26;
-            let x = (78 + step).min(self.screen.width() - width - BORDER * 2) as i32;
-            let y = (42 + step).min(self.screen.height() - height - TITLE_H - BORDER) as i32;
+            // Beside the open windows if it fits on the screen, else cascaded over them.
+            let right = self.windows.iter().map(|w| w.x + (w.front.width() + BORDER * 2) as i32).max();
+            let (x, y) = match right {
+                Some(r) if r as u32 + 16 + width + BORDER * 2 <= self.screen.width() => (r + 16, 42),
+                _ => {
+                    let step = self.windows.len() as u32 * 26;
+                    (
+                        (78 + step).min(self.screen.width() - width - BORDER * 2) as i32,
+                        (42 + step).min(self.screen.height() - height - TITLE_H - BORDER) as i32,
+                    )
+                }
+            };
             self.windows.push(Window {
                 id,
                 owner: client,

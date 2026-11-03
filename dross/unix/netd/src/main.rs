@@ -6,9 +6,10 @@ use alloc::{collections::BTreeMap, vec, vec::Vec};
 use dross_rt::{Error, Handle, bootstrap::Bootstrap, sys};
 use smoltcp::{
     iface::{Config, Interface, SocketHandle, SocketSet},
+    phy::{Loopback, Medium},
     socket::tcp,
     time::Instant,
-    wire::{EthernetAddress, IpAddress, IpCidr, IpEndpoint, IpListenEndpoint, Ipv4Address},
+    wire::{EthernetAddress, HardwareAddress, IpAddress, IpCidr, IpEndpoint, IpListenEndpoint, Ipv4Address},
 };
 dross_rt::main!(main);
 const MAX_SOCKETS: usize = 32;
@@ -43,14 +44,59 @@ impl Ports {
 #[derive(Clone, Copy)]
 enum Mode {
     New,
-    Stream(SocketHandle),
+    Stream(Sock),
     Listen,
+}
+/// A socket and the interface it is on: the Ethernet one, or loopback (127.0.0.0/8 and this machine's own
+/// address, so programs here reach servers here).
+#[derive(Clone, Copy)]
+struct Sock {
+    lo: bool,
+    h: SocketHandle,
+}
+struct Stack {
+    iface: Interface,
+    set: SocketSet<'static>,
+}
+struct Net {
+    eth: Stack,
+    lo: Stack,
+    loopback: Loopback,
+}
+impl Net {
+    fn stack(&mut self, lo: bool) -> &mut Stack {
+        if lo { &mut self.lo } else { &mut self.eth }
+    }
+    fn get(&self, s: Sock) -> &tcp::Socket<'static> {
+        if s.lo { self.lo.set.get(s.h) } else { self.eth.set.get(s.h) }
+    }
+    fn get_mut(&mut self, s: Sock) -> &mut tcp::Socket<'static> {
+        self.stack(s.lo).set.get_mut(s.h)
+    }
+    fn socket(&mut self, lo: bool) -> Sock {
+        Sock { lo, h: socket(&mut self.stack(lo).set) }
+    }
+    fn remove(&mut self, s: Sock) {
+        self.stack(s.lo).set.remove(s.h);
+    }
+    /// Loopback for this machine's addresses.
+    fn local(&self, addr: IpAddress) -> bool {
+        let IpAddress::Ipv4(a) = addr;
+        a.octets()[0] == 127 || self.eth.iface.has_ip_addr(addr)
+    }
+    fn poll_lo(&mut self) {
+        let now = Instant::from_micros((sys::clock() / 1000) as i64);
+        // A loopback packet goes out on one poll and in on the next.
+        for _ in 0..2 {
+            self.lo.iface.poll(now, &mut self.loopback, &mut self.lo.set);
+        }
+    }
 }
 struct Connection {
     ch: Handle,
     mode: Mode,
     bound: IpListenEndpoint,
-    listening: Vec<SocketHandle>,
+    listening: Vec<Sock>,
     backlog: usize,
     connecting: bool,
     error: u32,
@@ -97,8 +143,7 @@ fn reply(
 fn handle(
     c: &mut Connection,
     bytes: &[u8],
-    set: &mut SocketSet<'static>,
-    iface: &mut Interface,
+    net: &mut Net,
     ports: &mut Ports,
     notify: Handle,
 ) -> Result<Option<Connection>, i64> {
@@ -119,7 +164,7 @@ fn handle(
             if !matches!(c.mode, Mode::New) || c.bound.port != 0 {
                 return Err(22);
             }
-            if ep.addr != IpAddress::v4(0, 0, 0, 0) && !iface.has_ip_addr(ep.addr) {
+            if ep.addr != IpAddress::v4(0, 0, 0, 0) && !net.local(ep.addr) {
                 return Err(99);
             }
             let port = ports.reserve(ep.port, c.ch)?;
@@ -142,37 +187,44 @@ fn handle(
             }
             c.backlog = (u32::from_le_bytes(arg.try_into().unwrap()) as usize).clamp(1, 4);
             c.mode = Mode::Listen;
-            for _ in 0..c.backlog {
-                let h = socket(set);
-                set.get_mut::<tcp::Socket>(h)
-                    .listen(c.bound)
-                    .map_err(|_| 98)?;
-                c.listening.push(h);
+            // On every interface the address is on: loopback always takes a 127.0.0.0/8 or this machine's own
+            // address; Ethernet anything but loopback.
+            let loopback_only = c.bound.addr.is_some_and(|a| { let IpAddress::Ipv4(a) = a; a.octets()[0] == 127 });
+            for lo in [false, true] {
+                if !lo && loopback_only {
+                    continue;
+                }
+                for _ in 0..c.backlog {
+                    let s = net.socket(lo);
+                    net.get_mut(s).listen(c.bound).map_err(|_| 98)?;
+                    c.listening.push(s);
+                }
             }
             reply(c.ch, Ok(0), &[], &[]).map_err(|_| 5)?;
         }
         3 => {
             let remote = endpoint(arg)?;
             if matches!(c.mode, Mode::New) {
-                let h = socket(set);
+                let lo = net.local(remote.addr);
+                let s = net.socket(lo);
                 if c.bound.port == 0 {
                     c.bound.port = ports.reserve(0, c.ch)?;
                 }
-                if set
-                    .get_mut::<tcp::Socket>(h)
-                    .connect(iface.context(), remote, c.bound)
-                    .is_err()
-                {
-                    set.remove(h);
+                let stack = net.stack(lo);
+                if stack.set.get_mut::<tcp::Socket>(s.h).connect(stack.iface.context(), remote, c.bound).is_err() {
+                    net.remove(s);
                     return Err(22);
                 }
-                c.mode = Mode::Stream(h);
+                c.mode = Mode::Stream(s);
                 c.connecting = true;
+                if lo {
+                    net.poll_lo();
+                }
             }
             let Mode::Stream(h) = c.mode else {
                 return Err(22);
             };
-            let sock = set.get::<tcp::Socket>(h);
+            let sock = net.get(h);
             if sock.state() == tcp::State::Established {
                 c.connecting = false;
                 reply(c.ch, Ok(0), &[], &[]).map_err(|_| 5)?;
@@ -190,19 +242,17 @@ fn handle(
             let Some(index) = c
                 .listening
                 .iter()
-                .position(|h| set.get::<tcp::Socket>(*h).state() == tcp::State::Established)
+                .position(|h| net.get(*h).state() == tcp::State::Established)
             else {
                 return Err(11);
             };
             let h = c.listening.remove(index);
-            let peer = set.get::<tcp::Socket>(h).remote_endpoint().ok_or(107)?;
+            let peer = net.get(h).remote_endpoint().ok_or(107)?;
             let (mine, theirs) = sys::channel_create().map_err(|_| 12)?;
             sys::channel_bind(mine, notify, 2).map_err(|_| 5)?;
             reply(c.ch, Ok(0), &sockaddr(peer), &[theirs]).map_err(|_| 5)?;
-            let replacement = socket(set);
-            set.get_mut::<tcp::Socket>(replacement)
-                .listen(c.bound)
-                .map_err(|_| 98)?;
+            let replacement = net.socket(h.lo);
+            net.get_mut(replacement).listen(c.bound).map_err(|_| 98)?;
             c.listening.push(replacement);
             return Ok(Some(Connection {
                 ch: mine,
@@ -227,7 +277,7 @@ fn handle(
             let Mode::Stream(h) = c.mode else {
                 return Err(107);
             };
-            let sock = set.get_mut::<tcp::Socket>(h);
+            let sock = net.get_mut(h);
             let mut out = vec![0; len];
             let n = if sock.can_recv() {
                 if peek {
@@ -246,7 +296,7 @@ fn handle(
             let Mode::Stream(h) = c.mode else {
                 return Err(107);
             };
-            let sock = set.get_mut::<tcp::Socket>(h);
+            let sock = net.get_mut(h);
             if !sock.can_send() {
                 return Err(if sock.may_send() { 11 } else { 32 });
             }
@@ -259,7 +309,7 @@ fn handle(
                 Mode::Listen => {
                     if c.listening
                         .iter()
-                        .any(|h| set.get::<tcp::Socket>(*h).state() == tcp::State::Established)
+                        .any(|h| net.get(*h).state() == tcp::State::Established)
                     {
                         1
                     } else {
@@ -267,7 +317,7 @@ fn handle(
                     }
                 }
                 Mode::Stream(h) => {
-                    let s = set.get::<tcp::Socket>(h);
+                    let s = net.get(h);
                     if c.connecting && s.state() == tcp::State::Closed {
                         c.error = 111;
                     }
@@ -286,13 +336,17 @@ fn handle(
             let Mode::Stream(h) = c.mode else {
                 return Err(107);
             };
-            set.get_mut::<tcp::Socket>(h).close();
+            // SHUT_WR or SHUT_RDWR end the sending side (FIN after what is queued); SHUT_RD leaves it open (an
+            // HTTP server shuts reading down and then writes its response).
+            if u32::from_le_bytes(arg.try_into().unwrap()) != 0 {
+                net.get_mut(h).close();
+            }
             reply(c.ch, Ok(0), &[], &[]).map_err(|_| 5)?;
         }
         9 | 10 => {
             let ep = match c.mode {
                 Mode::Stream(h) => {
-                    let s = set.get::<tcp::Socket>(h);
+                    let s = net.get(h);
                     if op == 9 {
                         s.local_endpoint()
                     } else {
@@ -353,8 +407,21 @@ fn main(bootstrap: Handle) -> i32 {
             .add_default_ipv4_route(gateway.parse().expect("IPv4 gateway"))
             .unwrap();
     }
-    let mut retired: Vec<(SocketHandle, u64)> = Vec::new();
-    let mut set = SocketSet::new(Vec::new());
+    let now = Instant::from_micros((sys::clock() / 1000) as i64);
+    let mut loopback = Loopback::new(Medium::Ip);
+    let mut lo_config = Config::new(HardwareAddress::Ip);
+    lo_config.random_seed = u64::from_le_bytes(seed).rotate_left(1);
+    let mut lo_iface = Interface::new(lo_config, &mut loopback, now);
+    lo_iface.update_ip_addrs(|ips| {
+        ips.push(IpCidr::new(Ipv4Address::new(127, 0, 0, 1).into(), 8)).unwrap();
+        ips.push(IpCidr::new(ip.into(), 32)).unwrap();
+    });
+    let mut net = Net {
+        eth: Stack { iface, set: SocketSet::new(Vec::new()) },
+        lo: Stack { iface: lo_iface, set: SocketSet::new(Vec::new()) },
+        loopback,
+    };
+    let mut retired: Vec<(Sock, u64)> = Vec::new();
     let mut connections: Vec<Connection> = Vec::new();
     let mut ports = Ports {
         owners: BTreeMap::new(),
@@ -371,11 +438,12 @@ fn main(bootstrap: Handle) -> i32 {
         if nic.service().is_err() {
             return 1;
         }
-        iface.poll(
+        net.eth.iface.poll(
             Instant::from_micros((sys::clock() / 1000) as i64),
             &mut nic,
-            &mut set,
+            &mut net.eth.set,
         );
+        net.poll_lo();
         for _ in 0..8 {
             match sys::channel_read(root, &mut bytes, &mut hs, 0) {
                 Ok((8, 1)) if bytes[..8] == *b"ONET\x01\0\0\0" => {
@@ -416,7 +484,7 @@ fn main(bootstrap: Handle) -> i32 {
                     Ok((n, 0)) => {
                         if bytes.get(..4) != Some(&4u32.to_le_bytes()) || accepted.len() < capacity
                         {
-                            match handle(c, &bytes[..n], &mut set, &mut iface, &mut ports, notify) {
+                            match handle(c, &bytes[..n], &mut net, &mut ports, notify) {
                                 Ok(Some(new)) => accepted.push(new),
                                 Ok(None) => {}
                                 Err(e) => {
@@ -451,21 +519,21 @@ fn main(bootstrap: Handle) -> i32 {
                 return true;
             }
             if let Mode::Stream(h) = c.mode {
-                set.get_mut::<tcp::Socket>(h).close();
+                net.get_mut(h).close();
                 retired.push((h, sys::after_ms(5000)));
             }
             for &h in &c.listening {
-                set.get_mut::<tcp::Socket>(h).abort();
-                set.remove(h);
+                net.get_mut(h).abort();
+                net.remove(h);
             }
             ports.release(c.ch);
             let _ = sys::close(c.ch);
             false
         });
         retired.retain(|&(h, deadline)| {
-            if set.get::<tcp::Socket>(h).state() == tcp::State::Closed || sys::clock() >= deadline {
-                set.get_mut::<tcp::Socket>(h).abort();
-                set.remove(h);
+            if net.get(h).state() == tcp::State::Closed || sys::clock() >= deadline {
+                net.get_mut(h).abort();
+                net.remove(h);
                 false
             } else {
                 true
@@ -473,14 +541,15 @@ fn main(bootstrap: Handle) -> i32 {
         });
         while retired.len() > 32 {
             let (h, _) = retired.remove(0);
-            set.get_mut::<tcp::Socket>(h).abort();
-            set.remove(h);
+            net.get_mut(h).abort();
+            net.remove(h);
         }
-        iface.poll(
+        net.eth.iface.poll(
             Instant::from_micros((sys::clock() / 1000) as i64),
             &mut nic,
-            &mut set,
+            &mut net.eth.set,
         );
+        net.poll_lo();
         if nic.service().is_err() {
             return 1;
         }

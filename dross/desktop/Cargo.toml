@@ -1,6 +1,6 @@
 [workspace]
-members = ["core", "host", "native"]
-default-members = ["core", "host"]
+members = ["core", "host", "native", "chat"]
+default-members = ["core", "host", "chat"]
 resolver = "2"
 
 [profile.release]

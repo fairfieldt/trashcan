@@ -239,6 +239,26 @@ objects page by page and kernel buffers sized by programs allocated fallibly (ma
 asked the 64 MiB heap for all of it); and a 4 GiB buffer file per gpud client instead of 32 GiB, since dross
 allocates a memfd's memory up front.
 
+### trashcan on Oscar
+
+trashcan itself runs on dross: built for musl in an Alpine container (Alpine's Rust and shaderc), from the ext4
+disk, with Vulkan as above. It needs timeline semaphores, which libgpud_drm.so doesn't give the kernel driver
+(no timeline syncobjs): Mesa 25 emulates them, Mesa 26 (Alpine 3.24) no longer does, so the Vulkan stack is
+Alpine 3.22's (Mesa 25.1.9). Measured on the Mac Pro: Qwen3.5-9B with its MTP draft on both D700s, 42.7 tok/s
+decode (46 on Linux), and `trashcan serve` with the Responses API on port 8000, started from init.conf.
+
+`oscar-chat` (also `ocsar-chat`) talks to it from Oscar's shell, and `oscar-chat-gui` is the desktop's chat
+window (`desktop/chat`). They reach the server on the same machine through netd's loopback interface:
+127.0.0.0/8 and the machine's own address go to a second smoltcp interface on a loopback device. netd used to
+end the sending side on `shutdown(SHUT_RD)`, so an HTTP server that shuts reading down before it answers
+(trashcan's, for `Connection: close`) sent nothing.
+
+```
+channel chatwin
+start oscar-chat-gui @chatwin=window
+native oscar-session ... @chatwin=client/chat
+```
+
 ### Network boot
 
 A test machine boots the newest build over the network, so a deploy is a build and a reset:

@@ -1,0 +1,25 @@
+[package]
+name = "oscar-chat"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Chat with Oscar the Grouch through a trashcan server: a command and a desktop window"
+
+[features]
+# The desktop window (a Linux program on dross that talks to the window server).
+gui = ["dep:dross-rt", "dep:dross-abi", "dep:oscar-desktop"]
+
+[dependencies]
+serde_json = "1"
+dross-rt = { path = "../../user/rt", default-features = false, optional = true }
+dross-abi = { path = "../../abi", optional = true }
+oscar-desktop = { path = "../core", optional = true }
+
+[[bin]]
+name = "oscar-chat"
+path = "src/bin/cli.rs"
+
+[[bin]]
+name = "oscar-chat-gui"
+path = "src/bin/gui.rs"
+required-features = ["gui"]

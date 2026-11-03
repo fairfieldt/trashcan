@@ -5,7 +5,9 @@ starts sshd; and copies unix-netd and unix-terminal-bridge (a shell on a PTY for
 the other modules. Keys come from files, so nothing machine-specific is
 in the repository.
 
-usage: unix/stage-hw.py --host-key OPENSSH_PRIVATE_KEY --authorized-keys FILE [--firmware DIR]
+usage: unix/stage-hw.py --host-key OPENSSH_PRIVATE_KEY --authorized-keys FILE [--firmware DIR] [--extra DIR]
+
+--extra adds a directory's files to the root (machine-local configuration such as /etc/oscar-chat.conf).
 Run after ./build-linux.sh and unix/build.sh; then build.sh with KERNEL_FEATURES=unix.
 """
 import argparse, io, shutil, tarfile
@@ -18,6 +20,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument('--host-key', required=True)
 ap.add_argument('--authorized-keys', required=True)
 ap.add_argument('--firmware')
+ap.add_argument('--extra')
 args = ap.parse_args()
 
 linux = dross / 'target/linux'
@@ -39,13 +42,24 @@ with tarfile.open(linux / 'rootfs.tar', 'w', format=tarfile.USTAR_FORMAT) as tar
         info.mode = mode
         tar.addfile(info, io.BytesIO(content))
     # build-linux.sh's staged tree: linux/rootfs and musl's dynamic linker.
+    def link(name, target):
+        info = tarfile.TarInfo(name)
+        info.type = tarfile.SYMTYPE
+        info.linkname = target
+        tar.addfile(info)
     for f in sorted((dross / 'target/rootfs').rglob('*')):
-        if f.is_file():
+        if f.is_symlink():
+            link(str(f.relative_to(dross / 'target/rootfs')), str(f.readlink()))
+        elif f.is_file():
             data(str(f.relative_to(dross / 'target/rootfs')), f.read_bytes(), f.stat().st_mode & 0o777)
     if args.firmware:
         for f in sorted(Path(args.firmware).rglob('*')):
             if f.is_file():
                 data('lib/firmware/' + str(f.relative_to(args.firmware)), f.read_bytes())
+    if args.extra:
+        for f in sorted(Path(args.extra).rglob('*')):
+            if f.is_file():
+                data(str(f.relative_to(args.extra)), f.read_bytes(), f.stat().st_mode & 0o777)
     data('bin/busybox', (busybox / 'busybox_unstripped').read_bytes(), 0o755)
     for path in (busybox / 'busybox.links').read_text().splitlines():
         info = tarfile.TarInfo(path.lstrip('/'))

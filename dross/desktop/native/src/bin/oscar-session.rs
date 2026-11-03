@@ -25,6 +25,12 @@ fn main(bootstrap: Handle) -> i32 {
             wb = wb.value(name, value);
         }
     }
+    // More applications' window connections (`client/NAME`, e.g. the chat window, a Linux program init starts).
+    for (n, h) in &b.handles {
+        if n.starts_with("client/") {
+            wb = wb.handle(n, *h);
+        }
+    }
     let windowd = bootstrap::spawn(
         b.handle("module/oscar-windowd").expect("windowd image"),
         "oscar-windowd",

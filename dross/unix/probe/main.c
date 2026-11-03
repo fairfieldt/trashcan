@@ -32,6 +32,13 @@ static void network_checks(void) {
  second=socket(AF_INET,SOCK_STREAM,0);address.sin_port=htons(0);
  socklen_t length=sizeof(address);ok=bind(second,(struct sockaddr*)&address,length)==0&&getsockname(second,(struct sockaddr*)&address,&length)==0&&ntohs(address.sin_port)>=49152;
  check("ephemeral TCP bind",ok);close(second);
+ {/* Loopback: a client here reaches a server here, through 127.0.0.1, and both ways. */
+  int l=socket(AF_INET,SOCK_STREAM,0),c=socket(AF_INET,SOCK_STREAM,0);
+  struct sockaddr_in lo={.sin_family=AF_INET,.sin_port=htons(2346),.sin_addr={.s_addr=htonl(INADDR_LOOPBACK)}};
+  int one=1,good=bind(l,(struct sockaddr*)&lo,sizeof(lo))==0&&listen(l,4)==0&&connect(c,(struct sockaddr*)&lo,sizeof(lo))==0;
+  int a=good?accept(l,0,0):-1;char buf[8]={0};
+  good=a>=0&&write(c,"ping",4)==4&&read(a,buf,4)==4&&!memcmp(buf,"ping",4)&&write(a,"pong",4)==4&&read(c,buf,4)==4&&!memcmp(buf,"pong",4);
+  (void)one;check("TCP over loopback",good);if(a>=0)close(a);close(c);close(l);}
  pid_t child=fork();if(!child){setgid(1000);setuid(1000);int fd=socket(AF_INET,SOCK_STREAM,0);address.sin_port=htons(22);_exit(fd>=0&&bind(fd,(struct sockaddr*)&address,sizeof(address))==-1&&errno==EACCES?0:1);}int status=0;waitpid(child,&status,0);
  check("privileged port permission",WIFEXITED(status)&&WEXITSTATUS(status)==0);
 }

@@ -408,6 +408,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "oscar-chat"
+version = "0.1.0"
+dependencies = [
+ "dross-abi",
+ "dross-rt",
+ "oscar-desktop",
+ "serde_json",
+]
+
+[[package]]
 name = "oscar-desktop"
 version = "0.1.0"
 dependencies = [

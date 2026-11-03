@@ -5,6 +5,7 @@ extern crate alloc;
 
 pub mod app;
 pub mod canvas;
+pub mod chat;
 pub mod protocol;
 pub mod server;
 pub mod shell;

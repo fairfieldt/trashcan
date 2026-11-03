@@ -69,6 +69,20 @@ dock), 30% CDE (inset front panel, slate surfaces, grouped controls), 10% System
 tabs). These are toolkit theme constants and rendering primitives, not image
 assets. Controls have concrete actions; the UI carries no infrastructure labels.
 
+## Oscar chat
+
+`chat/` talks to Oscar the Grouch through a trashcan server's Responses API: `oscar-chat` in a terminal, and
+`oscar-chat-gui`, the chat window (`core/src/chat.rs`), a Linux program on dross that connects to windowd as a
+`client/NAME` that `oscar-session` passes through. Enter sends; Page Up and Page Down scroll; Clear starts a new
+conversation. The server comes from `--server HOST:PORT` (or the window's `server` value), `OSCAR_CHAT_SERVER`,
+a `server HOST:PORT` line in `/etc/oscar-chat.conf`, else 127.0.0.1:8000.
+
+```sh
+cargo run -p oscar-chat --bin oscar-chat -- --server HOST:8000
+```
+
+A new window opens beside the open ones when it fits on the screen, else cascaded over them.
+
 ## Build and verify
 
 ```sh

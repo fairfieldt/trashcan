@@ -4,6 +4,7 @@
 #   gpud, tbd, ethd                    the drivers (driver/), with gpud-platform's dross backend
 #   test-*                             the drivers' unit tests
 #   dyntest                            a dynamically linked C program (linux/dyntest)
+#   oscar-chat-gui                     the desktop's chat window (desktop/chat)
 # and target/linux/rootfs.tar from linux/rootfs (plus /lib/firmware from FIRMWARE, a directory, if set), with
 # musl's dynamic linker from Alpine's minirootfs (downloaded once into target/alpine, checked by its SHA-256) and
 # dyntest's library.
@@ -64,6 +65,12 @@ stage=$PWD/target/rootfs
 rm -rf "$stage"
 cp -R linux/rootfs "$stage"
 tar -xzf "target/alpine/$alpine" -C "$stage" ./lib/ld-musl-x86_64.so.1
+# oscar-chat (also as ocsar-chat) for the shell, and the chat window as a module.
+(cd desktop && CARGO_PROFILE_RELEASE_STRIP=true CARGO_TARGET_DIR=$PWD/../target/chat cargo build --release --target $musl -p oscar-chat --features gui)
+mkdir -p "$stage/usr/bin"
+cp "target/chat/$musl/release/oscar-chat" "$stage/usr/bin/"
+ln -s oscar-chat "$stage/usr/bin/ocsar-chat"
+cp "target/chat/$musl/release/oscar-chat-gui" "$out/"
 mkdir -p "$stage/usr/lib"
 zig cc -target x86_64-linux-musl -O2 -shared -fPIC linux/dyntest/lib.c -o "$stage/usr/lib/libdrosstest.so"
 zig build-exe -target x86_64-linux-musl -dynamic -lc -O ReleaseSmall linux/dyntest/main.c -femit-bin="$out/dyntest"
