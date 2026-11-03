@@ -235,7 +235,9 @@ fn inner(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             let hdr = read_user(p, a[1], 56)?;
             let u = |at| u64::from_le_bytes(hdr[at..at + 8].try_into().unwrap());
             let iov = read_iov(p, u(16), u(24))?;
-            let capacity = iov.iter().map(|&(_, n)| n).sum::<u64>().min(60 * 1024);
+            let capacity = iov.iter().try_fold(0u64, |sum, &(_, len)| sum.checked_add(len)).ok_or(EINVAL)?;
+            if capacity > i64::MAX as u64 { return Err(EINVAL); }
+            let capacity = capacity.min(60 * 1024);
             let data = socket.read(capacity as usize, nb || a[2] & 0x40 != 0, a[2] & 2 != 0)?;
             scatter(p, &iov, &data).map(|n| n as u64)
         }

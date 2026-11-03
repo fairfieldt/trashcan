@@ -39,7 +39,12 @@ static void network_checks(void) {
   struct sockaddr_in lo={.sin_family=AF_INET,.sin_port=htons(2346),.sin_addr={.s_addr=htonl(INADDR_LOOPBACK)}};
   int one=1,good=bind(l,(struct sockaddr*)&lo,sizeof(lo))==0&&listen(l,4)==0&&connect(c,(struct sockaddr*)&lo,sizeof(lo))==0;
   int a=good?accept(l,0,0):-1;char buf[8]={0};
-  good=a>=0&&write(c,"ping",4)==4&&read(a,buf,4)==4&&!memcmp(buf,"ping",4)&&write(a,"pong",4)==4&&read(c,buf,4)==4&&!memcmp(buf,"pong",4);
+  struct iovec bad_iov[2]={{0,SIZE_MAX},{0,1}};struct msghdr bad_msg={.msg_iov=bad_iov,.msg_iovlen=2};
+  check("TCP recvmsg iovec overflow rejected",a>=0&&recvmsg(a,&bad_msg,MSG_DONTWAIT)==-1&&errno==EINVAL);
+  bad_iov[0].iov_len=INT64_MAX;
+  check("TCP recvmsg iovec above ssize_t rejected",a>=0&&recvmsg(a,&bad_msg,MSG_DONTWAIT)==-1&&errno==EINVAL);
+  struct iovec iov[3]={{0,0},{buf,2},{buf+2,2}};struct msghdr msg={.msg_iov=iov,.msg_iovlen=3};
+  good=a>=0&&write(c,"ping",4)==4&&recvmsg(a,&msg,0)==4&&!memcmp(buf,"ping",4)&&write(a,"pong",4)==4&&read(c,buf,4)==4&&!memcmp(buf,"pong",4);
   (void)one;check("TCP over loopback",good);if(a>=0)close(a);close(c);close(l);}
  pid_t child=fork();if(!child){setgid(1000);setuid(1000);int fd=socket(AF_INET,SOCK_STREAM,0);address.sin_port=htons(22);_exit(fd>=0&&bind(fd,(struct sockaddr*)&address,sizeof(address))==-1&&errno==EACCES?0:1);}int status=0;waitpid(child,&status,0);
  check("privileged port permission",WIFEXITED(status)&&WEXITSTATUS(status)==0);

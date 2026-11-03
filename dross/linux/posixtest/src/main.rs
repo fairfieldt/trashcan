@@ -162,6 +162,20 @@ fn main() {
     let mut sv = [0i32; 2];
     // SAFETY: socketpair into sv.
     let r = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, 0, sv.as_mut_ptr()) };
+    for (lengths, label) in [
+        ([usize::MAX, 1], "recvmsg iovec overflow rejected"),
+        ([i64::MAX as usize, 1], "recvmsg iovec above ssize_t rejected"),
+    ] {
+        let mut bad_iov = lengths.map(|iov_len| libc::iovec { iov_base: std::ptr::null_mut(), iov_len });
+        // SAFETY: msg and its two iovecs are valid; invalid buffer lengths must be rejected before copying.
+        let rejected = unsafe {
+            let mut msg: libc::msghdr = std::mem::zeroed();
+            msg.msg_iov = bad_iov.as_mut_ptr();
+            msg.msg_iovlen = bad_iov.len() as _;
+            r == 0 && libc::recvmsg(sv[1], &mut msg, libc::MSG_DONTWAIT) == -1 && *libc::__errno_location() == libc::EINVAL
+        };
+        t.check(label, rejected, String::new());
+    }
     // A later control header can overflow its offset even when the first is valid.
     let malformed = unsafe {
         let mut control = [0u64; 4];

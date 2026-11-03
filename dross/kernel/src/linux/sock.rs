@@ -408,7 +408,8 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
                 return Ok(if a[3] & MSG_TRUNC != 0 { full } else { data.len() } as u64);
             }
             let h = read_msghdr(p, a[1])?;
-            let total: u64 = h.iov.iter().map(|v| v.1).sum();
+            let total = h.iov.iter().try_fold(0u64, |sum, &(_, len)| sum.checked_add(len)).ok_or(EINVAL)?;
+            if total > i64::MAX as u64 { return Err(EINVAL); }
             let (data, fds, full) = e.recv(total as usize, a[2], f.nonblocking(), false)?;
             scatter(p, &h.iov, &data)?;
             let mut out_flags = 0u32;
