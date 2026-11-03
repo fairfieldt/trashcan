@@ -7,7 +7,8 @@ host them.
 
 Status: dross boots from UEFI, brings up all CPUs and the IOMMU, and runs user programs: processes, threads pinned
 to CPUs, channels and notifications, memory objects, and handles as capabilities, including device memory, I/O
-ports, MSIs and DMA domains. init starts a self-test of all of that at boot.
+ports, MSIs and DMA domains. init runs a self-test of all of that at boot, then starts pcid and drivers; a driver
+for QEMU's `edu` device checks the whole driver path (BAR, MSI, DMA through the IOMMU, and a blocked DMA).
 
 | Path | What |
 |---|---|
@@ -20,6 +21,9 @@ ports, MSIs and DMA domains. init starts a self-test of all of that at boot.
 | `user/rt/` | `dross-rt`, the runtime of every program: system calls, entry, heap, threads, bootstrap messages |
 | `user/init/` | The first process: holds the root resources and starts the rest |
 | `user/selftest/` | Checks the kernel from user space at every boot |
+| `user/pcid/` | Owns PCI config space; gives drivers their functions (filtered config access, BARs, a DMA domain each, MSIs) |
+| `user/rt/src/pci.rs` | The driver side: pcid's protocol and the platform interface (`Device`, `Mmio`, `DmaSpace`, `IrqEvent`), shaped like `gpud-platform` |
+| `user/edutest/` | A driver for QEMU's `edu` test device: the driver path end to end |
 
 ## What the kernel does at boot
 
@@ -73,7 +77,8 @@ cargo test -p acpi-tables -p pmm        # host tests, including the Mac Pro tabl
 ```
 
 `run-qemu.sh` boots a q35 machine shaped like the Mac Pro (Ivy Bridge CPU, 12 cores x 2 threads, an Intel
-IOMMU without interrupt remapping) and exits 0 when init reports that every check passed. Measured on QEMU 11.1
+IOMMU without interrupt remapping, QEMU's `edu` device) and exits 0 when init reports that every check passed and
+the kernel logged the IOMMU fault for the edu driver's deliberate DMA to an unmapped address. Measured on QEMU 11.1
 (TCG on an arm64 Mac): 24 of 24 CPUs online; the self-test's 14 checks pass with 4 and 24 CPUs, debug and release
 builds. Its timings under TCG (a 20 ms deadline taking up to 90 ms, 50-460 us channel round trips between CPUs)
 reflect the emulator and the host's timer coalescing, not the kernel.
@@ -113,5 +118,5 @@ server.
 - **Data paths** (Thunderbolt streams, GPU submission and fences) run through shared-memory rings mapped into
   the engine, busy-polled on dedicated cores; the servers own setup, teardown and recovery.
 
-Next: pcid and the driver side of the platform interface, a USB keyboard and mouse driver (xHCI, HID boot
-protocol), then a dross backend for `gpud-platform` so the existing drivers can run on it.
+Next: a USB keyboard and mouse driver (xHCI, HID boot protocol), then a dross backend for `gpud-platform` so
+the existing drivers can run on it.

@@ -70,6 +70,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "edutest"
+version = "0.1.0"
+dependencies = [
+ "dross-abi",
+ "dross-rt",
+]
+
+[[package]]
 name = "init"
 version = "0.1.0"
 dependencies = [
@@ -107,6 +115,14 @@ name = "noto-sans-mono-bitmap"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09b7b72dee69e4110d1b91fb8d497c1b74a54082da5738dff84136142c4f767b"
+
+[[package]]
+name = "pcid"
+version = "0.1.0"
+dependencies = [
+ "dross-abi",
+ "dross-rt",
+]
 
 [[package]]
 name = "pmm"

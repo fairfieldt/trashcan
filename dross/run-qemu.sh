@@ -1,6 +1,8 @@
 #!/bin/sh
 # Boots dross in QEMU (q35, OVMF) shaped like a Mac Pro 6,1: an Ivy Bridge CPU with 24 threads, an Intel
-# IOMMU without interrupt remapping, the kernel log on stdio. Exits 0 when the kernel reports "boot ok".
+# IOMMU without interrupt remapping, the kernel log on stdio (and in target/qemu.log), plus QEMU's edu test
+# device for the driver path. Exits 0 when init reports that every check passed and the IOMMU stopped the edu
+# driver's deliberate DMA to an unmapped address.
 #   SMP=24 MEM=8G ./run-qemu.sh [extra qemu args]
 set -eu
 cd "$(dirname "$0")"
@@ -21,19 +23,27 @@ cp "$vars" target/ovmf-vars.fd
 # 12 cores x 2 threads, as on the E5-2697 v2.
 threads=1
 [ "$SMP" -ge 2 ] && [ $((SMP % 2)) -eq 0 ] && threads=2
+log=target/qemu.log
 set +e
+set -o pipefail
 timeout "$TIMEOUT" qemu-system-x86_64 \
     -machine q35 -accel tcg,thread=multi \
     -cpu IvyBridge,+x2apic \
     -smp "$SMP",sockets=1,threads=$threads -m "$MEM" \
     -device intel-iommu,intremap=off \
+    -device edu \
     -drive if=pflash,format=raw,readonly=on,file="$fw" \
     -drive if=pflash,format=raw,file=target/ovmf-vars.fd \
     -drive format=raw,file=fat:rw:"$esp" \
     -device isa-debug-exit,iobase=0xf4,iosize=4 \
-    -serial stdio -display none -no-reboot -net none "$@"
+    -serial stdio -display none -no-reboot -net none "$@" | tee "$log"
 status=$?
 set -e
+# The edu driver's DMA to an unmapped address must have been stopped by the IOMMU.
+if [ $status -eq 33 ] && ! grep -q "iommu: fault: 00:02.0 write at iova" "$log"; then
+    echo "qemu: no IOMMU fault for the edu device's unmapped DMA" >&2
+    exit 1
+fi
 # isa-debug-exit: (value << 1) | 1; the kernel writes 0x10 for success.
 case $status in
 33) echo "qemu: boot ok"; exit 0 ;;

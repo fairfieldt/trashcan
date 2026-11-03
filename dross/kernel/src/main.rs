@@ -69,13 +69,13 @@ pub extern "sysv64" fn kernel_entry(info: &'static BootInfo) -> ! {
         time::tsc_hz() / 1_000 % 1_000,
         time::ms_since(info.tsc_at_entry)
     );
-    start_init(info);
+    start_init(info, &acpi);
     sched::idle()
 }
 
 /// Starts the `init` module with a bootstrap message: one line per handle (`@kind/name`) in handle order,
 /// then `key value` lines.
-fn start_init(info: &BootInfo) {
+fn start_init(info: &BootInfo, acpi: &firmware::Acpi) {
     let Some(m) = info.modules().iter().find(|m| m.name() == "init") else {
         println!("no init module: nothing to run");
         qemu::exit(false);
@@ -103,6 +103,12 @@ fn start_init(info: &BootInfo) {
         add(&alloc::format!("resource/{name}"), Object::Resource(Arc::new(Resource::root(kind, size))), &mut text);
     }
     text.push_str(&alloc::format!("rsdp {:#x}\ncpus {}\n", info.rsdp, smp::online()));
+    if let Some(r) = acpi.mcfg.as_ref().and_then(|t| ::acpi::mcfg::ranges(t).ok()).and_then(|mut r| r.next()) {
+        text.push_str(&alloc::format!("ecam {:#x}\necam-buses {} {}\n", r.base, r.start_bus, r.end_bus));
+    }
+    if let Some(v) = &acpi.vfct {
+        text.push_str(&alloc::format!("vfct {:#x} {}\n", v.bytes.as_ptr() as u64 - bootinfo::DIRECT_MAP, v.bytes.len()));
+    }
     if let Err((e, _)) = mine.write(Message { bytes: text.into_bytes(), handles }) {
         panic!("init bootstrap: {e:?}");
     }
