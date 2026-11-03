@@ -1,0 +1,20 @@
+host router 8086:156d, 12 ports, upstream port 5
+host UUID 00000000-0000-0008-0048-1a1dad52f062
+port 1: taking the link down and up
+port 1: another host, starting discovery
+port 1: remote UUID 00000000-0000-0008-8041-c5264ae46855
+port 1: lanes not bonded: second lane did not come up
+port 1: Linux invite (vendor 0x1d6b, device 0x4, max HopID 15), services: stream, network
+port 1: ThunderboltIP on tbd0 (MTU 1500)
+port 1: stream trashcan (in HopID 15, out HopID 15) on /run/tbd/invite.trashcan{,.ring}
+port 1: ThunderboltIP up: TX ring 2 -> HopID 8, HopID 8 -> RX ring 2, E2E
+port 1: stream trashcan handed to a client: TX ring 3 -> HopID 15, HopID 15 -> RX ring 3
+port 1: stream trashcan: ring client gone
+port 1: stream trashcan handed to a client: TX ring 3 -> HopID 15, HopID 15 -> RX ring 3
+port 1: stream trashcan: ring client gone
+port 1: stream trashcan handed to a client: TX ring 3 -> HopID 15, HopID 15 -> RX ring 3
+port 1: stream trashcan: ring client gone
+port 1: stream trashcan handed to a client: TX ring 3 -> HopID 15, HopID 15 -> RX ring 3
+port 1: stream trashcan: ring client gone
+stopping
+port 1: taking the link down and up

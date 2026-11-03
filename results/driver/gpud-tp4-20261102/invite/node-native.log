@@ -1,0 +1,11 @@
+tp-node: /home/fairfieldt/models/qwen3.8-27b/Qwen3.8-27B-trashcan-Q4_0.gguf on 0.0.0.0:7072, machine 1, peers [], GPUs [0, 1]
+tp-node: session as machine 1, lanes to machines [(0, 1, "tcp")]
+link enlight (10.99.36.2:50118): stream up (0-1.1/trashcan /dev/tbstream0), epoch 90570ba8, 20.4 ms after the link started [19:02:14.737]
+GPU0: rank 2 of 4, 4341.7 MiB allocated
+GPU1: rank 3 of 4, 4341.7 MiB allocated
+tp-node: session ended
+tp-node: session as machine 1, lanes to machines [(0, 1, "tcp")]
+link enlight (10.99.36.2:34664): stream up (0-1.1/trashcan /dev/tbstream0), epoch 158c1ad0, 56.6 ms after the link started [19:03:21.559]
+GPU0: rank 2 of 4 + MTP, 4439.9 MiB allocated
+GPU1: rank 3 of 4 + MTP, 4439.9 MiB allocated
+tp-node: session ended

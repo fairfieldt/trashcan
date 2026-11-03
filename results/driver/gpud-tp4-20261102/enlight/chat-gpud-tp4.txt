@@ -1,0 +1,7 @@
+link invite (10.99.36.1:7072): stream up (tbd invite.trashcan.ring), epoch 813017d7, 9.9 ms after the link started [19:09:27.690]
+tp: 4 ranks over 2 machine(s), GPUs per machine [2, 2], f16 all-reduce payload
+GPU0: rank 0 of 4 + MTP, 4439.9 MiB allocated
+GPU1: rank 1 of 4 + MTP, 4439.9 MiB allocated
+A GPU driver acts as a translator between the operating system and the graphics hardware, converting high-level graphics commands into specific instructions that the processor can execute. It manages critical resources such as memory allocation, scheduling rendering tasks, and handling input from the display, ensuring that visual data is processed efficiently. Additionally, it provides an API interface for applications and games to access advanced features like ray tracing or hardware acceleration, thereby maximizing performance and stability.
+prefill: 23 tokens (0 reused), 20.33 tok/s; decode: 86 tokens, 24.27 tok/s
+MTP: {"acceptance":0.5,"accepted":43,"accepted_at":[30,13],"draft_ms_per_round":4.5255839069767445,"offered_at":[43,43],"plain_ms_per_step":0.0,"plain_steps":0,"proposed":86,"rollback_ms_per_round":1.224730069767442,"rounds":43,"tokens_per_round":2.0,"verify_ms_per_round":76.64103034883719}
