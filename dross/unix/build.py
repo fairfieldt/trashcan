@@ -13,11 +13,17 @@ def run(args,cwd=here,env=None,log=None,input=None):
  if log:
   with open(out/log,'w') as f:subprocess.run(list(map(str,args)),cwd=cwd,env=env,stdout=f,stderr=subprocess.STDOUT,input=input,text=isinstance(input,str),check=True)
  else:subprocess.run(list(map(str,args)),cwd=cwd,env=env,check=True)
-for name,version,url,sha in packages:
- archive=cache/f'{name}-{version}.tar.bz2'
+# Alpine's minirootfs: musl's dynamic linker and Alpine's dynamically linked BusyBox, which stage.py copies out as
+# guest data (never run on the host).
+alpine=('alpine-minirootfs','3.24.3','https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86_64/alpine-minirootfs-3.24.3-x86_64.tar.gz','f8e1cafba9b1b283b5d30d06f9885c8d2bc161ffe9083ade8e2e157813a53407')
+def fetch(url,sha):
+ archive=cache/url.rsplit('/',1)[1]
  if not archive.exists():
   temporary=archive.with_suffix('.download');urllib.request.urlretrieve(url,temporary);temporary.replace(archive)
  if hashlib.sha256(archive.read_bytes()).hexdigest()!=sha:raise SystemExit(f'Checksum mismatch: {archive}')
+fetch(*alpine[2:])
+for name,version,url,sha in packages:
+ archive=cache/f'{name}-{version}.tar.bz2';fetch(url,sha)
  source=sources/f'{name}-{version}'
  if not source.exists():
   with tarfile.open(archive) as tar:tar.extractall(sources,filter='data')
@@ -49,6 +55,9 @@ run(['cargo','build','--locked','--manifest-path',here/'Cargo.toml','-p','unix-t
 run([here/'cc','-O2','-static',here/'probe/main.c','-o',out/'unix-probe'])
 for name in ['test-hostkey','test-client','test-stranger']:
  if not (out/name).exists():run(['ssh-keygen','-q','-t','ed25519','-N','','-C','oscar-test','-f',out/name])
-manifest={'packages':[{'name':name,'version':version,'url':url,'sha256':sha}for name,version,url,sha in packages]}
+(out/'musl-COPYRIGHT').write_bytes((Path(json.loads(subprocess.check_output(['zig','env']))['lib_dir'])/'libc/musl/COPYRIGHT').read_bytes())
+run(['zig','cc','-target','x86_64-linux-musl','-O2','-shared','-fPIC',dross/'linux/dyntest/lib.c','-o',out/'libdrosstest.so'])
+run(['zig','build-exe','-target','x86_64-linux-musl','-dynamic','-lc','-O','ReleaseSmall',dross/'linux/dyntest/main.c',f'-femit-bin={out}/dyntest'])
+manifest={'packages':[{'name':name,'version':version,'url':url,'sha256':sha}for name,version,url,sha in packages+[alpine]]}
 (out/'build-manifest.json').write_text(json.dumps(manifest,indent=2)+'\n')
 run(['python3',here/'stage.py'])

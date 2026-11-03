@@ -206,9 +206,15 @@ impl AddressSpace {
         Ok(end)
     }
 
-    /// Picks a free range of `len` bytes (with a guard page after it).
+    /// Picks a free range of `len` bytes (with a guard page after it), past mappings placed by address.
     fn place(inner: &mut Inner, len: u64) -> u64 {
-        let a = inner.next;
+        let mut a = inner.next;
+        while let Some((&s, m)) = inner.mappings.range(..a + len + PAGE).next_back() {
+            if s + m.len <= a {
+                break;
+            }
+            a = s + m.len + PAGE;
+        }
         inner.next = a + len + PAGE;
         a
     }

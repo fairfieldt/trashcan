@@ -111,8 +111,16 @@ separate exclusive framebuffer/input handoff before hardware use.
 ## Implemented semantics and limits
 
 * Eager private-memory fork with shared open descriptions, shared mappings, child
-  status/reaping and close-on-exec; transactional static ELF/shebang exec; empty
+  status/reaping and close-on-exec; transactional ELF/shebang exec; empty
   arguments preserved. No copy-on-write performance claim.
+* Dynamically linked programs: exec loads the PT_INTERP interpreter beside the
+  program. The image stages Alpine 3.24's musl dynamic linker
+  (`/lib/ld-musl-x86_64.so.1`) and its dynamically linked BusyBox
+  (`/opt/alpine/bin/busybox`), plus `/usr/bin/dyntest` (`../linux/dyntest`),
+  which dlopens `/usr/lib/libdrosstest.so`. File mappings are copies: musl maps
+  a library's whole span and then each segment over it, so a library takes about
+  twice its size in memory (and fork copies that), and libraries are files within
+  the RAM filesystem's limits below.
 * vfork/`posix_spawn`: the parent waits while the child shares backing pages, then
   detaches on exec or exit. Address-space mutation and nested fork in that child
   are rejected. General process-clone sharing flags are unsupported. Fork and exec

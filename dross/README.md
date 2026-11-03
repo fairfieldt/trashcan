@@ -11,10 +11,10 @@ ports, MSIs and DMA domains. init runs a self-test of all of that at boot, then 
 for QEMU's `edu` device checks the whole driver path (BAR, MSI, DMA through the IOMMU, and a blocked DMA), and
 usbd drives USB keyboards and mice on an xHCI controller.
 
-dross also runs static Linux executables: gpud, tbd and ethd run on it unchanged, built for
-`x86_64-unknown-linux-musl`, with gpud-platform choosing its dross backend at run time. Their unit tests pass on
-dross, and each driver reaches its device through pcid. In QEMU none of their hardware exists; they have not run
-on a Mac Pro under dross yet.
+dross also runs Linux executables on musl, static or dynamically linked: gpud, tbd and ethd run on it unchanged,
+built for `x86_64-unknown-linux-musl`, with gpud-platform choosing its dross backend at run time. Their unit tests
+pass on dross, and each driver reaches its device through pcid. In QEMU none of their hardware exists; they have
+not run on a Mac Pro under dross yet.
 
 | Path | What |
 |---|---|
@@ -32,7 +32,8 @@ on a Mac Pro under dross yet.
 | `../driver/platform/src/dross.rs` | The dross backend of `gpud-platform` (feature `dross`, no `std`): the interface gpud, tbd and ethd use on Linux |
 | `user/edutest/` | A driver for QEMU's `edu` test device, written against `gpud-platform` as gpud is: the driver path end to end |
 | `user/usbd/` | xHCI driver for USB keyboards and mice (HID boot protocol) on root ports: logs keys and mouse movement |
-| `kernel/src/linux/` | The Linux system call interface for static Linux executables |
+| `kernel/src/linux/` | The Linux system call interface for Linux executables |
+| `linux/dyntest/` | A dynamically linked C program that dlopens a library: checks the dynamic linking path |
 | `linux/posixtest/` | A Rust `std` program that checks the Linux interface (its own workspace: it needs unwinding) |
 | `linux/rootfs/` | Files Linux programs see (packed into the `rootfs.tar` module) |
 | `linux/*.conf` | What init runs: `qemu-init.conf` for `run-qemu.sh`, `macpro-init.conf` for a first boot on a Mac Pro |
@@ -108,7 +109,10 @@ A process started with `SPAWN_LINUX` gets Linux's system call numbers; its nativ
 `NATIVE` set in the number (`dross-rt` sets it, so gpud-platform's dross backend works inside a Linux program).
 The interface lives in the kernel for now (`kernel/src/linux/`):
 
-- memory: anonymous and memfd mappings, `munmap` and `mprotect` of any range (mappings split), reservations;
+- programs: static, static-PIE, and dynamically linked ones (their PT_INTERP, musl's dynamic linker
+  `/lib/ld-musl-x86_64.so.1`, is loaded beside them and started with the auxiliary vector it needs);
+- memory: anonymous and memfd mappings, files mapped by copying them (private, or shared read-only), `munmap`
+  and `mprotect` of any range (mappings split), reservations, `membarrier`;
 - threads: `clone` for threads, futexes (waking the oldest waiters), TLS (the FS base is part of a thread's
   state), clear-tid on exit; every thread is pinned where it was created (`sched_setaffinity` is accepted);
 - files: a read-only tree from the `rootfs.tar` module, the ACPI tables in `/sys/firmware/acpi/tables` (gpud
@@ -124,13 +128,14 @@ writes, and networking: ethd's and tbd's TAP interfaces need a network stack ins
 TCP/IP stack behind sockets: `unix/README.md`.)
 
 ```bash
-./build-linux.sh        # target/linux: posixtest, gpud, tbd, ethd, test-* and rootfs.tar (zig compiles gpud's C)
-./run-qemu.sh           # now also runs the unit tests, posixtest and the drivers' probes (linux/qemu-init.conf)
+./build-linux.sh        # target/linux: posixtest, gpud, tbd, ethd, test-*, dyntest and rootfs.tar
+./run-qemu.sh           # now also runs the unit tests, posixtest, the drivers' probes and dyntest (linux/qemu-init.conf)
 ```
 
-`build-linux.sh` builds static musl executables with `rust-lld` and Rust's own musl, and gpud's Linux C with
-`zig cc`; `FIRMWARE=DIR` adds `DIR` as `/lib/firmware` (gpud's `init` and `serve` need Tahiti's microcode there,
-from linux-firmware).
+`build-linux.sh` builds static musl executables with `rust-lld` and Rust's own musl, gpud's Linux C with
+`zig cc`, and dyntest and its library with zig against musl's dynamic linker, which it takes from Alpine's
+minirootfs (downloaded once into `target/alpine`, checked by SHA-256); `FIRMWARE=DIR` adds `DIR` as
+`/lib/firmware` (gpud's `init` and `serve` need Tahiti's microcode there, from linux-firmware).
 
 ## On a Mac Pro
 
@@ -281,4 +286,4 @@ memory by address into a DMA domain (`map_external`; peer BARs will come from pc
 counting interrupts (a notification reports one however often it fired).
 
 Next: a network stack (ethd and tbd's ThunderboltIP), and the engine with
-RADV, which needs dynamic linking and glibc's ABI rather than a static musl program.
+RADV, as Alpine's musl builds of Mesa and the Vulkan loader (shared libraries, dlopen'ed).
