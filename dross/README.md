@@ -35,7 +35,7 @@ path has been tested on hardware.
 | `acpi/` | Parsers for the static ACPI tables (RSDP, XSDT, MADT, MCFG, HPET, DMAR, FADT, `\_S5`); tested on the Mac Pro 6,1's own tables (`acpi/tests/macpro61`) |
 | `pmm/` | The physical frame allocator (a bitmap; contiguous, aligned and below-a-ceiling allocations) |
 | `abi/` | The system call interface (numbers, errors, rights, flags) |
-| `user/rt/` | `dross-rt`, the runtime of every program: system calls, entry, heap, threads, bootstrap messages |
+| `user/rt/` | `dross-rt`, the Rust runtime and native SDK: system calls, owned handles, entry, heap, threads, bootstrap messages |
 | `user/init/` | The first process: holds the root resources and starts the rest |
 | `user/selftest/` | Checks the kernel from user space at every boot |
 | `user/pcid/` | Owns PCI config space; gives drivers their functions (filtered config access, BARs, a DMA domain each, MSIs) |

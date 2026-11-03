@@ -1,4 +1,4 @@
-//! The runtime every dross program links: system call wrappers (`sys`), the entry point, a heap, threads,
+//! The Rust runtime and native SDK: system call wrappers (`sys`), the entry point, a heap, threads,
 //! bootstrap messages, and the client side of pcid with the platform interface drivers use (`pci`).
 //!
 //! Without the `runtime` feature (entry point, heap, panic handler) it is a plain library, for crates such as
