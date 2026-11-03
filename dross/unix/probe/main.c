@@ -76,6 +76,7 @@ int main(int argc,char **argv) {
  child=fork();if(!child){execl("/bin/unix-probe","unix-probe","--check-fd",fdtext,(char*)0);_exit(127);}waitpid(child,&status,0);check("fd close-on-exec",WIFEXITED(status)&&WEXITSTATUS(status)==0);
  check("dup2 preserves cloexec on same fd",dup2(fd,fd)==fd&&(fcntl(fd,F_GETFD)&FD_CLOEXEC));
  check("large fd rejected",dup2(fd,1000000)==-1&&errno==EBADF);
+ check("zero-length null read and write",syscall(SYS_read,fd,0,0)==0&&syscall(SYS_write,fd,0,0)==0);
  check("oversized mmap rejected",syscall(SYS_mmap,0,SIZE_MAX,PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0)==-1);
  check("oversized munmap rejected",syscall(SYS_munmap,4096,SIZE_MAX)==-1);
  check("oversized mprotect rejected",syscall(SYS_mprotect,4096,SIZE_MAX,PROT_READ)==-1);

@@ -85,6 +85,7 @@ pub fn read_user(p: &Process, ptr: u64, len: u64) -> Result<Vec<u8>, Errno> {
     if len > 64 << 20 {
         return Err(EINVAL);
     }
+    if len == 0 { return Ok(Vec::new()); }
     // Fallible: the size is the program's, the heap the kernel's.
     let mut v = Vec::new();
     v.try_reserve_exact(len as usize).map_err(|_| ENOMEM)?;
@@ -95,6 +96,7 @@ pub fn read_user(p: &Process, ptr: u64, len: u64) -> Result<Vec<u8>, Errno> {
 }
 
 pub fn write_user(p: &Process, ptr: u64, data: &[u8]) -> Result<(), Errno> {
+    if data.is_empty() { return Ok(()); }
     // SAFETY: with_user checked the range is mapped writable while its lock is held.
     p.aspace.with_user(ptr, data.len() as u64, true, |dst| unsafe { core::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len()) }).or_else(fault)
 }
@@ -156,7 +158,10 @@ pub fn scatter(p: &Process, iov: &[(u64, u64)], data: &[u8]) -> Result<usize, Er
 }
 
 pub fn gather(p: &Process, iov: &[(u64, u64)]) -> Result<Vec<u8>, Errno> {
+    let total = iov.iter().try_fold(0u64, |total, &(_, len)| total.checked_add(len)).ok_or(EINVAL)?;
+    if total > 64 << 20 { return Err(EINVAL); }
     let mut v = Vec::new();
+    v.try_reserve_exact(total as usize).map_err(|_| ENOMEM)?;
     for &(base, len) in iov {
         v.extend_from_slice(&read_user(p, base, len)?);
     }

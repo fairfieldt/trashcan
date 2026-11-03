@@ -162,7 +162,25 @@ fn main() {
     let mut sv = [0i32; 2];
     // SAFETY: socketpair into sv.
     let r = unsafe { libc::socketpair(libc::AF_UNIX, libc::SOCK_SEQPACKET | libc::SOCK_CLOEXEC, 0, sv.as_mut_ptr()) };
+    // A later control header can overflow its offset even when the first is valid.
+    let malformed = unsafe {
+        let mut control = [0u64; 4];
+        control[0] = 16;
+        control[2] = u64::MAX;
+        let mut byte = 0u8;
+        let mut iov = libc::iovec { iov_base: (&mut byte as *mut u8).cast(), iov_len: 1 };
+        let mut msg: libc::msghdr = std::mem::zeroed();
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = control.as_mut_ptr().cast();
+        msg.msg_controllen = std::mem::size_of_val(&control) as _;
+        libc::sendmsg(sv[0], &msg, 0) == -1
+    };
+    t.check("overflowing control message", malformed, String::new());
     let mfd = memfd_with(b"shared memory");
+    let large_iov = [libc::iovec { iov_base: std::ptr::null_mut(), iov_len: 64 << 20 }, libc::iovec { iov_base: std::ptr::null_mut(), iov_len: 1 }];
+    let oversized_iov = unsafe { libc::writev(mfd.as_raw_fd(), large_iov.as_ptr(), 2) == -1 && *libc::__errno_location() == libc::EINVAL };
+    t.check("oversized iovec rejected", oversized_iov, String::new());
     // Invalid or unrepresentable sizes must fail without damaging the live file.
     let bad_sizes = unsafe { libc::ftruncate(mfd.as_raw_fd(), -1) == -1 && libc::ftruncate(mfd.as_raw_fd(), i64::MAX) == -1 };
     t.check("memfd oversized truncate", bad_sizes, String::new());

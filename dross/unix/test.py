@@ -80,7 +80,10 @@ with open(out/'qemu-stderr.log','wb') as err:
   print('ok unauthorized key rejected',flush=True)
   for i in range(8):assert run(f'echo reconnect-{i}').strip()==f'reconnect-{i}'.encode()
   print('ok reconnect cleanup',flush=True)
-  run('touch /tmp/ssh-done');assert qemu.wait(timeout=15)==33
+  # The guest may see the marker and exit before SSH delivers the command status.
+  done=subprocess.run(ssh+['touch /tmp/ssh-done'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=20)
+  assert done.returncode in (0,255),(done.returncode,done.stdout,done.stderr)
+  assert qemu.wait(timeout=15)==33
   assert 'unix: ALL PASSED' in (out/'qemu.log').read_text();print('ALL UNIX AND SSH TESTS PASSED',flush=True)
  finally:
   if qemu.poll() is None:qemu.terminate()

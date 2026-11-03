@@ -66,6 +66,7 @@ fn copy_in(p: &Process, ptr: u64, len: u64) -> Result<Vec<u8>, Error> {
     if len > MSG_BYTES as u64 * 16 {
         return Err(Error::InvalidArgs);
     }
+    if len == 0 { return Ok(Vec::new()); }
     let mut v = alloc::vec![0u8; len as usize];
     // SAFETY: with_user checked the range is mapped readable while the lock is held.
     p.aspace.with_user(ptr, len, false, |src| unsafe { core::ptr::copy_nonoverlapping(src, v.as_mut_ptr(), len as usize) })?;
@@ -73,6 +74,7 @@ fn copy_in(p: &Process, ptr: u64, len: u64) -> Result<Vec<u8>, Error> {
 }
 
 fn copy_out(p: &Process, ptr: u64, data: &[u8]) -> Result<(), Error> {
+    if data.is_empty() { return Ok(()); }
     // SAFETY: with_user checked the range is mapped writable while the lock is held.
     p.aspace.with_user(ptr, data.len() as u64, true, |dst| unsafe { core::ptr::copy_nonoverlapping(data.as_ptr(), dst, data.len()) })
 }

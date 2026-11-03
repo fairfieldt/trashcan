@@ -282,11 +282,12 @@ fn rights_in(p: &Process, control: u64, len: u64) -> Result<Vec<Arc<File>>, Errn
     while at + 16 <= b.len() {
         let clen = u64::from_le_bytes(b[at..at + 8].try_into().unwrap()) as usize;
         let (level, ty) = (i32::from_le_bytes(b[at + 8..at + 12].try_into().unwrap()), i32::from_le_bytes(b[at + 12..at + 16].try_into().unwrap()));
-        if clen < 16 || at + clen > b.len() {
+        let Some(end) = at.checked_add(clen) else { return Err(EINVAL) };
+        if clen < 16 || end > b.len() {
             break;
         }
         if level == 1 && ty == 1 {
-            for c in b[at + 16..at + clen].chunks_exact(4) {
+            for c in b[at + 16..end].chunks_exact(4) {
                 fds.push(linux(p).files.get(i32::from_le_bytes(c.try_into().unwrap()))?);
             }
         }
