@@ -64,7 +64,10 @@ impl Node {
     pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, Errno> {
         if let Some(m) = self.content()? {
             let from = offset.min(self.len());
-            let mut out = alloc::vec![0; len.min((self.len() - from) as usize)];
+            let n = len.min((self.len() - from) as usize);
+            let mut out = Vec::new();
+            out.try_reserve_exact(n).map_err(|_| ENOMEM)?;
+            out.resize(n, 0);
             m.read(from, &mut out).map_err(|_| 5)?;
             return Ok(out);
         }
@@ -187,6 +190,7 @@ pub fn init() {
         "/root",
         "/root/.ssh",
         "/proc",
+        "/run",
     ] {
         if !tree.nodes.contains_key(path) {
             let _ = insert(

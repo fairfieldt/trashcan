@@ -209,19 +209,13 @@ impl File {
         match &self.kind {
             #[cfg(feature = "unix")]
             Kind::Node(node) => match node.content()? {
-                Some(c) => {
-                    let mut buf = alloc::vec![0u8; len.min(c.size().saturating_sub(off)) as usize];
-                    c.read(off, &mut buf).map_err(|_| EINVAL)?;
-                    m.write(0, &buf).map_err(|_| EINVAL)?
-                }
+                Some(c) => m.copy_from(0, &c, off, len.min(c.size().saturating_sub(off))).map_err(|_| EINVAL)?,
                 None => put(&node.data.lock())?,
             },
             Kind::Data(d) => put(d)?,
             Kind::Memfd(mf) => {
                 let mf = mf.lock().clone().ok_or(EINVAL)?;
-                let mut buf = alloc::vec![0u8; len.min(mf.size().saturating_sub(off)) as usize];
-                mf.read(off, &mut buf).map_err(|_| EINVAL)?;
-                m.write(0, &buf).map_err(|_| EINVAL)?
+                m.copy_from(0, &mf, off, len.min(mf.size().saturating_sub(off))).map_err(|_| EINVAL)?
             }
             _ => return Err(EACCES),
         }
@@ -512,7 +506,7 @@ impl Files {
     }
 }
 
-fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
+pub(super) fn stat(p: &Process, f: &File, ptr: u64) -> R {
     let mut st = [0u8; 144];
     let size = match &f.kind {
         #[cfg(feature = "unix")]
@@ -521,9 +515,9 @@ fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
         Kind::Memfd(_) => f.size.load(Ordering::Relaxed),
         _ => 0,
     };
-    // Each file its own inode: musl's dynamic linker takes a library whose (st_dev, st_ino) it has seen for one it
-    // already loaded.
-    let ino = if let Kind::Data(d) = &f.kind { d.as_ptr() as u64 } else { ino };
+    // Each file its own inode, the same through every descriptor of it: musl's dynamic linker takes a library whose
+    // (st_dev, st_ino) it has seen for one it already loaded, and libgpud_drm finds its device's memfd that way.
+    let ino = if let Kind::Data(d) = &f.kind { d.as_ptr() as u64 } else { f as *const File as u64 };
     #[cfg(feature = "unix")]
     let ino = match &f.kind { Kind::Node(node) => node.ino, Kind::Pty(end) => end.pty.node.ino, _ => ino };
     #[cfg(feature = "unix")]
@@ -540,7 +534,7 @@ fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
 }
 
 /// A statx reply with the basic fields.
-fn statx(p: &Process, f: &File, ptr: u64) -> R {
+pub(super) fn statx(p: &Process, f: &File, ptr: u64) -> R {
     let mut st = [0u8; 256];
     let size = match &f.kind {
         #[cfg(feature = "unix")]
@@ -724,16 +718,16 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
         // stat, lstat, fstat, newfstatat
         4 | 6 => {
             let f = open_path(&read_cstr(p, a[0], 4096)?, 0)?;
-            stat(p, &f, a[1], 1)
+            stat(p, &f, a[1])
         }
-        5 => stat(p, &*files.get(fd)?, a[1], fd as u64 + 2),
+        5 => stat(p, &*files.get(fd)?, a[1]),
         262 => {
             let path = read_cstr(p, a[1], 4096)?;
             if path.is_empty() && a[3] & 0x1000 != 0 {
-                return stat(p, &*files.get(a[0] as i32)?, a[2], 2);
+                return stat(p, &*files.get(a[0] as i32)?, a[2]);
             }
             let f = open_path(&path_at(p, a[0] as i32, a[1])?, 0)?;
-            stat(p, &f, a[2], 1)
+            stat(p, &f, a[2])
         }
         332 => {
             let path = read_cstr(p, a[1], 4096)?;
@@ -836,9 +830,7 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             if size.next_multiple_of(4096) > cur {
                 let new = Arc::new(Memory::anonymous(size.next_multiple_of(4096).max(4096), false, false).map_err(|_| ENOMEM)?);
                 if let Some(old) = g.as_ref() {
-                    let mut buf = alloc::vec![0u8; old.size() as usize];
-                    old.read(0, &mut buf).map_err(|_| EINVAL)?;
-                    new.write(0, &buf).map_err(|_| EINVAL)?;
+                    new.copy_from(0, old, 0, old.size()).map_err(|_| EINVAL)?;
                 }
                 *g = Some(new);
             }

@@ -85,7 +85,10 @@ pub fn read_user(p: &Process, ptr: u64, len: u64) -> Result<Vec<u8>, Errno> {
     if len > 64 << 20 {
         return Err(EINVAL);
     }
-    let mut v = alloc::vec![0u8; len as usize];
+    // Fallible: the size is the program's, the heap the kernel's.
+    let mut v = Vec::new();
+    v.try_reserve_exact(len as usize).map_err(|_| ENOMEM)?;
+    v.resize(len as usize, 0);
     // SAFETY: with_user checked the range is mapped readable while its lock is held.
     p.aspace.with_user(ptr, len, false, |src| unsafe { core::ptr::copy_nonoverlapping(src, v.as_mut_ptr(), len as usize) }).or_else(fault)?;
     Ok(v)

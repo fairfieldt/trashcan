@@ -225,6 +225,20 @@ native fsd @disk=block @root=service
 SanDisk Extreme Pro on the FL1100's SuperSpeed port, formatted on Linux: the listings, a 50 MB file's hash, and a
 7 GB GGUF (6652 MiB in 22.6 s, 308 MB/s, its SHA-256 as on Linux).
 
+### Vulkan
+
+`gpud serve` runs under dross on both D700s, and Alpine's musl builds of the Vulkan loader and Mesa's RADV (from
+an Alpine root on the ext4 disk) reach them through `libgpud_drm.so`, as on Linux: `vulkaninfo` lists both GPUs
+(RADV TAHITI, Mesa 26.1.6). Run with `LD_LIBRARY_PATH` naming the Alpine root's `lib` and `usr/lib`,
+`VK_DRIVER_FILES` an ICD file whose `library_path` is relative to it, `LD_PRELOAD` the shim (built for musl with
+`zig cc -target x86_64-linux-musl -shared`) and `GPUD_SOCKET` gpud's sockets (`--socket` paths without colons,
+which separate the list). What it took: memory objects behind an address for DMA (`VM_MEMORY`, so gpud's
+memfd-backed buffers map for the GPU); `open` and `stat` of `/proc/self/fd/N`; one inode per open file in
+`fstat`, the same through every descriptor (the shim finds its device's memfd by it); copies between memory
+objects page by page and kernel buffers sized by programs allocated fallibly (mapping LLVM's 182 MB library
+asked the 64 MiB heap for all of it); and a 4 GiB buffer file per gpud client instead of 32 GiB, since dross
+allocates a memfd's memory up front.
+
 ### Network boot
 
 A test machine boots the newest build over the network, so a deploy is a build and a reset:

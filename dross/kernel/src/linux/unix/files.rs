@@ -27,6 +27,11 @@ pub fn open(p: &Process, path: &str, flags: u32, mode: u32) -> Result<Arc<File>,
     if let Some(result) = pty::open(p, &path, flags) {
         return result;
     }
+    // A descriptor's file again (libgpud_drm hands RADV its buffer memfd as /proc/self/fd/N); it shares the
+    // offset, unlike Linux, which opens the file anew.
+    if let Some(fd) = path.strip_prefix("/proc/self/fd/").and_then(|s| s.parse::<i32>().ok()) {
+        return linux(p).files.get(fd).map_err(|_| ENOENT);
+    }
     if matches!(
         path.as_str(),
         "/dev/null" | "/dev/zero" | "/dev/random" | "/dev/urandom" | "/dev/kmsg" | "/dev/console"
@@ -94,6 +99,11 @@ fn node_of(p: &Process, fd: i32) -> Result<Arc<vfs::Node>, Errno> {
     }
 }
 fn stat(p: &Process, path: &str, follow: bool, ptr: u64, extended: bool) -> R {
+    // A descriptor's file (RADV stats the render node libgpud_drm names as /proc/self/fd/N).
+    if let Some(fd) = path.strip_prefix("/proc/self/fd/").and_then(|s| s.parse::<i32>().ok()) {
+        let f = linux(p).files.get(fd).map_err(|_| ENOENT)?;
+        return if extended { fs::statx(p, &f, ptr) } else { fs::stat(p, &f, ptr) };
+    }
     let (_, node) = vfs::lookup_as(p, path, follow)?;
     let attr = *node.attr.lock();
     let len = node.len();

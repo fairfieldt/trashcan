@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Stages the Unix userland for a hardware boot: writes ../target/linux/rootfs.tar (replacing build-linux.sh's) with
-the files under linux/rootfs, optional firmware, BusyBox (with its applet links), Dropbear, and an /etc/rc that
+build-linux.sh's root files (linux/rootfs, musl's dynamic linker), optional firmware, BusyBox (with its applet links), Dropbear, and an /etc/rc that
 starts sshd; and copies unix-netd and unix-terminal-bridge (a shell on a PTY for the desktop's terminal) next to
 the other modules. Keys come from files, so nothing machine-specific is
 in the repository.
@@ -38,9 +38,10 @@ with tarfile.open(linux / 'rootfs.tar', 'w', format=tarfile.USTAR_FORMAT) as tar
         info.size = len(content)
         info.mode = mode
         tar.addfile(info, io.BytesIO(content))
-    for f in sorted((dross / 'linux/rootfs').rglob('*')):
+    # build-linux.sh's staged tree: linux/rootfs and musl's dynamic linker.
+    for f in sorted((dross / 'target/rootfs').rglob('*')):
         if f.is_file():
-            data(str(f.relative_to(dross / 'linux/rootfs')), f.read_bytes())
+            data(str(f.relative_to(dross / 'target/rootfs')), f.read_bytes(), f.stat().st_mode & 0o777)
     if args.firmware:
         for f in sorted(Path(args.firmware).rglob('*')):
             if f.is_file():

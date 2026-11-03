@@ -103,7 +103,14 @@ static int ndevs;
 
 static bool debug;
 
-static int (*real_ioctl)(int, unsigned long, ...);
+/* ioctl's request type: unsigned long in glibc, int in musl (dross runs Alpine's musl builds of Mesa). */
+#ifdef __GLIBC__
+typedef unsigned long ioctl_req;
+#else
+typedef int ioctl_req;
+#endif
+
+static int (*real_ioctl)(int, ioctl_req, ...);
 
 #define LOG(...) do { if (debug) fprintf(stderr, "gpud_drm: " __VA_ARGS__); } while (0)
 
@@ -905,7 +912,7 @@ static int gpud_ioctl(struct gdev *g, unsigned long req, void *arg)
 	return -EINVAL;
 }
 
-int ioctl(int fd, unsigned long req, ...)
+int ioctl(int fd, ioctl_req req, ...)
 {
 	va_list ap;
 	void *arg;
@@ -919,22 +926,24 @@ int ioctl(int fd, unsigned long req, ...)
 
 	if (!g)
 		return real_ioctl(fd, req, arg);
+	/* The request's 32 bits, without musl's int sign-extending into the DRM_IOCTL_* constants. */
+	unsigned long request = (unsigned int)req;
 	/* Work on a zero-padded copy of the caller's struct, copied back up to the caller's size, as drm_ioctl does. */
 	uint64_t kbuf[64] = { 0 };
-	size_t usize = _IOC_SIZE(req);
+	size_t usize = _IOC_SIZE(request);
 	int r;
 
 	if (usize > sizeof(kbuf)) {
 		r = -EINVAL;
 	} else {
-		if (arg && (_IOC_DIR(req) & _IOC_WRITE))
+		if (arg && (_IOC_DIR(request) & _IOC_WRITE))
 			memcpy(kbuf, arg, usize);
-		r = gpud_ioctl(g, req, kbuf);
-		if (r == 0 && arg && (_IOC_DIR(req) & _IOC_READ))
+		r = gpud_ioctl(g, request, kbuf);
+		if (r == 0 && arg && (_IOC_DIR(request) & _IOC_READ))
 			memcpy(arg, kbuf, usize);
 	}
 
-	LOG("ioctl nr %#x -> %d\n", (unsigned)_IOC_NR(req), r);
+	LOG("ioctl nr %#x -> %d\n", (unsigned)_IOC_NR(request), r);
 	if (r < 0) {
 		errno = -r;
 		return -1;

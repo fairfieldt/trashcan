@@ -95,6 +95,13 @@ pub fn vm_unmap(addr: u64, len: u64) -> Result<()> {
     syscall(n::VM_UNMAP, [addr, len, 0, 0, 0, 0]).map(|_| ())
 }
 
+/// The memory object mapped at `addr`, the address's offset in it, and how many bytes of the mapping follow.
+pub fn vm_memory(addr: u64) -> Result<(Handle, u64, u64)> {
+    let mut out = [0u64; 2];
+    let h = syscall(n::VM_MEMORY, [addr, out.as_mut_ptr() as u64, 0, 0, 0, 0])?;
+    Ok((Handle(h as u32), out[0], out[1]))
+}
+
 /// Starts the ELF image in `image` as a new process with `bootstrap` (moved) as its handle 1.
 pub fn spawn(image: Handle, name: &str, bootstrap: Option<Handle>, cpu: u64) -> Result<Handle> {
     syscall(n::SPAWN, [image.0 as u64, name.as_ptr() as u64, name.len() as u64, bootstrap.map_or(0, |h| h.0 as u64), cpu, 0]).map(|h| Handle(h as u32))

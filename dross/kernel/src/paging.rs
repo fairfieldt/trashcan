@@ -402,12 +402,18 @@ impl AddressSpace {
 
     /// The memory object and offset behind a user address (for futexes keyed by memory, and checks).
     pub fn lookup(&self, addr: u64) -> Option<(Arc<Memory>, u64)> {
+        self.lookup_mapping(addr).map(|(m, off, _, _)| (m, off))
+    }
+
+    /// The memory object behind a user address, the offset there, the mapping's flags and how many bytes of the
+    /// mapping follow the address.
+    pub fn lookup_mapping(&self, addr: u64) -> Option<(Arc<Memory>, u64, u64, u64)> {
         let inner = self.inner.lock();
         let (&s, m) = inner.mappings.range(..=addr).next_back()?;
         if addr >= s + m.len {
             return None;
         }
-        Some((m.mem.clone()?, m.offset + (addr - s)))
+        Some((m.mem.clone()?, m.offset + (addr - s), m.flags, s + m.len - addr))
     }
 }
 

@@ -306,9 +306,43 @@ impl DmaSpace for DrossDma {
         Ok(unsafe { DmaBuffer::from_raw(NonNull::new(ptr as *mut u8).unwrap(), len, iova, Box::new(release)) })
     }
 
-    unsafe fn map_external(&self, _ptr: NonNull<u8>, _size: usize, _access: DmaAccess) -> Result<DmaBuffer> {
-        // dross maps memory objects, not addresses; peer BARs will come as memory objects from pcid.
-        Err(Error::Unsupported(String::from("mapping external memory by address on dross")))
+    unsafe fn map_external(&self, ptr: NonNull<u8>, size: usize, access: DmaAccess) -> Result<DmaBuffer> {
+        // dross maps memory objects: the one behind the address (one mapping, such as a memfd's).
+        let (addr, size64) = (ptr.as_ptr() as u64, size as u64);
+        if addr % 4096 != 0 || size64 % 4096 != 0 || size == 0 {
+            return Err(Error::Unsupported(String::from("mapping unaligned memory by address")));
+        }
+        let (mem, offset, rest) = sys::vm_memory(addr).map_err(os("finding the memory at an address"))?;
+        if rest < size64 {
+            let _ = sys::close(mem);
+            return Err(Error::Unsupported(String::from("mapping by address across mappings")));
+        }
+        let flags = match access {
+            DmaAccess::DeviceReads => dma::READ,
+            DmaAccess::DeviceWrites => dma::WRITE,
+            DmaAccess::ReadWrite => dma::READ | dma::WRITE,
+        };
+        let iova = match self.iova.with(|a| a.alloc(size64, iova_align(size))) {
+            Ok(i) => i,
+            Err(e) => {
+                let _ = sys::close(mem);
+                return Err(e);
+            }
+        };
+        if let Err(e) = sys::dma_map(self.domain, mem, offset, size64, iova, flags) {
+            let _ = sys::close(mem);
+            self.iova.with(|a| a.release(iova..iova + size64));
+            return Err(os("DMA mapping")(e));
+        }
+        let (domain, allocator) = (self.domain, self.iova.clone());
+        let release = move || {
+            let _ = sys::dma_unmap(domain, iova, size64);
+            let _ = sys::close(mem);
+            allocator.with(|a| a.release(iova..iova + size64));
+        };
+        // SAFETY: the caller keeps the memory mapped at `ptr` while the buffer lives (the trait's contract); the
+        // device's mapping holds the memory object until `release`.
+        Ok(unsafe { DmaBuffer::from_raw(ptr, size, iova, Box::new(release)) })
     }
 
     fn iova_ranges(&self) -> Vec<Range<u64>> {

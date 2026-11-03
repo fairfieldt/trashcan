@@ -210,6 +210,15 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             p.aspace.map(m, a[1], a[2], a[3], flags)
         }
         sys::VM_UNMAP => p.aspace.unmap(a[0], a[1]).map(|_| 0),
+        sys::VM_MEMORY => {
+            let (m, offset, flags, rest) = p.aspace.lookup_mapping(a[0]).ok_or(Error::NotFound)?;
+            let mut out = offset.to_le_bytes().to_vec();
+            out.extend_from_slice(&rest.to_le_bytes());
+            copy_out(&p, a[1], &out)?;
+            let write = if flags & vm::WRITE != 0 && m.writable() { rights::WRITE } else { 0 };
+            let r = rights::READ | rights::MAP | rights::TRANSFER | rights::DUPLICATE | write;
+            Ok(p.handles.lock().insert(Entry { object: Object::Memory(m), rights: r }) as u64)
+        }
         sys::SPAWN => {
             let (image, boot) = {
                 let mut t = p.handles.lock();

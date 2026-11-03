@@ -52,6 +52,10 @@ pub mod sys {
     /// (system resource, channel, path, path length): a read-only filesystem the program at the channel's other
     /// end serves appears at the path for Linux programs (`unix` kernels; kernel/src/linux/unix/mount.rs).
     pub const UNIX_MOUNT: u64 = 35;
+    /// (address, where to write two u64s): a handle to the memory object mapped at the address, with the rights
+    /// the mapping has (write only if it is writable); written: the address's offset in it and how many bytes of
+    /// the mapping follow the address (for DMA to memory a program mapped by address, such as a memfd).
+    pub const VM_MEMORY: u64 = 36;
 }
 
 /// Set in `rax` for a native dross call from a Linux process (whose plain numbers are Linux's).

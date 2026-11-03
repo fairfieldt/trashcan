@@ -68,6 +68,12 @@ const FRAGMENT: u64 = 2 << 20;
 
 /// Host memory a client may have in buffers at once (the size of its buffer file; pages exist only when used).
 const BO_FILE_SIZE: u64 = 32 << 30;
+/// Under dross a memfd's memory is allocated up front, not on first touch, so a client's buffer file is smaller.
+const BO_FILE_SIZE_DROSS: u64 = 4 << 30;
+
+fn bo_file_size() -> u64 {
+    if gpud_platform::on_dross() { BO_FILE_SIZE_DROSS } else { BO_FILE_SIZE }
+}
 
 struct Shared {
     device: Device,
@@ -252,7 +258,7 @@ fn serve_client(shared: Arc<Shared>, conn: OwnedFd) -> Result<()> {
         vmid,
         bo_file: None,
         bo_map: std::ptr::null_mut(),
-        bo_space: IovaAllocator::new(&[0..BO_FILE_SIZE]),
+        bo_space: IovaAllocator::new(&[0..bo_file_size()]),
         bos: HashMap::new(),
         next_handle: 1,
         last_fence: HashMap::new(),
@@ -345,12 +351,12 @@ impl Client {
                     return Err(libc::ENOMEM);
                 }
                 let fd = OwnedFd::from_raw_fd(fd);
-                if libc::ftruncate(fd.as_raw_fd(), BO_FILE_SIZE as libc::off_t) < 0 {
+                if libc::ftruncate(fd.as_raw_fd(), bo_file_size() as libc::off_t) < 0 {
                     return Err(libc::ENOMEM);
                 }
                 let p = libc::mmap(
                     std::ptr::null_mut(),
-                    BO_FILE_SIZE as usize,
+                    bo_file_size() as usize,
                     libc::PROT_READ | libc::PROT_WRITE,
                     libc::MAP_SHARED,
                     fd.as_raw_fd(),
@@ -369,7 +375,7 @@ impl Client {
         let rep = HelloRep {
             version: VERSION,
             vmid: self.vmid,
-            bo_file_size: BO_FILE_SIZE,
+            bo_file_size: bo_file_size(),
             pci_domain: a.domain,
             pci_bus: a.bus,
             pci_dev: a.device,
@@ -547,7 +553,7 @@ impl Client {
         }
         if !self.bo_map.is_null() {
             // SAFETY: unmaps the whole buffer file mapping made in hello().
-            unsafe { libc::munmap(self.bo_map.cast::<c_void>(), BO_FILE_SIZE as usize) };
+            unsafe { libc::munmap(self.bo_map.cast::<c_void>(), bo_file_size() as usize) };
         }
     }
 }

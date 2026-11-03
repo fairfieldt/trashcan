@@ -131,6 +131,27 @@ impl Memory {
         Ok(())
     }
 
+    /// Copies `len` bytes from `src` at `src_off` to `off`, page by page (no buffer the size of the copy).
+    pub fn copy_from(&self, off: u64, src: &Memory, src_off: u64, len: u64) -> Result<(), Error> {
+        if !matches!(self.kind, Kind::Pages(_) | Kind::Contiguous(_)) || !src.is_ram() {
+            return Err(Error::WrongType);
+        }
+        if off.checked_add(len).is_none_or(|e| e > self.size) || src_off.checked_add(len).is_none_or(|e| e > src.size) {
+            return Err(Error::OutOfRange);
+        }
+        let mut done = 0;
+        while done < len {
+            let (d, s) = (off + done, src_off + done);
+            let n = (PAGE - d % PAGE).min(PAGE - s % PAGE).min(len - done);
+            let from = mem::virt(src.page_phys((s / PAGE) as usize) + s % PAGE) as *const u8;
+            let to = mem::virt(self.page_phys((d / PAGE) as usize) + d % PAGE) as *mut u8;
+            // SAFETY: inside one page of each object, in the direct map; distinct objects or ranges.
+            unsafe { core::ptr::copy(from, to, n as usize) };
+            done += n;
+        }
+        Ok(())
+    }
+
     pub fn write(&self, offset: u64, data: &[u8]) -> Result<(), Error> {
         if !matches!(self.kind, Kind::Pages(_) | Kind::Contiguous(_)) {
             return Err(Error::WrongType);
