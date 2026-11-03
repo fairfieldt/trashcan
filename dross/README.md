@@ -143,6 +143,10 @@ with `grub-reboot` from Linux's GRUB, which chainloads the loader on the EFI sys
 - gpud's read-only probe passes on both D700s through pcid (config space, BARs, each card's VBIOS from the VFCT,
   memory controller registers, DMA buffers in the GPU's IOMMU domain); tbd's probe passes on a Thunderbolt
   controller; usbd brings up the Fresco Logic FL1100;
+- `gpud init` brings both D700s up under dross as under VFIO: memory controller and GART through the IOMMU, the
+  CP, RLC and SMC microcode (Tahiti's files from linux-firmware in the rootfs, `FIRMWARE=` in build-linux.sh), SI
+  power management, and ring and IB tests on all five rings (gfx, two compute, two SDMA; IB tests 22-24 us, fence
+  interrupts as dross notifications), 670 ms per card;
 - ethd sends the kernel log to the LAN (`ethd netlog`, below); at the end `reboot` resets back into Linux.
 
 Channel messages between threads on two CPUs: 2.7 us one way to a thread blocked in the kernel on a halted CPU
