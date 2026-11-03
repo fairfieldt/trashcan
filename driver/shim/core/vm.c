@@ -85,6 +85,7 @@ int gpud_vm_map(struct gpud_vm *vm, u64 va, u64 size, u64 addr, u64 flags)
 {
 	u64 first = va >> AMDGPU_GPU_PAGE_SHIFT, n = size >> AMDGPU_GPU_PAGE_SHIFT;
 	u64 mask = (1ULL << vm->block_size) - 1;
+	u64 pages[10] = { 0 }; /* by fragment size, for the debug log */
 	int r = 0;
 
 	if ((va | size | addr) & AMDGPU_GPU_PAGE_MASK || first + n > vm->adev->vm_manager.max_pfn)
@@ -102,12 +103,23 @@ int gpud_vm_map(struct gpud_vm *vm, u64 va, u64 size, u64 addr, u64 flags)
 		}
 		while (frag < 9 && !((pfn | ((addr >> 12) + i)) & ((2ULL << frag) - 1)) && i + (2ULL << frag) <= n)
 			frag++;
+		pages[frag] += 1ULL << frag;
 		for (u64 k = 0; k < (1ULL << frag); k++, i++)
 			writeq(((addr + (i << 12)) & 0x000000FFFFFFF000ULL) | flags | AMDGPU_PTE_FRAG(frag),
 			       &pt[(first + i) & mask]);
 	}
 	vm->dirty = true;
 	mutex_unlock(&vm->lock);
+	if (size >= (2ULL << 20)) {
+		unsigned top = 0;
+
+		for (unsigned f = 0; f < 10; f++)
+			if (pages[f] > pages[top])
+				top = f;
+		dev_dbg(vm->adev->dev, "VM %u: %llu MiB at %#llx -> %#llx, %llu%% in %u KiB fragments\n", vm->vmid,
+			(unsigned long long)(size >> 20), (unsigned long long)va, (unsigned long long)addr,
+			(unsigned long long)(pages[top] * 100 / n), 4u << top);
+	}
 	return r;
 }
 

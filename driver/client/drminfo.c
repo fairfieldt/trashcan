@@ -3,6 +3,9 @@
  * drminfo: what an amdgpu render node answers to the AMDGPU_INFO queries RADV and libdrm make at startup. Run against
  * amdgpu (the oracle) and against gpud (through libgpud_drm.so) to compare.
  * usage: drminfo /dev/dri/renderD129, or LD_PRELOAD=libgpud_drm.so drminfo gpud (the device libdrm enumerates)
+ *
+ * drminfo clockmon OUT samples every enumerated GPU's core and memory clock (MHz) and temperature (C) four times a
+ * second into OUT until killed, in scripts/clockmon.sh's format: through gpud, which has no hwmon.
  */
 #define _GNU_SOURCE
 #include <dlfcn.h>
@@ -10,8 +13,10 @@
 #include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <time.h>
 #include <unistd.h>
 #include <drm/amdgpu_drm.h>
 #include <drm/drm.h>
@@ -37,6 +42,49 @@ static void mmr(struct drm_amdgpu_info *r, const void *a)
 	r->read_mmr_reg.instance = ((const uint32_t *)a)[2];
 }
 
+static uint32_t sensor(uint32_t type)
+{
+	struct drm_amdgpu_info req = { .return_size = 4, .query = AMDGPU_INFO_SENSOR };
+	uint32_t v = 0;
+
+	req.return_pointer = (uintptr_t)&v;
+	req.sensor_info.type = type;
+	return ioctl(fd, DRM_IOCTL_AMDGPU_INFO, &req) ? 0 : v;
+}
+
+static int clockmon(const char *out)
+{
+	int (*get)(uint32_t, void **, int) = (int (*)(uint32_t, void **, int))dlsym(RTLD_DEFAULT, "drmGetDevices2");
+	void *dev[8];
+	int fds[8], n = get ? get(0, dev, 8) : 0;
+	FILE *f = fopen(out, "w");
+
+	if (n < 1 || !f) {
+		fprintf(stderr, "clockmon: %s\n", n < 1 ? "no device enumerated" : strerror(errno));
+		return 1;
+	}
+	for (int i = 0; i < n; i++)
+		fds[i] = open((*(char ***)dev[i])[2], O_RDWR | O_CLOEXEC);
+	fprintf(f, "t");
+	for (int i = 0; i < n; i++)
+		fprintf(f, " sclk%d mclk%d temp%d", i, i, i);
+	fprintf(f, "\n");
+	for (;;) {
+		struct timespec ts;
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+		fprintf(f, "%lld.%03ld", (long long)ts.tv_sec, ts.tv_nsec / 1000000);
+		for (int i = 0; i < n; i++) {
+			fd = fds[i];
+			fprintf(f, " %u %u %u", sensor(AMDGPU_INFO_SENSOR_GFX_SCLK), sensor(AMDGPU_INFO_SENSOR_GFX_MCLK),
+				sensor(AMDGPU_INFO_SENSOR_GPU_TEMP) / 1000);
+		}
+		fprintf(f, "\n");
+		fflush(f);
+		usleep(250000);
+	}
+}
+
 int main(int argc, char **argv)
 {
 	struct drm_amdgpu_info_device d = { 0 };
@@ -49,6 +97,9 @@ int main(int argc, char **argv)
 	int r;
 
 	const char *path = argc > 1 ? argv[1] : "/dev/dri/renderD128";
+
+	if (!strcmp(path, "clockmon") && argc > 2)
+		return clockmon(argv[2]);
 
 	if (!strcmp(path, "gpud")) {
 		/* drmGetDevices2 from whichever library provides it (libgpud_drm.so when preloaded) */

@@ -63,6 +63,8 @@ const PTE_SNOOPED: u64 = 1 << 2;
 const PTE_READABLE: u64 = 1 << 5;
 const PTE_WRITEABLE: u64 = 1 << 6;
 const PAGE: u64 = 4096;
+/// The page-table fragment size gpud reports to clients (AMDGPU_INFO_DEV_INFO pte_fragment_size).
+const FRAGMENT: u64 = 2 << 20;
 
 /// Host memory a client may have in buffers at once (the size of its buffer file; pages exist only when used).
 const BO_FILE_SIZE: u64 = 32 << 30;
@@ -392,6 +394,11 @@ impl Client {
         let want_vram = req.domains & DOMAIN_VRAM != 0 && req.flags & CREATE_NO_CPU_ACCESS != 0;
         let mut placement = None;
         if want_vram {
+            // amdgpu's VRAM manager hands out buffers this large in 2 MiB blocks (amdgpu_vram_mgr_new), so their
+            // physical address shares the 2 MiB alignment RADV gives their virtual address (pte_fragment_size) and
+            // the page tables map them in 2 MiB fragments. With only the requested alignment the fragments shrink
+            // to the common alignment of the two, and the TLB covers that much less.
+            let align = if size >= FRAGMENT { align.max(FRAGMENT) } else { align };
             let mut off = 0;
             // SAFETY: adev is valid.
             if unsafe { gpud_vram_alloc(self.adev(), size, align, &mut off) } == 0 {

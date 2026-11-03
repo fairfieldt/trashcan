@@ -265,6 +265,35 @@ int gpud_info(struct amdgpu_device *adev, const struct drm_amdgpu_info *info, vo
 		memset(&caps, 0, sizeof(caps));
 		return put(out, size, &caps, sizeof(caps));
 	}
+	case AMDGPU_INFO_SENSOR: {
+		/* amdgpu_kms.c: clocks of the SMC's current level and the temperature, from si_dpm's read_sensor */
+		const struct amd_pm_funcs *pp = adev->powerplay.pp_funcs;
+		int idx, vsize = 4, r;
+
+		if (!adev->pm.dpm_enabled || !pp || !pp->read_sensor)
+			return -ENOENT;
+		switch (info->sensor_info.type) {
+		case AMDGPU_INFO_SENSOR_GFX_SCLK:
+			idx = AMDGPU_PP_SENSOR_GFX_SCLK;
+			break;
+		case AMDGPU_INFO_SENSOR_GFX_MCLK:
+			idx = AMDGPU_PP_SENSOR_GFX_MCLK;
+			break;
+		case AMDGPU_INFO_SENSOR_GPU_TEMP:
+			idx = AMDGPU_PP_SENSOR_GPU_TEMP;
+			break;
+		default:
+			return -EINVAL;
+		}
+		mutex_lock(&adev->pm.mutex);
+		r = pp->read_sensor(adev->powerplay.pp_handle, idx, &ui32, &vsize);
+		mutex_unlock(&adev->pm.mutex);
+		if (r)
+			return -EINVAL;
+		if (idx != AMDGPU_PP_SENSOR_GPU_TEMP)
+			ui32 /= 100; /* MHz */
+		return put(out, size, &ui32, 4);
+	}
 	case AMDGPU_INFO_GPUVM_FAULT: {
 		struct drm_amdgpu_info_gpuvm_fault fault;
 
