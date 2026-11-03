@@ -23,6 +23,7 @@ both (40.5 tok/s against amdgpu's 50.5). The plan is `docs/plan.md`.
 | `client/` | `libgpud_drm.so` (RADV and libdrm onto gpud, loaded with `LD_PRELOAD`) and `drminfo` |
 | `vkcompute/` | Vulkan compute checks, run the same way on gpud and on amdgpu |
 | `tbd/` | `tbd` (Rust): the userspace Thunderbolt 2 driver, ThunderboltIP and USB4STREAM to other hosts (`tbd/README.md`) |
+| `ethd/` | `ethd` (Rust): the userspace Ethernet driver for the BCM57762 ports, a TAP interface on one port (`ethd/README.md`) |
 | `docs/vfio.md` | How a D700 is handed to VFIO on a Mac Pro 6,1, and what the host needs |
 | `docs/linux-deps.md` | Measured dependency audit of Linux 7.3's SI amdgpu code |
 | `docs/plan.md` | Architecture and the plan to command submission and beyond |

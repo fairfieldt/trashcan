@@ -21,6 +21,11 @@ groups are the kernel's finding, not just the separate root ports: check `/sys/k
 The GPU has no FLR. Its PM capability says `NoSoftRst-`, so a D3hot to D0 transition resets it. The kernel lists
 `bus` as its reset method: a secondary bus reset of the root port, which also resets the audio function.
 
+The two Ethernet ports are BCM57762s (14e4:1682) at 0b:00.0 and 0c:00.0, below PCH root ports 00:1c.0 and
+00:1c.1, each alone in its IOMMU group (the kernel's ACS quirk for this PCH). The ports have no FLR. With the reset
+methods cleared, vfio-pci still resets 0c:00.0 when it is opened and closed (the kernel logs "resetting" and
+"reset done"), and the chip comes back in its reset state (`ethd/README.md`).
+
 ## The IOMMU
 
 The DMAR table has one DMA remapping unit covering every device (`INCLUDE_PCI_ALL`), an RMRR for the USB
