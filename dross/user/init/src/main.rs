@@ -31,6 +31,15 @@ fn main(boot: Handle) -> i32 {
         let (a, b) = sys::channel_create().unwrap();
         channels.push((w[1], alloc::vec![b, a]));
     }
+    // `mount NAME PATH`: a channel whose one end serves a read-only filesystem at PATH (Unix kernels); the other
+    // end goes to the filesystem server as `@NAME=service`.
+    for w in all.iter().filter(|w| w[0] == "mount" && w.len() == 3) {
+        let (kernel_end, server_end) = sys::channel_create().unwrap();
+        match sys::unix_mount(system, kernel_end, w[2]) {
+            Ok(()) => channels.push((w[1], alloc::vec![server_end])),
+            Err(e) => println!("init.conf: mount {} {}: {e:?}", w[1], w[2]),
+        }
+    }
     // `netservice NAME`: a channel whose one end becomes the kernel's network service (Unix kernels); the other
     // end goes to the network stack as `@NAME=service`.
     for w in all.iter().filter(|w| w[0] == "netservice" && w.len() == 2) {
@@ -156,7 +165,7 @@ fn main(boot: Handle) -> i32 {
                 let _ = sys::notify_wait(sys::notify_create().unwrap(), sys::after_ms(ms));
             }
             "reboot" => reboot = true,
-            "channel" | "netservice" => {}
+            "channel" | "netservice" | "mount" => {}
             "start" | "native" => li += 1,
             "check" => {
                 let end = ends[li].take().unwrap();

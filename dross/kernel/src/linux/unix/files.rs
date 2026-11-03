@@ -96,7 +96,7 @@ fn node_of(p: &Process, fd: i32) -> Result<Arc<vfs::Node>, Errno> {
 fn stat(p: &Process, path: &str, follow: bool, ptr: u64, extended: bool) -> R {
     let (_, node) = vfs::lookup_as(p, path, follow)?;
     let attr = *node.attr.lock();
-    let len = node.data.lock().len() as u64;
+    let len = node.len();
     let mut bytes = alloc::vec![0; if extended { 256 } else { 144 }];
     if extended {
         bytes[0..4].copy_from_slice(&0x7ffu32.to_le_bytes());
@@ -161,6 +161,7 @@ fn dirents(p: &Process, fd: i32, ptr: u64, size: u64) -> R {
         ),
         (String::from(".."), vfs::lookup_as(p, "/", true)?.1)
     ];
+    vfs::ensure_listed(p, &alloc::format!("/{path}"))?;
     entries.extend(vfs::entries(&alloc::format!("/{path}")));
     let mut offset = file.pos.lock();
     let mut bytes = Vec::new();

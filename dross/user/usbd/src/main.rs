@@ -1,9 +1,9 @@
-//! usbd: an xHCI driver for USB keyboards and mice (HID boot protocol), for local debugging at the machine.
+//! usbd: an xHCI driver for USB keyboards, mice (HID boot protocol) and one mass storage device.
 //!
 //! It takes the controller from the firmware, sets up the command and event rings, enumerates the devices on
 //! the root ports and configures the HID boot interfaces it finds. Given a `seat` channel (init.conf), it sends
 //! keys and pointer moves to the display server as the desktop's input packets (`seat.rs`); otherwise it logs
-//! them. No hubs yet
+//! them. A bulk-only mass storage device is served as a block device on `block` (`storage.rs`). No hubs yet
 //! (devices must be on a root port), no other device classes. The Mac Pro 6,1's rear ports are on a Fresco
 //! Logic FL1100 xHCI (1b73:1100).
 #![no_std]
@@ -20,6 +20,7 @@ use dross_rt::pci::{DmaBuffer, DmaSpace, IrqEvent, Mmio, Pci};
 use dross_rt::{println, sys, Handle};
 
 mod seat;
+mod storage;
 
 dross_rt::main!(main);
 
@@ -143,6 +144,8 @@ struct Xhci {
     seen: (bool, bool, bool, bool),
     /// The display server's input, when init.conf gives usbd a `seat` channel.
     seat: Option<seat::Seat>,
+    /// A mass storage device, served on the `block` channel.
+    storage: Option<storage::Storage>,
 }
 
 impl Xhci {
@@ -199,16 +202,20 @@ impl Xhci {
 
     /// Waits for an event matching `want`, keeping the others for later.
     fn wait_event(&mut self, want: impl Fn(&Trb) -> bool) -> Trb {
-        let end = sys::after_ms(2000);
+        self.try_wait_event(sys::after_ms(2000), want).expect("timed out waiting for an event")
+    }
+
+    /// The first event `want` accepts, before `end` (other events wait in `pending`).
+    fn try_wait_event(&mut self, end: u64, want: impl Fn(&Trb) -> bool) -> Option<Trb> {
         loop {
             while let Some(t) = self.poll_event() {
                 if want(&t) {
-                    return t;
+                    return Some(t);
                 }
                 self.pending.push_back(t);
             }
             if sys::clock() > end {
-                panic!("timed out waiting for an event");
+                return None;
             }
             // Clear the interrupter's pending bit, then wait for the next MSI (or poll every 10 ms).
             self.m.write32(self.rt + 0x20, 0b11);
@@ -294,6 +301,7 @@ impl Xhci {
             endpoints: Vec::new(),
             seen: (false, false, false, false),
             seat: None,
+            storage: None,
         };
 
         // Stop, reset, wait until ready.
@@ -435,6 +443,8 @@ impl Xhci {
 
         // HID boot interfaces and their interrupt IN endpoints.
         let mut found: Vec<(u8, Hid, u8, u16, u8)> = Vec::new();
+        // And a bulk-only SCSI mass storage interface (class 8, subclass 6, protocol 0x50): its bulk OUT and IN.
+        let (mut msc, mut bulk_out, mut bulk_in, mut last_in) = (false, None, None, None);
         let mut i = 0;
         let mut current: Option<(u8, Hid)> = None;
         while i + 2 <= cfg.len() && cfg[i] >= 2 {
@@ -445,6 +455,21 @@ impl Xhci {
                     (3, 1, 2) => Some((cfg[i + 2], Hid::Mouse)),
                     _ => None,
                 };
+                msc = (cfg[i + 5], cfg[i + 6], cfg[i + 7]) == (8, 6, 0x50) && self.storage.is_none();
+            }
+            if msc && kind == 5 && i + 7 <= cfg.len() && cfg[i + 3] & 3 == 2 {
+                let ep = (cfg[i + 2] & 0xf, u16::from_le_bytes([cfg[i + 4], cfg[i + 5]]) & 0x7ff, 0u8);
+                last_in = Some(cfg[i + 2] & 0x80 != 0);
+                if cfg[i + 2] & 0x80 != 0 { bulk_in = Some(ep) } else { bulk_out = Some(ep) }
+            }
+            // A SuperSpeed endpoint companion: the max burst of the endpoint just before it.
+            if msc && kind == 0x30 && i + 3 <= cfg.len() {
+                let e = match last_in.take() {
+                    Some(true) => bulk_in.as_mut(),
+                    Some(false) => bulk_out.as_mut(),
+                    None => None,
+                };
+                if let Some(e) = e { e.2 = cfg[i + 2] & 0xf; }
             }
             if kind == 5 && i + 7 <= cfg.len() {
                 if let Some((iface, hid)) = current.take() {
@@ -456,8 +481,9 @@ impl Xhci {
             }
             i += len;
         }
-        println!("port {port}: slot {slot}, {:04x}:{:04x}, speed {speed}, {} HID boot interface(s)", vendor, product, found.len());
-        if found.is_empty() {
+        let bulk = bulk_out.zip(bulk_in);
+        println!("port {port}: slot {slot}, {:04x}:{:04x}, speed {speed}, {} HID boot interface(s){}", vendor, product, found.len(), if bulk.is_some() { ", mass storage" } else { "" });
+        if found.is_empty() && bulk.is_none() {
             return;
         }
         self.control(slot, [0, 9, config_value, 0, 0, 0, 0, 0], None);
@@ -487,6 +513,12 @@ impl Xhci {
             let buf = self.space.alloc(64).unwrap();
             self.endpoints.push(Endpoint { slot, dci, ring, buf, len: mps.min(64) as u32, kind: hid, last: [0; 8] });
         }
+        let storage = bulk.map(|b| {
+            let (out, inp) = self.storage_endpoints(&input, b);
+            add |= 1 << out.1 | 1 << inp.1;
+            max_dci = max_dci.max(out.1).max(inp.1);
+            (out, inp)
+        });
         self.ctx_w(&input, 0, 1, add);
         self.ctx_w(&input, 1, 0, speed << 20 | (max_dci as u32) << 27);
         self.ctx_w(&input, 1, 1, (port as u32) << 16);
@@ -497,6 +529,9 @@ impl Xhci {
         for e in self.endpoints.iter().filter(|e| e.slot == slot) {
             self.doorbell(e.slot, e.dci);
             println!("port {port}: {} ready", if e.kind == Hid::Keyboard { "keyboard" } else { "mouse" });
+        }
+        if let Some((out, inp)) = storage {
+            self.storage = self.storage_start(slot, out, inp);
         }
     }
 
@@ -585,6 +620,12 @@ fn main(boot: Handle) -> i32 {
         return 0;
     };
     let mut x = Xhci::init(&pci, bdf);
+    // The disk's clients ask on `block`; their requests wake the loop like the controller's interrupts.
+    let mut block = b.handle("block");
+    if let Some(ch) = block {
+        let _ = sys::channel_bind(ch, x.irq.notification, 1 << 62);
+    }
+    let mut window_shared = false;
     x.seat = b.handle("seat").map(|h| seat::Seat::new(h, b.value_u64("width").unwrap_or(1024) as u32, b.value_u64("height").unwrap_or(768) as u32));
     let ports = (x.m.read32(0x04) >> 24) as usize;
     // Give devices time to connect after the reset.
@@ -614,6 +655,12 @@ fn main(boot: Handle) -> i32 {
         if let (Some(r), false, (true, true, true, true)) = (report, reported, x.seen) {
             let _ = sys::channel_write(r, b"keyboard and mouse ok", &[]);
             reported = true;
+        }
+        if let Some(ch) = block {
+            if let Err(e) = x.storage_serve(ch, &mut window_shared) {
+                println!("block: {e:?}; closing");
+                block = None;
+            }
         }
         x.m.write32(x.rt + 0x20, 0b11);
         // A held key repeats on time; otherwise wait for the controller.

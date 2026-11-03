@@ -1,0 +1,15 @@
+[package]
+name = "fsd"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[[bin]]
+name = "fsd"
+test = false
+bench = false
+
+[dependencies]
+dross-rt = { path = "../rt" }
+dross-abi = { path = "../../abi" }
+ext4-view = { version = "1", default-features = false }

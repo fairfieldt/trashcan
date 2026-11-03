@@ -75,6 +75,13 @@ impl Memory {
         Memory { size, kind: Kind::Display(phys), writable: true }
     }
 
+    /// The same memory, no longer writable (a filesystem's file contents).
+    #[cfg(feature = "unix")]
+    pub fn read_only(mut self) -> Memory {
+        self.writable = false;
+        self
+    }
+
     pub fn is_display(&self) -> bool {
         matches!(self.kind, Kind::Display(_))
     }

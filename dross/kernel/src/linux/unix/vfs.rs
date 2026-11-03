@@ -11,6 +11,8 @@ static BYTES: AtomicUsize = AtomicUsize::new(0);
 const MAX_FILE: usize = 8 << 20;
 const MAX_TOTAL: usize = 24 << 20;
 const MAX_NODES: usize = 4096;
+const EBUSY: Errno = 16;
+const EROFS: Errno = 30;
 #[derive(Clone, Copy)]
 pub struct Attr {
     pub mode: u32,
@@ -22,8 +24,54 @@ pub struct Attr {
 }
 pub struct Node {
     pub attr: Mutex<Attr>,
+    /// A file's contents, a symlink's target.
     pub data: Mutex<Vec<u8>>,
     pub ino: u64,
+    /// A node of a mounted filesystem (`mount.rs`): read-only.
+    pub remote: Option<Remote>,
+}
+pub struct Remote {
+    mount: Arc<super::mount::Mount>,
+    /// Below the mount's root.
+    path: String,
+    size: u64,
+    /// A directory whose entries are in the tree.
+    listed: core::sync::atomic::AtomicBool,
+    /// A file's contents, once opened.
+    content: Mutex<Option<Arc<crate::memory::Memory>>>,
+}
+impl Node {
+    /// A file's size.
+    pub fn len(&self) -> u64 {
+        match &self.remote {
+            Some(r) if self.attr.lock().mode & 0o170000 == REG => r.size,
+            _ => self.data.lock().len() as u64,
+        }
+    }
+    /// A mounted file's contents (read from the filesystem the first time).
+    pub fn content(&self) -> Result<Option<Arc<crate::memory::Memory>>, Errno> {
+        let Some(r) = self.remote.as_ref().filter(|_| self.attr.lock().mode & 0o170000 == REG) else {
+            return Ok(None);
+        };
+        if let Some(m) = r.content.lock().clone() {
+            return Ok(Some(m));
+        }
+        // Read outside the lock; a concurrent open may read it too, and one copy is kept.
+        let m = r.mount.open(&r.path)?;
+        Ok(Some(r.content.lock().get_or_insert(m).clone()))
+    }
+    /// `len` bytes of a file from `offset`.
+    pub fn read_at(&self, offset: u64, len: usize) -> Result<Vec<u8>, Errno> {
+        if let Some(m) = self.content()? {
+            let from = offset.min(self.len());
+            let mut out = alloc::vec![0; len.min((self.len() - from) as usize)];
+            m.read(from, &mut out).map_err(|_| 5)?;
+            return Ok(out);
+        }
+        let data = self.data.lock();
+        let from = (offset as usize).min(data.len());
+        Ok(data[from..from + len.min(data.len() - from)].to_vec())
+    }
 }
 struct Tree {
     nodes: BTreeMap<String, Arc<Node>>,
@@ -68,23 +116,59 @@ fn insert(
     {
         return Err(28);
     }
+    let now = clock_ns(0);
+    let node = new_node(tree, Attr { mode, uid, gid, atime: now, mtime: now, ctime: now }, data, None);
+    tree.nodes.insert(path, node.clone());
+    Ok(node)
+}
+fn new_node(tree: &mut Tree, attr: Attr, data: Vec<u8>, remote: Option<Remote>) -> Arc<Node> {
     BYTES.fetch_add(data.len(), Ordering::Relaxed);
     let ino = tree.next;
     tree.next += 1;
-    let node = Arc::new(Node {
-        attr: Mutex::new(Attr {
-            mode,
-            uid,
-            gid,
-            atime: clock_ns(0),
-            mtime: clock_ns(0),
-            ctime: clock_ns(0),
-        }),
-        data: Mutex::new(data),
-        ino,
-    });
-    tree.nodes.insert(path, node.clone());
-    Ok(node)
+    Arc::new(Node { attr: Mutex::new(attr), data: Mutex::new(data), ino, remote })
+}
+/// Puts the filesystem `mount` serves at `path` (an empty directory, made if missing).
+pub fn mount(path: &str, mount: Arc<super::mount::Mount>) -> Result<(), Errno> {
+    let path = normalize(path);
+    if path == "/" {
+        return Err(EBUSY);
+    }
+    import(&path, DIR | 0o755, &[]);
+    let mut tree = TREE.lock();
+    if tree.nodes.keys().any(|k| k.starts_with(&alloc::format!("{path}/"))) {
+        return Err(EBUSY);
+    }
+    let now = clock_ns(0);
+    let remote = Remote { mount, path: String::from("/"), size: 0, listed: false.into(), content: Mutex::new(None) };
+    let node = new_node(&mut tree, Attr { mode: DIR | 0o755, uid: 0, gid: 0, atime: now, mtime: now, ctime: now }, Vec::new(), Some(remote));
+    tree.nodes.insert(path, node);
+    Ok(())
+}
+/// Brings a mounted directory's entries into the tree, once.
+fn list(dir: &Arc<Node>, at: &str) -> Result<(), Errno> {
+    let Some(r) = dir.remote.as_ref().filter(|r| !r.listed.load(Ordering::Acquire)) else {
+        return Ok(());
+    };
+    let entries = r.mount.list(&r.path)?;
+    let mut tree = TREE.lock();
+    for e in entries {
+        let path = if at == "/" { alloc::format!("/{}", e.name) } else { alloc::format!("{at}/{}", e.name) };
+        if tree.nodes.contains_key(&path) {
+            continue;
+        }
+        let remote_path = if r.path == "/" { alloc::format!("/{}", e.name) } else { alloc::format!("{}/{}", r.path, e.name) };
+        let remote = Remote { mount: r.mount.clone(), path: remote_path, size: e.size, listed: false.into(), content: Mutex::new(None) };
+        let attr = Attr { mode: e.mode, uid: e.uid, gid: e.gid, atime: e.mtime, mtime: e.mtime, ctime: e.mtime };
+        let node = new_node(&mut tree, attr, e.target, Some(remote));
+        tree.nodes.insert(path, node);
+    }
+    r.listed.store(true, Ordering::Release);
+    Ok(())
+}
+/// Lists a mounted directory before its entries are read.
+pub fn ensure_listed(p: &Process, path: &str) -> Result<(), Errno> {
+    let (at, node) = lookup_as(p, path, true)?;
+    list(&node, &at)
 }
 pub fn init() {
     let mut tree = TREE.lock();
@@ -176,16 +260,45 @@ pub fn archive(bytes: &'static [u8]) {
     }
 }
 pub fn lookup(path: &str, follow: bool) -> Result<(String, Arc<Node>), Errno> {
-    resolve(None, path, follow)
+    lookup_listing(None, path, follow)
 }
 pub fn lookup_as(p: &Process, path: &str, follow: bool) -> Result<(String, Arc<Node>), Errno> {
-    resolve(Some(p), path, follow)
+    lookup_listing(Some(p), path, follow)
+}
+/// Why a lookup stopped: an error, or a mounted directory whose entries aren't in the tree yet.
+enum Miss {
+    Error(Errno),
+    List(Arc<Node>, String),
+}
+impl From<Errno> for Miss {
+    fn from(e: Errno) -> Miss {
+        Miss::Error(e)
+    }
+}
+fn lookup_listing(process: Option<&Process>, path: &str, follow: bool) -> Result<(String, Arc<Node>), Errno> {
+    // Each listing adds a directory's entries, so a path needs at most one per component.
+    for _ in 0..256 {
+        match resolve(process, path, follow) {
+            Ok(found) => return Ok(found),
+            Err(Miss::Error(e)) => return Err(e),
+            Err(Miss::List(dir, at)) => list(&dir, &at)?,
+        }
+    }
+    Err(40)
+}
+/// A path's missing entry: ENOENT, or the listing its directory still needs.
+fn missing(tree: &Tree, path: &str) -> Miss {
+    let dir = parent(path);
+    match tree.nodes.get(dir).filter(|d| d.remote.as_ref().is_some_and(|r| !r.listed.load(Ordering::Acquire))) {
+        Some(d) => Miss::List(d.clone(), String::from(dir)),
+        None => Miss::Error(ENOENT),
+    }
 }
 fn resolve(
     process: Option<&Process>,
     path: &str,
     follow: bool,
-) -> Result<(String, Arc<Node>), Errno> {
+) -> Result<(String, Arc<Node>), Miss> {
     let mut path = String::from(path);
     let tree = TREE.lock();
     for _ in 0..40 {
@@ -210,11 +323,13 @@ fn resolve(
             }
             built.push('/');
             built.push_str(part);
-            let node = tree.nodes.get(&built).ok_or(ENOENT)?;
+            let Some(node) = tree.nodes.get(&built) else {
+                return Err(missing(&tree, &built));
+            };
             let mode = node.attr.lock().mode;
             if mode & 0o170000 == LINK && (follow || i + 1 != components.len()) {
                 let data = node.data.lock();
-                let target = core::str::from_utf8(&data).map_err(|_| EINVAL)?;
+                let target = core::str::from_utf8(&data).map_err(|_| Miss::Error(EINVAL))?;
                 let rest = components[i + 1..].join("/");
                 restart = Some(if target.starts_with('/') {
                     alloc::format!("{target}/{rest}")
@@ -225,7 +340,7 @@ fn resolve(
             }
             if i + 1 != components.len() {
                 if mode & 0o170000 != DIR {
-                    return Err(ENOTDIR);
+                    return Err(Miss::Error(ENOTDIR));
                 }
                 if let Some(p) = process {
                     check(p, node, 1)?;
@@ -239,14 +354,12 @@ fn resolve(
         if built.is_empty() {
             built.push('/');
         }
-        return tree
-            .nodes
-            .get(&built)
-            .cloned()
-            .map(|n| (built, n))
-            .ok_or(ENOENT);
+        return match tree.nodes.get(&built) {
+            Some(n) => Ok((built, n.clone())),
+            None => Err(missing(&tree, &built)),
+        };
     }
-    Err(40)
+    Err(Miss::Error(40))
 }
 pub fn check(p: &Process, node: &Node, need: u32) -> Result<(), Errno> {
     let credentials = state(p).credentials.lock();
@@ -275,6 +388,9 @@ fn writable_parent(p: &Process, path: &str) -> Result<(), Errno> {
     if node.attr.lock().mode & 0o170000 != DIR {
         return Err(ENOTDIR);
     }
+    if node.remote.is_some() || lookup(path, false).is_ok_and(|(_, n)| n.remote.is_some()) {
+        return Err(EROFS);
+    }
     check(p, &node, 3)
 }
 pub fn create(p: &Process, path: &str, mode: u32, data: Vec<u8>) -> Result<Arc<Node>, Errno> {
@@ -291,6 +407,9 @@ pub fn create(p: &Process, path: &str, mode: u32, data: Vec<u8>) -> Result<Arc<N
     insert(&mut tree, path, mode, uid, gid, data)
 }
 pub fn resize(node: &Node, size: usize) -> Result<(), Errno> {
+    if node.remote.is_some() {
+        return Err(EROFS);
+    }
     if size > MAX_FILE {
         return Err(28);
     }
@@ -317,6 +436,9 @@ pub fn resize(node: &Node, size: usize) -> Result<(), Errno> {
     Ok(())
 }
 pub fn write(node: &Node, offset: usize, bytes: &[u8], append: bool) -> Result<usize, Errno> {
+    if node.remote.is_some() {
+        return Err(EROFS);
+    }
     let _tree = TREE.lock();
     let mut data = node.data.lock();
     let offset = if append { data.len() } else { offset };
@@ -424,7 +546,7 @@ pub fn read_executable(p: &Process, path: &str) -> Result<Vec<u8>, Errno> {
         return Err(EACCES);
     }
     check(p, &node, 1)?;
-    Ok(node.data.lock().clone())
+    node.read_at(0, node.len() as usize)
 }
 
 pub fn device_node(path: &str, uid: u32) -> Result<Arc<Node>, Errno> {

@@ -49,6 +49,9 @@ pub mod sys {
     pub const UNIX_NET_REGISTER: u64 = 33;
     /// (buffer, length): cryptographically secure bytes, or ShouldWait before seeding.
     pub const RANDOM: u64 = 34;
+    /// (system resource, channel, path, path length): a read-only filesystem the program at the channel's other
+    /// end serves appears at the path for Linux programs (`unix` kernels; kernel/src/linux/unix/mount.rs).
+    pub const UNIX_MOUNT: u64 = 35;
 }
 
 /// Set in `rax` for a native dross call from a Linux process (whose plain numbers are Linux's).

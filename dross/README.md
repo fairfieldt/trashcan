@@ -175,7 +175,8 @@ What init runs comes from `init.conf`: `start PROG ARGS` (a Linux program) and `
 program) run before the self-test, up to the first `wait`; `channel NAME` makes a channel whose ends go to
 programs as `@NAME=HANDLE` (a NAME that isn't a channel passes a duplicate of init's own handle, such as
 `module/trash` or `display`); `netservice NAME` registers one end of a channel as the kernel's network service
-(`unix` kernels) and hands the other to the stack; `%KEY=VALUE` passes a value, `%KEY=$NAME` one of init's (the
+(`unix` kernels) and hands the other to the stack; `mount NAME PATH` puts the read-only filesystem served at the
+other end of channel NAME at PATH (`unix` kernels); `%KEY=VALUE` passes a value, `%KEY=$NAME` one of init's (the
 kernel's `display-width` and so on); a `native usbd` line replaces the usbd init starts by itself; then, in order, `wait CHANNEL
 [MS]` (init's end of the channel gets a message, e.g. netd's `ready`), the remaining `start` lines, `check PROG
 CODE ARGS`, `sleep MS` and `reboot`.
@@ -198,6 +199,26 @@ native oscar-session @module/oscar-windowd=module/oscar-windowd @module/oscar-te
 (94 by 27 cells is the terminal's default 760 by 500 window.) On the Mac Pro it draws on the 1600 by 1200
 framebuffer, and a keyboard and mouse on the rear ports work. usbd used to switch a port's power off when it
 reset it (its mask of the port bits to keep lacked port power; QEMU's controller ignores that bit).
+
+### Disks
+
+usbd also drives one USB mass storage device (bulk-only transport, SCSI READ) and serves it as a block device on
+its `block` channel; the reads land in a 1 MiB DMA buffer it shares with the client. fsd reads ext4 from it,
+read-only, with the `ext4-view` crate (journal included): the first Linux filesystem partition of a GPT disk
+(or `%partition=N`), else the whole disk. The kernel's Linux layer asks fsd for a directory's entries the first
+time a path goes through it and keeps them, and for a file's contents (a memory object, kept and shared by
+`read`, `exec` and `mmap`) the first time it is opened. Writes fail with `EROFS`.
+
+```
+channel disk
+mount root /disk
+native usbd @disk=block
+native fsd @disk=block @root=service
+```
+
+`linux/disk-test.sh` checks it in QEMU (a GPT disk with an ext4 partition as a USB stick). On the Mac Pro, from a
+SanDisk Extreme Pro on the FL1100's SuperSpeed port, formatted on Linux: the listings, a 50 MB file's hash, and a
+7 GB GGUF (6652 MiB in 22.6 s, 308 MB/s, its SHA-256 as on Linux).
 
 ### Network boot
 

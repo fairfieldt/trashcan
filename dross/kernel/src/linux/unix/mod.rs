@@ -3,6 +3,7 @@ pub mod channel;
 pub mod entropy;
 mod files;
 mod multiplex;
+pub mod mount;
 pub mod net;
 mod processes;
 pub mod pty;

@@ -118,6 +118,17 @@ fn dispatch(n: u64, a: [u64; 6]) -> R {
             drop(t); crate::linux::unix::net::register(ch).map(|_| 0)
         }
         #[cfg(feature = "unix")]
+        sys::UNIX_MOUNT => {
+            let t = p.handles.lock();
+            let resource = get_obj!(t, a[0] as u32, Resource, rights::WRITE)?;
+            resource.check(Kind::System, 0, 1)?;
+            let ch = get_obj!(t, a[1] as u32, Channel, rights::READ | rights::WRITE)?;
+            drop(t);
+            let path = copy_in(&p, a[2], a[3].min(4096))?;
+            let path = core::str::from_utf8(&path).map_err(|_| Error::InvalidArgs)?;
+            crate::linux::unix::vfs::mount(path, crate::linux::unix::mount::Mount::new(ch)).map(|_| 0).map_err(|_| Error::InvalidArgs)
+        }
+        #[cfg(feature = "unix")]
         sys::RANDOM => {
             if a[1] > MSG_BYTES as u64 { return Err(Error::InvalidArgs); }
             let mut bytes = alloc::vec![0; a[1] as usize];

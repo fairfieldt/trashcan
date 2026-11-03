@@ -163,7 +163,7 @@ impl File {
     pub fn new(kind: Kind, flags: u32) -> Arc<File> {
         let size = match &kind {
             #[cfg(feature = "unix")]
-            Kind::Node(node) => node.data.lock().len() as u64,
+            Kind::Node(node) => node.len(),
             Kind::Data(d) => d.len() as u64,
             _ => 0,
         };
@@ -179,6 +179,10 @@ impl File {
         match &self.kind {
             #[cfg(feature = "unix")]
             Kind::Node(node) => {
+                // A mounted file's contents are shared (read-only); a RAM file's are copied.
+                if let Some(m) = node.content()? {
+                    return if off + len <= m.size() { Ok((m, true)) } else { Err(EINVAL) };
+                }
                 let data = node.data.lock(); let size = (data.len() as u64).next_multiple_of(4096).max(4096);
                 let mem = Arc::new(Memory::anonymous(size, false, false).map_err(|_| ENOMEM)?);
                 mem.write(0, &data).map_err(|_| EINVAL)?; Ok((mem, false))
@@ -261,10 +265,9 @@ impl File {
             #[cfg(feature = "unix")]
             Kind::Node(node) => {
                 if self.flags.load(Ordering::Relaxed) & 3 == 1 { return Err(EBADF); }
-                let mut pos = self.pos.lock(); let data = node.data.lock();
-                let from = at.unwrap_or(*pos).min(data.len() as u64) as usize;
-                let len = buf_len.min(data.len() - from); let out = data[from..from + len].to_vec();
-                if at.is_none() { *pos += len as u64; } Ok(out)
+                let mut pos = self.pos.lock();
+                let out = node.read_at(at.unwrap_or(*pos), buf_len.min(1 << 20))?;
+                if at.is_none() { *pos += out.len() as u64; } Ok(out)
             }
             Kind::Null => Ok(Vec::new()),
             Kind::Zero => Ok(alloc::vec![0; buf_len]),
@@ -490,7 +493,7 @@ fn stat(p: &Process, f: &File, ptr: u64, ino: u64) -> R {
     let mut st = [0u8; 144];
     let size = match &f.kind {
         #[cfg(feature = "unix")]
-        Kind::Node(node) => node.data.lock().len() as u64,
+        Kind::Node(node) => node.len(),
         Kind::Data(d) => d.len() as u64,
         Kind::Memfd(_) => f.size.load(Ordering::Relaxed),
         _ => 0,
@@ -515,7 +518,7 @@ fn statx(p: &Process, f: &File, ptr: u64) -> R {
     let mut st = [0u8; 256];
     let size = match &f.kind {
         #[cfg(feature = "unix")]
-        Kind::Node(node) => node.data.lock().len() as u64,
+        Kind::Node(node) => node.len(),
         Kind::Data(d) => d.len() as u64,
         Kind::Memfd(_) => f.size.load(Ordering::Relaxed),
         _ => 0,
@@ -720,7 +723,7 @@ pub fn syscall(p: &Arc<Process>, n: u64, a: [u64; 6]) -> R {
             let f = files.get(fd)?;
             let size = match &f.kind {
                 #[cfg(feature = "unix")]
-                Kind::Node(node) => node.data.lock().len() as i64,
+                Kind::Node(node) => node.len() as i64,
                 Kind::Data(d) => d.len() as i64,
                 Kind::Memfd(_) => f.size.load(Ordering::Relaxed) as i64,
                 Kind::Dir(_) => 0,

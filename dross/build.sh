@@ -12,7 +12,7 @@ flag=""
 cargo build -p dross-boot --target x86_64-unknown-uefi $flag
 # KERNEL_FEATURES=unix builds the kernel with the Unix subsystem (unix/README.md).
 cargo build -p dross --target x86_64-unknown-none $flag ${KERNEL_FEATURES:+--features dross/$KERNEL_FEATURES}
-cargo build -p init -p selftest -p pcid -p edutest -p usbd --target x86_64-unknown-none $flag
+cargo build -p init -p selftest -p pcid -p edutest -p usbd -p fsd --target x86_64-unknown-none $flag
 # Oscar's desktop (desktop/README.md): its own workspace.
 cargo build --manifest-path desktop/Cargo.toml -p oscar-desktop-native --features native --bins --target x86_64-unknown-none $flag
 esp=target/esp
@@ -21,7 +21,7 @@ mkdir -p "$esp/EFI/BOOT"
 cp "target/x86_64-unknown-uefi/$PROFILE/dross-boot.efi" "$esp/EFI/BOOT/BOOTX64.EFI"
 cp "target/x86_64-unknown-none/$PROFILE/dross" "$esp/dross.elf"
 mkdir -p "$esp/modules"
-for m in init selftest pcid edutest usbd; do
+for m in init selftest pcid edutest usbd fsd; do
     cp "target/x86_64-unknown-none/$PROFILE/$m" "$esp/modules/$m"
 done
 for m in oscar-session oscar-windowd oscar-terminal trash; do
