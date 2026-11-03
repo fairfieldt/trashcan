@@ -18,6 +18,8 @@ use crate::mem::{self, virt};
 use crate::{apic, cpu, interrupts};
 
 const PAGE: u64 = 4096;
+/// Internal mapping metadata; never installed as a hardware permission.
+pub const FORK_SHARED: u64 = 1 << 63;
 static KERNEL_PML4: AtomicU64 = AtomicU64::new(0);
 
 pub fn kernel_pml4() -> u64 {
@@ -85,6 +87,62 @@ impl AddressSpace {
         let k = table(kernel_pml4());
         table(pml4)[256..].copy_from_slice(&k[256..]);
         AddressSpace { pml4, inner: Mutex::new(Inner { mappings: BTreeMap::new(), next: AUTO_BASE }), cpus: AtomicU64::new(0) }
+    }
+
+    /// Eager fork for small Unix processes. Shared mappings keep their memory object;
+    /// private aliases of the same object share one copy in the child.
+    #[cfg(feature = "unix")]
+    pub fn fork_into(&self, child: &Self) -> Result<(), Error> {
+        let inner = self.inner.lock();
+        let mut copies: BTreeMap<usize, Arc<Memory>> = BTreeMap::new();
+        for (&addr, m) in &inner.mappings {
+            match &m.mem {
+                None => { child.reserve(m.len, addr, false)?; }
+                Some(mem) => {
+                    if mem.uncached() { return Err(Error::AccessDenied); }
+                    let backing = if m.flags & FORK_SHARED != 0 { mem.clone() } else {
+                        let key = Arc::as_ptr(mem) as usize;
+                        if let Some(copy) = copies.get(&key) { copy.clone() } else {
+                            let copy = Arc::new(Memory::anonymous(mem.size(), false, false)?);
+                            let mut buffer = alloc::vec![0; 4096];
+                            for off in (0..mem.size()).step_by(4096) { mem.read(off, &mut buffer)?; copy.write(off, &buffer)?; }
+                            copies.insert(key, copy.clone()); copy
+                        }
+                    };
+                    child.map(backing, m.offset, m.len, addr, m.flags)?;
+                }
+            }
+        }
+        child.inner.lock().next = inner.next;
+        Ok(())
+    }
+
+    /// vfork shares backing pages while the parent is suspended. The child may
+    /// only exec/exit; its independent page tables let exec detach transactionally.
+    #[cfg(feature = "unix")]
+    pub fn vfork_into(&self, child: &Self) -> Result<(), Error> {
+        let inner = self.inner.lock();
+        for (&addr, m) in &inner.mappings {
+            if let Some(mem) = &m.mem {
+                if mem.uncached() { return Err(Error::AccessDenied); }
+                child.map(mem.clone(), m.offset, m.len, addr, m.flags)?;
+            } else { child.reserve(m.len, addr, false)?; }
+        }
+        child.inner.lock().next = inner.next;
+        Ok(())
+    }
+
+    /// Install a fully validated exec image without changing this process's CR3.
+    /// The caller has excluded sibling threads before committing the replacement.
+    #[cfg(feature = "unix")]
+    pub fn replace_from(&self, image: &Self) {
+        let mut old = self.inner.lock();
+        let mut new = image.inner.lock();
+        for index in 0..256 { core::mem::swap(&mut table(self.pml4)[index], &mut table(image.pml4)[index]); }
+        core::mem::swap(&mut *old, &mut *new);
+        drop(new); drop(old);
+        x86_64::instructions::tlb::flush_all();
+        shootdown(self.cpus.load(Ordering::Relaxed));
     }
 
     pub fn pml4(&self) -> u64 {
@@ -296,7 +354,7 @@ impl AddressSpace {
                 m.mem = Some(Arc::new(Memory::anonymous(m.len, false, false)?));
                 m.offset = 0;
             }
-            m.flags = flags;
+            m.flags = flags | (m.flags & FORK_SHARED);
             let r = self.install(k, &m);
             inner.mappings.insert(k, m);
             r?;

@@ -1,0 +1,13 @@
+[package]
+name = "unix-netd"
+version = "0.1.0"
+edition = "2024"
+[[bin]]
+name = "unix-netd"
+test = false
+bench = false
+[dependencies]
+oscar-ethernet = { path = "../ethernet" }
+dross-rt = { path = "../../user/rt" }
+dross-abi = { path = "../../abi" }
+smoltcp = { version = "=0.12.0", default-features = false, features = ["alloc", "medium-ethernet", "proto-ipv4", "socket-tcp"] }

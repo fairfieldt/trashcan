@@ -256,6 +256,16 @@ pub fn spawn_with(process: Arc<Process>, cpu_index: u32, mut regs: [u64; 22], fs
     t
 }
 
+/// Called before a same-CPU fork child can run: inherit the live XSAVE state.
+#[cfg(feature = "unix")]
+pub fn copy_fpu_to(child: &Thread) {
+    assert_eq!(child.cpu, cpu::index());
+    let mask = cpu::xsave_mask();
+    // SAFETY: the child is queued on this CPU and cannot run while the kernel has
+    // interrupts disabled. Its XSAVE page is aligned and not used concurrently.
+    unsafe { core::arch::asm!("xsave64 [{}]", in(reg) child.xsave, in("eax") mask as u32, in("edx") (mask >> 32) as u32); }
+}
+
 static NEXT_TID: core::sync::atomic::AtomicU32 = core::sync::atomic::AtomicU32::new(100);
 
 /// Sets the current thread's FS base (Linux `arch_prctl(ARCH_SET_FS)`).
@@ -518,13 +528,26 @@ impl<T> WaitCell<T> {
     }
 
     /// Blocks until `f` returns `Some`, the deadline (TSC) passes or the thread is killed.
-    pub fn wait<R>(&self, deadline_tsc: u64, mut f: impl FnMut(&mut T) -> Option<R>) -> Result<R, WaitError> {
+    pub fn wait<R>(&self, deadline_tsc: u64, f: impl FnMut(&mut T) -> Option<R>) -> Result<R, WaitError> {
+        self.wait_inner(deadline_tsc, f, true)
+    }
+
+    /// Kernel transactions defer ordinary signals until their reply is consumed.
+    /// Process death and the deadline still interrupt the wait.
+    #[cfg(feature = "unix")]
+    pub fn wait_uninterruptible<R>(&self, deadline_tsc: u64, f: impl FnMut(&mut T) -> Option<R>) -> Result<R, WaitError> {
+        self.wait_inner(deadline_tsc, f, false)
+    }
+
+    fn wait_inner<R>(&self, deadline_tsc: u64, mut f: impl FnMut(&mut T) -> Option<R>, _interruptible: bool) -> Result<R, WaitError> {
         let me = current();
         loop {
             let mut g = self.inner.lock();
             if let Some(r) = f(&mut g.0) {
                 return Ok(r);
             }
+            #[cfg(feature = "unix")]
+            if _interruptible && me.process.as_ref().is_some_and(|p| p.linux.is_some() && crate::linux::unix::interrupted(p)) { return Err(WaitError::Killed); }
             if me.killed() {
                 return Err(WaitError::Killed);
             }

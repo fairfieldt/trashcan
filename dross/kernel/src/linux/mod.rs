@@ -6,11 +6,14 @@
 //! futex, TLS, exit with clear-tid), files (a read-only tree from the `rootfs.tar` boot module, the ACPI tables
 //! under /sys/firmware/acpi/tables, /dev/null, logs on stdout and stderr), Unix sockets (stream, datagram and
 //! seqpacket, with fd passing), pipes, memfd, eventfd, poll, time, sleeping, randomness. Signals are accepted and
-//! never delivered (except an abort, which ends the process). No fork, exec, epoll, or networking.
+//! never delivered (except an abort, which ends the process). The optional `unix` feature adds fork, exec,
+//! signals, writable files, PTYs and TCP capability RPC; see unix/mod.rs and ../../unix/README.md.
 
 mod exec;
 mod fs;
 mod sock;
+#[cfg(feature = "unix")]
+pub mod unix;
 
 use alloc::string::String;
 use alloc::sync::Arc;
@@ -56,13 +59,15 @@ const TRACE: bool = false;
 /// What a Linux process has beyond a dross one.
 pub struct Linux {
     pub files: Files,
+    #[cfg(feature = "unix")]
+    pub unix: unix::State,
     sigmask: Mutex<u64>,
     sigactions: Mutex<[[u64; 4]; 64]>,
 }
 
 impl Linux {
     pub fn new(name: &str) -> Linux {
-        Linux { files: Files::new(name), sigmask: Mutex::new(0), sigactions: Mutex::new([[0; 4]; 64]) }
+        Linux { #[cfg(feature = "unix")] unix: unix::State::new(), files: Files::new(name), sigmask: Mutex::new(0), sigactions: Mutex::new([[0; 4]; 64]) }
     }
 }
 
@@ -262,6 +267,7 @@ pub fn exit_thread(p: &Process, me: &Thread) -> ! {
     sched::exit_current()
 }
 
+#[cfg(not(feature = "unix"))]
 fn random_u64() -> u64 {
     let mut v = 0u64;
     let mut ok = 0u8;
@@ -280,9 +286,14 @@ fn random_u64() -> u64 {
 }
 
 pub fn random_bytes(buf: &mut [u8]) {
-    for c in buf.chunks_mut(8) {
-        let r = random_u64().to_le_bytes();
-        c.copy_from_slice(&r[..c.len()]);
+    #[cfg(feature = "unix")]
+    { unix::entropy::fill(buf).expect("secure entropy unavailable"); }
+    #[cfg(not(feature = "unix"))]
+    {
+        for c in buf.chunks_mut(8) {
+            let r = random_u64().to_le_bytes();
+            c.copy_from_slice(&r[..c.len()]);
+        }
     }
 }
 
@@ -304,7 +315,7 @@ fn mmap(p: &Process, addr: u64, len: u64, prot: u64, flags: u64, fd: u64, off: u
         return Err(EINVAL);
     }
     let at = if fixed { addr } else { 0 };
-    let f = prot_flags(prot);
+    let f = prot_flags(prot) | if cfg!(feature = "unix") && flags & MAP_SHARED != 0 { crate::paging::FORK_SHARED } else { 0 };
     let r = if flags & MAP_ANONYMOUS != 0 {
         if f == 0 {
             p.aspace.reserve(len, at, flags & MAP_FIXED != 0)
@@ -375,7 +386,11 @@ pub fn syscall(f: &mut Frame) -> u64 {
     let p = sched::current_process();
     let a = [f.rdi, f.rsi, f.rdx, f.r10, f.r8, f.r9];
     let n = f.rax;
-    let r = dispatch(&p, f, f.rax, a);
+    #[cfg(feature = "unix")] { f.error = n; }
+    #[cfg(feature = "unix")]
+    let r = match unix::dispatch(&p, f, n, a) { Some(r) => r, None => dispatch(&p, f, n, a) };
+    #[cfg(not(feature = "unix"))]
+    let r = dispatch(&p, f, n, a);
     if TRACE { crate::println!("TRACE {} tid {} cpu {}: {} {:x?} -> {:x?}", p.name, sched::current().tid, crate::cpu::index(), n, &a[..4], r); }
     match r {
         Ok(v) => v,

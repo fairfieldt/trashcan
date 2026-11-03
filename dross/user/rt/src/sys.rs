@@ -192,3 +192,8 @@ pub fn system_exit(system: Handle, code: u64) -> ! {
 pub fn after_ms(ms: u64) -> u64 {
     clock() + ms * 1_000_000
 }
+
+/// Secure entropy from a kernel built with the Unix feature. No fallback to time.
+pub fn random(bytes: &mut [u8]) -> Result<()> {
+    syscall(n::RANDOM, [bytes.as_mut_ptr() as u64, bytes.len() as u64, 0, 0, 0, 0]).map(|_| ())
+}

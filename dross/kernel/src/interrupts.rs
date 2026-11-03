@@ -143,6 +143,8 @@ extern "C" fn isr_dispatch(f: &mut Frame) {
     // Only interrupts that arrive in user mode or in the idle loop (the kernel runs with interrupts off) get here,
     // so switching threads is safe.
     sched::preempt_point();
+    #[cfg(feature = "unix")]
+    if from_user { crate::linux::unix::user_return(f); }
     if from_user && sched::current().killed() {
         sched::exit_current();
     }

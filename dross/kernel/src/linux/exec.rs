@@ -27,8 +27,17 @@ fn u64_at(b: &[u8], o: usize) -> u64 {
 
 /// `argv` and `envp` are NUL-separated strings. `bootstrap` becomes native handle 1.
 pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>) -> Result<Arc<Process>, Error> {
-    let args: Vec<&[u8]> = argv.split(|&b| b == 0).filter(|s| !s.is_empty()).collect();
-    let envs: Vec<&[u8]> = envp.split(|&b| b == 0).filter(|s| !s.is_empty()).collect();
+    let (p, entry, sp) = load(image, argv, envp, [0; 4])?;
+    if let Some(e) = bootstrap { let h = p.handles.lock().insert(e); debug_assert_eq!(h, 1); }
+    sched::spawn_user(p.clone(), sched::pick_cpu(), entry, sp, 0);
+    Ok(p)
+}
+
+pub(super) fn load(image: &Memory, argv: &[u8], envp: &[u8], ids: [u64; 4]) -> Result<(Arc<Process>, u64, u64), Error> {
+    let packed = |bytes: &[u8]| -> Vec<Vec<u8>> {
+        if bytes.is_empty() { Vec::new() } else { bytes.strip_suffix(&[0]).unwrap_or(bytes).split(|&b| b == 0).map(|s| s.to_vec()).collect() }
+    };
+    let args = packed(argv); let envs = packed(envp);
     let name = args.first().and_then(|a| core::str::from_utf8(a).ok()).map(|a| a.rsplit('/').next().unwrap_or(a)).unwrap_or("linux");
 
     let mut hdr = [0u8; 64];
@@ -50,6 +59,7 @@ pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>)
         image.read(phoff + i * phentsize, &mut ph).map_err(|_| Error::BadElf)?;
         let ty = u32_at(&ph, 0);
         let (flags, offset, vaddr, filesz, memsz) = (u32_at(&ph, 4), u64_at(&ph, 8), u64_at(&ph, 16), u64_at(&ph, 32), u64_at(&ph, 40));
+        if ty == 3 { return Err(Error::BadElf); }
         if ty == 6 {
             phdr_addr = base + vaddr;
         }
@@ -59,10 +69,10 @@ pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>)
         if first_load.is_none() {
             first_load = Some((vaddr, offset));
         }
-        let va = base + vaddr;
+        let va = base.checked_add(vaddr).ok_or(Error::BadElf)?;
         let start = va & !0xfff;
-        let end = va.checked_add(memsz).ok_or(Error::BadElf)?.next_multiple_of(4096);
-        if filesz > memsz || end > USER_TOP || start == 0 {
+        let end = va.checked_add(memsz).and_then(|v| v.checked_add(4095)).ok_or(Error::BadElf)? & !4095;
+        if filesz > memsz || offset.checked_add(filesz).is_none_or(|end| end > image.size()) || end > USER_TOP || start == 0 {
             return Err(Error::BadElf);
         }
         let seg = Memory::anonymous(end - start, false, false)?;
@@ -82,7 +92,7 @@ pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>)
         let (v, off) = first_load.ok_or(Error::BadElf)?;
         phdr_addr = base + v - off + phoff;
     }
-    let entry = base + u64_at(&hdr, 24);
+    let entry = base.checked_add(u64_at(&hdr, 24)).filter(|entry| *entry < USER_TOP && *entry >= 4096).ok_or(Error::BadElf)?;
 
     // The stack, built in a kernel buffer and copied into its top page(s).
     let stack = Arc::new(Memory::anonymous(STACK_SIZE, false, false)?);
@@ -110,10 +120,10 @@ pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>)
         (6, 4096),
         (7, 0),
         (9, entry),
-        (11, 0),
-        (12, 0),
-        (13, 0),
-        (14, 0),
+        (11, ids[0]),
+        (12, ids[1]),
+        (13, ids[2]),
+        (14, ids[3]),
         (16, edx as u64),
         (25, strings_at + rand_off),
         (15, strings_at + platform_off),
@@ -140,10 +150,5 @@ pub fn spawn(image: &Memory, argv: &[u8], envp: &[u8], bootstrap: Option<Entry>)
     img[so..so + strings.len()].copy_from_slice(&strings);
     stack.write(STACK_SIZE - total, &img)?;
 
-    if let Some(e) = bootstrap {
-        let h = p.handles.lock().insert(e);
-        debug_assert_eq!(h, 1);
-    }
-    sched::spawn_user(p.clone(), sched::pick_cpu(), entry, sp, 0);
-    Ok(p)
+    Ok((p, entry, sp))
 }

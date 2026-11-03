@@ -1,0 +1,7 @@
+[package]
+name = "unix-terminal-bridge"
+version = "0.1.0"
+edition = "2024"
+[dependencies]
+dross-rt = { path = "../../user/rt", default-features = false }
+libc = "0.2"
