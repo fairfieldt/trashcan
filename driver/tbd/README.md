@@ -91,6 +91,10 @@ or the descriptors' interrupt flag. The cause is not known. tbd-client writes th
 have been pending for 50 µs without progress, on every read, write and wait. Only the client writes that register,
 because a stale value from tbd could move the index back.
 
+On the Mac Pro nodes, `tblink` knows only the kernel's links: while tbd owns a controller, the `PEER.tbN` names of
+that controller's links drop out of `/etc/hosts` (connect by address), and `tbd0` gets no address of its own (add the
+one `tblink` gave the link's `thunderboltN`).
+
 `TBD_TRACE=1` prints every control frame. `TBD_KMSG=1` copies tbd's output to the kernel log (with
 `sysctl kernel.printk_devkmsg=on`), so netconsole has it if the machine goes down.
 
