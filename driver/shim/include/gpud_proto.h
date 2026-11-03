@@ -31,6 +31,7 @@ enum gpud_op {
 	GPUD_SUBMIT,	 /* gpud_submit_req, ibs[num_ibs], deps[num_deps] (fence ids) -> gpud_fence_rep */
 	GPUD_WAIT,	 /* gpud_wait_req */
 	GPUD_RING,	 /* gpud_ring_req -> gpud_ring_rep */
+	GPUD_BO_IMPORT, /* gpud_bo_import_req + one fd -> gpud_bo_rep */
 };
 
 struct gpud_req {
@@ -63,6 +64,9 @@ struct gpud_bo_create_req {
 	uint64_t domains; /* AMDGPU_GEM_DOMAIN_* */
 	uint64_t flags;	  /* AMDGPU_GEM_CREATE_* */
 };
+
+/* Import native shared memory. Server owns a mapping/fd until GPU completion. */
+struct gpud_bo_import_req { uint64_t offset, size; };
 
 struct gpud_bo_handle {
 	uint32_t handle;

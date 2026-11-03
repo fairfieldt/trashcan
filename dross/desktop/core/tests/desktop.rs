@@ -605,3 +605,141 @@ fn byte_stream_client_does_not_run_trash_commands() {
     assert!(app.terminal.line(0).starts_with("external peer"));
     assert_eq!(app.shell.line(), "");
 }
+
+#[test]
+fn shared_surface_snapshot_checks_owner_size_and_legacy_mixing() {
+    let mut server = Server::new(640, 480).unwrap();
+    let replies = server.request(
+        7,
+        Packet::new(
+            1,
+            0,
+            Message::CreateShared {
+                width: 160,
+                height: 100,
+                title: "Shared".into(),
+            },
+        ),
+    );
+    let id = replies
+        .iter()
+        .find(|d| matches!(d.packet.message, Message::CreatedShared { .. }))
+        .unwrap()
+        .packet
+        .window;
+    let before = server.render().pixels().to_vec();
+    assert!(
+        server
+            .present_shared(8, id, 2, &vec![0x123456; 16000])
+            .is_err()
+    );
+    assert!(server.present_shared(7, id, 2, &[0x123456]).is_err());
+    assert_eq!(server.render().pixels(), before);
+    let upload = server.request(
+        7,
+        Packet::new(
+            2,
+            id,
+            Message::Upload {
+                offset: 0,
+                pixels: vec![1],
+            },
+        ),
+    );
+    assert!(matches!(upload[0].packet.message, Message::Error(_)));
+    let legacy = server.request(7, Packet::new(2, id, Message::Present));
+    assert!(matches!(legacy[0].packet.message, Message::Error(_)));
+    let mut pixels = vec![0xff123456; 16000];
+    let done = server.present_shared(7, id, 3, &pixels).unwrap();
+    assert_eq!(done.packet, Packet::new(3, id, Message::FrameDone));
+    pixels.fill(0); // the submitted snapshot is independent of client reuse.
+    assert!(server.render().pixels().contains(&0x123456));
+    server.disconnect(7);
+    assert!(server.present_shared(7, id, 4, &pixels).is_err());
+}
+
+#[test]
+fn physical_keyboard_snapshots_roundtrip_and_reject_rollover_codes() {
+    let packet = Packet::new(
+        0,
+        0,
+        Message::Input(Input::KeyboardState {
+            modifiers: 0x81,
+            keys: [4, 82, 0, 0, 0, 0],
+        }),
+    );
+    assert_eq!(Packet::decode(&packet.encode().unwrap()).unwrap(), packet);
+    for keys in [[1, 0, 0, 0, 0, 0], [0xe0, 0, 0, 0, 0, 0]] {
+        let packet = Packet::new(
+            0,
+            0,
+            Message::Input(Input::KeyboardState { modifiers: 0, keys }),
+        );
+        assert!(packet.encode().is_err());
+    }
+    let mut bad = packet.encode().unwrap();
+    bad[oscar_desktop::protocol::HEADER + 1] = 2;
+    assert!(Packet::decode(&bad).is_err());
+}
+
+#[test]
+fn external_painter_and_software_fallback_share_scene() {
+    let mut server = Server::new(640, 480).unwrap();
+    server.request(
+        1,
+        Packet::new(
+            1,
+            0,
+            Message::Create {
+                width: 160,
+                height: 100,
+                title: "Scene".into(),
+            },
+        ),
+    );
+    let mut canvas = Canvas::new(640, 480).unwrap();
+    server.paint(&mut canvas).unwrap();
+    assert_eq!(server.render().pixels(), canvas.pixels());
+    server.input(Input::Pointer {
+        x: 200,
+        y: 200,
+        down: false,
+    });
+    server.paint(&mut canvas).unwrap();
+    assert_eq!(server.render().pixels(), canvas.pixels());
+}
+
+#[test]
+fn focus_change_supplies_current_physical_keyboard_state() {
+    let mut server = Server::new(640, 480).unwrap();
+    let keys = Input::KeyboardState {
+        modifiers: 1,
+        keys: [82, 0, 0, 0, 0, 0],
+    };
+    assert!(server.input(keys).is_empty());
+    let replies = server.request(
+        1,
+        Packet::new(
+            1,
+            0,
+            Message::CreateShared {
+                width: 160,
+                height: 100,
+                title: "Keys".into(),
+            },
+        ),
+    );
+    assert!(
+        replies
+            .iter()
+            .any(|d| d.packet.message == Message::Input(keys))
+    );
+    let released = Input::KeyboardState {
+        modifiers: 0,
+        keys: [0; 6],
+    };
+    assert_eq!(
+        server.input(released).last().unwrap().packet.message,
+        Message::Input(released)
+    );
+}

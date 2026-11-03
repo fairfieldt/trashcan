@@ -60,6 +60,18 @@ fail:
 	return NULL;
 }
 
+void gpud_vm_destroy(struct gpud_vm *vm)
+{
+    if(!vm)return;
+    /* Caller has observed every ring's last fence and prevents new submissions.
+     * No stale client may reach these page tables when their VRAM is reused. */
+    for(u64 i=0;i<vm->num_pde;i++)
+        gpud_bo_retire_kernel(vm->adev,&vm->pt[i]);
+    gpud_bo_retire_kernel(vm->adev,&vm->pd);
+    mutex_destroy(&vm->lock);
+    free(vm->pt);free(vm->pt_cpu);free(vm);
+}
+
 u64 gpud_vm_pd_addr(struct gpud_vm *vm) { return vm->pd->gpu_addr; }
 unsigned gpud_vm_vmid(struct gpud_vm *vm) { return vm->vmid; }
 
@@ -150,6 +162,27 @@ static struct {
 	pthread_mutex_t lock;
 } vram = { .lock = PTHREAD_MUTEX_INITIALIZER };
 
+static void vram_reserve(u64 start,u64 size)
+{
+    u64 end=start+size;
+    for(int i=0;i<vram.n;i++) {
+        u64 low=max(start,vram.r[i].start),high=min(end,vram.r[i].end);
+        if(low>=high)continue;
+        u64 old_end=vram.r[i].end;
+        if(low==vram.r[i].start) {
+            vram.r[i].start=high;
+            if(high==old_end){memmove(&vram.r[i],&vram.r[i+1],(--vram.n-i)*sizeof(vram.r[0]));i--;}
+        } else {
+            vram.r[i].end=low;
+            if(high<old_end) {
+                if(vram.n==(int)ARRAY_SIZE(vram.r))abort();
+                memmove(&vram.r[i+2],&vram.r[i+1],(vram.n-i-1)*sizeof(vram.r[0]));
+                vram.r[i+1].start=high;vram.r[i+1].end=old_end;vram.n++;i++;
+            }
+        }
+    }
+}
+
 void gpud_vram_init(struct amdgpu_device *adev, u64 start)
 {
 	extern u64 gpud_fw_vram_offset, gpud_fw_vram_size;
@@ -161,6 +194,10 @@ void gpud_vram_init(struct amdgpu_device *adev, u64 start)
 	vram.r[0].start = start;
 	vram.r[0].end = end;
 	vram.n = 1;
+    for(unsigned i=0;i<12;i++) {
+        u64 offset,size;
+        if(!gpud_display_reservation(i,&offset,&size))vram_reserve(offset,size);
+    }
 }
 
 int gpud_vram_alloc(struct amdgpu_device *adev, u64 size, u64 align, u64 *offset)
@@ -305,7 +342,7 @@ int gpud_submit(struct amdgpu_device *adev, int ring_key, struct gpud_vm *vm, co
 		if ((int32_t)((u32)gpud_fence_read(adev, ring_key) - oldest) >= 0)
 			break;
 		pthread_mutex_unlock(&submit_lock);
-		r = gpud_fence_wait(adev, ring_key, oldest, 10 * NSEC_PER_SEC);
+		r = gpud_fence_wait(adev, ring_key, oldest, 500 * NSEC_PER_MSEC);
 		if (r)
 			return r;
 	}

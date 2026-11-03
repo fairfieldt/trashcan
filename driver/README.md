@@ -2,7 +2,7 @@
 
 `gpud` is the start of a GPU driver that runs as an ordinary process: it owns one FirePro D700 (Tahiti XT, GCN 1)
 through an IOMMU and serves the inference engine. Linux is the development harness; the interfaces are drawn so
-the same driver can later run on a small microkernel with only the platform backend replaced. The engine in
+the same driver runs on dross with its platform backend replaced. The engine in
 `engine/` stays the reference implementation, unchanged, running on Linux's amdgpu.
 
 Status: Linux's Southern Islands code (driver/linux, unmodified) runs in `gpud` on a small compatibility layer
@@ -13,6 +13,13 @@ gives activations bit-identical to amdgpu's and the same chat text. Linux's SI p
 interpreter, si_dpm and the SMC firmware), so clocks follow load as under amdgpu: 204 GB/s VRAM copies, and Qwen
 decodes at 20.7 tok/s against amdgpu's 24.7. With one `gpud serve` per D700, the engine's tensor parallelism runs across
 both (40.5 tok/s against amdgpu's 50.5). The plan is `docs/plan.md`.
+
+On dross, the Mac Pro now also passes Vulkan graphics and native Memory import
+checks, GPU window composition, and current-mode DCE6 page flips. Real Doom and a
+native Vulkan application run together in Oscar windows; display close restores
+the retained firmware plane. This keeps Mesa and window policy in userspace. See
+[desktop validation](../dross/desktop/gpu/README.md) and the opt-in
+[developer supervisor](gpud/DEVELOPMENT.md) for exact evidence and iteration steps.
 
 | Path | What |
 |---|---|
@@ -44,7 +51,10 @@ LD_PRELOAD=$PWD/libgpud_drm.so vulkaninfo --summary
 LD_PRELOAD=$PWD/libgpud_drm.so ./vkcompute
 ```
 
-`gpud serve` stops the engines on SIGINT or SIGTERM, and logs the GPU's state on SIGUSR1 (for a stuck submission).
+`gpud serve` logs GPU state on SIGUSR1. SIGINT/SIGTERM stop a drained GPU; unfinished
+fences or acquired scanout keep the driver and backing alive rather than freeing
+memory still reachable by hardware. Restore the display and close clients before
+replacing a driver through the developer supervisor.
 After a SIGKILL the next `init` or `serve` stops what was left running, with one exception: a kill in the middle of a
 dispatch can leave shader waves that never finish (their host memory is gone with the process), and SI can only
 clear those with an ASIC reset and a VBIOS re-POST, which `gpud` can't do yet. `init` and the IB tests still pass,

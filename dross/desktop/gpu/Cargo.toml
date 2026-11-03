@@ -1,0 +1,14 @@
+[package]
+name = "oscar-desktop-gpu"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+ash = { version = "0.38", features = ["loaded"] }
+oscar-desktop = { path = "../core" }
+oscar-desktop-native = { path = "../native" }
+dross-rt = { path = "../../user/rt", default-features = false }
+dross-abi = { path = "../../abi" }
+noto-sans-mono-bitmap = { version = "0.4", default-features = false, features = ["regular", "size_16", "unicode-basic-latin"] }

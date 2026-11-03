@@ -165,6 +165,8 @@ dependencies = [
  "anyhow",
  "cc",
  "clap",
+ "dross-abi",
+ "dross-rt",
  "gpud-platform",
  "libc",
 ]

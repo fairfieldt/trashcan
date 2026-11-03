@@ -1,7 +1,7 @@
 //! Small immediate-mode toolkit with stable widget IDs, pointer capture and keyboard
 //! focus. Layout and drawing share rectangles, so hit testing cannot drift from paint.
 use crate::{
-    canvas::{CHAR_H, Canvas, Rect, char_w},
+    canvas::{CHAR_H, Canvas, Painter, Rect, char_w},
     protocol::{Input, Key, Mods},
 };
 
@@ -20,7 +20,7 @@ impl Theme {
     pub const TERMINAL_TEXT: u32 = 0xe2e3d8;
 }
 
-pub fn bevel(c: &mut Canvas, r: Rect, face: u32, pressed: bool) {
+pub fn bevel(c: &mut impl Painter, r: Rect, face: u32, pressed: bool) {
     c.fill(r, face);
     let (light, dark) = if pressed {
         (Theme::SHADOW, Theme::LIGHT)

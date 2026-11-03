@@ -115,7 +115,7 @@ static int (*real_ioctl)(int, ioctl_req, ...);
 #define LOG(...) do { if (debug) fprintf(stderr, "gpud_drm: " __VA_ARGS__); } while (0)
 
 /* ---- the connection ---- */
-static int rpc(struct gdev *g, uint32_t op, const void *req, uint32_t req_len, const void *req2, uint32_t req2_len,
+static int rpc_fd(struct gdev *g, int fd_in, uint32_t op, const void *req, uint32_t req_len, const void *req2, uint32_t req2_len,
 	       void *rep, uint32_t rep_len, int *fd_out)
 {
 	char buf[GPUD_MAX_MSG];
@@ -134,11 +134,23 @@ static int rpc(struct gdev *g, uint32_t op, const void *req, uint32_t req_len, c
 	if (req2_len)
 		memcpy(buf + sizeof(*h) + req_len, req2, req2_len);
 	pthread_mutex_lock(&g->conn_lock);
-	if (send(g->sock, buf, sizeof(*h) + h->len, MSG_NOSIGNAL) < 0) {
+	iov.iov_len = sizeof(*h) + h->len;
+    msg.msg_controllen = 0;
+    if (fd_in >= 0) {
+        memset(cbuf, 0, sizeof(cbuf));
+        msg.msg_controllen = sizeof(cbuf);
+        struct cmsghdr *c = CMSG_FIRSTHDR(&msg);
+        c->cmsg_level = SOL_SOCKET; c->cmsg_type = SCM_RIGHTS;
+        c->cmsg_len = CMSG_LEN(sizeof(int));
+        memcpy(CMSG_DATA(c), &fd_in, sizeof(int));
+    }
+    if (sendmsg(g->sock, &msg, MSG_NOSIGNAL) < 0) {
 		pthread_mutex_unlock(&g->conn_lock);
 		return -EIO;
 	}
-	n = recvmsg(g->sock, &msg, MSG_CMSG_CLOEXEC);
+	iov.iov_len = sizeof(buf);
+    msg.msg_controllen = sizeof(cbuf);
+    n = recvmsg(g->sock, &msg, MSG_CMSG_CLOEXEC);
 	pthread_mutex_unlock(&g->conn_lock);
 	if (n < (ssize_t)sizeof(*rh))
 		return -EIO;
@@ -150,6 +162,12 @@ static int rpc(struct gdev *g, uint32_t op, const void *req, uint32_t req_len, c
 	if (rh->status == 0 && rep)
 		memcpy(rep, buf + sizeof(*rh), rh->len < rep_len ? rh->len : rep_len);
 	return rh->status;
+}
+
+static int rpc(struct gdev *g, uint32_t op, const void *req, uint32_t req_len, const void *req2, uint32_t req2_len,
+               void *rep, uint32_t rep_len, int *fd_out)
+{
+    return rpc_fd(g, -1, op, req, req_len, req2, req2_len, rep, rep_len, fd_out);
 }
 
 static pthread_once_t connect_once = PTHREAD_ONCE_INIT;
@@ -439,6 +457,58 @@ static int get_cap(struct drm_get_cap *c)
 	}
 }
 
+static int bo_register(struct gdev *g, const struct gpud_bo_rep *rep)
+{
+	pthread_mutex_lock(&g->bo_lock);
+	if (rep->handle >= g->nbos) {
+		uint32_t n = rep->handle * 2 + 64;
+		struct bo *b = realloc(g->bos, n * sizeof(*b));
+
+		if (!b) {
+			pthread_mutex_unlock(&g->bo_lock);
+			return -ENOMEM;
+		}
+		memset(b + g->nbos, 0, (n - g->nbos) * sizeof(*b));
+		g->bos = b;
+		g->nbos = n;
+	}
+	g->bos[rep->handle] = (struct bo){ .rep = *rep, .used = true };
+	pthread_mutex_unlock(&g->bo_lock);
+    return 0;
+}
+
+/* Native Memory is the import authority. No arbitrary process pointer is sent
+ * to gpud: VM_MEMORY derives a bounded object handle and SCM_RIGHTS retains it. */
+static int native_call(uint64_t nr, uint64_t a, uint64_t b, uint64_t *value)
+{
+#if defined(__x86_64__)
+    register uint64_t result __asm__("rdx") = 0;
+    int64_t status = nr | 0x40000000;
+    __asm__ volatile("syscall" : "+a"(status), "+d"(result) : "D"(a), "S"(b) : "rcx", "r11", "memory");
+    *value = result;
+    return status == 0 ? 0 : -EINVAL;
+#else
+    return -ENOTSUP;
+#endif
+}
+static int gem_userptr(struct gdev *g, struct drm_amdgpu_gem_userptr *a)
+{
+    uint64_t range[2], memory, fd, ignored;
+    if (!getenv("DROSS_BOOTSTRAP") || !a->size || (a->addr | a->size) & 4095)
+        return -EINVAL;
+    if (native_call(36, a->addr, (uintptr_t)range, &memory)) return -EINVAL;
+    int r = -EINVAL;
+    if (range[1] >= a->size && !native_call(32, memory, 0, &fd)) {
+        struct gpud_bo_import_req req = { .offset = range[0], .size = a->size };
+        struct gpud_bo_rep rep;
+        r = rpc_fd(g, fd, GPUD_BO_IMPORT, &req, sizeof(req), NULL, 0, &rep, sizeof(rep), NULL);
+        close(fd);
+        if (!r) { r = bo_register(g, &rep); a->handle = rep.handle; }
+    }
+    native_call(6, memory, 0, &ignored);
+    return r;
+}
+
 static int gem_create(struct gdev *g, union drm_amdgpu_gem_create *a)
 {
 	struct gpud_bo_create_req req = {
@@ -452,21 +522,8 @@ static int gem_create(struct gdev *g, union drm_amdgpu_gem_create *a)
 
 	if (r)
 		return r;
-	pthread_mutex_lock(&g->bo_lock);
-	if (rep.handle >= g->nbos) {
-		uint32_t n = rep.handle * 2 + 64;
-		struct bo *b = realloc(g->bos, n * sizeof(*b));
-
-		if (!b) {
-			pthread_mutex_unlock(&g->bo_lock);
-			return -ENOMEM;
-		}
-		memset(b + g->nbos, 0, (n - g->nbos) * sizeof(*b));
-		g->bos = b;
-		g->nbos = n;
-	}
-	g->bos[rep.handle] = (struct bo){ .rep = rep, .used = true };
-	pthread_mutex_unlock(&g->bo_lock);
+	if ((r = bo_register(g, &rep)))
+		return r;
 	LOG("BO %u: %llu bytes, domains %#llx flags %#llx -> %s\n", rep.handle, (unsigned long long)rep.size,
 	    (unsigned long long)req.domains, (unsigned long long)req.flags, rep.domain == AMDGPU_GEM_DOMAIN_VRAM ? "VRAM" : "GTT");
 	memset(a, 0, sizeof(*a));
@@ -904,7 +961,7 @@ static int gpud_ioctl(struct gdev *g, unsigned long req, void *arg)
 		memset(&((union drm_amdgpu_vm *)arg)->out, 0, sizeof(((union drm_amdgpu_vm *)arg)->out));
 		return 0;
 	case DRM_COMMAND_BASE + DRM_AMDGPU_GEM_USERPTR:
-		return -EINVAL;
+		return gem_userptr(g, arg);
 	}
 	if (nr >= 0xbf && nr <= 0xcf)
 		return syncobj_ioctl(g, DRM_IOWR(nr, char), arg);

@@ -34,6 +34,28 @@ static void ranges_init(struct gpud_ranges *a, u64 start, u64 end)
 	mutex_init(&a->lock);
 }
 
+/* Exclude firmware scanout before any kernel allocation can overwrite it. */
+static void ranges_reserve(struct gpud_ranges *a,u64 start,u64 size)
+{
+    u64 end=start+size;
+    for(int i=0;i<a->n;i++) {
+        u64 low=max(start,a->r[i].start),high=min(end,a->r[i].end);
+        if(low>=high)continue;
+        u64 old_end=a->r[i].end;
+        if(low==a->r[i].start) {
+            a->r[i].start=high;
+            if(high==old_end){memmove(&a->r[i],&a->r[i+1],(--a->n-i)*sizeof(a->r[0]));i--;}
+        } else {
+            a->r[i].end=low;
+            if(high<old_end) {
+                if(a->n==(int)ARRAY_SIZE(a->r))abort();
+                memmove(&a->r[i+2],&a->r[i+1],(a->n-i-1)*sizeof(a->r[0]));
+                a->r[i+1]=(struct gpud_range){high,old_end};a->n++;i++;
+            }
+        }
+    }
+}
+
 static int ranges_alloc(struct gpud_ranges *a, u64 size, u64 align, u64 *out)
 {
 	mutex_lock(&a->lock);
@@ -110,6 +132,10 @@ int gpud_mem_create(struct amdgpu_device *adev, const struct gpud_device_info *i
 	m->vram_cpu = info->vram;
 	m->vram_cpu_size = info->vram_size;
 	ranges_init(&m->kernel_vram, GPUD_KERNEL_VRAM_START, min_t(u64, GPUD_KERNEL_VRAM_END, info->vram_size));
+    for(unsigned i=0;i<12;i++) {
+        u64 offset,size;
+        if(!gpud_display_reservation(i,&offset,&size))ranges_reserve(&m->kernel_vram,offset,size);
+    }
 	adev->mman.gtt_mgr_priv = m;
 	return 0;
 }
@@ -233,6 +259,25 @@ void amdgpu_bo_free_kernel(struct amdgpu_bo **bo_ptr, u64 *gpu_addr, void **cpu_
 		*gpu_addr = 0;
 	if (cpu_addr)
 		*cpu_addr = NULL;
+}
+
+/* Explicit post-fence retirement. General Linux teardown calls keep their old
+ * conservative behavior; only callers which have proved quiescence use this. */
+void gpud_bo_retire_kernel(struct amdgpu_device *adev,struct amdgpu_bo **bo_ptr)
+{
+    struct amdgpu_bo *bo=bo_ptr?*bo_ptr:NULL;
+    if(!bo)return;
+    struct gpud_mem *m=mem(adev);
+    if(bo->domain==AMDGPU_GEM_DOMAIN_VRAM) {
+        ranges_free(&m->kernel_vram,bo->vram_offset,bo->size);
+    } else if(bo->domain==AMDGPU_GEM_DOMAIN_GTT) {
+        u64 offset=bo->gpu_addr-adev->gmc.gart_start;
+        for(u64 at=0;at<bo->size;at+=AMDGPU_GPU_PAGE_SIZE)
+            writeq(0,(u8 __iomem*)adev->gart.ptr+((offset+at)>>AMDGPU_GPU_PAGE_SHIFT)*8);
+        amdgpu_gart_invalidate_tlb(adev);
+        ranges_free(&m->gart,offset,bo->size);
+    }
+    amdgpu_bo_free_kernel(bo_ptr,NULL,NULL);
 }
 
 u64 amdgpu_bo_gpu_offset(struct amdgpu_bo *bo) { return bo->gpu_addr; }

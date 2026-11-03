@@ -53,6 +53,19 @@ void gpud_device_fini(struct amdgpu_device *adev);
 /* Logs the registers that tell why a ring stalled (CP, RLC, ring pointers, GART, VM faults) and the rings' state. */
 void gpud_debug_dump(struct amdgpu_device *adev);
 
+struct gpud_display_info {
+    uint32_t index,width,height,pitch,control,swap,frame,flags;
+    uint64_t base,bytes;
+};
+void gpud_display_capture(struct amdgpu_device *adev);
+int gpud_display_info(struct amdgpu_device *adev,unsigned index,struct gpud_display_info *out);
+int gpud_display_reservation(unsigned which,uint64_t *offset,uint64_t *size);
+void gpud_display_pm(struct amdgpu_device *adev);
+int gpud_display_acquire(struct amdgpu_device *adev,unsigned index,void **cpu,uint64_t *bytes);
+int gpud_display_upload(struct amdgpu_device *adev,unsigned index,unsigned buffer,int *ring,uint64_t *sequence);
+int gpud_display_flip(struct amdgpu_device *adev,unsigned index,unsigned buffer,uint32_t *frame);
+int gpud_display_release(struct amdgpu_device *adev,unsigned index);
+
 /* ---- clients ---- */
 struct gpud_vm;
 struct drm_amdgpu_info;
@@ -65,6 +78,10 @@ struct gpud_ib {
 
 /* A client address space on VMID vmid (1-15). */
 struct gpud_vm *gpud_vm_create(struct amdgpu_device *adev, unsigned vmid);
+/* Only after all work using this VM/BO has completed. Returns address ranges. */
+void gpud_vm_destroy(struct gpud_vm *vm);
+struct amdgpu_bo;
+void gpud_bo_retire_kernel(struct amdgpu_device *adev,struct amdgpu_bo **bo);
 /* Maps [va, va+size) to a VRAM offset, or to an IOVA when pte_flags has AMDGPU_PTE_SYSTEM. */
 int gpud_vm_map(struct gpud_vm *vm, uint64_t va, uint64_t size, uint64_t addr, uint64_t pte_flags);
 int gpud_vm_unmap(struct gpud_vm *vm, uint64_t va, uint64_t size);

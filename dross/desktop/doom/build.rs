@@ -1,0 +1,99 @@
+fn main() {
+    let root = "vendor/doomgeneric/doomgeneric";
+    let mut build = cc::Build::new();
+    build
+        .include(root)
+        .define("NORMALUNIX", None)
+        .define("LINUX", None)
+        .define("SNDSERV", None)
+        .define("_DEFAULT_SOURCE", None)
+        .warnings(false)
+        .flag_if_supported("-fcommon");
+    build.file(format!("{root}/dummy.c"));
+    build.file(format!("{root}/am_map.c"));
+    build.file(format!("{root}/doomdef.c"));
+    build.file(format!("{root}/doomstat.c"));
+    build.file(format!("{root}/dstrings.c"));
+    build.file(format!("{root}/d_event.c"));
+    build.file(format!("{root}/d_items.c"));
+    build.file(format!("{root}/d_iwad.c"));
+    build.file(format!("{root}/d_loop.c"));
+    build.file(format!("{root}/d_main.c"));
+    build.file(format!("{root}/d_mode.c"));
+    build.file(format!("{root}/d_net.c"));
+    build.file(format!("{root}/f_finale.c"));
+    build.file(format!("{root}/f_wipe.c"));
+    build.file(format!("{root}/g_game.c"));
+    build.file(format!("{root}/hu_lib.c"));
+    build.file(format!("{root}/hu_stuff.c"));
+    build.file(format!("{root}/info.c"));
+    build.file(format!("{root}/i_cdmus.c"));
+    build.file(format!("{root}/i_endoom.c"));
+    build.file(format!("{root}/i_joystick.c"));
+    build.file(format!("{root}/i_scale.c"));
+    build.file(format!("{root}/i_sound.c"));
+    build.file(format!("{root}/i_system.c"));
+    build.file(format!("{root}/i_timer.c"));
+    build.file(format!("{root}/memio.c"));
+    build.file(format!("{root}/m_argv.c"));
+    build.file(format!("{root}/m_bbox.c"));
+    build.file(format!("{root}/m_cheat.c"));
+    build.file(format!("{root}/m_config.c"));
+    build.file(format!("{root}/m_controls.c"));
+    build.file(format!("{root}/m_fixed.c"));
+    build.file(format!("{root}/m_menu.c"));
+    build.file(format!("{root}/m_misc.c"));
+    build.file(format!("{root}/m_random.c"));
+    build.file(format!("{root}/p_ceilng.c"));
+    build.file(format!("{root}/p_doors.c"));
+    build.file(format!("{root}/p_enemy.c"));
+    build.file(format!("{root}/p_floor.c"));
+    build.file(format!("{root}/p_inter.c"));
+    build.file(format!("{root}/p_lights.c"));
+    build.file(format!("{root}/p_map.c"));
+    build.file(format!("{root}/p_maputl.c"));
+    build.file(format!("{root}/p_mobj.c"));
+    build.file(format!("{root}/p_plats.c"));
+    build.file(format!("{root}/p_pspr.c"));
+    build.file(format!("{root}/p_saveg.c"));
+    build.file(format!("{root}/p_setup.c"));
+    build.file(format!("{root}/p_sight.c"));
+    build.file(format!("{root}/p_spec.c"));
+    build.file(format!("{root}/p_switch.c"));
+    build.file(format!("{root}/p_telept.c"));
+    build.file(format!("{root}/p_tick.c"));
+    build.file(format!("{root}/p_user.c"));
+    build.file(format!("{root}/r_bsp.c"));
+    build.file(format!("{root}/r_data.c"));
+    build.file(format!("{root}/r_draw.c"));
+    build.file(format!("{root}/r_main.c"));
+    build.file(format!("{root}/r_plane.c"));
+    build.file(format!("{root}/r_segs.c"));
+    build.file(format!("{root}/r_sky.c"));
+    build.file(format!("{root}/r_things.c"));
+    build.file(format!("{root}/sha1.c"));
+    build.file(format!("{root}/sounds.c"));
+    build.file(format!("{root}/statdump.c"));
+    build.file(format!("{root}/st_lib.c"));
+    build.file(format!("{root}/st_stuff.c"));
+    build.file(format!("{root}/s_sound.c"));
+    build.file(format!("{root}/tables.c"));
+    build.file(format!("{root}/v_video.c"));
+    build.file(format!("{root}/wi_stuff.c"));
+    build.file(format!("{root}/w_checksum.c"));
+    build.file(format!("{root}/w_file.c"));
+    build.file(format!("{root}/w_main.c"));
+    build.file(format!("{root}/w_wad.c"));
+    build.file(format!("{root}/z_zone.c"));
+    build.file(format!("{root}/w_file_stdc.c"));
+    build.file(format!("{root}/i_input.c"));
+    build.file(format!("{root}/i_video.c"));
+    build.file(format!("{root}/doomgeneric.c"));
+    build.file("state.c");
+    build.compile("doomgeneric");
+    println!("cargo:rerun-if-changed=state.c");
+    if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() != Ok("musl") {
+        println!("cargo:rustc-link-lib=m");
+    }
+    println!("cargo:rerun-if-changed=vendor/doomgeneric");
+}

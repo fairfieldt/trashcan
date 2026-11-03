@@ -30,7 +30,7 @@ Each window has a front surface and a staging surface. `Upload` copies a bounded
 contiguous pixel span into staging after validating the complete range. `Present`
 copies staging to front atomically with respect to server request processing and
 queues `FrameDone` with the same serial. A partially uploaded frame cannot reach
-the screen. Unmodified staging pixels retain the previous frame. Native messages
+the screen. Unmodified staging pixels retain the previous frame. Legacy native messages
 carry copied pixels, so there is no shared-memory validation/use race and no
 client fence which can wedge the display.
 
@@ -65,8 +65,8 @@ justifies another renderer or buffer transport.
 
 ## Protocol v1
 
-All integers are little endian. A message is exactly one channel datagram. No
-messages carry handles. Unexpected transferred handles are closed by the native
+All integers are little endian. A message is exactly one channel datagram. The legacy opcodes below carry no handles; the optional shared-surface extension
+is described later. Unexpected transferred handles are closed by the native
 adapter, then the connection is rejected. Oversize messages, invalid UTF-8,
 unknown enums/flags, trailing bytes and inconsistent lengths are rejected.
 
@@ -152,14 +152,16 @@ are fixed for the connection's lifetime, so no resize stream message is needed.
 
 On dross the kernel hands init the firmware framebuffer as `display` (a memory object) with its geometry as
 values (`display-width`, `display-height`, `display-stride`, `display-format`). While any program has it mapped,
-the kernel log stays off the screen; a panic or a reset draws on it regardless. usbd is the seat: given a `seat`
+the kernel log stays off the screen; a panic or a reset draws into that original memory.
+A private page-flipped display must first restore the firmware plane for those
+pixels to be visible; serial/network logs remain necessary during display bringup. usbd is the seat: given a `seat`
 channel it sends keyboard and pointer input as protocol Input packets (US layout, key repeat, the pointer
 clamped to the display) and stops logging keys. init.conf connects them (`../README.md`, "Oscar's desktop").
 
-This boundary is also where a later modesetting display server can replace the
-firmware scanout adapter. Shared surfaces would need explicit ownership and release
-semantics; a GPU renderer would need bounded submissions. Neither is assumed by
-the UI/toolkit or terminal model.
+This boundary allows a display service to replace firmware presentation without
+changing toolkit or terminal models. The provisional GPU adapter below has
+bounded rendering submissions, native shared Memory, and a private current-mode
+page-flip channel. Connector/mode selection is outside its current scope.
 
 ## Current scope and limits
 
@@ -184,3 +186,48 @@ graphical file manager. The toolkit is a small initial widget set with explicit
 state; adding menus/text fields can follow the same stable-ID/event contract.
 Native Trash does not make Linux's logged stdout into terminal output: that needs
 an actual process/PTY service rather than intercepting the kernel log.
+
+
+## Provisional shared-surface and rendering extension
+
+The optional OSCR v1 extension adds opcodes 13 `CreateShared` (same fields as
+Create), 14 `CreatedShared` (same geometry as Created, accompanied by exactly one
+server-created memory handle), 15 `PresentShared` (empty), and 16 trusted
+`KeyboardState` (modifier byte followed by six USB HID keyboard usage bytes).
+Unsupported servers reject these requests; legacy copied-pixel clients are
+unchanged. This extension is implementation work, not a frozen public API.
+
+The shared surface is tightly packed XRGB8888 with page-rounded backing. Its
+client handle carries READ/WRITE/MAP/TRANSFER, without DUPLICATE. The server
+allocates and bounds its geometry, retains a read mapping, and never accepts a
+client-supplied address, size or scene object. A client may write only before
+PresentShared and after the matching FrameDone. Windowd snapshots pixels into
+server-owned front storage before acknowledging reuse. A misbehaving client can
+tear its own submitted image but cannot change retained scene memory or make the
+compositor follow arbitrary pointers. A GPU application can import this native
+Memory as its Vulkan transfer destination through gpud, avoiding a CPU output
+copy; the compositor still snapshots the submitted window. This is not an
+end-to-end zero-copy claim. Shared windows reject legacy Upload/Present, avoiding
+stale staging state.
+
+A shared window uses front storage plus a bounded snapshot scratch buffer and
+one memory object instead of the old front/staging pair: at the global 512 Ki
+pixel limit, up to 6 MiB of window storage. GPU rendering has separate upload,
+image and transfer-output allocations. The private scanout adapter imports its
+server-owned staging Memory as that transfer output. Closing a window or disconnecting releases its
+mapping, memory handle and scratch; unsent handle-bearing replies are closed too.
+
+KeyboardState is independent of text and key repeat. Only the trusted seat may
+supply it; normal clients cannot inject input. USB retains/coalesces the latest
+complete keyboard state and retries under channel backpressure, so a dropped
+release cannot strand a held key. Clients clear held state on loss of focus.
+
+Window policy paints through a renderer-independent Painter. The native server
+uses Canvas. The musl GPU server uses Vulkan graphics through Mesa/RADV and gpud;
+without a private scanout capability it copies completed pixels to firmware
+scanout. With that capability it imports the display staging Memory, completes
+Vulkan rendering, copies to alternating VRAM surfaces using SDMA and observes
+vblank-latched flips. Owner close waits for firmware restore acknowledgement.
+FrameDone remains snapshot acknowledgement, not GPU completion or vblank. See
+`gpu/README.md` for measured correctness and current display limits,
+and `doom/README.md` for an actual dross native-window application acceptance test.

@@ -35,3 +35,9 @@ name = "oscar-session"
 required-features = ["native"]
 test = false
 bench = false
+
+[[bin]]
+name = "oscar-desktop-test-init"
+required-features = ["native"]
+test = false
+bench = false

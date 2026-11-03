@@ -696,6 +696,7 @@ struct amdgpu_device *gpud_device_create(const struct gpud_platform *platform, c
 	spin_lock_init(&adev->irq.lock);
 	spin_lock_init(&adev->wb.lock);
 	adev->gpud = (void *)info;
+	gpud_display_capture(adev);
 	extern int gpud_mem_create(struct amdgpu_device *adev, const struct gpud_device_info *info);
 	if (gpud_mem_create(adev, info)) {
 		free(pdev);

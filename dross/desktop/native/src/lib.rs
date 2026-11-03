@@ -2,6 +2,9 @@
 //! this crate neither enumerates devices nor alters the boot supervisor.
 #![no_std]
 extern crate alloc;
+pub mod scanout;
+pub mod window;
+pub mod windowd;
 
 use alloc::{format, string::String, vec, vec::Vec};
 use dross_rt::{Error, Handle, bootstrap::Bootstrap, sys};

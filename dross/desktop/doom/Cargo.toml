@@ -1,0 +1,17 @@
+[package]
+name = "oscar-doom"
+version = "0.1.0"
+edition = "2024"
+license = "GPL-2.0-or-later"
+description = "DoomGeneric in an Oscar native shared-surface window"
+
+[features]
+acceptance = []
+
+[dependencies]
+dross-rt = { path = "../../user/rt", default-features = false }
+oscar-desktop = { path = "../core" }
+oscar-desktop-native = { path = "../native" }
+
+[build-dependencies]
+cc = "1"

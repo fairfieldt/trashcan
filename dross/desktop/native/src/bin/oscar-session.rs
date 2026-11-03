@@ -1,4 +1,4 @@
-//! Explicit opt-in process graph. The existing init/boot configuration never loads it.
+//! Session supervisor. The caller provisions display, seat and program images.
 #![no_std]
 #![no_main]
 extern crate alloc;
@@ -20,7 +20,10 @@ fn main(bootstrap: Handle) -> i32 {
         .handle("input", b.handle("input").expect("seat input"))
         .handle("client/trash", server)
         .handle("control", lifetime);
-    for name in ["width", "height", "stride", "format", "offset"] {
+    if let Some(scanout) = b.handle("scanout") {
+        wb = wb.handle("scanout", scanout);
+    }
+    for name in ["width", "height", "stride", "format", "offset", "gpu-bus"] {
         if let Some(value) = b.value(name) {
             wb = wb.value(name, value);
         }
@@ -31,23 +34,50 @@ fn main(bootstrap: Handle) -> i32 {
             wb = wb.handle(n, *h);
         }
     }
-    let windowd = bootstrap::spawn(
-        b.handle("module/oscar-windowd").expect("windowd image"),
-        "oscar-windowd",
-        wb,
-        u64::MAX,
-    )
-    .expect("spawn windowd");
+    // Supplying the GPU server image explicitly selects the Linux-compat adapter.
+    // Applications still receive the same native channel and surface capabilities.
+    let windowd = if let Some(image) = b.handle("module/oscar-windowd-gpu") {
+        let environment = graphics_environment(&b);
+        let env: alloc::vec::Vec<&str> = environment.iter().map(|s| s.as_str()).collect();
+        let child = wb.send().expect("windowd bootstrap");
+        sys::spawn_linux(image, &["oscar-windowd-gpu"], &env, Some(child))
+            .expect("spawn GPU windowd")
+    } else {
+        bootstrap::spawn(
+            b.handle("module/oscar-windowd").expect("windowd image"),
+            "oscar-windowd",
+            wb,
+            u64::MAX,
+        )
+        .expect("spawn windowd")
+    };
+    let doom = b.value("app") == Some("doom");
+    let vulkan = b.value("app") == Some("vulkan");
     let external = b.value("app") == Some("terminal");
-    let name = if external { "oscar-terminal" } else { "trash" };
+    let name = if vulkan {
+        "oscar-vkdraw"
+    } else if doom {
+        "oscar-doom"
+    } else if external {
+        "oscar-terminal"
+    } else {
+        "trash"
+    };
     let image = b
-        .handle(if external {
+        .handle(if vulkan {
+            "module/oscar-vkdraw"
+        } else if doom {
+            "module/oscar-doom"
+        } else if external {
             "module/oscar-terminal"
         } else {
             "module/trash"
         })
         .expect("app image");
     let mut ab = Builder::default().handle("window", client);
+    if let Some(bus) = b.value("gpu-bus") {
+        ab = ab.value("gpu-bus", bus);
+    }
     if external {
         ab = ab.handle("terminal", b.handle("terminal").expect("terminal stream"));
     }
@@ -66,7 +96,31 @@ fn main(bootstrap: Handle) -> i32 {
     if let Some(height) = b.value("client-height") {
         ab = ab.value("height", height);
     }
-    let app = match bootstrap::spawn(image, name, ab, u64::MAX) {
+    let started = if vulkan {
+        let environment = graphics_environment(&b);
+        let env: alloc::vec::Vec<&str> = environment.iter().map(|s| s.as_str()).collect();
+        let boot = ab.send().expect("Vulkan app bootstrap");
+        sys::spawn_linux(image, &["oscar-vkdraw"], &env, Some(boot))
+    } else if doom {
+        let boot = ab.send().expect("Doom bootstrap");
+        sys::spawn_linux(
+            image,
+            &[
+                "oscar-doom",
+                "-iwad",
+                b.value("iwad").unwrap_or("/freedoom1.wad"),
+                "-warp",
+                "1",
+                "1",
+                "-nosound",
+            ],
+            &[],
+            Some(boot),
+        )
+    } else {
+        bootstrap::spawn(image, name, ab, u64::MAX)
+    };
+    let app = match started {
         Ok(p) => p,
         Err(_) => {
             let _ = sys::close(control);
@@ -78,4 +132,18 @@ fn main(bootstrap: Handle) -> i32 {
     let _ = sys::close(control);
     let _ = sys::process_wait(windowd, FOREVER);
     result as i32
+}
+
+fn graphics_environment(b: &Bootstrap) -> alloc::vec::Vec<alloc::string::String> {
+    let mut environment: alloc::vec::Vec<alloc::string::String> = [
+        "LD_LIBRARY_PATH",
+        "LD_PRELOAD",
+        "VK_DRIVER_FILES",
+        "GPUD_SOCKET",
+    ]
+    .iter()
+    .filter_map(|key| b.value(key).map(|value| alloc::format!("{key}={value}")))
+    .collect();
+    environment.push("DROSS_BOOTSTRAP=1".into());
+    environment
 }

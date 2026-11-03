@@ -6,6 +6,7 @@
 
 use crate::hw::{AmdgpuDevice, Device};
 use crate::proto::{self, *};
+use crate::retirement::LastUse;
 use anyhow::{Context, Result, bail};
 use gpud_platform::iova::IovaAllocator;
 use gpud_platform::{DmaAccess, DmaBuffer, DmaSpace, PciDevice};
@@ -13,7 +14,11 @@ use std::collections::HashMap;
 use std::ffi::{CString, c_void};
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
 use std::ptr::NonNull;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex, RwLock,
+    atomic::{AtomicBool, Ordering},
+};
+use std::time::{Duration, Instant};
 
 #[repr(C)]
 struct GpudVm {
@@ -29,6 +34,7 @@ struct GpudIb {
 
 unsafe extern "C" {
     fn gpud_vm_create(adev: *mut AmdgpuDevice, vmid: u32) -> *mut GpudVm;
+    fn gpud_vm_destroy(vm: *mut GpudVm);
     fn gpud_vm_map(vm: *mut GpudVm, va: u64, size: u64, addr: u64, flags: u64) -> i32;
     fn gpud_vm_unmap(vm: *mut GpudVm, va: u64, size: u64) -> i32;
     fn gpud_vram_alloc(adev: *mut AmdgpuDevice, size: u64, align: u64, offset: *mut u64) -> i32;
@@ -75,11 +81,15 @@ fn bo_file_size() -> u64 {
     if gpud_platform::on_dross() { BO_FILE_SIZE_DROSS } else { BO_FILE_SIZE }
 }
 
-struct Shared {
-    device: Device,
+pub(crate) struct Shared {
+    pub(crate) device: Device,
     dma: Arc<dyn DmaSpace>,
     pci: Arc<dyn PciDevice>,
-    vmids: Mutex<[bool; 16]>,
+    pub(crate) vmids: Mutex<[bool; 16]>,
+    /// Readers protect requests/cleanup; shutdown excludes every device user.
+    pub(crate) accepting: RwLock<bool>,
+    pub(crate) submitted: Mutex<LastUse>,
+    pub(crate) display_live: AtomicBool,
 }
 
 // SAFETY: the C core locks its own state (submission, VM tables, VRAM allocator); the raw pointer is the device.
@@ -87,7 +97,7 @@ unsafe impl Send for Shared {}
 unsafe impl Sync for Shared {}
 
 impl Shared {
-    fn adev(&self) -> *mut AmdgpuDevice {
+    pub(crate) fn adev(&self) -> *mut AmdgpuDevice {
         self.device.adev()
     }
 }
@@ -95,6 +105,21 @@ impl Shared {
 enum Placement {
     Vram { offset: u64 },
     Gtt { file_offset: u64, dma: DmaBuffer },
+    Imported { dma: DmaBuffer, mapping: ImportedMapping },
+}
+
+/// The driver owns both an fd and its CPU mapping independently of the exporter.
+struct ImportedMapping {
+    _fd: OwnedFd,
+    ptr: *mut c_void,
+    size: usize,
+}
+impl Drop for ImportedMapping {
+    fn drop(&mut self) {
+        unsafe {
+            libc::munmap(self.ptr, self.size);
+        }
+    }
 }
 
 struct Bo {
@@ -111,7 +136,7 @@ struct Client {
     bo_space: IovaAllocator,
     bos: HashMap<u32, Bo>,
     next_handle: u32,
-    last_fence: HashMap<i32, u64>,
+    last_fence: LastUse,
 }
 
 pub fn run(pci: Arc<dyn PciDevice>, dma: Arc<dyn DmaSpace>, firmware_dir: &str, socket: &str) -> Result<()> {
@@ -134,7 +159,16 @@ pub fn run(pci: Arc<dyn PciDevice>, dma: Arc<dyn DmaSpace>, firmware_dir: &str, 
     if failed > 0 {
         bail!("{failed} IB tests failed");
     }
-    let shared = Arc::new(Shared { device, dma, pci, vmids: Mutex::new([false; 16]) });
+    let shared = Arc::new(Shared {
+        device,
+        dma,
+        pci,
+        vmids: Mutex::new([false; 16]),
+        accepting: RwLock::new(true),
+        submitted: Mutex::new(LastUse::default()),
+        display_live: AtomicBool::new(false),
+    });
+    crate::display::start(shared.clone());
     let s = shared.clone();
     std::thread::spawn(move || {
         loop {
@@ -145,13 +179,30 @@ pub fn run(pci: Arc<dyn PciDevice>, dma: Arc<dyn DmaSpace>, firmware_dir: &str, 
                 s.device.dump();
                 continue;
             }
-            crate::hw::log("info", &format!("signal {sig}: stopping the GPU"));
+            // Once draining, no request may queue more GPU work. If a fence has
+            // not completed, retain the process/device/backing; a reset or device
+            // detachment is required before the operator may force its exit.
+            let mut accepting = s.accepting.write().unwrap();
+            *accepting = false;
+            if s.display_live.load(Ordering::Acquire) {
+                crate::hw::log("error", "display owner must release scanout before driver shutdown; backing retained");
+                continue;
+            }
+            if !s.submitted.lock().unwrap().complete(|ring| unsafe { gpud_fence_read(s.adev(), ring) }) {
+                crate::hw::log(
+                    "error",
+                    "GPU has unfinished work: driver remains alive with backing quarantined; reset/detach before forcing exit",
+                );
+                continue;
+            }
+            crate::hw::log("info", &format!("signal {sig}: stopping the drained GPU"));
             s.device.shutdown();
             std::process::exit(0);
         }
     });
 
     let listener = listen(socket)?;
+    crate::supervisor::start(shared.clone());
     eprintln!("[info] gpud serving {} on {socket}", shared.pci.address());
     loop {
         // SAFETY: accept on our listening socket.
@@ -204,13 +255,35 @@ fn listen(path: &str) -> Result<OwnedFd> {
     }
 }
 
-fn recv(fd: RawFd, buf: &mut [u8]) -> Result<usize> {
-    // SAFETY: buf is writable for its length.
-    let n = unsafe { libc::recv(fd, buf.as_mut_ptr().cast(), buf.len(), 0) };
-    if n < 0 {
-        bail!("recv: {}", std::io::Error::last_os_error());
+fn recv(fd: RawFd, buf: &mut [u8]) -> Result<(usize, Option<OwnedFd>)> {
+    let mut iov = libc::iovec { iov_base: buf.as_mut_ptr().cast(), iov_len: buf.len() };
+    let mut control = [0usize; 16];
+    unsafe {
+        let mut hdr: libc::msghdr = std::mem::zeroed();
+        hdr.msg_iov = &mut iov;
+        hdr.msg_iovlen = 1;
+        hdr.msg_control = control.as_mut_ptr().cast();
+        hdr.msg_controllen = size_of_val(&control) as _;
+        let n = libc::recvmsg(fd, &mut hdr, libc::MSG_CMSG_CLOEXEC);
+        if n < 0 {
+            bail!("recvmsg: {}", std::io::Error::last_os_error());
+        }
+        let mut fds = Vec::new();
+        let mut c = libc::CMSG_FIRSTHDR(&hdr);
+        while !c.is_null() {
+            if (*c).cmsg_level == libc::SOL_SOCKET && (*c).cmsg_type == libc::SCM_RIGHTS {
+                let bytes = (*c).cmsg_len as usize - libc::CMSG_LEN(0) as usize;
+                for i in 0..bytes / size_of::<RawFd>() {
+                    fds.push(OwnedFd::from_raw_fd(std::ptr::read_unaligned(libc::CMSG_DATA(c).cast::<RawFd>().add(i))));
+                }
+            }
+            c = libc::CMSG_NXTHDR(&hdr, c);
+        }
+        if hdr.msg_flags & (libc::MSG_TRUNC | libc::MSG_CTRUNC) != 0 || fds.len() > 1 {
+            bail!("oversized GPU request/ancillary data");
+        }
+        Ok((n as usize, fds.pop()))
     }
-    Ok(n as usize)
 }
 
 fn send(fd: RawFd, status: i32, payload: &[u8], pass_fd: Option<RawFd>) -> Result<()> {
@@ -241,6 +314,10 @@ fn send(fd: RawFd, status: i32, payload: &[u8], pass_fd: Option<RawFd>) -> Resul
 }
 
 fn serve_client(shared: Arc<Shared>, conn: OwnedFd) -> Result<()> {
+    let accepting = shared.accepting.read().unwrap();
+    if !*accepting {
+        bail!("GPU is draining");
+    }
     let vmid = {
         let mut v = shared.vmids.lock().unwrap();
         let id = (1..8).find(|&i| !v[i]).context("no free VMID")?;
@@ -250,6 +327,7 @@ fn serve_client(shared: Arc<Shared>, conn: OwnedFd) -> Result<()> {
     // SAFETY: adev is valid; the VM lives as long as the client.
     let vm = unsafe { gpud_vm_create(shared.adev(), vmid) };
     if vm.is_null() {
+        shared.vmids.lock().unwrap()[vmid as usize] = false;
         bail!("VM {vmid}: out of page table memory");
     }
     let mut client = Client {
@@ -258,22 +336,26 @@ fn serve_client(shared: Arc<Shared>, conn: OwnedFd) -> Result<()> {
         vmid,
         bo_file: None,
         bo_map: std::ptr::null_mut(),
-        bo_space: IovaAllocator::new(&[0..bo_file_size()]),
+        bo_space: IovaAllocator::new(std::slice::from_ref(&(0..bo_file_size()))),
         bos: HashMap::new(),
         next_handle: 1,
-        last_fence: HashMap::new(),
+        last_fence: LastUse::default(),
     };
+    drop(accepting);
     eprintln!("[info] client connected: VMID {vmid}");
     let mut buf = vec![0u8; MAX_MSG];
     let r = loop {
-        let n = match recv(conn.as_raw_fd(), &mut buf) {
-            Ok(0) => break Ok(()),
-            Ok(n) => n,
+        let (n, incoming) = match recv(conn.as_raw_fd(), &mut buf) {
+            Ok((0, _)) => break Ok(()),
+            Ok(v) => v,
             Err(e) => break Err(e),
         };
         let Some(req) = proto::read::<Req>(&buf[..n], 0) else { break Err(anyhow::anyhow!("short request")) };
-        let payload = &buf[8..n.min(8 + req.len as usize)];
-        let (status, reply, fd) = match client.handle(req.op, payload) {
+        if n != 8 + req.len as usize {
+            break Err(anyhow::anyhow!("invalid GPU request length"));
+        }
+        let payload = &buf[8..n];
+        let (status, reply, fd) = match client.handle(req.op, payload, incoming) {
             Ok((reply, fd)) => (0, reply, fd),
             Err(errno) => (-errno, Vec::new(), None),
         };
@@ -292,8 +374,24 @@ impl Client {
         self.shared.adev()
     }
 
-    fn handle(&mut self, op: u32, p: &[u8]) -> std::result::Result<(Vec<u8>, Option<RawFd>), i32> {
+    fn handle(
+        &mut self,
+        op: u32,
+        p: &[u8],
+        incoming: Option<OwnedFd>,
+    ) -> std::result::Result<(Vec<u8>, Option<RawFd>), i32> {
+        let shared = self.shared.clone();
+        let accepting = shared.accepting.read().unwrap();
+        if !*accepting {
+            return Err(libc::ESHUTDOWN);
+        }
+        if op != BO_IMPORT && incoming.is_some() {
+            return Err(libc::EINVAL);
+        }
         match op {
+            BO_IMPORT => self
+                .bo_import(proto::read(p, 0).ok_or(libc::EINVAL)?, incoming.ok_or(libc::EINVAL)?)
+                .map(|r| (proto::bytes(&r).to_vec(), None)),
             HELLO => self.hello(),
             INFO => {
                 let q: InfoReq = proto::read(p, 0).ok_or(libc::EINVAL)?;
@@ -323,7 +421,14 @@ impl Client {
             WAIT => {
                 let w: WaitReq = proto::read(p, 0).ok_or(libc::EINVAL)?;
                 // SAFETY: adev is valid; the ring index is checked by the C side.
-                let r = unsafe { gpud_fence_wait(self.adev(), fence_ring(w.fence), fence_seq(w.fence), w.timeout_ns) };
+                let r = unsafe {
+                    gpud_fence_wait(
+                        self.adev(),
+                        fence_ring(w.fence),
+                        fence_seq(w.fence),
+                        if w.timeout_ns < 0 { 500_000_000 } else { w.timeout_ns.min(500_000_000) },
+                    )
+                };
                 if r != 0 { Err(-r) } else { Ok((Vec::new(), None)) }
             }
             RING => {
@@ -393,8 +498,8 @@ impl Client {
         if self.bo_file.is_none() || req.size == 0 {
             return Err(libc::EINVAL);
         }
-        let size = req.size.next_multiple_of(PAGE);
-        let align = req.alignment.max(PAGE).next_power_of_two();
+        let size = req.size.checked_add(PAGE - 1).ok_or(libc::EINVAL)? & !(PAGE - 1);
+        let align = req.alignment.max(PAGE).checked_next_power_of_two().ok_or(libc::EINVAL)?;
         // VRAM only for buffers the client promises never to map (NO_CPU_ACCESS: RADV's device-local memory
         // types): no VRAM is CPU-visible to clients, and anything else may be mapped later.
         let want_vram = req.domains & DOMAIN_VRAM != 0 && req.flags & CREATE_NO_CPU_ACCESS != 0;
@@ -432,6 +537,7 @@ impl Client {
         let (domain, mmap_offset) = match &placement {
             Placement::Vram { .. } => (DOMAIN_VRAM as u32, NO_MMAP),
             Placement::Gtt { file_offset, .. } => (DOMAIN_GTT as u32, *file_offset),
+            Placement::Imported { .. } => unreachable!(),
         };
         let handle = self.next_handle;
         self.next_handle += 1;
@@ -440,16 +546,77 @@ impl Client {
         Ok(rep)
     }
 
+    fn bo_import(&mut self, req: BoImportReq, fd: OwnedFd) -> std::result::Result<BoRep, i32> {
+        if self.bo_file.is_none()
+            || req.size == 0
+            || req.size > 64 << 20
+            || !req.offset.is_multiple_of(PAGE)
+            || !req.size.is_multiple_of(PAGE)
+        {
+            return Err(libc::EINVAL);
+        }
+        let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+        if unsafe { libc::fstat(fd.as_raw_fd(), &mut stat) } != 0
+            || stat.st_size < 0
+            || req.offset.checked_add(req.size).is_none_or(|end| end > stat.st_size as u64)
+        {
+            return Err(libc::EINVAL);
+        }
+        let ptr = unsafe {
+            libc::mmap(
+                std::ptr::null_mut(),
+                req.size as usize,
+                libc::PROT_READ | libc::PROT_WRITE,
+                libc::MAP_SHARED,
+                fd.as_raw_fd(),
+                req.offset as libc::off_t,
+            )
+        };
+        if ptr == libc::MAP_FAILED {
+            return Err(libc::ENOMEM);
+        }
+        let mapping = ImportedMapping { _fd: fd, ptr, size: req.size as usize };
+        let dma = unsafe {
+            self.shared.dma.map_external(NonNull::new(ptr.cast()).unwrap(), req.size as usize, DmaAccess::ReadWrite)
+        }
+        .map_err(|_| libc::ENOMEM)?;
+        let handle = self.next_handle;
+        self.next_handle = handle.checked_add(1).ok_or(libc::ENOMEM)?;
+        let rep = BoRep {
+            handle,
+            domain: DOMAIN_GTT as u32,
+            size: req.size,
+            mmap_offset: NO_MMAP,
+            alignment: PAGE,
+            domains: DOMAIN_GTT,
+            flags: 0,
+        };
+        self.bos.insert(handle, Bo { placement: Placement::Imported { dma, mapping }, rep });
+        Ok(rep)
+    }
+
     /// Frees a buffer once every ring this client used has finished its work.
     fn bo_free(&mut self, handle: u32) -> std::result::Result<(), i32> {
-        let bo = self.bos.remove(&handle).ok_or(libc::ENOENT)?;
-        for (&ring, &f) in &self.last_fence {
-            // SAFETY: adev is valid.
-            unsafe { gpud_fence_wait(self.adev(), ring, fence_seq(f), 5_000_000_000) };
+        if !self.bos.contains_key(&handle) {
+            return Err(libc::ENOENT);
         }
+        let deadline = Instant::now() + Duration::from_millis(500);
+        while !self.last_fence.complete(|ring| unsafe { gpud_fence_read(self.adev(), ring) }) {
+            if Instant::now() >= deadline {
+                // Leave the BO, file offset and DMA mapping installed. Neither
+                // this handle nor its physical range may be recycled yet.
+                return Err(libc::ETIMEDOUT);
+            }
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        let bo = self.bos.remove(&handle).unwrap();
         match bo.placement {
             // SAFETY: adev is valid; the range came from gpud_vram_alloc.
             Placement::Vram { offset } => unsafe { gpud_vram_free(self.adev(), offset, bo.rep.size) },
+            Placement::Imported { dma, mapping } => {
+                drop(dma);
+                drop(mapping);
+            }
             Placement::Gtt { file_offset, dma } => {
                 drop(dma);
                 if let Some(f) = &self.bo_file {
@@ -471,7 +638,7 @@ impl Client {
 
     fn va(&mut self, req: VaReq) -> std::result::Result<(), i32> {
         let (va, size) = (req.va, req.size);
-        if va % PAGE != 0 || size % PAGE != 0 || req.offset % PAGE != 0 {
+        if !va.is_multiple_of(PAGE) || !size.is_multiple_of(PAGE) || !req.offset.is_multiple_of(PAGE) {
             return Err(libc::EINVAL);
         }
         // A partially-resident (sparse) range reserves address space with nothing behind it; gpud leaves it
@@ -488,7 +655,7 @@ impl Client {
             }
             VA_OP_MAP | VA_OP_REPLACE => {
                 let bo = self.bos.get(&req.handle).ok_or(libc::ENOENT)?;
-                if req.offset + size > bo.rep.size {
+                if req.offset.checked_add(size).is_none_or(|end| end > bo.rep.size) {
                     return Err(libc::EINVAL);
                 }
                 let mut flags = PTE_VALID;
@@ -500,7 +667,7 @@ impl Client {
                 }
                 let addr = match &bo.placement {
                     Placement::Vram { offset } => offset + req.offset,
-                    Placement::Gtt { dma, .. } => {
+                    Placement::Gtt { dma, .. } | Placement::Imported { dma, .. } => {
                         flags |= PTE_SYSTEM | PTE_SNOOPED;
                         dma.iova() + req.offset
                     }
@@ -515,6 +682,12 @@ impl Client {
 
     fn submit(&mut self, p: &[u8]) -> std::result::Result<u64, i32> {
         let req: SubmitReq = proto::read(p, 0).ok_or(libc::EINVAL)?;
+        if !(1..=16).contains(&req.num_ibs)
+            || req.num_deps > 16
+            || p.len() != 16 + req.num_ibs as usize * 16 + req.num_deps as usize * 8
+        {
+            return Err(libc::EINVAL);
+        }
         let ibs: Vec<GpudIb> = (0..req.num_ibs as usize)
             .map(|i| {
                 proto::read::<IbDesc>(p, 16 + i * 16).map(|d| GpudIb { va: d.va, size_dw: d.size_dw, flags: d.flags })
@@ -532,7 +705,10 @@ impl Client {
             // Work queued earlier on the same ring runs first anyway; other rings are waited for.
             if fence_ring(dep) != ring {
                 // SAFETY: adev is valid.
-                unsafe { gpud_fence_wait(self.adev(), fence_ring(dep), fence_seq(dep), 10_000_000_000) };
+                let result = unsafe { gpud_fence_wait(self.adev(), fence_ring(dep), fence_seq(dep), 500_000_000) };
+                if result != 0 {
+                    return Err(-result);
+                }
             }
         }
         let mut seq = 0;
@@ -542,18 +718,42 @@ impl Client {
             return Err(-r);
         }
         let f = fence(ring, seq);
-        self.last_fence.insert(ring, f);
+        self.last_fence.record(ring, seq);
+        self.shared.submitted.lock().unwrap().record(ring, seq);
         Ok(f)
     }
 
     fn close(&mut self) {
-        let handles: Vec<u32> = self.bos.keys().copied().collect();
-        for h in handles {
-            let _ = self.bo_free(h);
-        }
-        if !self.bo_map.is_null() {
-            // SAFETY: unmaps the whole buffer file mapping made in hello().
-            unsafe { libc::munmap(self.bo_map.cast::<c_void>(), bo_file_size() as usize) };
+        let mut reported = false;
+        // Disconnected clients keep their VMID, file mapping and every BO until
+        // all last uses finish. The bounded VMID pool bounds quarantined clients.
+        // A hung device requires explicit detach/reset; closing the socket alone
+        // never licenses reuse of memory still reachable by the GPU.
+        loop {
+            let shared = self.shared.clone();
+            let _access = shared.accepting.read().unwrap();
+            if self.last_fence.complete(|ring| unsafe { gpud_fence_read(self.adev(), ring) }) {
+                let handles: Vec<_> = self.bos.keys().copied().collect();
+                for handle in handles {
+                    self.bo_free(handle).expect("completed fences cannot fail retirement");
+                }
+                if !self.bo_map.is_null() {
+                    unsafe { libc::munmap(self.bo_map.cast::<c_void>(), bo_file_size() as usize) };
+                    self.bo_map = std::ptr::null_mut();
+                }
+                unsafe { gpud_vm_destroy(self.vm) };
+                self.vm = std::ptr::null_mut();
+                return;
+            }
+            if !reported {
+                crate::hw::log(
+                    "warning",
+                    &format!("VMID {} disconnected with GPU work pending: backing quarantined", self.vmid),
+                );
+                reported = true;
+            }
+            drop(_access);
+            std::thread::sleep(Duration::from_millis(10));
         }
     }
 }

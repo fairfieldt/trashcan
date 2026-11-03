@@ -16,7 +16,7 @@ const IMPORTED: &[&str] = &[
     "pm/legacy-dpm/si_smc",
     "pm/legacy-dpm/legacy_dpm",
 ];
-const CORE: &[&str] = &["lkpi", "device", "mem", "ring", "vm", "info", "pm"];
+const CORE: &[&str] = &["lkpi", "device", "mem", "ring", "vm", "info", "pm", "display"];
 
 fn main() {
     if std::env::var("CARGO_CFG_TARGET_OS").unwrap() != "linux" {

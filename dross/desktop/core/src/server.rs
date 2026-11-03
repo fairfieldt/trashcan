@@ -1,7 +1,7 @@
 //! Single-owner compositor and window manager. A connection ID is assigned by the
 //! transport, never accepted from a client packet. Surfaces belong to that ID.
 use crate::{
-    canvas::{Canvas, Rect},
+    canvas::{Canvas, Painter, Rect},
     protocol::{Fault, Input, Key, MAX_DIMENSION, MAX_WINDOW_PIXELS, Message, Mods, Packet},
     ui::Theme,
 };
@@ -24,7 +24,7 @@ struct Window {
     x: i32,
     y: i32,
     front: Canvas,
-    pending: Canvas,
+    pending: Option<Canvas>,
 }
 impl Window {
     fn frame(&self) -> Rect {
@@ -58,6 +58,8 @@ pub struct Server {
     drag: Option<(u32, i32, i32)>,
     capture: Option<u32>,
     dirty: bool,
+    screen_valid: bool,
+    keyboard: (u8, [u8; 6]),
 }
 impl Server {
     pub fn new(width: u32, height: u32) -> Result<Self, Fault> {
@@ -74,6 +76,8 @@ impl Server {
             drag: None,
             capture: None,
             dirty: true,
+            screen_valid: false,
+            keyboard: (0, [0; 6]),
         })
     }
     pub fn dimensions(&self) -> (u32, u32) {
@@ -104,6 +108,16 @@ impl Server {
         self.focus = id;
         if let Some(w) = self.windows.iter().find(|w| Some(w.id) == id) {
             out.push(Self::delivery(w, 0, Message::Focus(true)));
+            if self.keyboard != (0, [0; 6]) {
+                out.push(Self::delivery(
+                    w,
+                    0,
+                    Message::Input(Input::KeyboardState {
+                        modifiers: self.keyboard.0,
+                        keys: self.keyboard.1,
+                    }),
+                ));
+            }
         }
         self.dirty = true;
     }
@@ -120,7 +134,13 @@ impl Server {
         out
     }
     fn apply(&mut self, client: Client, p: Packet, out: &mut Vec<Delivery>) -> Result<(), Fault> {
+        let shared = matches!(p.message, Message::CreateShared { .. });
         if let Message::Create {
+            width,
+            height,
+            title,
+        }
+        | Message::CreateShared {
             width,
             height,
             title,
@@ -151,13 +171,23 @@ impl Server {
                 return Err(Fault::Limit);
             }
             let front = Canvas::new(width, height)?;
-            let pending = Canvas::new(width, height)?;
+            let pending = if shared {
+                None
+            } else {
+                Some(Canvas::new(width, height)?)
+            };
             let id = self.next_id;
             self.next_id += 1;
             // Beside the open windows if it fits on the screen, else cascaded over them.
-            let right = self.windows.iter().map(|w| w.x + (w.front.width() + BORDER * 2) as i32).max();
+            let right = self
+                .windows
+                .iter()
+                .map(|w| w.x + (w.front.width() + BORDER * 2) as i32)
+                .max();
             let (x, y) = match right {
-                Some(r) if r as u32 + 16 + width + BORDER * 2 <= self.screen.width() => (r + 16, 42),
+                Some(r) if r as u32 + 16 + width + BORDER * 2 <= self.screen.width() => {
+                    (r + 16, 42)
+                }
                 _ => {
                     let step = self.windows.len() as u32 * 26;
                     (
@@ -178,7 +208,11 @@ impl Server {
             out.push(Self::delivery(
                 self.windows.last().unwrap(),
                 p.serial,
-                Message::Created { width, height },
+                if shared {
+                    Message::CreatedShared { width, height }
+                } else {
+                    Message::Created { width, height }
+                },
             ));
             self.set_focus(Some(id), out);
             self.dirty = true;
@@ -196,6 +230,8 @@ impl Server {
                 let end = start.checked_add(pixels.len()).ok_or(Fault::Geometry)?;
                 let dest = w
                     .pending
+                    .as_mut()
+                    .ok_or(Fault::Unknown)?
                     .pixels_mut()
                     .get_mut(start..end)
                     .ok_or(Fault::Geometry)?;
@@ -204,7 +240,9 @@ impl Server {
                 }
             }
             Message::Present => {
-                w.front.pixels_mut().copy_from_slice(w.pending.pixels());
+                w.front
+                    .pixels_mut()
+                    .copy_from_slice(w.pending.as_ref().ok_or(Fault::Unknown)?.pixels());
                 out.push(Self::delivery(w, p.serial, Message::FrameDone));
                 self.dirty = true;
             }
@@ -215,6 +253,29 @@ impl Server {
             _ => return Err(Fault::Unknown),
         }
         Ok(())
+    }
+    /// Adapter-only shared-buffer snapshot. The transport owns and validates the
+    /// fixed-size mapping; client writes cannot affect memory outside its window.
+    pub fn present_shared(
+        &mut self,
+        client: Client,
+        window: u32,
+        serial: u32,
+        pixels: &[u32],
+    ) -> Result<Delivery, Fault> {
+        let w = self
+            .windows
+            .iter_mut()
+            .find(|w| w.id == window && w.owner == client)
+            .ok_or(Fault::Ownership)?;
+        if w.pending.is_some() || pixels.len() != w.front.pixels().len() {
+            return Err(Fault::Geometry);
+        }
+        for (d, s) in w.front.pixels_mut().iter_mut().zip(pixels) {
+            *d = *s & 0xffffff;
+        }
+        self.dirty = true;
+        Ok(Self::delivery(w, serial, Message::FrameDone))
     }
     fn remove(&mut self, index: usize, out: &mut Vec<Delivery>) {
         let w = self.windows.remove(index);
@@ -239,6 +300,9 @@ impl Server {
     /// Only the trusted seat backend calls this, never an application connection.
     pub fn input(&mut self, input: Input) -> Vec<Delivery> {
         let mut out = Vec::new();
+        if let Input::KeyboardState { modifiers, keys } = input {
+            self.keyboard = (modifiers, keys);
+        }
         match input {
             Input::Key {
                 key: Key::Tab,
@@ -251,7 +315,7 @@ impl Server {
                     self.set_focus(Some(id), &mut out);
                 }
             }
-            Input::Key { .. } => {
+            Input::Key { .. } | Input::KeyboardState { .. } => {
                 if let Some(w) = self.windows.iter().find(|w| Some(w.id) == self.focus) {
                     out.push(Self::delivery(w, 0, Message::Input(input)));
                 }
@@ -320,24 +384,41 @@ impl Server {
         out
     }
     pub fn render(&mut self) -> &Canvas {
-        if !self.dirty {
+        if !self.dirty && self.screen_valid {
             return &self.screen;
         }
-        let c = &mut self.screen;
-        c.fill(c.bounds(), Theme::DESKTOP);
-        // System 6's restrained stipple, rather than a wallpaper asset.
-        for y in (0..c.height() as i32).step_by(4) {
-            for x in ((y % 8 / 4 * 2)..c.width() as i32).step_by(4) {
-                c.pixel(x, y, 0x555d61);
-            }
+        Self::paint_scene(&self.windows, self.focus, self.pointer, &mut self.screen);
+        self.dirty = false;
+        self.screen_valid = true;
+        &self.screen
+    }
+
+    /// Paints the same scene through a renderer without exposing window ownership.
+    /// Completion here means commands were recorded, not that scanout has occurred.
+    pub fn paint(&mut self, painter: &mut impl Painter) -> Result<(), Fault> {
+        if painter.bounds() != self.screen.bounds() {
+            return Err(Fault::Geometry);
         }
-        for w in &self.windows {
+        Self::paint_scene(&self.windows, self.focus, self.pointer, painter);
+        self.screen_valid = false;
+        self.dirty = false;
+        Ok(())
+    }
+
+    fn paint_scene(
+        windows: &[Window],
+        focus: Option<u32>,
+        pointer: (i32, i32),
+        c: &mut impl Painter,
+    ) {
+        c.desktop(Theme::DESKTOP);
+        for w in windows {
             c.fill(
                 Rect::new(w.x + 5, w.y + 5, w.frame().w, w.frame().h),
                 0x24282a,
             );
             crate::ui::bevel(c, w.frame(), Theme::FACE, false);
-            let active = Some(w.id) == self.focus;
+            let active = Some(w.id) == focus;
             let title = Rect::new(w.x + 3, w.y + 3, w.frame().w - 6, TITLE_H - 5);
             c.fill(title, if active { Theme::TITLE } else { 0x686a6b });
             // A compact BeOS tab sits within the dominant NeXT charcoal title bar.
@@ -366,7 +447,7 @@ impl Server {
             c.blit(&w.front, w.content().x, w.content().y);
         }
         // Monochrome pointer; it is drawn by the compositor, never by clients.
-        let (x, y) = self.pointer;
+        let (x, y) = pointer;
         for dy in 0i32..14 {
             for dx in 0..=dy / 2 {
                 c.pixel(
@@ -380,7 +461,5 @@ impl Server {
                 );
             }
         }
-        self.dirty = false;
-        &self.screen
     }
 }

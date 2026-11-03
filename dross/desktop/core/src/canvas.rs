@@ -39,6 +39,26 @@ impl Rect {
     }
 }
 
+/// Rendering mechanism used by window policy. Coordinates are display pixels.
+/// Implementations must clip every operation to bounds; source pixels are opaque XRGB8888.
+pub trait Painter {
+    fn bounds(&self) -> Rect;
+    fn fill(&mut self, rect: Rect, color: u32);
+    fn text(&mut self, x: i32, y: i32, text: &str, color: u32, clip: Rect);
+    fn blit(&mut self, source: &Canvas, x: i32, y: i32);
+    fn pixel(&mut self, x: i32, y: i32, color: u32) {
+        self.fill(Rect::new(x, y, 1, 1), color);
+    }
+    fn desktop(&mut self, color: u32) {
+        self.fill(self.bounds(), color);
+        for y in (0..self.bounds().h as i32).step_by(4) {
+            for x in ((y % 8 / 4 * 2)..self.bounds().w as i32).step_by(4) {
+                self.pixel(x, y, 0x555d61);
+            }
+        }
+    }
+}
+
 pub struct Canvas {
     width: u32,
     height: u32,
@@ -131,4 +151,19 @@ fn blend(bg: u32, fg: u32, a: u32) -> u32 {
         out |= ((((bg >> shift) & 255) * (255 - a) + ((fg >> shift) & 255) * a) / 255) << shift;
     }
     out
+}
+
+impl Painter for Canvas {
+    fn bounds(&self) -> Rect {
+        self.bounds()
+    }
+    fn fill(&mut self, r: Rect, color: u32) {
+        self.fill(r, color);
+    }
+    fn text(&mut self, x: i32, y: i32, text: &str, color: u32, clip: Rect) {
+        self.text(x, y, text, color, clip);
+    }
+    fn blit(&mut self, source: &Canvas, x: i32, y: i32) {
+        self.blit(source, x, y);
+    }
 }

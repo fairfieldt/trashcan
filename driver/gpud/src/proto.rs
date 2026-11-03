@@ -12,6 +12,14 @@ pub const VA: u32 = 6;
 pub const SUBMIT: u32 = 7;
 pub const WAIT: u32 = 8;
 pub const RING: u32 = 9;
+pub const BO_IMPORT: u32 = 10;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct BoImportReq {
+    pub offset: u64,
+    pub size: u64,
+}
 
 pub const NO_MMAP: u64 = u64::MAX;
 

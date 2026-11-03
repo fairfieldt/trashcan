@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "host", "native", "chat"]
+members = ["core", "host", "native", "chat", "gpu", "doom"]
 default-members = ["core", "host", "chat"]
 resolver = "2"
 

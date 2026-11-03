@@ -283,6 +283,11 @@ A test machine boots the newest build over the network, so a deploy is a build a
 ./netboot.sh dross target/my-test/BOOTX64.EFI
 ```
 
+`stage-image.py` can package an already tested ESP into an isolated loader and
+SHA-256 manifest. Supply `--esp`, `--init-conf`, `--rootfs` and `--out`; add test
+programs with `--module NAME=FILE`. It leaves the live network-boot tree intact.
+Publish its `BOOTX64.EFI` with `netboot.sh` when the image is ready.
+
 `NETBOOT=1` builds the loader with the kernel and modules (stripped, 18 MB) built in, since a network boot has no
 volume to read them from; `NETBOOT=1 ./run-qemu.sh` boots it from an otherwise empty volume. Serve
 `target/netboot/` over HTTP and let the machine's GRUB (2.12) fetch `boot.cfg` at every boot, from

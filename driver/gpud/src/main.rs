@@ -1,5 +1,5 @@
-//! gpud: a userspace driver server for the Mac Pro 6,1's FirePro D700s. So far it takes ownership of one GPU through
-//! VFIO and probes it (`gpud probe`); see driver/README.md for the plan.
+//! gpud: userspace D700 hardware, per-client GPU address spaces and bounded
+//! rendering/compute submission, through either VFIO or dross capabilities.
 
 // Off Linux only the tests use the probe.
 #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
@@ -13,6 +13,11 @@ mod proto;
 #[cfg(target_os = "linux")]
 mod serve;
 mod si;
+mod retirement;
+#[cfg(target_os="linux")]
+mod display;
+#[cfg(target_os = "linux")]
+mod supervisor;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};

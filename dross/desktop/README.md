@@ -1,9 +1,10 @@
 # Oscar desktop
 
-A separate workspace for Oscar's window server, GUI toolkit, Trash shell and
-terminal emulator. Nothing here is included by `dross/build.sh`, the main dross
-workspace, init, the hardware boot configuration, or the USB driver. Builds and
-snapshots stay in this directory's `target/`. No GPU driver is used.
+A workspace for Oscar's window server, GUI toolkit, Trash shell and terminal
+emulator. `dross/build.sh` builds the native desktop binaries; `init.conf` connects
+the session, display and USB input. Build output stays in this directory's
+`target/`. The baseline renderer uses the CPU. `gpu/` adds a musl Vulkan compositor
+adapter, with its current validation and display limits documented separately.
 
 ![Oscar desktop](preview.png)
 
@@ -103,9 +104,18 @@ widget activation, streaming UTF-8/ANSI, history limits, alternate screens,
 shell quoting/editing, a complete serialized desktop session, and a real PTY
 round trip. Host rendering and native cross-compilation have been checked, and the desktop runs on dross: in QEMU and on a
 Mac Pro, on the firmware framebuffer with a USB keyboard and mouse (`../README.md`, "Oscar's desktop").
-The current suite has 21 passing tests, including the host PTY test. Both host
-and native Clippy checks pass with warnings denied.
+The host suite includes the real PTY round trip. Host and native desktop Clippy
+checks pass with warnings denied.
 
 For formatting, run `rustfmt` only on files in this workspace with
 `--edition 2024 --config skip_children=true`. `cargo fmt --all` follows local
 dependencies into the driver and kernel workspaces and should be avoided here.
+
+
+## Graphics and native-window application checks
+
+See [gpu/README.md](gpu/README.md) for the Vulkan renderer and Linux-compat windowd
+adapter, and [doom/README.md](doom/README.md) for DoomGeneric using native shared
+surfaces and physical keyboard state. The QEMU Doom test uses an isolated ESP and
+captures real guest scanout; it does not change the installed desktop. These
+protocol additions are provisional while the native application API is designed.

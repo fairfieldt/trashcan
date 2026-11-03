@@ -2,6 +2,7 @@
 name = "gpud"
 version = "0.1.0"
 edition = "2024"
+default-run = "gpud"
 license = "MIT"
 description = "Userspace AMDGPU driver server for the Mac Pro 6,1's FirePro D700s (Tahiti)"
 
@@ -10,6 +11,8 @@ anyhow = "1.0.104"
 clap = { version = "4.6.7", features = ["derive"] }
 gpud-platform = { path = "../platform", features = ["dross"] }
 libc = "0.2"
+dross-rt = {path="../../dross/user/rt",default-features=false}
+dross-abi = {path="../../dross/abi"}
 
 [build-dependencies]
 cc = "1"

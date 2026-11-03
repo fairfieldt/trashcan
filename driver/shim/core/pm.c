@@ -9,6 +9,7 @@
 #include "amdgpu_display.h"
 #include "amdgpu_dpm_internal.h"
 #include "amdgpu_i2c.h"
+#include <gpud_core.h>
 
 /*
  * amdgpu_dpm_internal.c with no display: no CRTC is active, so the vblank time is unbounded and memory clock
@@ -21,6 +22,7 @@ void amdgpu_dpm_get_display_cfg(struct amdgpu_device *adev)
 	cfg->min_vblank_time = 0xffffffff;
 	cfg->display_clk = adev->clock.default_dispclk;
 	cfg->num_display = 0;
+	gpud_display_pm(adev);
 }
 
 /* The VBIOS's own VRAM (amdgpu_atombios_allocate_fb_scratch): kept out of client VRAM by gpud_vram_init. */

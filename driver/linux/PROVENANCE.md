@@ -84,3 +84,11 @@ call (amdgpu.h, the core, the kernel API) are in `driver/shim/`.
 | `include/uapi/drm/amdgpu_drm.h` | ac7f6dae44b224f34591152123fbf2047d3486c35d39f3eb818a96ea47a6462a |
 | `include/uapi/drm/drm.h` | 51fb1105a52c2085e6bdf4d6a3be347dfe8097d2375d8720d63106cc59f3fb6b |
 | `include/uapi/drm/drm_mode.h` | cfa0f3dff969178ec1f30abcb2072feb1a0b9f3aabb55580f3b08a77fd13e1e8 |
+
+
+Additional unmodified import for current-mode display handover: Linux commit
+24a19b953e2a `drivers/gpu/drm/amd/amdgpu/dce_v6_0.c`, SHA-256
+3bc398fd3d88f6d8e7d8833c23c1d1520dd9eb9cbfaa69a27735e19da2b01812.
+The retained file is a source/reference import; the bounded current-mode adapter
+in `driver/shim/core/display.c` uses its vblank/flip sequence and preserves its AMD
+MIT license provenance. No connector-training or general modeset port is implied.

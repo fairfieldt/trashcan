@@ -51,8 +51,20 @@ impl Mods {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Input {
-    Pointer { x: i32, y: i32, down: bool },
-    Key { key: Key, mods: Mods },
+    Pointer {
+        x: i32,
+        y: i32,
+        down: bool,
+    },
+    Key {
+        key: Key,
+        mods: Mods,
+    },
+    /// USB HID keyboard usage, independent of text layout and key repeat.
+    KeyboardState {
+        modifiers: u8,
+        keys: [u8; 6],
+    },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -62,6 +74,19 @@ pub enum Message {
         height: u32,
         title: String,
     },
+    /// Optional shared-surface extension; the server allocates the buffer.
+    CreateShared {
+        width: u32,
+        height: u32,
+        title: String,
+    },
+    /// Exactly one mapped-memory capability accompanies this server reply.
+    CreatedShared {
+        width: u32,
+        height: u32,
+    },
+    /// The client promises not to write again until the matching FrameDone.
+    PresentShared,
     Created {
         width: u32,
         height: u32,
@@ -123,6 +148,11 @@ impl Packet {
                 width,
                 height,
                 title,
+            }
+            | Message::CreateShared {
+                width,
+                height,
+                title,
             } => {
                 if title.len() > MAX_TITLE || title.chars().any(char::is_control) {
                     return Err(Fault::Malformed);
@@ -130,8 +160,18 @@ impl Packet {
                 put(&mut p, *width);
                 put(&mut p, *height);
                 p.extend_from_slice(title.as_bytes());
-                1
+                if matches!(self.message, Message::CreateShared { .. }) {
+                    13
+                } else {
+                    1
+                }
             }
+            Message::CreatedShared { width, height } => {
+                put(&mut p, *width);
+                put(&mut p, *height);
+                14
+            }
+            Message::PresentShared => 15,
             Message::Created { width, height } => {
                 put(&mut p, *width);
                 put(&mut p, *height);
@@ -163,6 +203,14 @@ impl Packet {
                 put(&mut p, key_code(*key));
                 p.push(mods.0);
                 11
+            }
+            Message::Input(Input::KeyboardState { modifiers, keys }) => {
+                if keys.iter().any(|k| *k != 0 && !(4..=0xdf).contains(k)) {
+                    return Err(Fault::Malformed);
+                }
+                p.push(*modifiers);
+                p.extend_from_slice(keys);
+                16
             }
             Message::Error(e) => {
                 put(&mut p, *e as u32);
@@ -196,15 +244,23 @@ impl Packet {
         let p = &bytes[HEADER..];
         let op = u16::from_le_bytes([bytes[6], bytes[7]]);
         let message = match (op, p.len()) {
-            (1, n) if (8..=8 + MAX_TITLE).contains(&n) => {
+            (1 | 13, n) if (8..=8 + MAX_TITLE).contains(&n) => {
                 let title = core::str::from_utf8(&p[8..]).map_err(|_| Fault::Malformed)?;
                 if title.chars().any(char::is_control) {
                     return Err(Fault::Malformed);
                 }
-                Message::Create {
-                    width: get(p, 0)?,
-                    height: get(p, 4)?,
-                    title: String::from(title),
+                if op == 13 {
+                    Message::CreateShared {
+                        width: get(p, 0)?,
+                        height: get(p, 4)?,
+                        title: String::from(title),
+                    }
+                } else {
+                    Message::Create {
+                        width: get(p, 0)?,
+                        height: get(p, 4)?,
+                        title: String::from(title),
+                    }
                 }
             }
             (2, 8) => Message::Created {
@@ -220,6 +276,17 @@ impl Packet {
                     offset: get(p, 0)?,
                     pixels,
                 }
+            }
+            (14, 8) => Message::CreatedShared {
+                width: get(p, 0)?,
+                height: get(p, 4)?,
+            },
+            (15, 0) => Message::PresentShared,
+            (16, 7) if p[1..].iter().all(|k| *k == 0 || (4..=0xdf).contains(k)) => {
+                Message::Input(Input::KeyboardState {
+                    modifiers: p[0],
+                    keys: p[1..7].try_into().unwrap(),
+                })
             }
             (4, 0) => Message::Present,
             (5, 0) => Message::FrameDone,
