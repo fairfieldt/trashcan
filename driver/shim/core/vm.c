@@ -274,7 +274,23 @@ int gpud_submit(struct amdgpu_device *adev, int ring_key, struct gpud_vm *vm, co
 		ib[i].flags = ibs[i].flags;
 	}
 
-	pthread_mutex_lock(&submit_lock);
+	/*
+	 * At most amdgpu_sched_hw_submission jobs in a ring: amdgpu_ring_init sizes the ring for that many and the DRM
+	 * scheduler keeps to it in amdgpu. Without the limit a client that queues work ahead wraps the ring over packets
+	 * the CP has not read yet.
+	 */
+	for (;;) {
+		u32 oldest;
+
+		pthread_mutex_lock(&submit_lock);
+		oldest = ring->fence_drv.sync_seq + 1 - amdgpu_sched_hw_submission;
+		if ((int32_t)((u32)gpud_fence_read(adev, ring_key) - oldest) >= 0)
+			break;
+		pthread_mutex_unlock(&submit_lock);
+		r = gpud_fence_wait(adev, ring_key, oldest, 10 * NSEC_PER_SEC);
+		if (r)
+			return r;
+	}
 	if (vm) {
 		mutex_lock(&vm->lock);
 		if (vm->dirty) {
