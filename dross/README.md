@@ -114,9 +114,9 @@ logged the IOMMU fault for the edu driver's deliberate DMA to an unmapped addres
 (TCG on an arm64 Mac): the API foundation audit build passes 75 native and 28 POSIX
 checks with one CPU, and 80 native and 28 POSIX checks with four CPUs. The default
 kernel audit build also passes 80 native and 28 POSIX checks with four CPUs.
-The earlier kernel and memory foundation passed 60 native and 28 POSIX checks on
-a physical 12-CPU Mac Pro 6,1; the new SDK and service tests have been validated in
-QEMU. Timings under TCG reflect
+The Unix audit build also passes 80 native and 28 POSIX checks on a physical
+Mac Pro 6,1 with 24 logical CPUs, including the native Rust and C service clients.
+Timings under TCG reflect
 the emulator and the host's timer coalescing; use hardware runs for latency work.
 
 Under TCG on macOS the host coalesces QEMU's timer wakeups: 1 kHz APIC timer ticks arrive 2-18 ms apart and the

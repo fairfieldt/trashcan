@@ -115,5 +115,6 @@ The API foundation passes 75 native checks on one CPU and 80 on four CPUs, plus
 28 POSIX checks in each configuration. Tests include heap exhaustion before
 receive, failed-send ownership, bootstrap recovery after failed launch, native
 Rust and C directory clients, rights attenuation and provider failure cleanup.
-Host codecs agree on 267 framing and bootstrap cases. Physical acceptance of
-these new interfaces remains separate from the earlier hardware bringup.
+Host codecs agree on 267 framing and bootstrap cases. The Unix audit build also
+passes 80 native and 28 POSIX checks on a physical Mac Pro 6,1 with 24 logical
+CPUs, including both native service clients and failure cleanup tests.
