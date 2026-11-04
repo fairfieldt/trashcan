@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::fs::File;
 use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -209,14 +210,29 @@ pub struct TensorInfo {
     pub file: usize,
 }
 
+/// Maps a file, or finds the mapping made earlier: a model is opened several times during a load, and
+/// mapping a file reads all of it on dross, where this saves a minute. A program keeps its model's
+/// mapping for as long as it runs, so holding on to them costs nothing.
+fn map_once(path: &Path) -> Result<Arc<Mmap>> {
+    static MAPPED: Mutex<BTreeMap<std::path::PathBuf, Arc<Mmap>>> = Mutex::new(BTreeMap::new());
+    let mut mapped = MAPPED.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(mmap) = mapped.get(path) {
+        return Ok(mmap.clone());
+    }
+    let file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
+    let mmap = Arc::new(unsafe { Mmap::map(&file)? });
+    mapped.insert(path.to_path_buf(), mmap.clone());
+    Ok(mmap)
+}
+
 pub struct Gguf {
     pub version: u32,
     pub meta: BTreeMap<String, Value>,
     pub tensors: Vec<TensorInfo>,
     pub data_offset: u64,
-    mmap: Mmap,
+    mmap: Arc<Mmap>,
     /// Further shards of a split GGUF (`NAME-0000k-of-0000n.gguf`): (data section offset, map).
-    shards: Vec<(u64, Mmap)>,
+    shards: Vec<(u64, Arc<Mmap>)>,
     /// Shard paths in order, the opened file first.
     pub paths: Vec<std::path::PathBuf>,
 }
@@ -329,8 +345,7 @@ impl Gguf {
 
     /// Open one file of a split GGUF on its own (its metadata and its own tensors).
     pub fn open_one(path: &Path) -> Result<Self> {
-        let file = File::open(path).with_context(|| format!("opening {}", path.display()))?;
-        let mmap = unsafe { Mmap::map(&file)? };
+        let mmap = map_once(path)?;
         let mut c = Cursor { b: &mmap, pos: 0 };
 
         ensure!(
@@ -476,5 +491,22 @@ impl Gguf {
 
     pub fn file_size(&self) -> u64 {
         self.mmap.len() as u64 + self.shards.iter().map(|(_, m)| m.len() as u64).sum::<u64>()
+    }
+}
+
+#[cfg(test)]
+mod map_once_tests {
+    use super::*;
+
+    #[test]
+    fn a_file_is_mapped_once() {
+        let path = std::env::temp_dir().join(format!("trashcan-map-once-{}", std::process::id()));
+        std::fs::write(&path, b"contents").unwrap();
+        let first = map_once(&path).unwrap();
+        let second = map_once(&path).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(&first[..], b"contents");
+        assert!(map_once(Path::new("/nonexistent/model.gguf")).is_err());
+        std::fs::remove_file(&path).unwrap();
     }
 }
