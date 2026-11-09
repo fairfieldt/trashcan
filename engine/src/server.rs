@@ -192,6 +192,7 @@ impl Backend for Qwen {
         let (mut generated, mut stopped) = (0, false);
         if let Some(s) = self.spec.as_mut() { s.begin_generation(); }
         'decode: while generated < budget {
+            anyhow::ensure!(!crate::server_control::stopping(), "server stopping");
             if self.stop.contains(&pending) {
                 generated += 1;
                 stopped = true;
@@ -269,6 +270,7 @@ impl Backend for Qwen4 {
         let mut queue = std::collections::VecDeque::from([draws.pick(&top, e.pos)]);
         let (mut generated, mut stopped) = (0, false);
         while generated < budget {
+            anyhow::ensure!(!crate::server_control::stopping(), "server stopping");
             let pending = queue.pop_front().context("no pending token")?;
             generated += 1;
             if self.stop.contains(&pending) {
@@ -381,7 +383,15 @@ fn error(request: tiny_http::Request, status: u16, message: &str, cors: bool) ->
     )
 }
 
-pub fn serve(mut options: Options) -> Result<()> {
+pub fn serve(options: Options) -> Result<()> {
+    let control = crate::server_control::start()?;
+    // All model/device owners in serve_inner are dropped before the reply.
+    let result = serve_inner(options);
+    crate::server_control::finish(control, result.is_ok())?;
+    result
+}
+
+fn serve_inner(mut options: Options) -> Result<()> {
     ensure!(options.max_tokens > 0, "max-tokens must be positive");
     Sampler::new(
         options.temperature,
@@ -495,8 +505,9 @@ pub fn serve(mut options: Options) -> Result<()> {
 fn run(options: Options, mut backend: impl Backend) -> Result<()> {
     let model_id = options.model_id.clone().unwrap_or_default();
     ensure!(!model_id.is_empty(), "model-id must be nonempty");
-    let http = tiny_http::Server::http((options.host.as_str(), options.port))
-        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let http = std::sync::Arc::new(tiny_http::Server::http((options.host.as_str(), options.port))
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?);
+    crate::server_control::register_server(&http);
     let defaults = Defaults {
         max_tokens: options.max_tokens,
         temperature: options.temperature,
@@ -509,9 +520,16 @@ fn run(options: Options, mut backend: impl Backend) -> Result<()> {
         "Responses server listening on http://{} (model: {model_id})",
         http.server_addr(),
     );
-    for request in http.incoming_requests() {
+    while !crate::server_control::stopping() {
+        let request = match http.recv() {
+            Ok(request) => request,
+            Err(_) if crate::server_control::stopping() => break,
+            Err(error) => return Err(error.into()),
+        };
+        if crate::server_control::stopping() { break; }
         if let Err(e) = handle(request, &options, &model_id, defaults, &mut backend) {
             backend.reset();
+            if crate::server_control::stopping() { break; }
             eprintln!("request failed: {e:#}");
             ensure!(!backend.broken(), "the link to the next machine has ended; stopping");
         }
@@ -668,6 +686,7 @@ fn generate<W: Write>(
     let mut generated = 0;
     let mut stopped = false;
     'decode: while generated < budget {
+        anyhow::ensure!(!crate::server_control::stopping(), "server stopping");
         if matches!(pending, 1 | 106 | 50) {
             generated += 1;
             stopped = true;

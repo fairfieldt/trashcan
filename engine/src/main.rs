@@ -14,6 +14,7 @@ mod qwen;
 mod qwen4;
 mod responses;
 mod server;
+mod server_control;
 mod tokenizer;
 mod visibility;
 mod vulkan;

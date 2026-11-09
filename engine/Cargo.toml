@@ -6,6 +6,9 @@ description = "LLM inference on Mac Pro 6,1 FirePro D700s over Vulkan, across GP
 license = "MIT"
 publish = false
 
+[features]
+dross = ["dep:dross-rt"]
+
 [dependencies]
 anyhow = "1.0.104"
 ash = { version = "0.38.0", features = ["loaded"] }
@@ -24,4 +27,5 @@ serde_json = "1"
 minijinja = { version = "2", features = ["builtins", "json"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 tiny_http = "0.12"
+dross-rt = { git = "https://github.com/fairfieldt/dross.git", rev = "60897e99", default-features = false, optional = true }
 fancy-regex = "0.19.2"
