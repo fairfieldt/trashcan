@@ -1,0 +1,17 @@
+[package]
+name = "dross-rt"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Runtime for dross programs: system calls, entry, heap, threads, bootstrap messages, PCI client"
+
+[features]
+default = ["runtime"]
+# The program entry point, heap and panic handler; off for libraries that only use the system calls and pcid.
+runtime = []
+# Share the native heap with Rust's System allocator without entry/panic handlers.
+hosted = []
+
+[dependencies]
+dross-abi = { path = "../../abi" }
+linked_list_allocator = "0.10"

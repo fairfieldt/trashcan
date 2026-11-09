@@ -27,5 +27,5 @@ serde_json = "1"
 minijinja = { version = "2", features = ["builtins", "json"] }
 minijinja-contrib = { version = "2", features = ["pycompat"] }
 tiny_http = "0.12"
-dross-rt = { git = "https://github.com/fairfieldt/dross.git", rev = "60897e99", default-features = false, optional = true }
+dross-rt = { path = "../vendor/dross/user/rt", default-features = false, optional = true }
 fancy-regex = "0.19.2"
