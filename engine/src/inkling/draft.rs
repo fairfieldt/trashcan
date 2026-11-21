@@ -309,13 +309,15 @@ impl DraftRank {
         u[15] = n as u32;
         let p = self.push([0, x, y, 0, 0, 0], u);
         if n <= 8 {
-            // Decode kernels with up to 4 columns per workgroup row (the block's 8 rows as two groups).
+            // Decode kernels, up to 4 columns per workgroup row: the block's 8 rows read each weight twice, still far
+            // cheaper than a GEMM at this size.
             let wide = m.rows >= 4096;
             let c = ["", "_c2", "_c3", "_c4"][n.min(4) - 1];
             let (name, rpw) = if wide { (format!("qwen4_q8_mvw4_r4{c}"), 16) } else { (format!("qwen4_q8_mvw4_r2{c}"), 8) };
             self.gpu.dispatch_matrix(cmd, &name, p, m.rows.div_ceil(rpw) as u32, n.div_ceil(4) as u32, &m.buf)
         } else {
-            self.gpu.dispatch_matrix(cmd, "qwen4_q8_gemm", p, m.rows.div_ceil(64) as u32, n.div_ceil(64) as u32, &m.buf)
+            ensure!(m.k % 256 == 0, "inkling_q8_gemm needs k a multiple of 256");
+            self.gpu.dispatch_matrix(cmd, "inkling_q8_gemm", p, m.rows.div_ceil(128) as u32, n.div_ceil(8) as u32, &m.buf)
         }
     }
 
