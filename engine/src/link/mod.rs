@@ -92,6 +92,64 @@ pub enum Wait {
 pub(crate) struct Inner {
     st: Mutex<State>,
     streams: Arc<dyn Streams>,
+    devices: Arc<Devices>,
+}
+
+/// The stream devices a link holds or is opening, so that it opens one only once its earlier ones are closed. A
+/// device is closed on a thread of its own (`close_later`), and a new epoch can ask for one before that thread has
+/// run: a device still open here turns the open away at once (the kernel device's `flock`, tbd), which failed the
+/// epoch and put the next one off by `backoff_min` (a second by default). The driver itself holds an open back
+/// while a close runs, so waiting for our own close costs nothing it would not.
+struct Devices {
+    held: Mutex<u32>,
+    closed: std::sync::Condvar,
+}
+
+/// The longest an open waits for the link's earlier devices to close before it goes ahead (and is turned away, as
+/// before): a close takes under a millisecond with patch 0007 and 0.5 s without (docs/kernel.md), so only a close
+/// that hangs reaches it.
+const CLOSE_WAIT: Duration = Duration::from_secs(2);
+
+impl Devices {
+    fn wait_and_take(&self) {
+        let held = self.held.lock().unwrap_or_else(|e| e.into_inner());
+        let (mut held, _) = self.closed.wait_timeout_while(held, CLOSE_WAIT, |n| *n > 0).unwrap_or_else(|e| e.into_inner());
+        *held += 1;
+    }
+
+    fn give_back(&self) {
+        let mut held = self.held.lock().unwrap_or_else(|e| e.into_inner());
+        *held = held.saturating_sub(1);
+        self.closed.notify_all();
+    }
+}
+
+/// A device of this link: closing it (dropping it, wherever that runs) tells `Devices` once the close is over.
+struct Held {
+    dev: Option<Box<dyn Frames>>,
+    devices: Arc<Devices>,
+}
+
+impl Frames for Held {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.dev.as_mut().expect("open").read(buf)
+    }
+    fn writev(&mut self, bufs: &[io::IoSlice]) -> io::Result<usize> {
+        self.dev.as_mut().expect("open").writev(bufs)
+    }
+    fn fd(&self) -> Option<i32> {
+        self.dev.as_ref().expect("open").fd()
+    }
+    fn late(&self) -> Duration {
+        self.dev.as_ref().expect("open").late()
+    }
+}
+
+impl Drop for Held {
+    fn drop(&mut self) {
+        drop(self.dev.take());
+        self.devices.give_back();
+    }
 }
 
 impl Drop for Inner {
@@ -156,12 +214,19 @@ impl Inner {
                 }
                 _ => {
                     let t = Instant::now();
-                    let r = self.streams.open(&found).map(|d| (d, found));
+                    self.devices.wait_and_take();
+                    let r = match self.streams.open(&found) {
+                        Ok(d) => Ok((Box::new(Held { dev: Some(d), devices: self.devices.clone() }) as Box<dyn Frames>, found)),
+                        Err(e) => {
+                            self.devices.give_back();
+                            Err(e)
+                        }
+                    };
                     let waited = t.elapsed();
                     let asked = job.at.elapsed();
                     if waited > Duration::from_millis(100) || asked > Duration::from_millis(100) {
-                        // The driver holds an open back while an earlier close of the device runs (0.5 s or more);
-                        // a busy machine can be slow to start the open.
+                        // The driver holds an open back while an earlier close of the device runs (0.5 s or more), and
+                        // so does `Devices`; a busy machine can be slow to start the open.
                         let label = self.lock().label.clone();
                         proto::say(format!(
                             "link {label}: opening the stream device took {waited:.0?}, {asked:.0?} after the epoch asked for it [{}]",
@@ -308,7 +373,7 @@ pub enum Accepted {
 
 impl Link {
     fn start(st: State, streams: Arc<dyn Streams>) -> Link {
-        let inner = Arc::new(Inner { st: Mutex::new(st), streams });
+        let inner = Arc::new(Inner { st: Mutex::new(st), streams, devices: Arc::new(Devices { held: Mutex::new(0), closed: Default::default() }) });
         service::register(&inner);
         Link { _owner: Arc::new(Owner { inner: inner.clone() }), inner }
     }
