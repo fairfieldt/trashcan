@@ -193,13 +193,29 @@ reach the other machines as one binary message with the forward.
 
 ## Speculative decoding
 
-The release ships a DSpark block drafter (`dspark-Inkling-2-Mini-Q8_0.gguf`, 0.40 GB; BF16 0.65 GB): 3 layers of
-2304 (24 Q / 8 KV heads of 128, RoPE base 1e6, sliding window 1024 on layers 0 and 2, dense MLP 9216), drafting a
-block of up to 7 tokens in one forward from the target's hidden states at applications 5, 23, 41 and 48, with a
-rank-256 Markov RNN head chaining the block positions. It borrows the target's embedding and head. In TP the host
-already holds those hidden states, so the taps cost nothing. Verifying a block reads each weight once for all its
-tokens, which matters more here than usual because the loop triples the bytes per token. llama.cpp's support for
-the Inkling drafter is an open pull request (#32218), so this comes after the plain model.
+The release ships a DSpark block drafter (`dspark-Inkling-2-Mini-Q8_0.gguf`, 0.40 GB; BF16 0.65 GB;
+`general.architecture = dflash`), whose llama.cpp support is an open pull request (#32218). Its math, from that
+pull request:
+
+- **Context.** For every token the target accepts, the residual entering applications 5, 23 and 41 (in execution
+  order: the prelude's last layer, the second pass's sixth, the third pass's last) and the final hidden state (after
+  the output mix and `output_norm`) are kept as four 2304-vectors. Draft layer `l` mixes them with
+  `softmax(dspark_fuse[l])` (4 weights per layer), RMS-norms the mix with `dflare_norm`, and writes
+  `rms(W_k_ctx c) * k_ctx_norm` (rotated at the token's position, RoPE base 1e6 on all 128 dimensions) and `W_v_ctx c`
+  into its K/V cache. A fourth row of `dspark_fuse` mixes the same features into `f_rnn` (normed with
+  `dspark_norm`), the recurrent head's context.
+- **Block.** A draft step runs a block of 8 rows: the last accepted token's embedding (the target's `token_embd`,
+  RMS-normed with `token_embd_norm`) and 7 copies of `mask_embd`. Three pre-norm layers: attention with 24 Q / 8 KV
+  heads of 128, per-head Q and K norms, RoPE, non-causal within the block, over the context entries and the block
+  (sliding window 1025 on layers 0 and 2); a SiLU-gated MLP of 9216. `output_norm`, then the target's head gives the
+  base logits of every row.
+- **Markov head.** Rows 1..7 refine their logits in order: `joint = joint_proj [state; markov_w1[prev]; row; f_rnn]
+  + b` (5120 -> 768) splits into a gate `sigmoid`, a candidate `tanh` and a latent `tanh`; `state = cand + gate *
+  (state - cand)` (rank 256, from zero); the logits are `30 tanh((base + head(hidden_out latent + b)) / 30)`, and
+  `prev` is their first maximum (the anchor token for row 1).
+
+So each drafted token costs a second pass over the 201,024-row head, in sequence, and verification must roll the
+target's K/V positions and its K, V and sublayer-output convolution histories back to the accepted token.
 
 ## Chat format
 
