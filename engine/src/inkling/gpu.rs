@@ -220,6 +220,8 @@ pub struct Shard {
     ids: Buffer,
     wts: Buffer,
     act: Buffer,
+    /// A prefill segment's partial output before it is copied to `part`.
+    pout: Buffer,
     /// Prefill experts: the tiles and the pairs listed by expert (qwen4_moe_tiles), and each pair's down output.
     tiles: Buffer,
     list: Buffer,
@@ -451,6 +453,7 @@ impl Shard {
             ids: fb(nb * c.used)?,
             wts: fb(nb * c.used)?,
             act: fb(nb * c.used * f)?,
+            pout: fb(if nb > GATED_MAX { nb * d } else { 1 })?,
             tiles: fb(1 + 2 * ((nb * c.used).div_ceil(TILE) + c.experts))?,
             list: fb(nb * c.used)?,
             ypair: fb(if nb > GATED_MAX { nb * c.used * d } else { 1 })?,
@@ -522,7 +525,7 @@ impl Shard {
         &self.part[self.mb.get()]
     }
 
-    /// A Q8_0 matrix times `n` columns of `x` into `y` (decode kernels up to 4 columns, the GEMM above).
+    /// A Q8_0 matrix times `n` columns of `x` into `y` (decode kernels up to 4 columns, inkling_q8_gemm above).
     fn matrix(&self, cmd: vk::CommandBuffer, m: &Matrix, x: u64, y: u64, n: usize) -> Result<()> {
         self.matrix_with(cmd, m, x, y, n, 0)
     }
@@ -550,8 +553,9 @@ impl Shard {
             let p = self.push([0, x, y, 0, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, names[n - 1], p, m.rows.div_ceil(rpw) as u32, 1, &m.buf)
         } else {
+            // 128 rows and 8 columns per workgroup.
             let p = self.push([0, x, y, 0, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, "qwen4_q8_gemm", p, m.rows.div_ceil(64) as u32, n.div_ceil(64) as u32, &m.buf)
+            self.gpu.dispatch_matrix(cmd, "inkling_q8_gemm", p, m.rows.div_ceil(128) as u32, n.div_ceil(8) as u32, &m.buf)
         }
     }
 
@@ -638,10 +642,10 @@ impl Shard {
         let mut ticks = vec![0u64; labels.len()];
         unsafe { self.gpu.dev.get_query_pool_results(pools[mb], 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
         let period = self.gpu.period as f64 * 1e-6;
-        // Stamps come in (top, bottom) pairs per segment, dispatch and copy.
+        // Stamps come in (top, bottom) pairs per segment, dispatch and copy; matrix kernels are told apart by shape.
         let mut open: std::collections::HashMap<&str, u64> = Default::default();
         for (l, &t) in labels.iter().zip(&ticks) {
-            let key = l.split(' ').next().unwrap_or(l);
+            let key = if l.contains("gemm") || l.contains("matf32") { l.as_str() } else { l.split(' ').next().unwrap_or(l) };
             if let Some(t0) = open.remove(key) {
                 let e = self.profile.entry(key.to_owned()).or_default();
                 e.0 += 1;
@@ -840,7 +844,9 @@ impl Shard {
             u[12] = c.rel_extent as u32;
             let p = self.push([self.aout.address, self.qgr.address, self.kpre.address + (sink_off * 4) as u64, s.k.address, s.v.address, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_attn_grp", p, hk as u32, n as u32, &l.relb)?;
-            return self.matrix(cmd, &l.wo, self.aout.address, self.part_buf().address, n);
+            self.matrix(cmd, &l.wo, self.aout.address, self.pout.address, n)?;
+            self.part_out(cmd, n);
+            return Ok(());
         }
         let parts = partitions(l.swa);
         let mut u = [0u32; 16];
@@ -907,8 +913,9 @@ impl Shard {
             let mut u = [0u32; 16];
             u[0] = d as u32;
             u[2] = c.used as u32;
-            let p = self.push([0, self.ypair.address, self.part_buf().address, 0, 0, 0], 0, u);
+            let p = self.push([0, self.ypair.address, self.pout.address, 0, 0, 0], 0, u);
             self.gpu.dispatch(cmd, "inkling_moe_sum", p, d.div_ceil(256) as u32, n as u32);
+            self.part_out(cmd, n);
             return Ok(());
         }
         let (gu_name, down_name) = if q8 { ("inkling_moe_gu_q8", "inkling_moe_down_q8") } else { ("inkling_moe_gu", "inkling_moe_down") };
@@ -928,6 +935,12 @@ impl Shard {
         u[3] = l.down.stride as u32;
         let p = self.push([0, self.act.address, self.part_buf().address, self.wts.address, self.ids.address, 0], l.sd.address, u);
         self.gpu.dispatch_matrix(cmd, down_name, p, d.div_ceil(8) as u32, n as u32, &l.down.buf)
+    }
+
+    /// Copy a prefill segment's partial output from `pout` to the host-visible `part`: the kernels' scattered stores
+    /// into host memory took several times the kernel itself.
+    fn part_out(&self, cmd: vk::CommandBuffer, n: usize) {
+        self.gpu.copy(cmd, &self.pout, 0, self.part_buf(), 0, n * self.c.d * 4);
     }
 
     /// Record the head over `rows` normed rows the host wrote into `hin`: this rank's logits (before the softcap)

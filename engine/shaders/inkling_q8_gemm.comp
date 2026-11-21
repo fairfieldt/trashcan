@@ -1,0 +1,48 @@
+#version 460
+#include "common.glsl"
+// Q8_0 matrix times a batch of more than four columns (prefill): a lane owns ROWS adjacent rows and walks a quarter
+// of them (wave w of the workgroup takes the w-th quarter of the blocks) for COLS columns, whose inputs are the
+// same for every lane (scalar loads); the four waves' sums meet in shared memory at the end. A lane loads two blocks
+// (a 64-byte line) of a row at a time. Workgroup x covers 64 * ROWS rows, y covers COLS columns. Weights: f16 scales
+// per 32-weight block, then 32-byte blocks from word p.stride (quant::Kind::Q8h); p.n rows of p.k weights, p.k a
+// multiple of 256. b: x [t][p.k], c: y [t][p.n].
+#define ROWS 2
+#define COLS 8
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+shared float red[3][64][ROWS*COLS];
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+#define DOT4(A_,W_,X_) A_=fma(W_.x,X_.x,A_);A_=fma(W_.y,X_.y,A_);A_=fma(W_.z,X_.z,A_);A_=fma(W_.w,X_.w,A_);
+void main(){
+uint nb=batch(),t0=gl_WorkGroupID.y*COLS,lane=gl_SubgroupInvocationID,wv=gl_SubgroupID;
+if(t0>=nb)return;
+uint first=(gl_WorkGroupID.x*64+lane)*ROWS,blocks=p.k/32,quarter=blocks/4;
+uint xb[COLS],rb[ROWS];
+[[unroll]]for(uint t=0;t<COLS;t++)xb[t]=min(t0+t,nb-1)*(p.k/4);
+[[unroll]]for(uint r=0;r<ROWS;r++)rb[r]=min(first+r,p.n-1)*blocks;
+float acc[ROWS][COLS];
+[[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint t=0;t<COLS;t++)acc[r][t]=0;
+for(uint b=wv*quarter;b<(wv+1)*quarter;b+=2){
+    uvec4 q[ROWS][4];uint sc[ROWS];
+    [[unroll]]for(uint r=0;r<ROWS;r++){uint a=p.stride/4+(rb[r]+b)*2;
+        q[r][0]=wq.q[a];q[r][1]=wq.q[a+1];q[r][2]=wq.q[a+2];q[r][3]=wq.q[a+3];sc[r]=ww.words[(rb[r]+b)/2];}
+    [[unroll]]for(uint i=0;i<2;i++){
+        float ps[ROWS][COLS];
+        [[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint t=0;t<COLS;t++)ps[r][t]=0;
+        [[unroll]]for(uint w=0;w<8;w++){
+            vec4 wt[ROWS];
+            [[unroll]]for(uint r=0;r<ROWS;r++)wt[r]=i8(q[r][i*2+w/4][w%4]);
+            [[unroll]]for(uint t=0;t<COLS;t++){
+                vec4 x=b_v4.v[xb[t]+(b+i)*8+w];
+                [[unroll]]for(uint r=0;r<ROWS;r++){DOT4(ps[r][t],wt[r],x)}
+            }
+        }
+        [[unroll]]for(uint r=0;r<ROWS;r++){float s=unpackHalf2x16(sc[r]>>(16*i)).x;
+            [[unroll]]for(uint t=0;t<COLS;t++)acc[r][t]=fma(ps[r][t],s,acc[r][t]);}
+    }
+}
+if(wv>0)[[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint t=0;t<COLS;t++)red[wv-1][lane][r*COLS+t]=acc[r][t];
+barrier();
+if(wv==0)[[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint t=0;t<COLS;t++)
+    if(first+r<p.n&&t0+t<nb)c_f.v[(t0+t)*p.n+first+r]=(acc[r][t]+red[0][lane][r*COLS+t])+(red[1][lane][r*COLS+t]+red[2][lane][r*COLS+t]);
+}

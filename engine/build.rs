@@ -128,6 +128,7 @@ fn main() {
         "inkling_prep",
         "inkling_moe_sum",
         "inkling_moe_mm",
+        "inkling_q8_gemm",
         "vit_ln",
         "vit_ops",
         "vit_rope",
