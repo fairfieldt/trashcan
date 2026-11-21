@@ -108,6 +108,10 @@ trait Backend {
         None
     }
     fn tokenizer(&self) -> &Tokenizer;
+    /// The prompt's token ids, for a model that renders its chat format itself (otherwise the GGUF template).
+    fn prompt(&self, _request: &Request) -> Option<Result<Vec<u32>>> {
+        None
+    }
     fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value>;
     /// Forget reusable state after a failed request.
     fn reset(&mut self);
@@ -230,6 +234,79 @@ impl Backend for Qwen {
     }
     fn reset(&mut self) {
         self.chain.forget();
+    }
+}
+
+/// Inkling 2 Mini on a tensor-parallel group; its chat format is rendered natively (inkling::chat).
+struct Inkling {
+    group: crate::inkling::group::Group,
+    tokenizer: Tokenizer,
+    specials: crate::inkling::chat::Specials,
+    /// The tokens the group has processed since its last reset, for prefix reuse across turns.
+    history: Vec<u32>,
+}
+
+impl Backend for Inkling {
+    fn native(&self) -> Native {
+        Native::Inkling
+    }
+    fn tokenizer(&self) -> &Tokenizer {
+        &self.tokenizer
+    }
+    fn prompt(&self, request: &Request) -> Option<Result<Vec<u32>>> {
+        let tools: Vec<_> = request.tools.iter().map(|t| t.schema.clone()).collect();
+        // No thinking requested: the lowest effort (the model still reasons a little).
+        let effort = match (&request.effort, request.thinking) {
+            (Some(e), _) => Some(json!(e)),
+            (None, false) => Some(json!("none")),
+            (None, true) => None,
+        };
+        Some(crate::inkling::chat::render(&request.messages, &tools, effort.as_ref()).map(|r| self.tokenizer.encode(&r, false, true)))
+    }
+    fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value> {
+        use crate::inkling::{chat::Event, group::Score};
+        let p = request.sampling;
+        let mut sampler = Sampler::new(p.temperature, p.top_k, p.top_p, p.seed)?;
+        let g = &mut self.group;
+        // Continue after the tokens already processed when the prompt extends them.
+        let reuse = !options.no_prefix_cache && !self.history.is_empty() && self.history.len() < ids.len() && ids.starts_with(&self.history);
+        if !reuse {
+            g.reset()?;
+            self.history.clear();
+        }
+        let cached = self.history.len();
+        let mut top = g.forward(&ids[cached..], Score::Last, None)?;
+        self.history.extend_from_slice(&ids[cached..]);
+        let mut out = crate::inkling::chat::Output::new(self.specials);
+        let budget = p.max_tokens.min(g.context - g.pos);
+        let (mut generated, mut stopped, mut reasoning_tokens) = (0, false, 0);
+        while generated < budget {
+            ensure!(!crate::server_control::stopping(), "server stopping");
+            let tok = sampler.sample(top.first().context("missing candidates")?);
+            generated += 1;
+            if out.part == crate::inkling::chat::Part::Thinking {
+                reasoning_tokens += 1;
+            }
+            match out.token(tok, &self.tokenizer.decode_bytes(tok, false)) {
+                Some(Event::Text(s)) => output.text(&s, false)?,
+                Some(Event::Thinking(s)) => output.text(&s, true)?,
+                Some(Event::Tool(name, args)) => output.tool(&name, args, &request.tools)?,
+                None => {}
+            }
+            if out.done || (!request.parallel_tool_calls && !out.tool_calls.is_empty()) {
+                stopped = true;
+                break;
+            }
+            if generated == budget {
+                break;
+            }
+            top = g.forward(&[tok], Score::Last, None)?;
+            self.history.push(tok);
+        }
+        output.finish(ids.len(), cached, generated, reasoning_tokens, !stopped)
+    }
+    fn reset(&mut self) {
+        self.history.clear();
     }
 }
 
@@ -439,6 +516,20 @@ fn serve_inner(mut options: Options) -> Result<()> {
         };
         return run(options, backend);
     }
+    if matches!(gguf.get_str("general.architecture")?, "inkling2" | "inkling2_loop") {
+        let name = gguf.get_str("general.name").unwrap_or("inkling").to_lowercase().replace(' ', "-");
+        options.model_id.get_or_insert(name);
+        drop(gguf);
+        let gpus = match options.gpus.clone() {
+            Some(g) => g,
+            None => (0..crate::gpu::Instance::new()?.amd_gpus()?.len()).collect(),
+        };
+        let mesh = qwen::tp::mesh(&options.tp_connect, &options.tp_peer)?;
+        let group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, options.batch.min(256))?;
+        let tokenizer = Tokenizer::new(&group.gguf)?;
+        let specials = crate::inkling::chat::Specials::new(&tokenizer)?;
+        return run(options, Inkling { group, tokenizer, specials, history: Vec::new() });
+    }
     if gguf.get_str("general.architecture")? == "qwen35" {
         let name = gguf.get_str("general.name").unwrap_or("qwen").to_lowercase().replace(' ', "-");
         options.model_id.get_or_insert(name);
@@ -557,6 +648,11 @@ fn prepare(
     ensure!(body.len() as u64 <= MAX_BODY, "request body exceeds 8 MiB");
     let value = serde_json::from_slice(&body).context("invalid JSON request")?;
     let parsed = Request::parse_native(&value, defaults, model_id, native)?;
+    if let Some(ids) = backend.prompt(&parsed) {
+        let ids = ids?;
+        ensure!(ids.len() < options.context, "prompt has {} tokens; context is {} and needs room for output", ids.len(), options.context);
+        return Ok((parsed, ids));
+    }
     let tools: Vec<_> = parsed.tools.iter().map(|t| t.schema.clone()).collect();
     let mut rendered = tokenizer.render_with_effort(&parsed.messages, parsed.thinking, &tools, effort(&parsed))?;
     // Tool results continue the same model turn. Some embedded templates terminate it anyway.

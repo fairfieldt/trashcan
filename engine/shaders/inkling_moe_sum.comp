@@ -1,0 +1,12 @@
+#version 460
+#include "common.glsl"
+// Add each token's p.m expert outputs in slot order: y[t][i] = sum_k y_pair[t * p.m + k][i]. b: y_pair [pair][p.n],
+// c: y [t][p.n]. Thread per element, workgroup x covers 256, y = token.
+layout(local_size_x=256) in;
+void main(){
+uint i=gl_GlobalInvocationID.x,t=gl_WorkGroupID.y;
+if(i>=p.n||t>=batch())return;
+float s=0;
+for(uint k=0;k<p.m;k++)s+=b_f.v[(t*p.m+k)*p.n+i];
+c_f.v[t*p.n+i]=s;
+}

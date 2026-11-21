@@ -45,6 +45,13 @@ pub struct Phases {
     /// Waits for attention and MoE segments.
     pub gpu_attn: f64,
     pub gpu_moe: f64,
+    /// Host work around the segments (mixes, inputs, convolutions).
+    pub host_in: f64,
+    /// Parts of it: residual mixes, input writes, convolutions and residual updates, local partial sums.
+    pub host_mix: f64,
+    pub host_write: f64,
+    pub host_conv: f64,
+    pub host_sum: f64,
     pub exchange: f64,
     pub forwards: u64,
     pub tokens: u64,
@@ -283,46 +290,30 @@ impl Group {
         let mut blocks: Vec<Vec<f32>> = Vec::new();
         let mut normed: Vec<Vec<f32>> = Vec::new();
         let mut prelude = (Vec::new(), 0usize);
-        let mut messages: Option<Vec<[Vec<f32>; 4]>> = None;
+        // Per core layer: the q, k, v and ffn messages of the pass in progress (n rows each).
+        let mut messages: Vec<[Vec<f32>; 4]> = Vec::new();
         for app in self.sched.clone() {
             if app.phys == c.core_start {
                 if app.pass == 0 {
                     prelude = (cur.clone(), blocks.len());
                 } else {
                     // The bank of the previous pass: its blocks after the first core block, and its output.
-                    let bank: Vec<&Vec<f32>> = normed[prelude.1 + 1..].iter().collect();
                     let out_n = rows_rms(&cur, d);
-                    let mut msgs = Vec::new();
-                    for t in 0..n {
-                        let states: Vec<&[f32]> = bank.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&out_n[t * d..(t + 1) * d]]).collect();
-                        let per_layer: Vec<[Vec<f32>; 4]> = (c.core_start..c.core_end)
-                            .map(|p| {
-                                let q = self.hw.layers[p].msg.as_ref().unwrap();
-                                std::array::from_fn(|k| {
-                                    let mut o = vec![0.; d];
-                                    mix(&states, &q[k], &mut o);
-                                    o
-                                })
-                            })
-                            .collect();
-                        msgs.push(per_layer);
-                    }
-                    // messages[layer][kind] holds n rows.
-                    let mut by_layer = Vec::new();
-                    for li in 0..c.core() {
-                        by_layer.push(std::array::from_fn(|k| msgs.iter().flat_map(|m| m[li][k].iter().copied()).collect::<Vec<f32>>()));
-                    }
-                    messages = Some(by_layer);
+                    let mut bank: Vec<&[f32]> = normed[prelude.1 + 1..].iter().map(Vec::as_slice).collect();
+                    bank.push(&out_n);
+                    messages = (c.core_start..c.core_end)
+                        .map(|p| {
+                            let q = self.hw.layers[p].msg.as_ref().unwrap();
+                            std::array::from_fn(|k| mix_rows(&bank, &q[k], n, d))
+                        })
+                        .collect();
                     cur = prelude.0.clone();
                     blocks.truncate(prelude.1);
                     normed.truncate(prelude.1);
                 }
             }
-            let msg = if app.pass > 0 { messages.as_ref().map(|m| &m[app.phys - c.core_start]) } else { None };
+            let msg = if app.pass > 0 { Some(&messages[app.phys - c.core_start]) } else { None };
             self.apply(app, n, &mut cur, &mut blocks, &mut normed, msg, reference.as_deref_mut())?;
-            if app.phys == c.core_end - 1 && app.pass + 1 == c.passes {
-                messages = None;
-            }
         }
         let result = if score == Score::None {
             Vec::new()
@@ -345,13 +336,20 @@ impl Group {
                     r.check("result_norm", &mut h, false)?;
                 }
             }
-            for s in self.shards.iter_mut() {
-                s.hin(h.len()).copy_from_slice(&h);
-            }
+            self.write_inputs(&h);
             self.segment()?;
             self.candidates(rows.len())?
         };
         Ok(result)
+    }
+
+    /// Write a segment's input rows into every local rank's `hin` (write-only: the host never reads that memory).
+    fn write_inputs(&mut self, rows: &[f32]) {
+        let t = Instant::now();
+        for s in &self.shards {
+            s.hin(rows.len()).copy_from_slice(rows);
+        }
+        self.seconds.host_write += t.elapsed().as_secs_f64();
     }
 
     /// Run the next segment of the plan (its inputs are in every local rank's `hin`) and wait for it.
@@ -397,94 +395,81 @@ impl Group {
         let c = self.c.clone();
         let d = c.d;
         let len = n * d;
-        let inp_sa = cur.clone();
-        let cur_n = rows_rms(cur, d);
+        let h0 = Instant::now();
         // Attention inputs: the residual mixes (one, or q/k/v on global layers), then with messages the q/k/v
         // messages; the GPUs apply the controllers and the norms.
         let controlled = msg.is_some();
-        let kinds = {
+        let mixes = if c.swa(app.phys) { 1 } else { 3 };
+        let kinds = if controlled { 3 } else { mixes };
+        let mut input = vec![0f32; if controlled { 6 * len } else { kinds * len }];
+        {
             let l = &self.hw.layers[app.phys];
-            let mixes = if c.swa(app.phys) { 1 } else { 3 };
-            let kinds = if controlled { 3 } else { mixes };
-            let hin = self.shards[0].hin(2 * 3 * len);
+            let cur_n = rows_rms(cur, d);
+            let mut states: Vec<&[f32]> = normed.iter().map(Vec::as_slice).collect();
+            states.push(&cur_n);
             for j in 0..kinds {
-                let o = &mut hin[j * len..(j + 1) * len];
+                let o = &mut input[j * len..(j + 1) * len];
                 match &l.attn_query {
-                    Some(q) => {
-                        let jq = if mixes == 1 { 0 } else { j };
-                        for t in 0..n {
-                            let states: Vec<&[f32]> = normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
-                            mix(&states, &q[jq], &mut o[t * d..(t + 1) * d]);
-                        }
+                    Some(q) if j < mixes => mix_rows_into(&states, &q[j], d, o),
+                    Some(_) => {
+                        let (done, rest) = input.split_at_mut(j * len);
+                        rest[..len].copy_from_slice(&done[..len]);
                     }
                     None => o.copy_from_slice(cur),
                 }
             }
             if let Some(m) = msg {
                 for j in 0..3 {
-                    hin[(3 + j) * len..(4 + j) * len].copy_from_slice(&m[j]);
+                    input[(3 + j) * len..(4 + j) * len].copy_from_slice(&m[j]);
                 }
             }
-            let used = if controlled { 6 * len } else { kinds * len };
-            let first = hin[..used].to_vec();
-            for s in &self.shards[1..] {
-                s.hin(used).copy_from_slice(&first);
-            }
-            kinds
-        };
+        }
+        self.seconds.host_mix += h0.elapsed().as_secs_f64();
+        self.write_inputs(&input);
+        self.seconds.host_in += h0.elapsed().as_secs_f64();
         debug_assert!(matches!(self.plan[self.next], Seg::Attn { kinds: k, .. } if k == kinds));
         self.segment()?;
         self.allreduce(len)?;
+        let h1 = Instant::now();
         let mut attn = vec![0f32; len];
-        {
-            let l = &self.hw.layers[app.phys];
-            let hist = &mut self.attn_hist[app.slot];
-            for t in 0..n {
-                super::conv_step(&self.sum[t * d..(t + 1) * d], hist, &l.attn_post_conv, &mut attn[t * d..(t + 1) * d]);
-            }
-        }
+        let hc = Instant::now();
+        conv_rows(&self.sum[..len], &mut self.attn_hist[app.slot], &self.hw.layers[app.phys].attn_post_conv, &mut attn);
         if app.phys % c.block == 0 {
-            normed.push(rows_rms(&inp_sa, d));
-            blocks.push(inp_sa);
-            *cur = attn;
+            normed.push(rows_rms(cur, d));
+            blocks.push(std::mem::replace(cur, attn));
         } else {
             for (x, a) in cur.iter_mut().zip(&attn) {
                 *x += a;
             }
         }
         let ffn_inp = cur.clone();
+        self.seconds.host_conv += hc.elapsed().as_secs_f64();
+        let hm = Instant::now();
         {
             let l = &self.hw.layers[app.phys];
             let cur_n = rows_rms(cur, d);
-            let mut h = vec![0f32; len];
-            for t in 0..n {
-                let states: Vec<&[f32]> = normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
-                mix(&states, &l.ffn_query, &mut h[t * d..(t + 1) * d]);
-            }
-            let hin = self.shards[0].hin(2 * len);
-            hin[..len].copy_from_slice(&h);
+            let mut states: Vec<&[f32]> = normed.iter().map(Vec::as_slice).collect();
+            states.push(&cur_n);
+            let mut input = vec![0f32; if controlled { 2 * len } else { len }];
+            mix_rows_into(&states, &l.ffn_query, d, &mut input[..len]);
             if let Some(m) = msg {
-                hin[len..2 * len].copy_from_slice(&m[3]);
+                input[len..].copy_from_slice(&m[3]);
             }
-            let used = if controlled { 2 * len } else { len };
-            let first = hin[..used].to_vec();
-            for s in &self.shards[1..] {
-                s.hin(used).copy_from_slice(&first);
-            }
+            self.seconds.host_mix += hm.elapsed().as_secs_f64();
+            self.write_inputs(&input);
         }
+        self.seconds.host_in += h1.elapsed().as_secs_f64();
         self.segment()?;
         self.allreduce(len)?;
-        {
-            let l = &self.hw.layers[app.phys];
-            let hist = &mut self.ffn_hist[app.slot];
-            let mut out = vec![0f32; d];
-            for t in 0..n {
-                super::conv_step(&self.sum[t * d..(t + 1) * d], hist, &l.ffn_post_conv, &mut out);
-                for (x, (a, o)) in cur[t * d..(t + 1) * d].iter_mut().zip(ffn_inp[t * d..(t + 1) * d].iter().zip(&out)) {
-                    *x = a + o;
-                }
-            }
+        let h2 = Instant::now();
+        let mut out = vec![0f32; len];
+        let hc = Instant::now();
+        conv_rows(&self.sum[..len], &mut self.ffn_hist[app.slot], &self.hw.layers[app.phys].ffn_post_conv, &mut out);
+        for (x, (a, o)) in cur.iter_mut().zip(ffn_inp.iter().zip(&out)) {
+            *x = a + o;
         }
+        self.seconds.host_conv += hc.elapsed().as_secs_f64();
+        self.seconds.host_in += h2.elapsed().as_secs_f64();
         if let Some(r) = reference.as_deref_mut() {
             r.check(&format!("l_out-{}", app.slot), cur, true)?;
         }
@@ -493,6 +478,7 @@ impl Group {
 
     /// Add the local ranks' partials (rank order), all-reduce with the other machines; the total in `self.sum`.
     fn allreduce(&mut self, len: usize) -> Result<()> {
+        let ts = Instant::now();
         let sum = &mut self.sum[..len];
         sum.copy_from_slice(self.shards[0].part(len));
         for s in &self.shards[1..] {
@@ -500,6 +486,7 @@ impl Group {
                 *a += b;
             }
         }
+        self.seconds.host_sum += ts.elapsed().as_secs_f64();
         if let Some(m) = self.mesh.as_mut() {
             let e = Instant::now();
             let last = m.all_reduce(sum, &mut self.remote[..len], Duration::from_secs(5), 1, self.c.d)?;
@@ -605,14 +592,92 @@ fn parse_score(s: &str) -> Result<Score> {
     })
 }
 
+/// Host threads for batches of rows (prefill); single rows run on the calling thread.
+const HOST_THREADS: usize = 12;
+
+/// Run `f(t, row)` over the `d`-rows of `out`, spread over threads for batches of 16 or more rows.
+fn par_rows<F: Fn(usize, &mut [f32]) + Sync>(out: &mut [f32], d: usize, f: F) {
+    let n = out.len() / d;
+    let threads = if n >= 16 { HOST_THREADS.min(n / 4) } else { 1 };
+    if threads <= 1 {
+        out.chunks_exact_mut(d).enumerate().for_each(|(t, o)| f(t, o));
+        return;
+    }
+    let per = n.div_ceil(threads);
+    std::thread::scope(|s| {
+        for (i, chunk) in out.chunks_mut(per * d).enumerate() {
+            let f = &f;
+            s.spawn(move || chunk.chunks_exact_mut(d).enumerate().for_each(|(j, o)| f(i * per + j, o)));
+        }
+    });
+}
+
 /// RMS-normed copies (no weight) of each `d`-row of `x`, as the residual mixes read them.
 fn rows_rms(x: &[f32], d: usize) -> Vec<f32> {
     let mut o = vec![0f32; x.len()];
-    for (a, b) in x.chunks_exact(d).zip(o.chunks_exact_mut(d)) {
-        rms_into(a, None, 1e-6, b);
-    }
+    par_rows(&mut o, d, |t, row| rms_into(&x[t * d..(t + 1) * d], None, 1e-6, row));
     o
 }
+
+/// The residual mix of every row: `states` are RMS-normed state matrices of the same rows.
+fn mix_rows_into(states: &[&[f32]], query: &[f32], d: usize, out: &mut [f32]) {
+    par_rows(out, d, |t, row| {
+        let s: Vec<&[f32]> = states.iter().map(|m| &m[t * d..(t + 1) * d]).collect();
+        mix(&s, query, row);
+    });
+}
+
+fn mix_rows(states: &[&[f32]], query: &[f32], n: usize, d: usize) -> Vec<f32> {
+    let mut o = vec![0f32; n * d];
+    mix_rows_into(states, query, d, &mut o);
+    o
+}
+
+/// The sublayer-output convolution of `n` rows `y` (oldest first) with history `hist`: each channel runs through the
+/// rows in order, so batches split the channels over threads.
+fn conv_rows(y: &[f32], hist: &mut [f32], w: &[f32], out: &mut [f32]) {
+    let d = hist.len() / 3;
+    let n = y.len() / d;
+    if n == 1 {
+        super::conv_step(y, hist, w, out);
+        return;
+    }
+    let threads = if n >= 16 { HOST_THREADS } else { 1 };
+    let per = d.div_ceil(threads).next_multiple_of(8);
+    let scale = 1.0 / 5f32.sqrt();
+    let outp = SendPtr(out.as_mut_ptr());
+    let histp = SendPtr(hist.as_mut_ptr());
+    std::thread::scope(|s| {
+        for c0 in (0..d).step_by(per) {
+            let (outp, histp) = (outp, histp);
+            s.spawn(move || {
+                let (outp, histp) = (outp, histp);
+                for c in c0..(c0 + per).min(d) {
+                    let wc = &w[c * 4..c * 4 + 4];
+                    // SAFETY: each thread owns channels c0..c0 + per of every row and of the history.
+                    let h = unsafe { [*histp.0.add(c), *histp.0.add(d + c), *histp.0.add(2 * d + c)] };
+                    let (mut a, mut b, mut cc) = (h[0], h[1], h[2]);
+                    for t in 0..n {
+                        let x = y[t * d + c];
+                        let conv = wc[0] * a + wc[1] * b + wc[2] * cc + wc[3] * x;
+                        unsafe { *outp.0.add(t * d + c) = (x + conv) * scale };
+                        (a, b, cc) = (b, cc, x);
+                    }
+                    unsafe {
+                        *histp.0.add(c) = a;
+                        *histp.0.add(d + c) = b;
+                        *histp.0.add(2 * d + c) = cc;
+                    }
+                }
+            });
+        }
+    });
+}
+
+#[derive(Clone, Copy)]
+struct SendPtr(*mut f32);
+unsafe impl Send for SendPtr {}
+unsafe impl Sync for SendPtr {}
 
 fn best(c: &mut Candidates) {
     c.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));

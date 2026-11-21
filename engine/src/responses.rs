@@ -19,11 +19,12 @@ pub struct Defaults {
 }
 
 /// Where a model's chat template expects tool results: Gemma attaches them to the calling assistant
-/// message; Qwen renders them as `tool` messages after it.
+/// message; Qwen renders them as `tool` messages after it, and Inkling as `tool` messages carrying the tool's name.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Native {
     Gemma,
     Qwen,
+    Inkling,
 }
 
 #[derive(Debug)]
@@ -439,6 +440,10 @@ impl Request {
                         };
                         if native == Native::Qwen {
                             messages.push(json!({"role":"tool","content":text}));
+                            continue;
+                        }
+                        if native == Native::Inkling {
+                            messages.push(json!({"role":"tool","name":name,"content":text}));
                             continue;
                         }
                         // Older embedded Gemma templates require results on the calling assistant.

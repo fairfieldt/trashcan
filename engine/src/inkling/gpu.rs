@@ -215,6 +215,9 @@ pub struct Shard {
     ids: Buffer,
     wts: Buffer,
     act: Buffer,
+    /// Prefill experts: the pairs grouped by expert (inkling_moe_group) and each pair's down output.
+    grp: Buffer,
+    ypair: Buffer,
     timeline: vk::Semaphore,
     counter: u64,
     cmds: Vec<vk::CommandBuffer>,
@@ -434,6 +437,8 @@ impl Shard {
             ids: fb(nb * c.used)?,
             wts: fb(nb * c.used)?,
             act: fb(nb * c.used * f)?,
+            grp: fb(1 + 3 * (nb + c.experts) + nb * c.used)?,
+            ypair: fb(if nb > GATED_MAX { nb * c.used * d } else { 1 })?,
             gpu,
             split,
             c: c.clone(),
@@ -814,10 +819,45 @@ impl Shard {
         u[12] = c.route_scale.to_bits();
         let p = self.push([0, self.rlog.address, self.ids.address, self.wts.address, 0, 0], 0, u);
         self.gpu.dispatch_matrix(cmd, "inkling_route", p, n as u32, 1, &l.bias)?;
-        let (gu_name, down_name) = match l.gu.ty {
-            GgmlType::NVFP4 => ("inkling_moe_gu", "inkling_moe_down"),
-            _ => ("inkling_moe_gu_q8", "inkling_moe_down_q8"),
-        };
+        let q8 = l.gu.ty != GgmlType::NVFP4;
+        if n > GATED_MAX {
+            // Prefill: group the pairs by expert, so each chunk of up to 8 pairs reads its expert's weights once.
+            let list_at = 1 + 3 * (self.max_batch + c.experts);
+            let mut u = [0u32; 16];
+            u[0] = c.experts as u32;
+            u[2] = c.used as u32;
+            u[10] = list_at as u32;
+            let p = self.push([self.grp.address, self.ids.address, 0, 0, 0, 0], 0, u);
+            self.gpu.dispatch(cmd, "inkling_moe_group", p, 1, 1);
+            let chunks = (n * c.used).div_ceil(32) + c.experts;
+            let mut u = [0u32; 16];
+            u[0] = self.f as u32;
+            u[1] = d as u32;
+            u[2] = c.used as u32;
+            u[3] = l.gu.stride as u32;
+            u[10] = list_at as u32;
+            u[12] = c.situ_beta.to_bits();
+            u[13] = c.situ_linear.to_bits();
+            let p = self.push([0, self.xin.address, self.act.address, self.grp.address, 0, 0], l.sgu.address, u);
+            let name = if q8 { "inkling_moe_mm_gu_q8" } else { "inkling_moe_mm_gu" };
+            self.gpu.dispatch_matrix(cmd, name, p, self.f.div_ceil(64) as u32, chunks as u32, &l.gu.buf)?;
+            let mut u = [0u32; 16];
+            u[0] = d as u32;
+            u[1] = self.f as u32;
+            u[2] = c.used as u32;
+            u[3] = l.down.stride as u32;
+            u[10] = list_at as u32;
+            let p = self.push([0, self.act.address, self.ypair.address, self.grp.address, self.wts.address, 0], l.sd.address, u);
+            let name = if q8 { "inkling_moe_mm_down_q8" } else { "inkling_moe_mm_down" };
+            self.gpu.dispatch_matrix(cmd, name, p, d.div_ceil(64) as u32, chunks as u32, &l.down.buf)?;
+            let mut u = [0u32; 16];
+            u[0] = d as u32;
+            u[2] = c.used as u32;
+            let p = self.push([0, self.ypair.address, self.part.address, 0, 0, 0], 0, u);
+            self.gpu.dispatch(cmd, "inkling_moe_sum", p, d.div_ceil(256) as u32, n as u32);
+            return Ok(());
+        }
+        let (gu_name, down_name) = if q8 { ("inkling_moe_gu_q8", "inkling_moe_down_q8") } else { ("inkling_moe_gu", "inkling_moe_down") };
         let mut u = [0u32; 16];
         u[0] = self.f as u32;
         u[1] = d as u32;

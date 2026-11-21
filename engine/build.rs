@@ -125,6 +125,9 @@ fn main() {
         "inkling_norm",
         "inkling_qkv",
         "inkling_prep",
+        "inkling_moe_group",
+        "inkling_moe_sum",
+        "inkling_moe_mm",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",

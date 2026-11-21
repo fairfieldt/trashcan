@@ -215,9 +215,11 @@ fn validate(model: &Path, reference: &Path, run: &Run, ids: &Path, greedy: usize
 pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<Value> {
     group.reset()?;
     let prompt: Vec<u32> = (0..pp).map(|i| 1000 + (i as u32 * 7919) % 150000).collect();
+    let s0 = group.seconds;
     let t = Instant::now();
     let top = group.forward(&prompt, Score::Last, None)?;
     let pp_s = t.elapsed().as_secs_f64();
+    let s1 = group.seconds;
     let mut tok = top[0][0].1;
     let before = group.seconds;
     let t = Instant::now();
@@ -229,12 +231,21 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<Value> {
     let per = |a: f64, b: f64| (a - b) / tg as f64 * 1e3;
     Ok(json!({
         "pp_tok_s": pp as f64 / pp_s,
+        "pp_gpu_s": s1.gpu - s0.gpu,
+        "pp_exchange_s": s1.exchange - s0.exchange,
+        "pp_host_math_s": s1.host_in - s0.host_in,
+        "pp_host_mix_s": s1.host_mix - s0.host_mix,
+        "pp_host_write_s": s1.host_write - s0.host_write,
+        "pp_host_conv_s": s1.host_conv - s0.host_conv,
+        "pp_host_sum_s": s1.host_sum - s0.host_sum,
+        "pp_host_s": s1.host - s0.host,
         "tg_tok_s": tg as f64 / tg_s,
         "tg_ms": tg_s / tg as f64 * 1e3,
         "tg_gpu_wait_ms": per(after.gpu, before.gpu),
         "tg_exchange_ms": per(after.exchange, before.exchange),
         "tg_attn_wait_ms": per(after.gpu_attn, before.gpu_attn),
         "tg_moe_wait_ms": per(after.gpu_moe, before.gpu_moe),
+        "tg_host_math_ms": per(after.host_in, before.host_in),
         "tg_host_ms": per(after.host, before.host) - per(after.gpu, before.gpu) - per(after.exchange, before.exchange),
     }))
 }

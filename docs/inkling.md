@@ -242,6 +242,12 @@ trashcan inkling bench MODEL --tp-connect mac1.tb1:7073 --pp 512 --tg 128
 trashcan inkling validate MODEL REFERENCE_DIR --ids PROMPT.ids --tp-connect mac1.tb1:7073
 ```
 
+`trashcan serve MODEL --tp-connect mac1.tb1:7073` serves the Responses API ([server.md](server.md)) with Inkling's
+chat format rendered natively (`inkling/chat.rs`): reasoning effort from `reasoning.effort` (`none` when thinking is
+off; the model still reasons briefly), tool calls and tool results by name, and prefix reuse when a request extends
+the tokens already processed. `scripts/test-server.py` passes with a larger output budget for its sampled request
+(32 tokens are spent on reasoning).
+
 `TRASHCAN_INKLING_PROFILE=1` adds GPU time per kernel to `bench`. The all-reduces carry exact f32 sums;
 `TRASHCAN_TP_WIRE=f16` on the driver selects the compact payload of the Qwen groups.
 
