@@ -5,7 +5,7 @@
 //! operation down the mesh first.
 use super::{
     embed,
-    gpu::{Seg, Shard, Split, GATED_MAX},
+    gpu::{Seg, Shard, Split, GATED_MAX, MICRO},
     mix, rms_into, App, Config, HostWeights,
 };
 use crate::{
@@ -111,11 +111,28 @@ pub struct Group {
     pub seconds: Phases,
     /// GPUs on every machine, for reports.
     pub ranks: usize,
-    /// The forward in progress: its segments, the next one's index, its tokens, and whether it is event-gated.
-    plan: Vec<Seg>,
-    next: usize,
+}
+
+/// Batches of at least this many tokens run as two micro-batches (`Group::drive`).
+const MICRO_MIN: usize = 128;
+
+/// The host state of one micro-batch of a forward: `n` rows of the batch with their own input and output buffers
+/// on every rank (`mb`).
+struct Flow {
+    mb: usize,
     n: usize,
-    gated: bool,
+    plan: Vec<Seg>,
+    /// The residual, and the RMS-normed block states before it.
+    cur: Vec<f32>,
+    normed: Vec<Vec<f32>>,
+    /// The prelude's output and its number of blocks.
+    prelude: (Vec<f32>, usize),
+    /// Per core layer: the q, k, v and ffn messages of the pass in progress (n rows each).
+    messages: Vec<[Vec<f32>; 4]>,
+    /// The residual the MoE output is added to.
+    ffn_inp: Vec<f32>,
+    /// The submission of the segment in flight on every local rank.
+    tickets: Vec<u64>,
 }
 
 /// Parse a request message.
@@ -194,10 +211,6 @@ impl Group {
             max_batch,
             seconds: Phases::default(),
             ranks,
-            plan: Vec::new(),
-            next: 0,
-            n: 0,
-            gated: false,
             c,
         })
     }
@@ -259,14 +272,16 @@ impl Group {
             let k = chunk.iter().filter(|&&t| t == IMAGE_ROW).count();
             let mine = &rows[used * d..(used + k) * d];
             used += k;
-            self.tell(json!({"forward": {"tokens": chunk, "score": score_name(s), "force": force, "image_rows": k}}))?;
+            // Two micro-batches overlap the host's work with the GPUs'; forcing and profiling take one at a time.
+            let micro = if chunk.len() >= MICRO_MIN && reference.is_none() && s != Score::All && !self.shards[0].profiling() { MICRO } else { 1 };
+            self.tell(json!({"forward": {"tokens": chunk, "score": score_name(s), "force": force, "image_rows": k, "micro": micro}}))?;
             if k > 0 {
                 if let (true, Some(m)) = (self.driver, self.mesh.as_mut()) {
                     m.tell_children(bytemuck::cast_slice(mine))?;
                 }
             }
             let x = self.embed_rows(chunk, mine)?;
-            out = self.run(x, chunk.len(), s, reference.as_deref_mut())?;
+            out = self.run(x, chunk.len(), s, reference.as_deref_mut(), micro)?;
         }
         Ok(out)
     }
@@ -289,31 +304,57 @@ impl Group {
         Ok(x)
     }
 
-    /// One batch of `n` embedded rows `x` at `self.pos`.
-    fn run(&mut self, x: Vec<f32>, n: usize, score: Score, mut reference: Option<&mut Reference>) -> Result<Vec<Candidates>> {
+    /// One batch of `n` embedded rows `x` at `self.pos`, as `micro` micro-batches.
+    fn run(&mut self, x: Vec<f32>, n: usize, score: Score, mut reference: Option<&mut Reference>, micro: usize) -> Result<Vec<Candidates>> {
         let start = Instant::now();
-        let c = self.c.clone();
+        let (c, d) = (self.c.clone(), self.c.d);
         ensure!(self.pos + n <= self.context, "context of {} tokens exceeded", self.context);
-        for s in &self.shards {
-            s.set_params(self.pos, n)?;
+        let gated = n <= GATED_MAX;
+        ensure!(
+            micro == 1 || (micro <= MICRO && !gated && n >= micro && reference.is_none() && score != Score::All),
+            "a forward of {n} tokens cannot run as {micro} micro-batches"
+        );
+        let mut flows = Vec::with_capacity(micro);
+        let mut row0 = 0;
+        for mb in 0..micro {
+            let rows = (n - row0).div_ceil(micro - mb);
+            let mut plan = Vec::with_capacity(2 * self.sched.len() + 1);
+            for a in &self.sched {
+                let controlled = a.pass > 0;
+                let kinds = if controlled || !c.swa(a.phys) { 3 } else { 1 };
+                plan.push(Seg::Attn { slot: a.slot, phys: a.phys, kinds, controlled });
+                plan.push(Seg::Moe { phys: a.phys, controlled });
+            }
+            // The scored rows are the last micro-batch's.
+            if mb + 1 == micro {
+                match score {
+                    Score::Last => plan.push(Seg::Head { rows: 1 }),
+                    Score::All => plan.push(Seg::Head { rows }),
+                    Score::None => {}
+                }
+            }
+            for s in &self.shards {
+                s.set_params(mb, self.pos + row0, rows)?;
+            }
+            flows.push(Flow {
+                mb,
+                n: rows,
+                plan,
+                cur: x[row0 * d..(row0 + rows) * d].to_vec(),
+                normed: Vec::new(),
+                prelude: (Vec::new(), 0),
+                messages: Vec::new(),
+                ffn_inp: Vec::new(),
+                tickets: vec![0; self.shards.len()],
+            });
+            row0 += rows;
         }
-        self.plan.clear();
-        for a in &self.sched {
-            let controlled = a.pass > 0;
-            let kinds = if controlled || !c.swa(a.phys) { 3 } else { 1 };
-            self.plan.push(Seg::Attn { slot: a.slot, phys: a.phys, kinds, controlled });
-            self.plan.push(Seg::Moe { phys: a.phys, controlled });
-        }
-        match score {
-            Score::Last => self.plan.push(Seg::Head { rows: 1 }),
-            Score::All => self.plan.push(Seg::Head { rows: n }),
-            Score::None => {}
-        }
-        self.next = 0;
-        self.n = n;
-        self.gated = n <= GATED_MAX;
-        let result = self.run_plan(x, n, score, reference.as_deref_mut());
-        if result.is_err() || self.gated {
+        let result = self.drive(&mut flows, gated, reference.as_deref_mut()).and_then(|()| match score {
+            Score::None => Ok(Vec::new()),
+            Score::Last => self.candidates(1),
+            Score::All => self.candidates(n),
+        });
+        if result.is_err() || gated {
             for s in self.shards.iter_mut() {
                 s.retire()?;
             }
@@ -326,205 +367,223 @@ impl Group {
         Ok(result)
     }
 
-    fn run_plan(&mut self, x: Vec<f32>, n: usize, score: Score, mut reference: Option<&mut Reference>) -> Result<Vec<Candidates>> {
-        let (c, d) = (self.c.clone(), self.c.d);
-        let mut cur = x;
-        let mut blocks: Vec<Vec<f32>> = Vec::new();
-        let mut normed: Vec<Vec<f32>> = Vec::new();
-        let mut prelude = (Vec::new(), 0usize);
-        // Per core layer: the q, k, v and ffn messages of the pass in progress (n rows each).
-        let mut messages: Vec<[Vec<f32>; 4]> = Vec::new();
-        for app in self.sched.clone() {
-            if app.phys == c.core_start {
-                if app.pass == 0 {
-                    prelude = (cur.clone(), blocks.len());
-                } else {
-                    // The bank of the previous pass: its blocks after the first core block, and its output.
-                    let out_n = rows_rms(&cur, d);
-                    let mut bank: Vec<&[f32]> = normed[prelude.1 + 1..].iter().map(Vec::as_slice).collect();
-                    bank.push(&out_n);
-                    messages = (c.core_start..c.core_end)
-                        .map(|p| {
-                            let q = self.hw.layers[p].msg.as_ref().unwrap();
-                            std::array::from_fn(|k| mix_rows(&bank, &q[k], n, d))
-                        })
-                        .collect();
-                    cur = prelude.0.clone();
-                    blocks.truncate(prelude.1);
-                    normed.truncate(prelude.1);
-                }
-            }
-            let msg = if app.pass > 0 { Some(&messages[app.phys - c.core_start]) } else { None };
-            self.apply(app, n, &mut cur, &mut blocks, &mut normed, msg, reference.as_deref_mut())?;
+    /// Run the flows' segments. Segment `j` of every flow runs in flow order (the K/V cache and the convolution
+    /// histories of a slot take the rows in order); while the GPUs run one flow's segment, the host all-reduces the
+    /// other's output and prepares its next segment, which then waits in the queue.
+    fn drive(&mut self, flows: &mut [Flow], gated: bool, mut reference: Option<&mut Reference>) -> Result<()> {
+        let d = self.c.d;
+        for f in flows.iter_mut() {
+            self.prepare(f, 0, reference.as_deref_mut())?;
+            self.launch(f, 0, gated)?;
         }
-        let result = if score == Score::None {
-            Vec::new()
-        } else {
-            let rows: Vec<usize> = match score {
-                Score::Last => vec![n - 1],
-                _ => (0..n).collect(),
-            };
-            ensure!(rows.len() <= 16, "at most 16 scored rows");
-            let cur_n = rows_rms(&cur, d);
-            let mut h = vec![0f32; rows.len() * d];
-            for (i, &t) in rows.iter().enumerate() {
-                let states: Vec<&[f32]> = normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
-                let mut m = vec![0.; d];
-                mix(&states, &self.hw.out_query, &mut m);
-                rms_into(&m, Some(&self.hw.out_norm), c.eps, &mut h[i * d..(i + 1) * d]);
-            }
-            if let Some(r) = reference.as_deref_mut() {
-                if rows.len() == 1 && r.dir.join("result_norm.f32").exists() {
-                    r.check("result_norm", &mut h, false)?;
+        let segments = flows.iter().map(|f| f.plan.len()).max().unwrap_or(0);
+        for j in 0..segments {
+            for f in flows.iter_mut() {
+                if j >= f.plan.len() {
+                    continue;
+                }
+                self.wait(f, j, gated)?;
+                if !matches!(f.plan[j], Seg::Head { .. }) {
+                    self.allreduce(f.mb, f.n * d)?;
+                }
+                self.absorb(f, j, reference.as_deref_mut())?;
+                if j + 1 < f.plan.len() {
+                    self.prepare(f, j + 1, reference.as_deref_mut())?;
+                    self.launch(f, j + 1, gated)?;
                 }
             }
-            self.write_inputs(&h);
-            self.segment()?;
-            self.candidates(rows.len())?
-        };
-        Ok(result)
+        }
+        Ok(())
     }
 
-    /// Write a segment's input rows into every local rank's `hin` (write-only: the host never reads that memory).
-    fn write_inputs(&mut self, rows: &[f32]) {
+    /// Write a segment's input rows into every local rank's `hin` of micro-batch `mb` (write-only: the host never
+    /// reads that memory).
+    fn write_inputs(&mut self, mb: usize, rows: &[f32]) {
         let t = Instant::now();
         for s in &self.shards {
-            s.hin(rows.len()).copy_from_slice(rows);
+            s.hin(mb, rows.len()).copy_from_slice(rows);
         }
         self.seconds.host_write += t.elapsed().as_secs_f64();
     }
 
-    /// Run the next segment of the plan (its inputs are in every local rank's `hin`) and wait for it.
-    fn segment(&mut self) -> Result<()> {
-        let j = self.next;
-        let seg = *self.plan.get(j).context("segment beyond the plan")?;
-        self.next += 1;
+    /// Start segment `j` of `f` on every local rank (its inputs are in their `hin`): a submission queued behind the
+    /// ones in flight, or the next segment of the gated graph.
+    fn launch(&mut self, f: &mut Flow, j: usize, gated: bool) -> Result<()> {
         let g = Instant::now();
-        for s in self.shards.iter_mut() {
-            if !self.gated {
-                s.submit(seg, self.n)?;
+        let seg = f.plan[j];
+        for (s, ticket) in self.shards.iter_mut().zip(f.tickets.iter_mut()) {
+            if !gated {
+                *ticket = s.submit(seg, f.n, f.mb)?;
             } else if j == 0 {
-                s.start_gated(&self.plan, self.n)?;
+                s.start_gated(&f.plan, f.n)?;
             } else {
                 s.release()?;
             }
         }
-        for s in self.shards.iter_mut() {
-            s.wait_segment()?;
+        self.gpu_time(seg, g.elapsed().as_secs_f64());
+        Ok(())
+    }
+
+    /// Wait for segment `j` of `f` on every local rank.
+    fn wait(&mut self, f: &Flow, j: usize, gated: bool) -> Result<()> {
+        let g = Instant::now();
+        for (s, &ticket) in self.shards.iter_mut().zip(&f.tickets) {
+            if gated {
+                s.wait_gated()?;
+            } else {
+                s.wait(ticket)?;
+            }
         }
-        let dt = g.elapsed().as_secs_f64();
+        self.gpu_time(f.plan[j], g.elapsed().as_secs_f64());
+        Ok(())
+    }
+
+    fn gpu_time(&mut self, seg: Seg, dt: f64) {
         self.seconds.gpu += dt;
         match seg {
             Seg::Attn { .. } => self.seconds.gpu_attn += dt,
             Seg::Moe { .. } => self.seconds.gpu_moe += dt,
             Seg::Head { .. } => {}
         }
-        Ok(())
     }
 
-    /// One layer application to the `n` rows of `cur`.
-    #[allow(clippy::too_many_arguments)]
-    fn apply(
-        &mut self,
-        app: App,
-        n: usize,
-        cur: &mut Vec<f32>,
-        blocks: &mut Vec<Vec<f32>>,
-        normed: &mut Vec<Vec<f32>>,
-        msg: Option<&[Vec<f32>; 4]>,
-        mut reference: Option<&mut Reference>,
-    ) -> Result<()> {
-        let c = self.c.clone();
-        let d = c.d;
-        let len = n * d;
+    /// Write the inputs of segment `j` of `f` into the local ranks' `hin`.
+    fn prepare(&mut self, f: &mut Flow, j: usize, reference: Option<&mut Reference>) -> Result<()> {
         let h0 = Instant::now();
-        // Attention inputs: the residual mixes (one, or q/k/v on global layers), then with messages the q/k/v
-        // messages; the GPUs apply the controllers and the norms.
-        let controlled = msg.is_some();
-        let mixes = if c.swa(app.phys) { 1 } else { 3 };
-        let kinds = if controlled { 3 } else { mixes };
-        let mut input = vec![0f32; if controlled { 6 * len } else { kinds * len }];
-        {
-            let l = &self.hw.layers[app.phys];
-            let cur_n = rows_rms(cur, d);
-            let mut states: Vec<&[f32]> = normed.iter().map(Vec::as_slice).collect();
-            states.push(&cur_n);
-            for j in 0..kinds {
-                let o = &mut input[j * len..(j + 1) * len];
-                match &l.attn_query {
-                    Some(q) if j < mixes => mix_rows_into(&states, &q[j], d, o),
-                    Some(_) => {
-                        let (done, rest) = input.split_at_mut(j * len);
-                        rest[..len].copy_from_slice(&done[..len]);
+        let (c, d, n) = (self.c.clone(), self.c.d, f.n);
+        let len = n * d;
+        match f.plan[j] {
+            Seg::Attn { phys, kinds, controlled, .. } => {
+                let app = self.sched[j / 2];
+                if phys == c.core_start {
+                    if app.pass == 0 {
+                        f.prelude = (f.cur.clone(), f.normed.len());
+                    } else {
+                        // The bank of the previous pass: its blocks after the first core block, and its output.
+                        let out_n = rows_rms(&f.cur, d);
+                        let mut bank: Vec<&[f32]> = f.normed[f.prelude.1 + 1..].iter().map(Vec::as_slice).collect();
+                        bank.push(&out_n);
+                        f.messages = (c.core_start..c.core_end)
+                            .map(|p| {
+                                let q = self.hw.layers[p].msg.as_ref().unwrap();
+                                std::array::from_fn(|k| mix_rows(&bank, &q[k], n, d))
+                            })
+                            .collect();
+                        f.cur = f.prelude.0.clone();
+                        f.normed.truncate(f.prelude.1);
                     }
-                    None => o.copy_from_slice(cur),
                 }
+                // Attention inputs: the residual mixes (one, or q/k/v on global layers), then with messages the
+                // q/k/v messages; the GPUs apply the controllers and the norms.
+                let mixes = if c.swa(phys) { 1 } else { 3 };
+                debug_assert_eq!(kinds, if controlled { 3 } else { mixes });
+                let mut input = vec![0f32; if controlled { 6 * len } else { kinds * len }];
+                let l = &self.hw.layers[phys];
+                let cur_n = rows_rms(&f.cur, d);
+                let mut states: Vec<&[f32]> = f.normed.iter().map(Vec::as_slice).collect();
+                states.push(&cur_n);
+                for k in 0..kinds {
+                    let o = &mut input[k * len..(k + 1) * len];
+                    match &l.attn_query {
+                        Some(q) if k < mixes => mix_rows_into(&states, &q[k], d, o),
+                        Some(_) => {
+                            let (done, rest) = input.split_at_mut(k * len);
+                            rest[..len].copy_from_slice(&done[..len]);
+                        }
+                        None => o.copy_from_slice(&f.cur),
+                    }
+                }
+                if controlled {
+                    let m = &f.messages[phys - c.core_start];
+                    for k in 0..3 {
+                        input[(3 + k) * len..(4 + k) * len].copy_from_slice(&m[k]);
+                    }
+                }
+                self.seconds.host_mix += h0.elapsed().as_secs_f64();
+                self.write_inputs(f.mb, &input);
             }
-            if let Some(m) = msg {
-                for j in 0..3 {
-                    input[(3 + j) * len..(4 + j) * len].copy_from_slice(&m[j]);
+            Seg::Moe { phys, controlled } => {
+                let l = &self.hw.layers[phys];
+                let cur_n = rows_rms(&f.cur, d);
+                let mut states: Vec<&[f32]> = f.normed.iter().map(Vec::as_slice).collect();
+                states.push(&cur_n);
+                let mut input = vec![0f32; if controlled { 2 * len } else { len }];
+                mix_rows_into(&states, &l.ffn_query, d, &mut input[..len]);
+                if controlled {
+                    input[len..].copy_from_slice(&f.messages[phys - c.core_start][3]);
                 }
+                self.seconds.host_mix += h0.elapsed().as_secs_f64();
+                self.write_inputs(f.mb, &input);
+            }
+            Seg::Head { rows } => {
+                // The last row, or every row of the batch.
+                ensure!(rows <= 16 && (rows == 1 || rows == n), "at most 16 scored rows");
+                let cur_n = rows_rms(&f.cur, d);
+                let mut h = vec![0f32; rows * d];
+                for i in 0..rows {
+                    let t = n - rows + i;
+                    let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
+                    let mut m = vec![0.; d];
+                    mix(&states, &self.hw.out_query, &mut m);
+                    rms_into(&m, Some(&self.hw.out_norm), c.eps, &mut h[i * d..(i + 1) * d]);
+                }
+                if let Some(r) = reference {
+                    if rows == 1 && r.dir.join("result_norm.f32").exists() {
+                        r.check("result_norm", &mut h, false)?;
+                    }
+                }
+                self.write_inputs(f.mb, &h);
             }
         }
-        self.seconds.host_mix += h0.elapsed().as_secs_f64();
-        self.write_inputs(&input);
         self.seconds.host_in += h0.elapsed().as_secs_f64();
-        debug_assert!(matches!(self.plan[self.next], Seg::Attn { kinds: k, .. } if k == kinds));
-        self.segment()?;
-        self.allreduce(len)?;
-        let h1 = Instant::now();
-        let mut attn = vec![0f32; len];
-        let hc = Instant::now();
-        conv_rows(&self.sum[..len], &mut self.attn_hist[app.slot], &self.hw.layers[app.phys].attn_post_conv, &mut attn);
-        if app.phys % c.block == 0 {
-            normed.push(rows_rms(cur, d));
-            blocks.push(std::mem::replace(cur, attn));
-        } else {
-            for (x, a) in cur.iter_mut().zip(&attn) {
-                *x += a;
-            }
-        }
-        let ffn_inp = cur.clone();
-        self.seconds.host_conv += hc.elapsed().as_secs_f64();
-        let hm = Instant::now();
-        {
-            let l = &self.hw.layers[app.phys];
-            let cur_n = rows_rms(cur, d);
-            let mut states: Vec<&[f32]> = normed.iter().map(Vec::as_slice).collect();
-            states.push(&cur_n);
-            let mut input = vec![0f32; if controlled { 2 * len } else { len }];
-            mix_rows_into(&states, &l.ffn_query, d, &mut input[..len]);
-            if let Some(m) = msg {
-                input[len..].copy_from_slice(&m[3]);
-            }
-            self.seconds.host_mix += hm.elapsed().as_secs_f64();
-            self.write_inputs(&input);
-        }
-        self.seconds.host_in += h1.elapsed().as_secs_f64();
-        self.segment()?;
-        self.allreduce(len)?;
-        let h2 = Instant::now();
-        let mut out = vec![0f32; len];
-        let hc = Instant::now();
-        conv_rows(&self.sum[..len], &mut self.ffn_hist[app.slot], &self.hw.layers[app.phys].ffn_post_conv, &mut out);
-        for (x, (a, o)) in cur.iter_mut().zip(ffn_inp.iter().zip(&out)) {
-            *x = a + o;
-        }
-        self.seconds.host_conv += hc.elapsed().as_secs_f64();
-        self.seconds.host_in += h2.elapsed().as_secs_f64();
-        if let Some(r) = reference.as_deref_mut() {
-            r.check(&format!("l_out-{}", app.slot), cur, true)?;
-        }
         Ok(())
     }
 
-    /// Add the local ranks' partials (rank order), all-reduce with the other machines; the total in `self.sum`.
-    fn allreduce(&mut self, len: usize) -> Result<()> {
+    /// Take the all-reduced output of segment `j` of `f` (in `self.sum`) into the flow's residual.
+    fn absorb(&mut self, f: &mut Flow, j: usize, reference: Option<&mut Reference>) -> Result<()> {
+        let h0 = Instant::now();
+        let len = f.n * self.c.d;
+        match f.plan[j] {
+            Seg::Attn { slot, phys, .. } => {
+                let mut attn = vec![0f32; len];
+                conv_rows(&self.sum[..len], &mut self.attn_hist[slot], &self.hw.layers[phys].attn_post_conv, &mut attn);
+                if phys % self.c.block == 0 {
+                    f.normed.push(rows_rms(&f.cur, self.c.d));
+                    f.cur = attn;
+                } else {
+                    for (x, a) in f.cur.iter_mut().zip(&attn) {
+                        *x += a;
+                    }
+                }
+                f.ffn_inp = f.cur.clone();
+            }
+            Seg::Moe { phys, .. } => {
+                let slot = self.sched[j / 2].slot;
+                let mut out = vec![0f32; len];
+                conv_rows(&self.sum[..len], &mut self.ffn_hist[slot], &self.hw.layers[phys].ffn_post_conv, &mut out);
+                for (x, (a, o)) in f.cur.iter_mut().zip(f.ffn_inp.iter().zip(&out)) {
+                    *x = a + o;
+                }
+                if let Some(r) = reference {
+                    r.check(&format!("l_out-{slot}"), &mut f.cur, true)?;
+                }
+            }
+            Seg::Head { .. } => {}
+        }
+        let dt = h0.elapsed().as_secs_f64();
+        self.seconds.host_conv += dt;
+        self.seconds.host_in += dt;
+        Ok(())
+    }
+
+    /// Add the local ranks' partials of micro-batch `mb` (rank order), all-reduce with the other machines; the total
+    /// in `self.sum`.
+    fn allreduce(&mut self, mb: usize, len: usize) -> Result<()> {
         let ts = Instant::now();
         let sum = &mut self.sum[..len];
-        sum.copy_from_slice(self.shards[0].part(len));
+        sum.copy_from_slice(self.shards[0].part(mb, len));
         for s in &self.shards[1..] {
-            for (a, b) in sum.iter_mut().zip(s.part(len)) {
+            for (a, b) in sum.iter_mut().zip(s.part(mb, len)) {
                 *a += b;
             }
         }
@@ -607,7 +666,8 @@ impl Group {
                     Vec::new()
                 };
                 let x = self.embed_rows(&tokens, &rows)?;
-                self.run(x, tokens.len(), score, reference.as_mut())?;
+                let micro = f["micro"].as_u64().unwrap_or(1) as usize;
+                self.run(x, tokens.len(), score, reference.as_mut(), micro)?;
             } else if m.get("reset").is_some() {
                 self.reset_local()?;
             } else if m.get("bye").is_some() {

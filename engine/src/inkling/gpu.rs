@@ -2,8 +2,11 @@
 //! expert's intermediate rows and its rows of the vocabulary. The host writes each segment's normed input rows into
 //! `hin` and reads the segment's partial output (attention or MoE, before the all-reduce) from `part`.
 //!
-//! A forward is a sequence of segments recorded and submitted one at a time: per layer application an attention
-//! segment (`attention`) and a MoE segment (`moe`), then the head (`head`).
+//! A forward is a sequence of segments: per layer application an attention segment (`rec_attention`) and a MoE
+//! segment (`rec_moe`), then the head (`rec_head`). Decode-sized forwards are one event-gated submission; prefill
+//! batches submit each segment, and a batch split in micro-batches (`MICRO`) keeps a segment of each queued, so the
+//! host works on one micro-batch's output while the GPU runs the other's segment. Each micro-batch has its own
+//! `hin`, `part` and parameters; the device scratch is shared (segments run one at a time).
 use super::{dequant_row, vector, Config};
 use crate::{
     gguf::{GgmlType, Gguf, TensorInfo},
@@ -13,7 +16,7 @@ use crate::{
 use anyhow::{ensure, Context, Result};
 use ash::vk;
 use half::f16;
-use std::rc::Rc;
+use std::{cell::Cell, rc::Rc};
 
 /// This rank's share of the model.
 #[derive(Clone, Copy, Debug)]
@@ -196,11 +199,13 @@ pub struct Shard {
     hk: usize,
     f: usize,
     qgr_w: usize,
-    // Host-visible: input rows, partial outputs, head logits, params.
-    hin: Buffer,
-    part: Buffer,
+    // Host-visible: input rows, partial outputs and params of each micro-batch, head logits.
+    hin: [Buffer; MICRO],
+    part: [Buffer; MICRO],
     logits: Buffer,
-    params: Buffer,
+    params: [Buffer; MICRO],
+    /// The micro-batch whose segment is being recorded.
+    mb: Cell<usize>,
     // Device scratch.
     raw: Buffer,
     xin: Buffer,
@@ -220,7 +225,8 @@ pub struct Shard {
     ypair: Buffer,
     timeline: vk::Semaphore,
     counter: u64,
-    cmds: Vec<vk::CommandBuffer>,
+    /// Per-segment command buffers in flight, with their timeline values.
+    cmds: Vec<(u64, vk::CommandBuffer)>,
     /// Event-gated graphs by (tokens, plan), the release and done events they share, and whether one is running.
     graphs: std::collections::HashMap<(usize, Vec<Seg>), Graph>,
     gate: (vk::Event, vk::Event),
@@ -261,6 +267,9 @@ struct Graph {
     cmd: vk::CommandBuffer,
     labels: Vec<String>,
 }
+
+/// Micro-batches of a prefill batch that can be in flight together.
+pub const MICRO: usize = 2;
 
 /// Forwards of at most this many tokens are event-gated graphs (one submission per forward); longer ones submit
 /// each segment (a gated submission lasts the whole forward, and amdgpu resets a GPU whose job runs past 2 s).
@@ -421,12 +430,13 @@ impl Shard {
             None
         };
         Ok(Self {
-            hin: hb(6 * nb * d)?,
+            hin: [hb(6 * nb * d)?, hb(6 * nb * d)?],
             raw: fb(6 * nb * d)?,
             z: fb(nb * 3 * c.gate_rank)?,
-            part: hb(nb * d)?,
+            part: [hb(nb * d)?, hb(nb * d)?],
             logits: hb(nb.min(16) * vn)?,
-            params: hb(64)?,
+            params: [hb(64)?, hb(64)?],
+            mb: Cell::new(0),
             xin: fb(3 * nb * d)?,
             qgr: fb(nb * qgr_w)?,
             kpre: fb(nb * hk * 128 + nb * hq + 2 * nb * hk * 4)?,
@@ -472,14 +482,16 @@ impl Shard {
         self.split.vocab(&self.c)
     }
 
-    /// The host-visible input rows (`3 * n * d` floats for attention, `n * d` for the MoE and the head).
-    pub fn hin(&self, len: usize) -> &mut [f32] {
-        assert!(len <= self.hin.size / 4);
-        unsafe { std::slice::from_raw_parts_mut(self.hin.ptr.cast::<f32>(), len) }
+    /// The host-visible input rows of micro-batch `mb` (`3 * n * d` floats for attention, `n * d` for the MoE and
+    /// the head).
+    pub fn hin(&self, mb: usize, len: usize) -> &mut [f32] {
+        assert!(len <= self.hin[mb].size / 4);
+        unsafe { std::slice::from_raw_parts_mut(self.hin[mb].ptr.cast::<f32>(), len) }
     }
-    /// This rank's partial output of the last attention or MoE segment (`n * d` floats).
-    pub fn part(&self, len: usize) -> &[f32] {
-        unsafe { std::slice::from_raw_parts(self.part.ptr.cast::<f32>(), len) }
+    /// This rank's partial output of micro-batch `mb`'s last attention or MoE segment (`n * d` floats).
+    pub fn part(&self, mb: usize, len: usize) -> &[f32] {
+        assert!(len <= self.part[mb].size / 4);
+        unsafe { std::slice::from_raw_parts(self.part[mb].ptr.cast::<f32>(), len) }
     }
     /// This rank's head logits of the last head segment, `rows` rows of `vocab_rows().1`.
     pub fn logits(&self, rows: usize) -> &[f32] {
@@ -487,15 +499,22 @@ impl Shard {
         unsafe { std::slice::from_raw_parts(self.logits.ptr.cast::<f32>(), n) }
     }
 
-    /// Set the position and batch of the next segments.
-    pub fn set_params(&self, pos: usize, n: usize) -> Result<()> {
+    /// Set the position and batch of micro-batch `mb`'s next segments.
+    pub fn set_params(&self, mb: usize, pos: usize, n: usize) -> Result<()> {
         ensure!(n >= 1 && n <= self.max_batch, "batch of {n} tokens (at most {})", self.max_batch);
         ensure!(pos + n <= self.context, "context of {} tokens exceeded", self.context);
-        self.params.write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))
+        self.params[mb].write(bytemuck::cast_slice(&[pos as u32, n as u32, 0, 0]))
     }
 
     fn push(&self, ptr: [u64; 6], extra: u64, u: [u32; 16]) -> Push {
-        Push { ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params.address, extra], u }
+        Push { ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params[self.mb.get()].address, extra], u }
+    }
+    /// The input rows and the partial output of the micro-batch being recorded.
+    fn hin_buf(&self) -> &Buffer {
+        &self.hin[self.mb.get()]
+    }
+    fn part_buf(&self) -> &Buffer {
+        &self.part[self.mb.get()]
     }
 
     /// A Q8_0 matrix times `n` columns of `x` into `y` (decode kernels up to 4 columns, the GEMM above).
@@ -567,19 +586,49 @@ impl Shard {
         Ok(())
     }
 
-    /// Submit one segment on its own (prefill batches): the host has written its inputs into `hin`.
-    pub fn submit(&mut self, seg: Seg, n: usize) -> Result<()> {
+    /// Submit one segment of micro-batch `mb` on its own (prefill batches): the host has written its inputs into
+    /// `hin`. It runs after the submissions before it; `wait` takes the returned ticket. With profiling only one
+    /// submission may be in flight.
+    pub fn submit(&mut self, seg: Seg, n: usize, mb: usize) -> Result<u64> {
         let cmd = self.gpu.begin()?;
         self.start_stamps(cmd);
         self.gpu.host_barrier(cmd, false);
-        self.record(cmd, seg, n)?;
+        self.mb.set(mb);
+        let recorded = self.record(cmd, seg, n);
+        self.mb.set(0);
+        recorded?;
         self.gpu.host_barrier(cmd, true);
         self.stamp_labels = self.take_stamps();
         self.gpu.finish(cmd)?;
         self.counter += 1;
         self.gpu.submit(cmd, None, Some((self.timeline, self.counter)), vk::Fence::null())?;
-        self.cmds.push(cmd);
+        self.cmds.push((self.counter, cmd));
         self.gated = false;
+        Ok(self.counter)
+    }
+
+    /// Whether profiling is on (`TRASHCAN_INKLING_PROFILE`): batches then run as one micro-batch.
+    pub fn profiling(&self) -> bool {
+        self.stamp_pool.is_some()
+    }
+
+    /// Wait for the submission `ticket` (`submit`) and free the command buffers up to it.
+    pub fn wait(&mut self, ticket: u64) -> Result<()> {
+        let start = std::time::Instant::now();
+        while unsafe { self.gpu.dev.get_semaphore_counter_value(self.timeline)? } < ticket {
+            ensure!(start.elapsed().as_secs() < 10, "GPU segment did not finish");
+            std::hint::spin_loop();
+        }
+        if ticket == self.counter {
+            return self.retire();
+        }
+        let gpu = &self.gpu;
+        self.cmds.retain(|&(t, cmd)| {
+            if t <= ticket {
+                unsafe { gpu.dev.free_command_buffers(gpu.pool, &[cmd]) };
+            }
+            t > ticket
+        });
         Ok(())
     }
 
@@ -625,22 +674,15 @@ impl Shard {
         Ok(())
     }
 
-    /// Wait for the segment in flight: the gated graph's done event, or the last submission.
-    pub fn wait_segment(&mut self) -> Result<()> {
+    /// Wait for the running gated graph's segment in flight (its done event).
+    pub fn wait_gated(&mut self) -> Result<()> {
         let start = std::time::Instant::now();
-        if self.gated {
-            while !unsafe { self.gpu.dev.get_event_status(self.gate.1)? } {
-                ensure!(start.elapsed().as_secs() < 10, "GPU segment did not finish");
-                std::hint::spin_loop();
-            }
-            unsafe { self.gpu.dev.reset_event(self.gate.1)? };
-            return Ok(());
-        }
-        while unsafe { self.gpu.dev.get_semaphore_counter_value(self.timeline)? } < self.counter {
+        while !unsafe { self.gpu.dev.get_event_status(self.gate.1)? } {
             ensure!(start.elapsed().as_secs() < 10, "GPU segment did not finish");
             std::hint::spin_loop();
         }
-        self.retire()
+        unsafe { self.gpu.dev.reset_event(self.gate.1)? };
+        Ok(())
     }
 
     /// Wait for the last submission to retire (after its last segment, or draining a gated graph that an error
@@ -654,9 +696,8 @@ impl Shard {
             ensure!(start.elapsed().as_secs() < 10, "a GPU submission did not finish");
             std::hint::spin_loop();
         }
-        if !self.cmds.is_empty() {
-            unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &self.cmds) };
-            self.cmds.clear();
+        for (_, cmd) in self.cmds.drain(..) {
+            unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]) };
         }
         self.gated = false;
         if let (Some(pool), false) = (self.stamp_pool, self.stamp_labels.is_empty()) {
@@ -689,11 +730,11 @@ impl Shard {
         // The controllers read their rows from many workgroups: copy them to VRAM first. A norm alone reads the host's
         // rows once.
         let src = if ctrl.is_some() {
-            self.gpu.copy(cmd, &self.hin, 0, &self.raw, 0, 2 * kinds * n * d * 4);
+            self.gpu.copy(cmd, self.hin_buf(), 0, &self.raw, 0, 2 * kinds * n * d * 4);
             self.gpu.barrier(cmd);
             self.raw.address
         } else {
-            self.hin.address
+            self.hin_buf().address
         };
         if let Some(first) = ctrl {
             let (down, gf, stride) = l.ctrl.as_ref().context("controllers of a layer outside the loop")?;
@@ -801,7 +842,7 @@ impl Shard {
         u[4] = hq as u32;
         let p = self.push([self.aout.address, self.qgr.address, 0, 0, 0, self.apart.address], 0, u);
         self.gpu.dispatch(cmd, "inkling_attn_merge", p, (n * hq) as u32, 1);
-        self.matrix(cmd, &l.wo, self.aout.address, self.part.address, n)
+        self.matrix(cmd, &l.wo, self.aout.address, self.part_buf().address, n)
     }
 
     /// Submit the MoE segment of physical layer `phys` for `n` tokens: the host has written the mixed input (`n * d`)
@@ -853,7 +894,7 @@ impl Shard {
             let mut u = [0u32; 16];
             u[0] = d as u32;
             u[2] = c.used as u32;
-            let p = self.push([0, self.ypair.address, self.part.address, 0, 0, 0], 0, u);
+            let p = self.push([0, self.ypair.address, self.part_buf().address, 0, 0, 0], 0, u);
             self.gpu.dispatch(cmd, "inkling_moe_sum", p, d.div_ceil(256) as u32, n as u32);
             return Ok(());
         }
@@ -872,7 +913,7 @@ impl Shard {
         u[1] = self.f as u32;
         u[2] = c.used as u32;
         u[3] = l.down.stride as u32;
-        let p = self.push([0, self.act.address, self.part.address, self.wts.address, self.ids.address, 0], l.sd.address, u);
+        let p = self.push([0, self.act.address, self.part_buf().address, self.wts.address, self.ids.address, 0], l.sd.address, u);
         self.gpu.dispatch_matrix(cmd, down_name, p, d.div_ceil(8) as u32, n as u32, &l.down.buf)
     }
 
@@ -881,7 +922,7 @@ impl Shard {
     fn rec_head(&self, cmd: vk::CommandBuffer, rows: usize) -> Result<()> {
         ensure!(rows <= 16, "at most 16 head rows");
         let d = self.c.d;
-        self.gpu.copy(cmd, &self.hin, 0, &self.xin, 0, rows * d * 4);
+        self.gpu.copy(cmd, self.hin_buf(), 0, &self.xin, 0, rows * d * 4);
         self.gpu.barrier(cmd);
         self.matrix_rows(cmd, &self.head, self.xin.address, self.logits.address, rows)
     }
