@@ -1,0 +1,15 @@
+#version 460
+#include "common.glsl"
+// Inkling DSpark recurrent head input of block row p.m: a = [state (256) | markov_w1 row of token p.offset (256, BF16
+// in b as u16) | hidden row p.m of c ([rows][2304]) | context (2304, d)]; the state is e. p.k = 2304, p.n = rank 256.
+layout(local_size_x=256) in;
+void main(){
+uint i=gl_GlobalInvocationID.x,R=p.n,D=p.k;
+if(i>=2*R+2*D)return;
+float v;
+if(i<R)v=e_f.v[i];
+else if(i<2*R)v=uintBitsToFloat(uint(b_h.v[p.offset*R+i-R])<<16);
+else if(i<2*R+D)v=c_f.v[p.m*D+i-2*R];
+else v=d_f.v[i-2*R-D];
+a_f.v[i]=v;
+}

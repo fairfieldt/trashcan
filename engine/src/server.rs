@@ -336,14 +336,16 @@ impl Backend for Inkling {
             self.history.clear();
         }
         let cached = self.history.len();
-        let mut top = g.forward_rows(&ids[cached..], &rows, Score::Last, None)?;
+        let top = g.forward_rows(&ids[cached..], &rows, Score::Last, None)?;
         self.history.extend_from_slice(&ids[cached..]);
         let mut out = crate::inkling::chat::Output::new(self.specials);
         let budget = p.max_tokens.min(g.context - g.pos);
         let (mut generated, mut stopped, mut reasoning_tokens) = (0, false, 0);
+        let draft_k = options.draft_tokens.unwrap_or(3);
+        let mut tok = sampler.sample(top.first().context("missing candidates")?);
+        let mut queue: std::collections::VecDeque<u32> = std::collections::VecDeque::new();
         while generated < budget {
             ensure!(!crate::server_control::stopping(), "server stopping");
-            let tok = sampler.sample(top.first().context("missing candidates")?);
             generated += 1;
             if out.part == crate::inkling::chat::Part::Thinking {
                 reasoning_tokens += 1;
@@ -361,8 +363,20 @@ impl Backend for Inkling {
             if generated == budget {
                 break;
             }
-            top = g.forward(&[tok], Score::Last, None)?;
-            self.history.push(tok);
+            if queue.is_empty() {
+                if g.drafting() {
+                    let k = draft_k.min(budget - generated - 1);
+                    let (committed, next) = crate::inkling::spec::step(g, &mut sampler, tok, k)?;
+                    self.history.extend_from_slice(&committed);
+                    queue.extend(committed.into_iter().skip(1));
+                    queue.push_back(next);
+                } else {
+                    let top = g.forward(&[tok], Score::Last, None)?;
+                    self.history.push(tok);
+                    queue.push_back(sampler.sample(top.first().context("missing candidates")?));
+                }
+            }
+            tok = queue.pop_front().unwrap();
         }
         output.finish(ids.len(), cached, generated, reasoning_tokens, !stopped)
     }
@@ -586,7 +600,12 @@ fn serve_inner(mut options: Options) -> Result<()> {
             None => (0..crate::gpu::Instance::new()?.amd_gpus()?.len()).collect(),
         };
         let mesh = qwen::tp::mesh(&options.tp_connect, &options.tp_peer)?;
-        let group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, options.batch.min(256))?;
+        let batch = options.batch.min(256);
+        crate::validate_draft(options.draft.as_ref(), options.draft_tokens.unwrap_or(3), batch)?;
+        let mut group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, batch)?;
+        if let Some(d) = &options.draft {
+            group.enable_draft(d)?;
+        }
         let tokenizer = Tokenizer::new(&group.gguf)?;
         let specials = crate::inkling::chat::Specials::new(&tokenizer)?;
         let vision = options.mmproj.as_ref().map(|m| crate::inkling::vision::Vision::new(group.first_gpu(), m)).transpose()?;

@@ -32,7 +32,7 @@ pub type Candidates = Vec<(f32, u32)>;
 pub const IMAGE_ROW: u32 = u32::MAX;
 pub const TOP_K: usize = 64;
 
-/// What a forward scores: the last row, or every row of a batch up to 16 (verification).
+/// What a forward scores: the last row, every row (verification), or nothing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Score {
     Last,
@@ -110,7 +110,45 @@ pub struct Group {
     pub seconds: Phases,
     /// GPUs on every machine, for reports.
     pub ranks: usize,
+    /// The DSpark drafter, when loaded (`enable_draft`), and what speculative decoding keeps of the last forward.
+    drafter: Option<Drafter>,
+    spec: Spec,
 }
+
+/// The drafter on this machine's ranks, and the recurrent head's context of the latest committed positions.
+struct Drafter {
+    host: super::draft::DraftHost,
+    ranks: Vec<super::draft::DraftRank>,
+    /// `f_rnn` of position p at slot p % (BLOCK + 1), with its position.
+    rnn: Vec<(usize, Vec<f32>)>,
+}
+
+/// The state of the last forward that speculative decoding needs: every row's target features for the drafter's
+/// context ([rows][4][d]), and for a verification batch the histories before it and each slot's sublayer outputs, so
+/// `rollback` can rebuild them at the accepted row.
+#[derive(Default)]
+struct Spec {
+    features: Vec<f32>,
+    /// The batch's first position and rows.
+    pos: usize,
+    n: usize,
+    verifying: bool,
+    attn_hist: Vec<Vec<f32>>,
+    ffn_hist: Vec<Vec<f32>>,
+    /// Per slot, the pre-convolution rows of its attention and MoE outputs in this batch.
+    attn_y: Vec<Vec<f32>>,
+    ffn_y: Vec<Vec<f32>>,
+    /// Seconds in the drafter's block, its recurrent steps, verification forwards and rollbacks (with the context
+    /// writes), and the rounds.
+    t_block: f64,
+    t_steps: f64,
+    t_verify: f64,
+    t_rollback: f64,
+    rounds: usize,
+}
+
+/// The applications whose input residual the drafter reads (execution order), then the final hidden state.
+const FEATURE_VISITS: [usize; 3] = [5, 23, 41];
 
 /// Batches of at least this many tokens run as two micro-batches (`Group::drive`).
 const MICRO_MIN: usize = 128;
@@ -119,6 +157,8 @@ const MICRO_MIN: usize = 128;
 /// on every rank (`mb`).
 struct Flow {
     mb: usize,
+    /// The flow's first row in the batch.
+    row0: usize,
     n: usize,
     plan: Vec<Seg>,
     /// The residual, and the RMS-normed block states before it.
@@ -210,8 +250,179 @@ impl Group {
             max_batch,
             seconds: Phases::default(),
             ranks,
+            drafter: None,
+            spec: Spec::default(),
             c,
         })
+    }
+
+    /// Load the DSpark drafter (`dspark-*.gguf`; the same path on every machine) onto every local rank.
+    pub fn enable_draft(&mut self, path: &Path) -> Result<()> {
+        self.tell(json!({"draft_load": path.display().to_string()}))?;
+        self.load_draft(path)
+    }
+
+    fn load_draft(&mut self, path: &Path) -> Result<()> {
+        let g = Gguf::open(path)?;
+        let host = super::draft::DraftHost::new(&g)?;
+        let mut ranks = Vec::new();
+        for s in &self.shards {
+            ranks.push(super::draft::DraftRank::new(s.gpu.clone(), &g, &self.gguf, &self.c, s.split, self.context)?);
+        }
+        self.drafter = Some(Drafter { host, ranks, rnn: vec![(usize::MAX, Vec::new()); super::draft::BLOCK + 1] });
+        Ok(())
+    }
+
+    pub fn drafting(&self) -> bool {
+        self.drafter.is_some()
+    }
+
+    /// Mean milliseconds per speculative round: block, steps, verify, rollback; and the rounds.
+    pub fn draft_profile(&self) -> ([f64; 4], usize) {
+        let s = &self.spec;
+        let r = s.rounds.max(1) as f64 * 1e-3;
+        ([s.t_block / r, s.t_steps / r, s.t_verify / r, s.t_rollback / r], s.rounds)
+    }
+
+    /// Write the drafter's context entries of the last forward's first `rows` rows (committed tokens).
+    fn commit_context(&mut self, rows: usize) -> Result<()> {
+        let d = self.c.d;
+        let Some(dr) = self.drafter.as_mut() else { return Ok(()) };
+        let nl = dr.host.layers;
+        let pos = self.spec.pos;
+        for start in (0..rows).step_by(64) {
+            let n = (rows - start).min(64);
+            let mut ctx = Vec::with_capacity(n * nl * d);
+            for t in start..start + n {
+                let (c, rnn) = dr.host.contexts(&self.spec.features[t * 4 * d..(t + 1) * 4 * d], d);
+                ctx.extend(c);
+                let p = pos + t;
+                dr.rnn[p % (super::draft::BLOCK + 1)] = (p, rnn);
+            }
+            let pend = dr.ranks.iter().map(|r| r.inject(&ctx, pos + start, n)).collect::<Result<Vec<_>>>()?;
+            super::draft::wait_all(pend)?;
+        }
+        Ok(())
+    }
+
+    /// Draft up to `n_max` tokens after `last` (the latest sampled token, which goes to position `self.pos`).
+    pub fn draft(&mut self, last: u32, n_max: usize) -> Result<Vec<u32>> {
+        self.tell(json!({"draft": {"token": last, "n": n_max}}))?;
+        self.draft_local(last, n_max)
+    }
+
+    fn draft_local(&mut self, last: u32, n_max: usize) -> Result<Vec<u32>> {
+        use super::draft::BLOCK;
+        let d = self.c.d;
+        let pos0 = self.pos;
+        ensure!(pos0 > 0 && n_max < BLOCK, "drafting needs a committed token and at most {} drafts", BLOCK - 1);
+        let dr = self.drafter.as_ref().context("no drafter loaded")?;
+        let (p, rnn) = &dr.rnn[(pos0 - 1) % (BLOCK + 1)];
+        ensure!(*p == pos0 - 1, "the drafter's context of position {} is missing", pos0 - 1);
+        let mut rows = embed(&self.gguf, &self.c, &self.hw, &[last])?;
+        for _ in 1..BLOCK {
+            rows.extend_from_slice(&dr.host.mask);
+        }
+        let rnn = rnn.clone();
+        let t0 = std::time::Instant::now();
+        let pend = dr.ranks.iter().map(|r| r.block(&rows, pos0, &rnn, last)).collect::<Result<Vec<_>>>()?;
+        super::draft::wait_all(pend)?;
+        self.spec.t_block += t0.elapsed().as_secs_f64();
+        let _ = d;
+        let mut out = Vec::new();
+        for row in 1..=n_max {
+            let t1 = std::time::Instant::now();
+            let ranks = &self.drafter.as_ref().unwrap().ranks;
+            if row > 1 {
+                let prev = *out.last().unwrap();
+                let pend = ranks.iter().map(|r| r.step(row, prev)).collect::<Result<Vec<_>>>()?;
+                super::draft::wait_all(pend)?;
+            }
+            let mut best = (f32::NEG_INFINITY, u32::MAX);
+            for r in ranks {
+                let b = r.top()?;
+                if b.0 > best.0 || (b.0 == best.0 && b.1 < best.1) {
+                    best = b;
+                }
+            }
+            self.spec.t_steps += t1.elapsed().as_secs_f64();
+            if let Some(m) = self.mesh.as_mut() {
+                for round in 0..m.rounds() {
+                    let mine = [best.0.to_le_bytes(), best.1.to_le_bytes()].concat();
+                    let mut theirs = [0u8; 8];
+                    m.lanes(m.partner(round))?.exchange(&mine, &mut theirs)?;
+                    let o = (f32::from_le_bytes(theirs[..4].try_into().unwrap()), u32::from_le_bytes(theirs[4..].try_into().unwrap()));
+                    if o.0 > best.0 || (o.0 == best.0 && o.1 < best.1) {
+                        best = o;
+                    }
+                }
+            }
+            out.push(best.1);
+        }
+        Ok(out)
+    }
+
+    /// Forward a verification batch (the latest sampled token, then drafts): every row's candidates. Its histories
+    /// are kept until `rollback` says how many rows to keep.
+    pub fn verify(&mut self, tokens: &[u32]) -> Result<Vec<Candidates>> {
+        ensure!(tokens.len() > 1 && tokens.len() <= GATED_MAX, "a verification batch has 2 to {GATED_MAX} tokens");
+        let t0 = std::time::Instant::now();
+        self.tell(json!({"forward": {"tokens": tokens, "score": "all", "verify": true}}))?;
+        let r = self.verify_local(tokens);
+        self.spec.t_verify += t0.elapsed().as_secs_f64();
+        self.spec.rounds += 1;
+        r
+    }
+
+    fn verify_local(&mut self, tokens: &[u32]) -> Result<Vec<Candidates>> {
+        ensure!(self.drafter.is_some(), "verification batches come from the drafter");
+        self.spec.verifying = true;
+        self.spec.attn_hist = self.attn_hist.clone();
+        self.spec.ffn_hist = self.ffn_hist.clone();
+        let x = embed(&self.gguf, &self.c, &self.hw, tokens)?;
+        let r = self.run(x, tokens.len(), Score::All, None, 1);
+        self.spec.verifying = r.is_ok();
+        r
+    }
+
+    /// Keep the first `keep` rows of the last verification batch: the position, every convolution history and the
+    /// drafter's context go back to just after them.
+    pub fn rollback(&mut self, keep: usize) -> Result<()> {
+        let t0 = std::time::Instant::now();
+        self.tell(json!({"rollback": keep}))?;
+        let r = self.rollback_local(keep);
+        self.spec.t_rollback += t0.elapsed().as_secs_f64();
+        r
+    }
+
+    fn rollback_local(&mut self, keep: usize) -> Result<()> {
+        ensure!(self.spec.verifying && keep >= 1 && keep <= self.spec.n, "nothing to roll back");
+        let d = self.c.d;
+        let n = self.spec.n;
+        if keep < n {
+            let rebuild = |old: &[f32], y: &[f32], out: &mut [f32]| {
+                // The last three inputs before row `keep`: old history rows, then the batch's rows.
+                for s in 0..3 {
+                    let src = keep as isize - 3 + s as isize;
+                    let row = if src >= 0 { &y[src as usize * d..(src as usize + 1) * d] } else { &old[(src + 3) as usize * d..(src + 4) as usize * d] };
+                    out[s * d..(s + 1) * d].copy_from_slice(row);
+                }
+            };
+            for slot in 0..self.attn_hist.len() {
+                if !self.spec.attn_y[slot].is_empty() {
+                    rebuild(&self.spec.attn_hist[slot], &self.spec.attn_y[slot], &mut self.attn_hist[slot]);
+                }
+                if !self.spec.ffn_y[slot].is_empty() {
+                    rebuild(&self.spec.ffn_hist[slot], &self.spec.ffn_y[slot], &mut self.ffn_hist[slot]);
+                }
+            }
+            for s in self.shards.iter_mut() {
+                s.rollback(keep)?;
+            }
+            self.pos = self.spec.pos + keep;
+        }
+        self.spec.verifying = false;
+        self.commit_context(keep)
     }
 
     /// GPU milliseconds per kernel of the first local rank since the last call (TRASHCAN_INKLING_PROFILE=1).
@@ -245,6 +456,7 @@ impl Group {
 
     fn reset_local(&mut self) -> Result<()> {
         self.pos = 0;
+        self.spec = Spec::default();
         for h in self.attn_hist.iter_mut().chain(self.ffn_hist.iter_mut()) {
             h.fill(0.);
         }
@@ -337,6 +549,7 @@ impl Group {
             }
             flows.push(Flow {
                 mb,
+                row0,
                 n: rows,
                 plan,
                 cur: x[row0 * d..(row0 + rows) * d].to_vec(),
@@ -346,6 +559,15 @@ impl Group {
                 tickets: vec![0; self.shards.len()],
             });
             row0 += rows;
+        }
+        if self.drafter.is_some() {
+            self.spec.features.clear();
+            self.spec.features.resize(n * 4 * d, 0.);
+            self.spec.pos = self.pos;
+            self.spec.n = n;
+            let slots = self.attn_hist.len();
+            self.spec.attn_y = vec![Vec::new(); slots];
+            self.spec.ffn_y = vec![Vec::new(); slots];
         }
         let result = self.drive(&mut flows, gated, reference.as_deref_mut()).and_then(|()| match score {
             Score::None => Ok(Vec::new()),
@@ -358,7 +580,26 @@ impl Group {
             }
         }
         let result = result?;
+        if self.drafter.is_some() {
+            // The final hidden state of every row: the drafter's fourth feature.
+            for f in &flows {
+                let mut cur_n = vec![0f32; f.cur.len()];
+                for (a, b) in f.cur.chunks_exact(d).zip(cur_n.chunks_exact_mut(d)) {
+                    super::rms_into(a, None, 1e-6, b);
+                }
+                for t in 0..f.n {
+                    let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
+                    let mut m = vec![0.; d];
+                    super::mix(&states, &self.hw.out_query, &mut m);
+                    let at = ((f.row0 + t) * 4 + 3) * d;
+                    super::rms_into(&m, Some(&self.hw.out_norm), c.eps, &mut self.spec.features[at..at + d]);
+                }
+            }
+        }
         self.pos += n;
+        if self.drafter.is_some() && !self.spec.verifying {
+            self.commit_context(n)?;
+        }
         self.seconds.forwards += 1;
         self.seconds.tokens += n as u64;
         self.seconds.host += start.elapsed().as_secs_f64();
@@ -395,6 +636,19 @@ impl Group {
                         self.advance(f, None, next, false);
                     }
                     None => self.advance(f, Some(j), next, addend),
+                }
+                // The drafter reads the residual entering some applications.
+                if self.drafter.is_some() {
+                    if let Some(nj) = next {
+                        if nj % 2 == 0 {
+                            if let Some(k) = FEATURE_VISITS.iter().position(|&v| v == nj / 2) {
+                                for t in 0..f.n {
+                                    let at = ((f.row0 + t) * 4 + k) * d;
+                                    self.spec.features[at..at + d].copy_from_slice(&f.cur[t * d..(t + 1) * d]);
+                                }
+                            }
+                        }
+                    }
                 }
                 if let Some(next) = next {
                     self.launch(f, next, gated)?;
@@ -518,6 +772,18 @@ impl Group {
         }
         // The history becomes the last three outputs before the convolution.
         if hist.is_some() {
+            if self.spec.verifying {
+                // A verification batch keeps every row's output for `rollback`.
+                let mut ys = vec![0f32; n * d];
+                for (t, row) in ys.chunks_exact_mut(d).enumerate() {
+                    pass.load_y(t as isize, row);
+                }
+                match done {
+                    Some((Seg::Attn { slot, .. }, _)) => self.spec.attn_y[slot] = ys,
+                    Some((Seg::Moe { .. }, Some(app))) => self.spec.ffn_y[app.slot] = ys,
+                    _ => {}
+                }
+            }
             let mut last = vec![0f32; 3 * d];
             for (k, row) in last.chunks_exact_mut(d).enumerate() {
                 pass.load_y(n as isize - 3 + k as isize, row);
@@ -619,7 +885,17 @@ impl Group {
             let bytes = mesh.hear()?;
             mesh.tell_children(&bytes)?;
             let m: Value = serde_json::from_slice(&bytes)?;
-            if let Some(f) = m.get("forward") {
+            if let Some(f) = m.get("forward").filter(|f| f["verify"].as_bool().unwrap_or(false)) {
+                let tokens: Vec<u32> = serde_json::from_value(f["tokens"].clone())?;
+                self.verify_local(&tokens)?;
+            } else if let Some(v) = m.get("draft_load") {
+                self.load_draft(Path::new(v.as_str().context("drafter path")?))?;
+            } else if let Some(v) = m.get("draft") {
+                let token = v["token"].as_u64().context("draft token")? as u32;
+                self.draft_local(token, v["n"].as_u64().context("draft count")? as usize)?;
+            } else if let Some(v) = m.get("rollback") {
+                self.rollback_local(v.as_u64().context("rollback rows")? as usize)?;
+            } else if let Some(f) = m.get("forward") {
                 let tokens: Vec<u32> = serde_json::from_value(f["tokens"].clone())?;
                 let score = parse_score(f["score"].as_str().unwrap_or("last"))?;
                 let mut reference = f["force"].as_str().map(|p| Reference::new(Path::new(p)));

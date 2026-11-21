@@ -1,0 +1,52 @@
+#version 460
+#include "common.glsl"
+// Inkling DSpark drafter attention: block row t (position p.offset + t) and query head h attend, without a causal
+// mask, to the 8 block rows (K, V f32 [8][p.kvheads][128] in c, d) and to the context cache (f16 [p.cap][p.kvheads]
+// [128] in e, f) at positions before p.offset: all of them, or with p.window > 0 those with qpos - kpos < p.window.
+// Scale 1/sqrt(128), online softmax over chunks of KC keys. b: q [rows][p.heads][128]; a: output, same shape.
+#define KC 256
+layout(local_size_x=256) in;
+shared vec2 qs[64];
+shared float sc[KC],red[4],accs[128];
+float kdot(uint j,uint ctx,uint g,uint lane){
+    vec2 k;
+    if(j<ctx){uint row=((j%p.cap)*p.kvheads+g)*64;k=unpackHalf2x16(uint(e_h.v[2*(row+lane)])|(uint(e_h.v[2*(row+lane)+1])<<16));}
+    else{uint row=(((j-ctx)*p.kvheads+g)*128);k=vec2(c_f.v[row+2*lane],c_f.v[row+2*lane+1]);}
+    return dot(k,qs[lane]);
+}
+float vval(uint j,uint ctx,uint g,uint c){
+    if(j<ctx)return unpackHalf2x16(uint(f_h.v[((j%p.cap)*p.kvheads+g)*128+c])).x;
+    return d_f.v[((j-ctx)*p.kvheads+g)*128+c];
+}
+void main(){
+uint tid=gl_LocalInvocationID.x,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
+uint t=gl_WorkGroupID.x/p.heads,h=gl_WorkGroupID.x%p.heads,g=h/(p.heads/p.kvheads);
+uint qp=p.offset+t,ctx=p.offset;
+uint lo=p.window>0&&qp>=p.window?qp+1-p.window:0;
+if(tid<64){uint qb=(t*p.heads+h)*128;qs[tid]=vec2(b_f.v[qb+2*tid],b_f.v[qb+2*tid+1]);}
+barrier();
+// Keys: context lo..ctx, then the 8 block rows (indices ctx..ctx+7).
+uint s0=min(lo,ctx),s1=ctx+8;
+uint c=tid%128,half_=tid/128;
+float M=-1e30,L=0,acc=0;
+for(uint cs=s0;cs<s1;cs+=KC){
+    uint n=min(KC,s1-cs);
+    for(uint i=w;i<n;i+=4){float dt=subgroupAdd(kdot(cs+i,ctx,g,lane));if(lane==0)sc[i]=dt*inversesqrt(128.0);}
+    barrier();
+    float m=-1e30;for(uint i=tid;i<n;i+=256)m=max(m,sc[i]);
+    m=subgroupMax(m);if(lane==0)red[w]=m;barrier();
+    float nm=max(M,max(max(red[0],red[1]),max(red[2],red[3])));
+    barrier();
+    float l=0;for(uint i=tid;i<n;i+=256){float e=exp(sc[i]-nm);sc[i]=e;l+=e;}
+    l=subgroupAdd(l);if(lane==0)red[w]=l;barrier();
+    float f=exp(M-nm);
+    L=L*f+((red[0]+red[1])+(red[2]+red[3]));
+    acc*=f;
+    for(uint i=half_;i<n;i+=2)acc=fma(sc[i],vval(cs+i,ctx,g,c),acc);
+    M=nm;
+    barrier();
+}
+if(half_==1)accs[c]=acc;
+barrier();
+if(half_==0)a_f.v[(t*p.heads+h)*128+c]=(acc+accs[c])/L;
+}
