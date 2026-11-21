@@ -298,6 +298,36 @@ For a 2,770-token document rendered as a low-effort chat prompt, `inkling bench 
 Drafting costs additional prefill time to build its context. Three drafts saved about 0.24 seconds overall on
 this document and output length. Five drafts took longer overall.
 
+### Small verification batches
+
+`ad764296` uses decode matrix kernels for 5–8 rows, schedules one host task per row in gated batches, and selects
+each rank and row's candidates on the existing host pool. The paired runs below use `df18d039` as the baseline,
+the same prompts and D700s, the f32 wire format, and `--reps 2` for each build and workload.
+Both Macs sustained 850 MHz core and 1370 MHz memory during the paired runs.
+
+On the 33-token code prompt with `--tg 192`, plain decode went from 37.87–38.01 to 38.42–38.48 tok/s. With
+`--draft DRAFT --draft-tokens 3`, it went from 43.16–43.23 to 46.07–46.22 tok/s at the same 3.00 emitted tokens
+per round. Verification went from 56.49–56.59 to 51.98–52.17 ms per round.
+
+The same 2,770-token document with `--tg 128` gave these paired results:
+
+| Draft tokens | Baseline decode tok/s | Small-batch decode tok/s | Baseline prefill plus decode | Small-batch prefill plus decode |
+|---|---:|---:|---:|---:|
+| 3 | 42.28–42.38 | 44.78–44.86 | 10.39–10.42 s | 10.22–10.25 s |
+| 5 | 36.13–36.16 | 42.30–42.34 | 10.91–10.94 s | 10.39–10.41 s |
+
+Document prefill was about 375 tok/s in both builds with drafting enabled. With five drafts, mean verification
+fell from 85.36–85.44 to 69.66–69.77 ms per round at the same 3.88 emitted tokens per round.
+
+The five-draft chat and seven-draft tool fixtures matched all 48 teacher-forced layer error measurements from the
+baseline and all 16 reference tokens per fixture. Five drafts also matched all 24 reference tokens after the
+2,761-token prompt. The five-draft Responses server matched the published plain server on streamed token limits,
+two seeded samples in JSON and SSE, vision, and the native tool-result continuation.
+
+The native optimizer also tried reusing the prefill expert tiles in small verification batches. In its four-row
+probe after a 64-token prompt, that increased verification from 57.55 to 67.19 ms. The gate/up portion alone
+rose from 8.25 to 16.05 ms. Small batches use the per-token expert kernels.
+
 ## Order of work
 
 1. Reference: build, dumps for the fixture prompts (text and images), KLD baselines and the attribution runs above.
