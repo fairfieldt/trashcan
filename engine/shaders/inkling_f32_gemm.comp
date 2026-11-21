@@ -5,9 +5,14 @@
 // for COLS columns, whose inputs are the same for every lane (scalar loads); the four waves' sums meet in shared
 // memory. Workgroup x covers 64 rows, y covers COLS columns. Weights (set 0): [p.n][p.k] f32, p.k a multiple of 64.
 // b: x [t][p.k], c: y [t][p.n].
+// BF16 (specialization constant) 1: the weights are the upper halves of f32 values whose lower halves are zero,
+// [p.n][p.k] u16 (the router: the kernel runs at the bandwidth of its weights).
+layout(constant_id=0) const uint BF16=0;
 #define COLS 8
 layout(local_size_x=256) in;
 layout(binding=0,std430) readonly restrict buffer WeightVec { vec4 v[]; } wv4;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+vec4 bf(uvec2 h){return uintBitsToFloat(uvec4(h.x<<16,h.x&0xffff0000u,h.y<<16,h.y&0xffff0000u));}
 shared float red[3][64][COLS];
 #define DOT4(A_,W_,X_) A_=fma(W_.x,X_.x,A_);A_=fma(W_.y,X_.y,A_);A_=fma(W_.z,X_.z,A_);A_=fma(W_.w,X_.w,A_);
 void main(){
@@ -17,7 +22,9 @@ uint row=gl_WorkGroupID.x*64+lane,quarter=p.k/16,wb=min(row,p.n-1)*(p.k/4)+wv*qu
 uint xb[COLS];float acc[COLS];
 [[unroll]]for(uint t=0;t<COLS;t++){xb[t]=min(t0+t,nb-1)*(p.k/4)+wv*quarter;acc[t]=0;}
 for(uint k=0;k<quarter;k+=4){
-    vec4 w0=wv4.v[wb+k],w1=wv4.v[wb+k+1],w2=wv4.v[wb+k+2],w3=wv4.v[wb+k+3];
+    vec4 w0,w1,w2,w3;
+    if(BF16!=0){uvec4 h0=wq.q[(wb+k)/2],h1=wq.q[(wb+k)/2+1];w0=bf(h0.xy);w1=bf(h0.zw);w2=bf(h1.xy);w3=bf(h1.zw);}
+    else{w0=wv4.v[wb+k];w1=wv4.v[wb+k+1];w2=wv4.v[wb+k+2];w3=wv4.v[wb+k+3];}
     [[unroll]]for(uint t=0;t<COLS;t++){
         vec4 x0=b_v4.v[xb[t]+k],x1=b_v4.v[xb[t]+k+1],x2=b_v4.v[xb[t]+k+2],x3=b_v4.v[xb[t]+k+3];
         DOT4(acc[t],w0,x0) DOT4(acc[t],w1,x1) DOT4(acc[t],w2,x2) DOT4(acc[t],w3,x3)

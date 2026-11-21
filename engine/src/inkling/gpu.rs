@@ -139,6 +139,16 @@ fn upload_f32(gpu: &Rc<Device>, v: &[f32]) -> Result<Buffer> {
     gpu.upload(f32_bytes(v))
 }
 
+/// The upper halves of `v` as a buffer, when every lower half is zero (f32 tensors converted from bf16): the
+/// prefill kernels of the f32 matrices run at the bandwidth of their weights and read half the bytes this way.
+fn upload_bf16(gpu: &Rc<Device>, v: &[f32]) -> Result<Option<Buffer>> {
+    if v.iter().any(|x| x.to_bits() & 0xffff != 0) {
+        return Ok(None);
+    }
+    let halves: Vec<u16> = v.iter().map(|x| (x.to_bits() >> 16) as u16).collect();
+    Ok(Some(gpu.upload(bytemuck::cast_slice(&halves))?))
+}
+
 /// Rows `r0..r0 + n` of a small matrix (F32, F16 or BF16; Q8_0 too) as f32.
 fn f32_rows(g: &Gguf, t: &TensorInfo, r0: usize, n: usize) -> Result<Vec<f32>> {
     let k = t.dims[0] as usize;
@@ -166,6 +176,9 @@ pub struct Layer {
     tapw: Option<(Buffer, Buffer)>,
     relb: Buffer,
     router: Buffer,
+    /// Prefill copies in bf16 (`upload_bf16`) of the router and of the controllers' down matrices.
+    router16: Option<Buffer>,
+    ctrl16: Option<Buffer>,
     bias: Buffer,
     gu: Matrix,
     down: Matrix,
@@ -327,6 +340,7 @@ impl Shard {
         let (v0, vn) = split.vocab(c);
         let qgr_w = 2 * hq * 128 + hq * c.rel;
         let mut layers = Vec::new();
+        let prefill = max_batch > GATED_MAX;
         for p in 0..c.layers {
             let lt = |n: &str| c.lt(g, p, n);
             let q = lt("attn_q.weight")?;
@@ -393,6 +407,7 @@ impl Shard {
                 norms.extend(vector(g, lt(n)?)?);
             }
             norms.extend(vector(g, lt("ffn_norm.weight")?)?);
+            let mut ctrl16 = None;
             let ctrl = if c.looped(p) {
                 let (mut down, mut gain, mut forget) = (Vec::new(), Vec::new(), Vec::new());
                 for i in 0..4 {
@@ -409,6 +424,9 @@ impl Shard {
                 }
                 let stride = gain.len();
                 gain.extend(forget);
+                if prefill {
+                    ctrl16 = upload_bf16(&gpu, &down)?;
+                }
                 Some((upload_f32(&gpu, &down)?, upload_f32(&gpu, &gain)?, stride))
             } else {
                 None
@@ -427,7 +445,9 @@ impl Shard {
                 sinkw: upload_f32(&gpu, &sinkr)?,
                 tapw,
                 relb: upload_f32(&gpu, &relb)?,
+                router16: if prefill { upload_bf16(&gpu, &router)? } else { None },
                 router: upload_f32(&gpu, &router)?,
+                ctrl16,
                 bias: upload_f32(&gpu, &bias)?,
                 gu,
                 down,
@@ -480,8 +500,8 @@ impl Shard {
         };
         Ok(Self {
             hin: each(&|| hb(6 * nb * (d + 1)))?,
-            vin,
-            raw: fb(6 * nb * (d + 1))?,
+            // Only decode and verification batches copy their rows here when the prefill inputs are in VRAM.
+            raw: fb(6 * if vin.is_some() { nb.min(GATED_MAX) } else { nb } * (d + 1))?,
             z: fb(nb * 3 * c.gate_rank)?,
             part: each(&|| hb(nb * d + 1))?,
             carry: Cell::new(None),
@@ -495,6 +515,7 @@ impl Shard {
             mb: Cell::new(0),
             defer: Cell::new(false),
             xin: fb(3 * nb * d)?,
+            vin,
             qgr: fb(nb * qgr_w)?,
             kpre: fb(nb * hk * 128 + nb * hq + 2 * nb * hk * 4)?,
             vpre: fb(nb * hk * 128)?,
@@ -876,13 +897,16 @@ impl Shard {
         u[7] = mixes as u32;
         u[10] = first as u32;
         if n > GATED_MAX {
-            // 8 tokens per workgroup in the first half, 32 in the second.
+            // 8 tokens per workgroup in the first half, 16 in the second.
             let p = self.push([0, raw, 0, self.z.address, 0, 0], 0, u).defer_barrier(true);
-            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z", p, kinds as u32, n.div_ceil(8) as u32, down)?;
+            match &l.ctrl16 {
+                Some(down16) => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z_bf16", p, kinds as u32, n.div_ceil(8) as u32, down16)?,
+                None => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z", p, kinds as u32, n.div_ceil(8) as u32, down)?,
+            }
             self.carry_then_barrier(cmd);
             u[3] = *stride as u32;
             let p = self.push([self.xin.address, raw, 0, self.z.address, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(32)) as u32, gf)?;
+            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(16)) as u32, gf)?;
         } else {
             let m = raw + (mixes * n * d * 4) as u64;
             let p = self.push([0, raw, m, self.z.address, 0, 0], 0, u);
@@ -1037,7 +1061,16 @@ impl Shard {
         self.inputs(cmd, l, n, 1, 1, controlled.then_some(3), kinds, false)?;
         if n > GATED_MAX {
             self.defer.set(true);
-            let router = self.matf32(cmd, &l.router, c.experts, d, self.xin.address, self.rlog.address, n);
+            let router = match &l.router16 {
+                Some(r16) => {
+                    let mut u = [0u32; 16];
+                    u[0] = c.experts as u32;
+                    u[1] = d as u32;
+                    let p = self.push([0, self.xin.address, self.rlog.address, 0, 0, 0], 0, u);
+                    self.gpu.dispatch_matrix(cmd, "inkling_bf16_gemm", p, c.experts.div_ceil(64) as u32, n.div_ceil(8) as u32, r16)
+                }
+                None => self.matf32(cmd, &l.router, c.experts, d, self.xin.address, self.rlog.address, n),
+            };
             self.defer.set(false);
             router?;
             self.carry_then_barrier(cmd);

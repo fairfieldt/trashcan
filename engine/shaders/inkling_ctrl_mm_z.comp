@@ -7,9 +7,14 @@
 // are the same for every lane (scalar loads); the waves' sums meet in shared memory. Weights (set 0): W_down
 // [ctrl][p.n][2 D] f32, controller p.offset + j. b: the sublayer's inputs: u rows [p.cap][t][D] (one set for all
 // controllers with p.cap 1), m rows [p.m][t][D], then (iu, im) [p.m][t]; d: z [t][p.m][p.n]. p.k = D.
+// BF16 (specialization constant) 1: the weights are the upper halves of the f32 values, [ctrl][p.n][2 D] u16 (the
+// release stores them in bf16, so the halves are exact): the kernel runs at the bandwidth of its weights.
+layout(constant_id=0) const uint BF16=0;
 #define COLS 8
 layout(local_size_x=256) in;
 layout(binding=0,std430) readonly restrict buffer WeightVec { vec4 v[]; } wv4;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
+vec4 bf(uvec2 h){return uintBitsToFloat(uvec4(h.x<<16,h.x&0xffff0000u,h.y<<16,h.y&0xffff0000u));}
 shared float red[3][64][COLS];
 #define DOT4(A_,W_,X_) A_=fma(W_.x,X_.x,A_);A_=fma(W_.y,X_.y,A_);A_=fma(W_.z,X_.z,A_);A_=fma(W_.w,X_.w,A_);
 void main(){
@@ -21,7 +26,9 @@ uint wb=(((p.offset+j)*p.n+r)*2*D+wv*(D/2))/4,xo=(wv&1)*(D/8),ib=(p.cap+p.m)*nb*
 uint xb[COLS];float inv[COLS],acc[COLS];
 [[unroll]]for(uint t=0;t<COLS;t++){uint tt=min(t0+t,nb-1);xb[t]=(set*nb+tt)*(D/4)+xo;inv[t]=b_f.v[ib+tt*2];acc[t]=0;}
 for(uint k=0;k<D/8;k+=4){
-    vec4 w0=wv4.v[wb+k],w1=wv4.v[wb+k+1],w2=wv4.v[wb+k+2],w3=wv4.v[wb+k+3];
+    vec4 w0,w1,w2,w3;
+    if(BF16!=0){uvec4 h0=wq.q[(wb+k)/2],h1=wq.q[(wb+k)/2+1];w0=bf(h0.xy);w1=bf(h0.zw);w2=bf(h1.xy);w3=bf(h1.zw);}
+    else{w0=wv4.v[wb+k];w1=wv4.v[wb+k+1];w2=wv4.v[wb+k+2];w3=wv4.v[wb+k+3];}
     [[unroll]]for(uint t=0;t<COLS;t++){
         vec4 x0=b_v4.v[xb[t]+k],x1=b_v4.v[xb[t]+k+1],x2=b_v4.v[xb[t]+k+2],x3=b_v4.v[xb[t]+k+3];
         DOT4(acc[t],w0,x0) DOT4(acc[t],w1,x1) DOT4(acc[t],w2,x2) DOT4(acc[t],w3,x3)
