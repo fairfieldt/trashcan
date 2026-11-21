@@ -2,7 +2,7 @@
 #include "common.glsl"
 // Element-wise steps of the Inkling vision tower over p.n rows of p.k values, thread per element. p.flags selects:
 // 0: a += bias; 1: a = gelu(a + bias); 2: a = c + ls * (a + bias) (bias, then ls, in set 0); 3: a = gelu(a);
-// 4: a += b. gelu is the erf form (llama.cpp's FFN_GELU_ERF), erf by Abramowitz and Stegun 7.1.26 refined
+// 4: a += b; 5: a = silu(a) * b (the DSpark drafter's MLP). gelu is the erf form (llama.cpp's FFN_GELU_ERF), erf by Abramowitz and Stegun 7.1.26 refined
 // (max error 1.5e-7). Weights (set 0): bias [p.k] (and ls [p.k] for mode 2).
 layout(local_size_x=256) in;
 float erf_(float x){
@@ -22,6 +22,7 @@ case 1u: v=gelu(v+uintBitsToFloat(ww.words[c]));break;
 case 2u: v=c_f.v[i]+uintBitsToFloat(ww.words[p.k+c])*(v+uintBitsToFloat(ww.words[c]));break;
 case 3u: v=gelu(v);break;
 case 4u: v+=b_f.v[i];break;
+case 5u: v=v/(1.0+exp(-v))*b_f.v[i];break;
 }
 a_f.v[i]=v;
 }

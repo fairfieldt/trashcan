@@ -1,0 +1,13 @@
+#version 460
+#include "common.glsl"
+// Inkling DSpark recurrent head update from the joint projection b ([3 * p.n], before its bias, which is in set 0):
+// gate = sigmoid(b0), candidate = tanh(b1), state (a) = candidate + gate * (state - candidate), latent (c) = tanh(b2).
+layout(local_size_x=256) in;
+void main(){
+uint k=gl_GlobalInvocationID.x,R=p.n;
+if(k>=R)return;
+float g=1.0/(1.0+exp(-(b_f.v[k]+uintBitsToFloat(ww.words[k]))));
+float cand=tanh(b_f.v[R+k]+uintBitsToFloat(ww.words[R+k]));
+a_f.v[k]=cand+g*(a_f.v[k]-cand);
+c_f.v[k]=tanh(b_f.v[2*R+k]+uintBitsToFloat(ww.words[2*R+k]));
+}

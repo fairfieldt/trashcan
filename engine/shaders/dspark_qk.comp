@@ -1,0 +1,27 @@
+#version 460
+#include "common.glsl"
+// Inkling DSpark drafter: RMS norm of each head of 128 with a weight (eps p.r0 bits), then NeoX RoPE (pairs i, i + 64,
+// base p.r1 bits) at position p.offset + row, in place on a ([p.n rows][p.heads][128]). With p.flags 1, also store
+// the result as f16 into the cache c at position (p.offset + row) % p.cap (heads of the cache: p.heads) and copy the
+// rows of b (V, f32, same shape) into the cache d. Weights (set 0): the norm [128]. Wave per (row, head).
+layout(local_size_x=64) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,row=gl_WorkGroupID.x/p.heads,h=gl_WorkGroupID.x%p.heads;
+if(row>=p.n)return;
+uint at=(row*p.heads+h)*128;
+float x0=a_f.v[at+lane],x1=a_f.v[at+lane+64];
+float inv=inversesqrt(subgroupAdd(x0*x0+x1*x1)/128.0+uintBitsToFloat(p.r0));
+x0*=inv*uintBitsToFloat(ww.words[lane]);x1*=inv*uintBitsToFloat(ww.words[lane+64]);
+float pos=float(p.offset+row);
+float theta=pos*pow(uintBitsToFloat(p.r1),-2.0*float(lane)/128.0);
+float cs=cos(theta),sn=sin(theta);
+float y0=x0*cs-x1*sn,y1=x0*sn+x1*cs;
+a_f.v[at+lane]=y0;a_f.v[at+lane+64]=y1;
+if((p.flags&1)!=0){
+    uint c=(((p.offset+row)%p.cap)*p.heads+h)*128;
+    c_h.v[c+lane]=uint16_t(packHalf2x16(vec2(y0,0))&0xffffu);
+    c_h.v[c+lane+64]=uint16_t(packHalf2x16(vec2(y1,0))&0xffffu);
+    d_h.v[c+lane]=uint16_t(packHalf2x16(vec2(b_f.v[at+lane],0))&0xffffu);
+    d_h.v[c+lane+64]=uint16_t(packHalf2x16(vec2(b_f.v[at+lane+64],0))&0xffffu);
+}
+}

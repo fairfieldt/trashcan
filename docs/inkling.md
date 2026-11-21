@@ -6,15 +6,11 @@ ViT image encoder, and a 3-layer block drafter for speculative decoding. This do
 reference for running it on Mac Pros: the layer math, the weights and the chosen quant, the machine layout, the
 vision path, the drafter and the order of work.
 
-Status: text and image prompts run tensor-parallel on two Mac Pros (TP4, `engine/src/inkling/`, shaders
-`engine/shaders/inkling_*.comp` and `vit_*.comp`) from Unsloth's UD-Q4_K_XL and BF16 vision projector as published,
-through `inkling chat`, `inkling bench` and the Responses server (`serve`; deploy recipe `2-inkling`). Checked
-against llama.cpp `29b52d398` (CPU, same GGUF): teacher-forced per-layer residual errors of 0.2-3% over all 48
-applications on a 25- and a 109-token prompt, the same top token, and the reference's greedy tokens (16 of 16 on both
-prompts, 24 of 24 after a 2,761-token document); the vision projector's output agrees with mtmd's to 2.1%. Decode 33
-tok/s and prefill about 120 tok/s on two Macs over one cable (being optimized). The DSpark drafter is not implemented.
-Every number below was read from the GGUFs of `unsloth/Inkling-2-Mini-GGUF`, from the original safetensors header of
-`thinkingmachines/Inkling-2-Mini`, or from llama.cpp at `29b52d398`.
+Text and image prompts run tensor-parallel on two Mac Pros (TP4) with Unsloth's UD-Q4_K_XL and BF16 vision
+projector through `inkling chat` and the Responses server (`serve`, recipe `2-inkling`). See [Validation](#validation)
+for the llama.cpp comparison and [Performance](#performance) for measurements on incite and enlight.
+The architecture details come from `unsloth/Inkling-2-Mini-GGUF`, the original `thinkingmachines/Inkling-2-Mini`
+safetensors header, and llama.cpp at `29b52d398`.
 
 | | |
 |---|---|
@@ -217,6 +213,31 @@ pull request:
 So each drafted token costs a second pass over the 201,024-row head, in sequence, and verification must roll the
 target's K/V positions and its K, V and sublayer-output convolution histories back to the accepted token.
 
+### Implementation (`inkling/draft.rs`, `inkling/spec.rs`)
+
+Every rank holds the whole drafter and the head rows of its quarter of the vocabulary. The target's forwards keep
+the four feature rows of each token (`Group::drive`); once tokens are committed the host mixes them
+(`DraftHost::contexts`) and each rank writes the context K/V of its own copy in one submission. A round
+(`spec::step`) after the pending token `t`:
+
+1. **Draft.** Every rank runs the block, the base logits of its vocabulary rows and the first Markov step after `t`
+   in one submission; then one submission per further step. The ranks are launched together and waited on together;
+   their first maxima (value, then lowest id) meet over the mesh, 8 bytes per round of the exchange.
+2. **Verify.** One gated forward of `[t, d1..dk]` (at most 8 rows) scores every row. Before it each slot saves its
+   K/V convolution history and the batch's pre-convolution K/V rows (`inkling_hist_restore` reads them back); the
+   host saves its attention- and MoE-output histories and the batch's pre-convolution rows.
+3. **Accept.** The target samples row 0; while its sample equals the next draft, that draft is kept and the next row
+   is sampled. The first mismatch is the new pending token. The acceptance procedure preserves the target's
+   sampling distribution given the same logits. Batched and single-row kernels can round logits differently.
+4. **Roll back.** Position, GPU and host convolution histories return to just after the accepted rows (the K/V
+   cache needs nothing: later rows overwrite rejected positions before they are read), and the drafter's context
+   gets the accepted tokens.
+
+`--draft dspark-Inkling-2-Mini-Q8_0.gguf` enables drafting for `chat`, `bench`, `validate` and `serve`. Put the file
+at the same path on both Macs. `--draft-tokens` defaults to 3 and accepts 1 through 7. Set `--batch` to at least
+one more than `--draft-tokens`. `bench` reports `tg_tokens_per_round` and the mean milliseconds per round in
+block, steps, verify and rollback (`draft_round_ms`). `validate --draft ...` uses drafting for the free greedy run.
+
 ## Chat format
 
 `tokenizer.ggml.pre = inkling2` is GPT-4o's pre-tokenizer regex; no BOS. Messages are
@@ -238,6 +259,45 @@ is checked against `tools/dump-activations` output from the reference, layer by 
 reduced precision, so a few prompts are also dumped with the same build on the CPU backend to bound how close the
 engine should get. Vision: the projector's output for fixed images, then the image prompt's logits.
 
+On `80ce8c6b`, the two-Mac run compared all 48 layer applications on 25-token chat and 109-token tool prompts.
+The worst relative residual errors against the same-quant llama.cpp CPU dumps were 2.983% and 2.864%.
+Plain and three-token DSpark runs both matched 16/16 greedy tokens on each fixture and 24/24 after a
+2,761-token document. These tokens also matched the archived Voyage UD-Q8_K_XL CUDA runs. The 108-row vision
+fixture agreed with the llama.cpp mtmd projector to 2.10% relative error (0.999781 cosine similarity). The full
+image chat produced identical reasoning and answer with and without drafting, over 65 generated tokens.
+The Responses server also matched with and without drafting on streamed 1- and 4-token limits, two seeded
+samples in JSON and SSE, an image request, and a native tool-result continuation.
+
+## Performance
+
+On incite and enlight (four D700s over Thunderbolt), `inkling bench MODEL --pp 1024 --tg 64 --reps 3` at batch
+256 measured 424.5–428.6 tok/s prefill and 35.7–35.9 tok/s decode on `80ce8c6b` with drafting disabled. The
+`37d0740f` baseline measured 115.7 and 29.1 tok/s for the same workload. The measured gains come from overlapping
+host work and GPU segments in two micro-batches, reusing weights across expert pairs, grouping attention by KV
+head, and reducing the cost of projections, controllers and copies. Both Macs ran with the performance governor,
+a command-scoped 0 µs CPU latency request, Linux `7.3.0-rc7-p2p` and RADV 25.0.7. `scripts/with-clocks.sh`
+recorded active clocks of 850 MHz core and 1370 MHz memory on all four D700s.
+
+On the same build and pair, `inkling bench MODEL --prompt 'Write a Python function that returns the n-th Fibonacci
+number, with a docstring.' --tg 192` ran at 37.86–38.02 tok/s across four plain runs split before and after three
+drafted runs. `--draft DRAFT --draft-tokens 3` measured 43.11–43.16 tok/s (+13–14%) and averaged 3.00 emitted tokens
+per round, including the pending target token. Mean time per round was 9.6 ms for the drafter block, 2.1 ms for its
+Markov steps, 56.6 ms for verification and 1.2 ms for rollback and context updates.
+At a 32,768-token context capacity the benchmark reported 4,846 MiB per GPU for the target and 5,486 MiB with
+DSpark loaded, before loading the vision projector.
+
+For a 2,770-token document rendered as a low-effort chat prompt, `inkling bench MODEL --prompt "$document" --tg 128
+--reps 2` on `f2b51e5b` measured:
+
+| Draft tokens | Prefill tok/s | Decode tok/s | Prefill plus decode |
+|---|---:|---:|---:|
+| 0 | 392.2–393.0 | 35.54–35.57 | 10.65–10.66 s |
+| 3 | 374.9–375.6 | 42.25–42.33 | 10.40–10.42 s |
+| 5 | 374.8–375.7 | 36.12–36.22 | 10.91–10.93 s |
+
+Drafting costs additional prefill time to build its context. Three drafts saved about 0.24 seconds overall on
+this document and output length. Five drafts took longer overall.
+
 ## Order of work
 
 1. Reference: build, dumps for the fixture prompts (text and images), KLD baselines and the attribution runs above.
@@ -257,7 +317,7 @@ engine should get. Vision: the projector's output for fixed images, then the ima
 
 ```sh
 # the other Mac (machine 1)
-trashcan inkling node ~/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf --listen 0.0.0.0:7073
+trashcan inkling node ~/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf --listen mac1.tb1:7073
 # the driver: chat, bench, or a check against a llama.cpp dump (tools/dump-activations, DUMP_FULL=l_out)
 trashcan inkling chat MODEL --tp-connect mac1.tb1:7073 "Hello"
 trashcan inkling bench MODEL --tp-connect mac1.tb1:7073 --pp 512 --tg 128
