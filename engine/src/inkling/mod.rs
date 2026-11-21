@@ -296,7 +296,7 @@ pub fn mix(normed: &[&[f32]], query: &[f32], out: &mut [f32]) {
 /// Causal depthwise convolution with a residual, of one token's `y` (pre-convolution values) given the three
 /// inputs before it (`prev`, oldest first), as llama.cpp's `convolve` without dynamic taps. `taps` are the weights
 /// by tap (`conv_taps`): `taps[i * len + c]` is on `prev[i][c]` for i < 3 and on `y[c]` for i = 3.
-#[inline(always)]
+#[cfg(test)]
 pub fn conv_row(y: &[f32], prev: [&[f32]; 3], taps: &[f32], out: &mut [f32]) {
     let n = y.len();
     let scale = 1.0 / 5f32.sqrt();
@@ -308,6 +308,113 @@ pub fn conv_row(y: &[f32], prev: [&[f32]; 3], taps: &[f32], out: &mut [f32]) {
     for c in 0..n {
         let conv = t0[c] * a[c] + t1[c] * b[c] + t2[c] * cc[c] + t3[c] * y[c];
         out[c] = (y[c] + conv) * scale;
+    }
+}
+
+/// Elements the host's blocked passes take at a time (1 KB of each row, so a step's rows stay in L1).
+pub const HOST_BLOCK: usize = 256;
+
+/// `mix` of the same states by each of `queries` (at most 3) with `mix`'s arithmetic per element, a block of
+/// elements at a time: the states are read twice and no mix is stored whole. `emit(k, at, values)` takes elements
+/// `at..` of mix `k`; the result is each mix's `rms_inv` with eps 1e-6.
+#[inline(always)]
+pub fn mix_blocks(states: &[&[f32]], queries: &[&[f32]], mut emit: impl FnMut(usize, usize, &[f32])) -> [f32; 3] {
+    let len = queries[0].len();
+    let scale = 1.0 / (len as f32).sqrt();
+    let tree = |a: &[f32; 8]| ((a[0] + a[1]) + (a[2] + a[3])) + ((a[4] + a[5]) + (a[6] + a[7]));
+    // `dot` of every state with every query.
+    let mut acc = [[[0f32; 8]; MIX_STATES]; 3];
+    for b in (0..len).step_by(HOST_BLOCK) {
+        let e = (b + HOST_BLOCK).min(len);
+        for (q, acc) in queries.iter().zip(acc.iter_mut()) {
+            let q = &q[b..e];
+            for (s, a) in states.iter().zip(acc.iter_mut()) {
+                for (x, y) in s[b..e].chunks_exact(8).zip(q.chunks_exact(8)) {
+                    for j in 0..8 {
+                        a[j] += x[j] * y[j];
+                    }
+                }
+            }
+        }
+    }
+    let mut p = [[0f32; MIX_STATES]; 3];
+    for (p, acc) in p.iter_mut().zip(&acc).take(queries.len()) {
+        let e = &mut p[..states.len()];
+        let mut m = f32::NEG_INFINITY;
+        for (x, a) in e.iter_mut().zip(acc) {
+            *x = tree(a) * scale;
+            m = m.max(*x);
+        }
+        let mut sum = 0f32;
+        for x in e.iter_mut() {
+            *x = (*x - m).exp();
+            sum += *x;
+        }
+        e.iter_mut().for_each(|x| *x /= sum);
+    }
+    let mut ss = [[0f32; 8]; 3];
+    let mut blk = [0f32; HOST_BLOCK];
+    for b in (0..len).step_by(HOST_BLOCK) {
+        let e = (b + HOST_BLOCK).min(len);
+        let blk = &mut blk[..e - b];
+        for k in 0..queries.len() {
+            for (i, s) in states.iter().enumerate() {
+                let (w, s) = (p[k][i], &s[b..e]);
+                if i == 0 {
+                    blk.iter_mut().zip(s).for_each(|(o, v)| *o = w * v);
+                } else {
+                    blk.iter_mut().zip(s).for_each(|(o, v)| *o += w * v);
+                }
+            }
+            for c in blk.chunks_exact(8) {
+                for j in 0..8 {
+                    ss[k][j] += c[j] * c[j];
+                }
+            }
+            emit(k, b, blk);
+        }
+    }
+    std::array::from_fn(|k| 1.0 / (tree(&ss[k]) / len as f32 + 1e-6).sqrt())
+}
+
+/// One token's sublayer output through the causal convolution into its residual `cur`, a block of elements at a
+/// time with `conv_row`'s arithmetic: the output before the convolution is `y` (plus `addend`), `prev` the three
+/// before it (oldest first). With `push` (a row and `cur`'s inverse RMS) the row takes `cur` normed and `cur`
+/// becomes the output; otherwise the output is added to `cur`. `keep` takes the values before the convolution.
+#[inline(always)]
+pub fn conv_blocks(y: &[f32], addend: Option<&[f32]>, prev: [&[f32]; 3], taps: &[f32], cur: &mut [f32], mut push: Option<(&mut [f32], f32)>, mut keep: Option<&mut [f32]>) {
+    let n = y.len();
+    let scale = 1.0 / 5f32.sqrt();
+    let (t0, rest) = taps.split_at(n);
+    let (t1, rest) = rest.split_at(n);
+    let (t2, t3) = rest.split_at(n);
+    let (mut yb, mut ob) = ([0f32; HOST_BLOCK], [0f32; HOST_BLOCK]);
+    for b in (0..n).step_by(HOST_BLOCK) {
+        let e = (b + HOST_BLOCK).min(n);
+        let m = e - b;
+        let (yb, ob) = (&mut yb[..m], &mut ob[..m]);
+        match addend {
+            Some(r) => yb.iter_mut().zip(&y[b..e]).zip(&r[b..e]).for_each(|((o, a), b)| *o = a + b),
+            None => yb.copy_from_slice(&y[b..e]),
+        }
+        let (p0, p1, p2) = (&prev[0][b..e], &prev[1][b..e], &prev[2][b..e]);
+        let (w0, w1, w2, w3) = (&t0[b..e], &t1[b..e], &t2[b..e], &t3[b..e]);
+        for c in 0..m {
+            let conv = w0[c] * p0[c] + w1[c] * p1[c] + w2[c] * p2[c] + w3[c] * yb[c];
+            ob[c] = (yb[c] + conv) * scale;
+        }
+        let cur = &mut cur[b..e];
+        match push.as_mut() {
+            Some((normed, inv)) => {
+                let inv = *inv;
+                normed[b..e].iter_mut().zip(cur.iter()).for_each(|(o, &v)| *o = v * inv);
+                cur.copy_from_slice(ob);
+            }
+            None => cur.iter_mut().zip(ob.iter()).for_each(|(x, a)| *x += a),
+        }
+        if let Some(k) = keep.as_mut() {
+            k[b..e].copy_from_slice(yb);
+        }
     }
 }
 
@@ -391,6 +498,66 @@ mod tests {
         conv_row(&[5., 7.], [&[10., 0.], &[20., 0.], &[30., 0.]], &taps, &mut out);
         assert!((out[0] - (5. + 10. + 40. + 90. + 20.) / 5f32.sqrt()).abs() < 1e-4);
         assert!((out[1] - 14. / 5f32.sqrt()).abs() < 1e-5);
+    }
+    fn noise(n: usize, seed: u64) -> Vec<f32> {
+        let mut x = seed | 1;
+        (0..n)
+            .map(|_| {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                (x >> 40) as f32 / (1u64 << 23) as f32 - 1.0
+            })
+            .collect()
+    }
+    #[test]
+    fn mix_blocks_keeps_the_bits_of_mix() {
+        for d in [2304usize, 520, 77] {
+            for count in [1usize, 2, 5, 9] {
+                let states: Vec<Vec<f32>> = (0..count).map(|i| noise(d, 3 + i as u64)).collect();
+                let refs: Vec<&[f32]> = states.iter().map(|s| s.as_slice()).collect();
+                let queries: Vec<Vec<f32>> = (0..3).map(|k| noise(d, 100 + k)).collect();
+                for nq in 1..=3 {
+                    let qs: Vec<&[f32]> = queries[..nq].iter().map(|q| q.as_slice()).collect();
+                    let mut got = vec![vec![0f32; d]; nq];
+                    let inv = mix_blocks(&refs, &qs, |k, at, v| got[k][at..at + v.len()].copy_from_slice(v));
+                    for k in 0..nq {
+                        let mut want = vec![0f32; d];
+                        mix(&refs, qs[k], &mut want);
+                        assert!(got[k].iter().zip(&want).all(|(a, b)| a.to_bits() == b.to_bits()), "mix {k} of {nq}, {count} states, d {d}");
+                        assert_eq!(inv[k].to_bits(), rms_inv(&want, 1e-6).to_bits());
+                    }
+                }
+            }
+        }
+    }
+    #[test]
+    fn conv_blocks_keeps_the_bits_of_conv_row() {
+        for d in [2304usize, 300] {
+            let (y, r) = (noise(d, 1), noise(d, 2));
+            let prev: Vec<Vec<f32>> = (0..3).map(|i| noise(d, 10 + i)).collect();
+            let taps = noise(4 * d, 20);
+            let start = noise(d, 30);
+            for addend in [false, true] {
+                let total: Vec<f32> = if addend { y.iter().zip(&r).map(|(a, b)| a + b).collect() } else { y.clone() };
+                let mut out = vec![0f32; d];
+                conv_row(&total, [&prev[0], &prev[1], &prev[2]], &taps, &mut out);
+                // Added to the residual.
+                let mut want = start.clone();
+                want.iter_mut().zip(&out).for_each(|(x, a)| *x += a);
+                let (mut cur, mut kept) = (start.clone(), vec![0f32; d]);
+                conv_blocks(&y, addend.then_some(&r), [&prev[0], &prev[1], &prev[2]], &taps, &mut cur, None, Some(&mut kept));
+                assert!(cur.iter().zip(&want).all(|(a, b)| a.to_bits() == b.to_bits()));
+                assert!(kept.iter().zip(&total).all(|(a, b)| a.to_bits() == b.to_bits()));
+                // A block start: the residual is normed aside and replaced.
+                let mut want_normed = vec![0f32; d];
+                rms_into(&start, None, 1e-6, &mut want_normed);
+                let (mut cur, mut normed) = (start.clone(), vec![0f32; d]);
+                conv_blocks(&y, addend.then_some(&r), [&prev[0], &prev[1], &prev[2]], &taps, &mut cur, Some((&mut normed, rms_inv(&start, 1e-6))), None);
+                assert!(cur.iter().zip(&out).all(|(a, b)| a.to_bits() == b.to_bits()));
+                assert!(normed.iter().zip(&want_normed).all(|(a, b)| a.to_bits() == b.to_bits()));
+            }
+        }
     }
     #[test]
     fn mix_of_one_state_is_that_state() {

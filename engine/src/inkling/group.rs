@@ -6,7 +6,7 @@
 use super::{
     embed,
     gpu::{Seg, Shard, Split, GATED_MAX, MICRO, WIDE_FROM},
-    conv_row, mix, rms_into, rms_inv, App, Config, HostLayer, HostWeights, MIX_STATES,
+    conv_blocks, mix_blocks, rms_into, rms_inv, App, Config, HostLayer, HostWeights, MIX_STATES,
 };
 use crate::{
     gguf::Gguf,
@@ -767,10 +767,11 @@ impl Group {
         // SAFETY: every task takes its own rows of the flow's state and of `hin`; `sum`, `remote` and the history are
         // only read.
         if (2..=GATED_MAX).contains(&n) || n >= POOL_MIN {
-            // Verification batches use one task per row. Prefill gives each worker several rows.
+            // Verification batches use one task per row, on workers that poll between the segments' passes. Prefill
+            // gives each worker several rows.
             let tasks = if n <= GATED_MAX { n } else { HOST_THREADS.min(n / 4) };
             let per = n.div_ceil(tasks);
-            self.pool.run(tasks, |i| unsafe { pass.rows((i * per).min(n), ((i + 1) * per).min(n)) });
+            self.pool.run_with(tasks, n <= GATED_MAX && row_spin(), |i| unsafe { pass.rows((i * per).min(n), ((i + 1) * per).min(n)) });
         } else {
             unsafe { pass.rows(0, n) };
         }
@@ -788,12 +789,17 @@ impl Group {
                     pass.load_y(t as isize, row);
                 }
             } else {
-                let mut last = vec![0f32; 3 * d];
-                for (k, row) in last.chunks_exact_mut(d).enumerate() {
-                    pass.load_y(n as isize - 3 + k as isize, row);
-                }
                 drop(pass);
-                hist.unwrap().copy_from_slice(&last);
+                // The history's last rows move up, the batch's last rows follow them.
+                let hist = hist.unwrap();
+                let kept = 3usize.saturating_sub(n);
+                if kept > 0 {
+                    hist.copy_within((3 - kept) * d.., 0);
+                }
+                let remote = addend.then_some(&self.remote[..len]);
+                for (k, row) in hist.chunks_exact_mut(d).enumerate().skip(kept) {
+                    y_row(&self.sum[..len], remote, n + k - 3, d, row);
+                }
             }
         }
         self.seconds.host_in += h0.elapsed().as_secs_f64();
@@ -857,7 +863,7 @@ impl Group {
             for t in 0..f.n {
                 rms_into(&f.cur[t * d..(t + 1) * d], None, 1e-6, &mut cur_n);
                 let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[..]]).collect();
-                mix(&states, &self.hw.out_query, &mut m);
+                super::mix(&states, &self.hw.out_query, &mut m);
                 let at = (f.row0 + t) * d;
                 rms_into(&m, Some(&self.hw.out_norm), self.c.eps, &mut self.hidden[at..at + d]);
             }
@@ -1021,6 +1027,15 @@ impl Group {
 
 impl Drop for Group {
     fn drop(&mut self) {
+        // TRASHCAN_INKLING_PHASES=1: this machine's totals per forward, to compare the machines of a group.
+        if std::env::var_os("TRASHCAN_INKLING_PHASES").is_some() {
+            let (p, f) = (self.seconds, self.seconds.forwards.max(1) as f64);
+            let st = self.mesh.as_ref().map(|m| (m.stats.sent, m.stats.first, m.stats.wire)).unwrap_or_default();
+            eprintln!(
+                "inkling phases: forwards {} ms per forward: gpu {:.3} exchange {:.3} (sent {:.3} first {:.3} wire {:.3}) host_math {:.3} host_sum {:.3} host {:.3}",
+                p.forwards, p.gpu / f * 1e3, p.exchange / f * 1e3, st.0 / f * 1e3, st.1 / f * 1e3, st.2 / f * 1e3, p.host_in / f * 1e3, p.host_sum / f * 1e3, p.host / f * 1e3
+            );
+        }
         let _ = self.tell(json!({"bye": true}));
     }
 }
@@ -1106,11 +1121,7 @@ impl Pass<'_> {
             out.copy_from_slice(&self.hist[(3 + t) as usize * d..][..d]);
             return;
         }
-        let s = &self.sum[t as usize * d..][..d];
-        match self.remote {
-            Some(r) => out.iter_mut().zip(s).zip(&r[t as usize * d..][..d]).for_each(|((o, a), b)| *o = a + b),
-            None => out.copy_from_slice(s),
-        }
+        y_row(self.sum, self.remote, t as usize, d, out)
     }
 
     /// Write `row` as input row `at` of every local rank.
@@ -1150,29 +1161,49 @@ impl Pass<'_> {
             return;
         }
         let row = |p: SendPtr, t: usize| std::slice::from_raw_parts_mut(p.at(t * d), d);
-        let mut scratch = vec![0f32; 7 * d];
-        let (ring, rest) = scratch.split_at_mut(4 * d);
-        let (out, rest) = rest.split_at_mut(d);
-        let (cur_n, u) = rest.split_at_mut(d);
-        // The ring holds the outputs t - 3 .. t before the convolution, row t at `(t - t0 + 3) % 4`.
+        // This thread's scratch rows (kept between passes): a ring of four outputs before the convolution (row t of
+        // a batch at `(t - t0 + 3) % 4`), the normed residual, and two rows for the head's input.
+        let base = SCRATCH.with(|s| {
+            let mut s = s.borrow_mut();
+            if s.len() < 7 * d {
+                s.resize(7 * d, 0.);
+            }
+            s.as_mut_ptr()
+        });
+        let slot = |k: usize| std::slice::from_raw_parts_mut(base.add(k * d), d);
+        let (cur_n, u, out) = (slot(4), slot(5), slot(6));
+        // A row's three outputs before it come from the history, or from the batch: those of rows before `t0` are
+        // loaded here, the others kept as their rows pass.
+        let batch = n > 1;
         if self.done.is_some() {
             for k in 0..3 {
-                self.load_y(t0 as isize - 3 + k as isize, &mut ring[k * d..(k + 1) * d]);
+                let t = t0 as isize - 3 + k as isize;
+                if t >= 0 {
+                    self.load_y(t, slot(k));
+                }
             }
         }
         for t in t0..t1 {
             let cur = row(self.cur, t);
             if let Some(seg) = self.done {
-                let at = (t - t0 + 3) % 4;
-                self.load_y(t as isize, &mut ring[at * d..(at + 1) * d]);
-                let r = |k: usize| &ring[(at + 1 + k) % 4 * d..][..d];
-                conv_row(r(3), [r(0), r(1), r(2)], self.taps, out);
+                let before = |k: usize| -> &[f32] {
+                    let p = t as isize - 3 + k as isize;
+                    if p < 0 {
+                        &self.hist[(3 + p) as usize * d..][..d]
+                    } else {
+                        slot((p - t0 as isize + 3) as usize % 4)
+                    }
+                };
+                let prev = [before(0), before(1), before(2)];
+                let y = &self.sum[t * d..][..d];
+                let addend = self.remote.map(|r| &r[t * d..][..d]);
+                let keep = batch.then(|| slot((t - t0 + 3) % 4));
                 match seg {
                     Seg::Attn { .. } if self.push => {
-                        rms_into(cur, None, 1e-6, row(*self.normed.last().unwrap(), t));
-                        cur.copy_from_slice(out);
+                        let inv = rms_inv(cur, 1e-6);
+                        conv_blocks(y, addend, prev, self.taps, cur, Some((row(*self.normed.last().unwrap(), t), inv)), keep);
                     }
-                    Seg::Attn { .. } | Seg::Moe { .. } => cur.iter_mut().zip(out.iter()).for_each(|(x, a)| *x += a),
+                    Seg::Attn { .. } | Seg::Moe { .. } => conv_blocks(y, addend, prev, self.taps, cur, None, keep),
                     Seg::Head { .. } => {}
                 }
             }
@@ -1208,39 +1239,30 @@ impl Pass<'_> {
                     let mut iu = [0f32; 3];
                     match &l.attn_query {
                         Some(q) => {
-                            for k in 0..mixes {
-                                mix(states, &q[k], u);
-                                self.write(k * n + t, u);
-                                if controlled {
-                                    iu[k] = rms_inv(u, 1e-6);
-                                }
-                            }
+                            let qs: [&[f32]; 3] = [&q[0], &q[1.min(mixes - 1)], &q[2.min(mixes - 1)]];
+                            iu = mix_blocks(states, &qs[..mixes], |k, at, v| self.write_floats((k * n + t) * d + at, v));
                         }
                         None => self.write(t, cur),
                     }
                     if controlled {
                         // The q, k and v messages, then every controller's inverse RMS of its input and message.
                         let q = l.msg.as_ref().unwrap();
+                        let im = mix_blocks(&bank(), &[&q[0], &q[1], &q[2]], |k, at, v| self.write_floats(((mixes + k) * n + t) * d + at, v));
                         for k in 0..3 {
-                            mix(&bank(), &q[k], u);
-                            self.write((mixes + k) * n + t, u);
-                            self.write_floats((mixes + 3) * n * d + (k * n + t) * 2, &[iu[k.min(mixes - 1)], rms_inv(u, 1e-6)]);
+                            self.write_floats((mixes + 3) * n * d + (k * n + t) * 2, &[iu[k.min(mixes - 1)], im[k]]);
                         }
                     }
                 }
                 Seg::Moe { controlled, .. } => {
                     let l = self.layer.unwrap();
-                    mix(states, &l.ffn_query, u);
-                    self.write(t, u);
+                    let iu = mix_blocks(states, &[&l.ffn_query], |_, at, v| self.write_floats(t * d + at, v));
                     if controlled {
-                        let iu = rms_inv(u, 1e-6);
-                        mix(&bank(), &l.msg.as_ref().unwrap()[3], u);
-                        self.write(n + t, u);
-                        self.write_floats(2 * n * d + t * 2, &[iu, rms_inv(u, 1e-6)]);
+                        let im = mix_blocks(&bank(), &[&l.msg.as_ref().unwrap()[3]], |_, at, v| self.write_floats((n + t) * d + at, v));
+                        self.write_floats(2 * n * d + t * 2, &[iu[0], im[0]]);
                     }
                 }
                 Seg::Head { rows } => {
-                    mix(states, self.out_query, u);
+                    mix_blocks(states, &[self.out_query], |_, at, v| u[at..at + v.len()].copy_from_slice(v));
                     rms_into(u, Some(self.out_norm), self.eps, out);
                     self.write(t + rows - n, out);
                 }
@@ -1249,7 +1271,25 @@ impl Pass<'_> {
     }
 }
 
-/// Worker threads for the host's passes over batches of rows. They sleep between passes.
+thread_local! {
+    /// A thread's scratch rows for `Pass::rows`.
+    static SCRATCH: std::cell::RefCell<Vec<f32>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Row `t` of an all-reduced output: `sum`, plus `remote` when that addend is still to be added.
+#[inline(always)]
+fn y_row(sum: &[f32], remote: Option<&[f32]>, t: usize, d: usize, out: &mut [f32]) {
+    let s = &sum[t * d..][..d];
+    match remote {
+        Some(r) => out.iter_mut().zip(s).zip(&r[t * d..][..d]).for_each(|((o, a), b)| *o = a + b),
+        None => out.copy_from_slice(s),
+    }
+}
+
+/// Worker threads for the host's passes over batches of rows. They sleep between passes, except after a pass run
+/// with `spin` (verification batches, whose passes follow each other within a segment's time): then as many
+/// workers as it had tasks for keep polling for the next pass for `SPIN`, because waking a sleeping thread takes
+/// longer than a row of such a pass.
 struct Pool {
     shared: Arc<PoolShared>,
     workers: Vec<std::thread::JoinHandle<()>>,
@@ -1259,6 +1299,9 @@ struct PoolShared {
     state: Mutex<PoolState>,
     wake: Condvar,
     done: Condvar,
+    /// Counts the passes posted (polling workers watch it) and the unfinished tasks of the pass in progress.
+    posted: std::sync::atomic::AtomicU64,
+    left: std::sync::atomic::AtomicUsize,
 }
 
 struct PoolState {
@@ -1268,12 +1311,27 @@ struct PoolState {
     tasks: usize,
     /// Tasks of the pass that have not finished.
     pending: usize,
+    /// Workers may poll until then, up to `poll_want` of them; `polling` do.
+    poll_until: Instant,
+    poll_want: usize,
+    polling: usize,
     quit: bool,
+}
+
+/// How long workers poll for the next pass after one run with `spin`.
+const SPIN: Duration = Duration::from_millis(2);
+
+/// Whether verification batches keep their workers polling (`TRASHCAN_INKLING_ROWSPIN=0`: they sleep).
+fn row_spin() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var("TRASHCAN_INKLING_ROWSPIN").as_deref() != Ok("0"))
 }
 
 impl Pool {
     fn new(threads: usize) -> Self {
-        let shared = Arc::new(PoolShared { state: Mutex::new(PoolState { job: None, next: 0, tasks: 0, pending: 0, quit: false }), wake: Condvar::new(), done: Condvar::new() });
+        use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+        let state = PoolState { job: None, next: 0, tasks: 0, pending: 0, poll_until: Instant::now(), poll_want: 0, polling: 0, quit: false };
+        let shared = Arc::new(PoolShared { state: Mutex::new(state), wake: Condvar::new(), done: Condvar::new(), posted: AtomicU64::new(0), left: AtomicUsize::new(0) });
         let workers = (0..threads)
             .map(|_| {
                 let shared = shared.clone();
@@ -1291,9 +1349,26 @@ impl Pool {
                                 f(i);
                                 st = shared.state.lock().unwrap();
                                 st.pending -= 1;
+                                shared.left.store(st.pending, Ordering::Release);
                                 if st.pending == 0 {
                                     shared.done.notify_all();
                                 }
+                            }
+                            _ if st.polling < st.poll_want && Instant::now() < st.poll_until => {
+                                // Poll for the next pass without the lock.
+                                st.polling += 1;
+                                let (seen, until) = (shared.posted.load(Ordering::Acquire), st.poll_until);
+                                drop(st);
+                                let mut turns = 0u32;
+                                while shared.posted.load(Ordering::Acquire) == seen {
+                                    std::hint::spin_loop();
+                                    turns += 1;
+                                    if turns % 1024 == 0 && Instant::now() >= until {
+                                        break;
+                                    }
+                                }
+                                st = shared.state.lock().unwrap();
+                                st.polling -= 1;
                             }
                             _ => st = shared.wake.wait(st).unwrap(),
                         }
@@ -1304,8 +1379,10 @@ impl Pool {
         Self { shared, workers }
     }
 
-    /// Run `f(0) .. f(tasks - 1)` on the workers and the calling thread, and return when all have finished.
-    fn run<F: Fn(usize) + Sync>(&self, tasks: usize, f: F) {
+    /// Run `f(0) .. f(tasks - 1)` on the workers and the calling thread, and return when all have finished. With
+    /// `spin` the calling thread polls for the workers' tasks, and they for the next pass.
+    fn run_with<F: Fn(usize) + Sync>(&self, tasks: usize, spin: bool, f: F) {
+        use std::sync::atomic::Ordering;
         if tasks <= 1 {
             return (0..tasks).for_each(f);
         }
@@ -1315,7 +1392,20 @@ impl Pool {
         let f: &'static (dyn Fn(usize) + Sync) = unsafe { std::mem::transmute(f) };
         let mut st = self.shared.state.lock().unwrap();
         (st.job, st.next, st.tasks, st.pending) = (Some(f), 0, tasks, tasks);
-        self.shared.wake.notify_all();
+        self.shared.left.store(tasks, Ordering::Release);
+        if spin {
+            (st.poll_until, st.poll_want) = (Instant::now() + SPIN, (tasks - 1).min(self.workers.len()));
+        } else {
+            st.poll_want = 0;
+        }
+        self.shared.posted.fetch_add(1, Ordering::AcqRel);
+        // The polling workers have seen the pass; the sleeping ones are woken for the tasks beyond them.
+        let asleep = (tasks - 1).saturating_sub(st.polling);
+        if asleep >= self.workers.len() {
+            self.shared.wake.notify_all();
+        } else {
+            (0..asleep).for_each(|_| self.shared.wake.notify_one());
+        }
         loop {
             if st.next < st.tasks {
                 let i = st.next;
@@ -1324,13 +1414,26 @@ impl Pool {
                 f(i);
                 st = self.shared.state.lock().unwrap();
                 st.pending -= 1;
+                self.shared.left.store(st.pending, Ordering::Release);
             } else if st.pending > 0 {
-                st = self.shared.done.wait(st).unwrap();
+                if spin {
+                    drop(st);
+                    while self.shared.left.load(Ordering::Acquire) > 0 {
+                        std::hint::spin_loop();
+                    }
+                    st = self.shared.state.lock().unwrap();
+                } else {
+                    st = self.shared.done.wait(st).unwrap();
+                }
             } else {
                 break;
             }
         }
         st.job = None;
+    }
+
+    fn run<F: Fn(usize) + Sync>(&self, tasks: usize, f: F) {
+        self.run_with(tasks, false, f)
     }
 }
 
