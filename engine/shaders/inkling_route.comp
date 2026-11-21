@@ -1,0 +1,27 @@
+#version 460
+#include "common.glsl"
+// Inkling routing of each token: s = sigmoid(router logit) for the p.n (128) experts, the top p.m (8) by s + bias
+// (ties to the lower expert), their weights s / (sum s + 1e-20) * scale (p.r0 bits). One wave per token, two
+// experts per lane. b: logits [t][n], c: ids [t][m] (u32), d: weights [t][m]. Bias (f32 [n]) in set 0.
+layout(local_size_x=64) in;
+void main(){
+uint lane=gl_SubgroupInvocationID,t=gl_WorkGroupID.x;
+if(t>=batch())return;
+float s[2],sel[2];
+[[unroll]]for(uint j=0;j<2;j++){uint e=lane+64*j;
+    s[j]=e<p.n?1.0/(1.0+exp(-b_f.v[t*p.n+e])):0.0;
+    sel[j]=e<p.n?s[j]+uintBitsToFloat(ww.words[e]):-1e30;}
+float total=0,mine=0;uint myid=0;
+for(uint k=0;k<p.m;k++){
+    float best=max(sel[0],sel[1]);
+    uint bi=sel[0]>=sel[1]?lane:lane+64;
+    float wb=subgroupMax(best);
+    uint wi=subgroupMin(best==wb?bi:0xffffffffu);
+    float sv=subgroupMax((wi==lane)?s[0]:((wi==lane+64)?s[1]:-1e30));
+    if(wi==lane)sel[0]=-1e30;
+    if(wi==lane+64)sel[1]=-1e30;
+    total+=sv;
+    if(lane==k){mine=sv;myid=wi;}
+}
+if(lane<p.m){c_u.v[t*p.m+lane]=myid;d_f.v[t*p.m+lane]=mine/(total+1e-20)*uintBitsToFloat(p.r0);}
+}

@@ -1,0 +1,41 @@
+#version 460
+#include "common.glsl"
+// Inkling expert down projections of one rank's slice, weighted and summed over the token's p.m experts:
+// y[t][row] = sum_k w[t][k] * s[e] * (down_e[row] . act[t][k]), e = ids[t][k], s = the expert's down scale.
+// Weights as inkling_moe_gu (FMT 4 NVFP4, 5 Q8_0); expert e's rows start at e * p.n, each p.k weights (the rank's
+// columns of the expert's down matrix). Four lanes per (slot, block) pair, 16 pairs per wave step, ROWS rows per
+// wave. b: act [t][p.m][p.k], c: y [t][p.n], d: weights [t][p.m], e: ids [t][p.m] (u32), extra: per-expert scales.
+layout(constant_id=0) const uint FMT=4;
+#define ROWS 2
+layout(local_size_x=256) in;
+shared float NV[16];
+const float NVC[16]=float[16](0.,1.,2.,3.,4.,6.,8.,12.,0.,-1.,-2.,-3.,-4.,-6.,-8.,-12.);
+vec4 nlo(uint q){return vec4(NV[q&15u],NV[(q>>8)&15u],NV[(q>>16)&15u],NV[(q>>24)&15u]);}
+vec4 nhi(uint q){return vec4(NV[(q>>4)&15u],NV[(q>>12)&15u],NV[(q>>20)&15u],NV[(q>>28)&15u]);}
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+float blk(uint row,uint b,uint part,uint xb){
+    uint B=row*(p.k/32)+b;
+    if(FMT==4){
+        uint q=ww.words[p.stride+B*4+part];
+        vec4 x0=b_v4.v[xb+b*8+part],x1=b_v4.v[xb+b*8+part+4];
+        return dot(nlo(q),x0)*unpackHalf2x16(uint(wh.halves[2*B])).x+dot(nhi(q),x1)*unpackHalf2x16(uint(wh.halves[2*B+1])).x;
+    }
+    uint w0=ww.words[p.stride+B*8+2*part],w1=ww.words[p.stride+B*8+2*part+1];
+    vec4 x0=b_v4.v[xb+b*8+2*part],x1=b_v4.v[xb+b*8+2*part+1];
+    return (dot(i8(w0),x0)+dot(i8(w1),x1))*unpackHalf2x16(uint(wh.halves[B])).x;
+}
+void main(){
+if(gl_LocalInvocationID.x<16)NV[gl_LocalInvocationID.x]=NVC[gl_LocalInvocationID.x];
+barrier();
+uint lane=gl_SubgroupInvocationID,part=lane%4,w=gl_SubgroupID,t=gl_WorkGroupID.y;
+if(t>=batch())return;
+uint first=gl_WorkGroupID.x*(4*ROWS)+w*ROWS,blocks=p.k/32,pairs=p.m*blocks;
+float acc[ROWS];[[unroll]]for(uint r=0;r<ROWS;r++)acc[r]=0;
+for(uint pi=lane/4;pi<pairs;pi+=16){
+    uint k=pi/blocks,b=pi%blocks,e=e_u.v[t*p.m+k];
+    float sw=d_f.v[t*p.m+k]*extra_f.v[e];
+    uint xb=(t*p.m+k)*(p.k/4);
+    [[unroll]]for(uint r=0;r<ROWS;r++){uint row=min(first+r,p.n-1);acc[r]=fma(blk(e*p.n+row,b,part,xb),sw,acc[r]);}
+}
+[[unroll]]for(uint r=0;r<ROWS;r++){float v=subgroupAdd(acc[r]);if(lane==0&&first+r<p.n)c_f.v[t*p.n+first+r]=v;}
+}

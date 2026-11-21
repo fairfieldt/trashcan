@@ -1,0 +1,62 @@
+#version 460
+#include "common.glsl"
+// Inkling attention projections of up to four tokens in one dispatch: three Q8_0 matrices (quant::Kind::Q8h:
+// f16 scales, then 32-byte blocks from word `stride`) over three inputs, then the small f32 rows. Rows 0..p.n are the
+// stacked q, gate and r rows (set 0, blocks from word p.stride) times xq into c; the next p.m rows the K matrix (d,
+// blocks from word p.r0) times xk into f; the next p.dim rows the V matrix (e, blocks from word p.r1) times xv into a;
+// the last p.cap rows (extra, f32 [p.cap][p.k]) are the sink rows (p.heads, times xq) and on global layers the K and V
+// tap rows (p.kvheads * 4 each, times xk and xv), written into f from float p.window: sinks [t][heads], K taps
+// [t][kvheads * 4], V taps [t][kvheads * 4], each block at a multiple of the batch. xq, xk, xv are b, b + p.offset,
+// b + 2 p.offset floats ([t][p.k] each). Q8_0 loads and sums as qwen4_q8_mvw4 (8-byte loads, four lanes per block),
+// f32 rows as qwen4_matf32 (every load issued first), one row per wave in the first workgroups (the longest
+// waves start first); ROWS Q8_0 rows per wave, four waves per workgroup; matrix boundaries fall on workgroups.
+layout(binding=0,std430) readonly restrict buffer WeightU2 { uvec2 v[]; } ww2;
+layout(set=2,binding=3,std430) readonly restrict buffer KU2 { uvec2 v[]; } k2;
+layout(set=2,binding=4,std430) readonly restrict buffer VU2 { uvec2 v[]; } v2;
+#define ROWS 2
+#define WAVES 4
+layout(local_size_x=WAVES*64) in;
+layout(constant_id=0) const uint COLS=1;
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+void main(){uint nb=batch(),lane=gl_SubgroupInvocationID,part=lane%4,blocks=p.k/32;
+uint fgroups=(p.cap+WAVES-1)/WAVES;
+if(gl_WorkGroupID.x<fgroups){
+    // f32 rows: one wave per row.
+    {
+        uint row=gl_WorkGroupID.x*WAVES+gl_SubgroupID;
+        if(row>=p.cap)return;
+        uint src=row<p.heads?0:(row<p.heads+4*p.kvheads?1:2);
+        float s[4];[[unroll]]for(uint z=0;z<4;z++)s[z]=0;
+        float w[36];
+        [[unroll]]for(uint u=0;u<36;u++)w[u]=extra_f.v[row*p.k+lane+64*u];
+        [[unroll]]for(uint z=0;z<COLS;z++){uint xb=src*p.offset+min(z,nb-1)*p.k;
+            float x[36];[[unroll]]for(uint u=0;u<36;u++)x[u]=b_f.v[xb+lane+64*u];
+            [[unroll]]for(uint u=0;u<36;u++)s[z]=fma(w[u],x[u],s[z]);}
+        [[unroll]]for(uint z=0;z<COLS;z++){float v=subgroupAdd(s[z]);
+            if(lane==0&&z<nb){
+                uint o=src==0?z*p.heads+row:(src==1?nb*p.heads+z*4*p.kvheads+row-p.heads:nb*p.heads+nb*4*p.kvheads+z*4*p.kvheads+row-p.heads-4*p.kvheads);
+                f_f.v[p.window+o]=v;}}
+    }
+    return;
+}
+uint g0=(gl_WorkGroupID.x-fgroups)*(ROWS*WAVES);
+uint mat=g0<p.n?0:(g0<p.n+p.m?1:2);
+uint base=mat==0?0:(mat==1?p.n:p.n+p.m),rows=mat==0?p.n:(mat==1?p.m:p.dim),stride=mat==0?p.stride:(mat==1?p.r0:p.r1);
+uint first=g0-base+gl_SubgroupID*ROWS;
+uint xoff=mat*p.offset/4;
+float s[ROWS][4];[[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint z=0;z<4;z++)s[r][z]=0;
+uint col[4];[[unroll]]for(uint z=0;z<4;z++)col[z]=xoff+min(z,nb-1)*(p.k/4)+part*2;
+uint rb[ROWS];[[unroll]]for(uint r=0;r<ROWS;r++)rb[r]=min(first+r,rows-1)*blocks;
+for(uint b=lane/4;b<blocks;b+=16){
+    uvec2 w[ROWS];uint d[ROWS];
+    [[unroll]]for(uint r=0;r<ROWS;r++){uint blk=rb[r]+b;
+        if(mat==0){w[r]=ww2.v[stride/2+blk*4+part];d[r]=uint(wh.halves[blk]);}
+        else if(mat==1){w[r]=k2.v[stride/2+blk*4+part];d[r]=uint(d_h.v[blk]);}
+        else{w[r]=v2.v[stride/2+blk*4+part];d[r]=uint(e_h.v[blk]);}}
+    vec4 x[4][2];[[unroll]]for(uint z=0;z<COLS;z++){uint xo=col[z]+b*8;x[z][0]=b_v4.v[xo];x[z][1]=b_v4.v[xo+1];}
+    [[unroll]]for(uint r=0;r<ROWS;r++){vec4 lo=i8(w[r].x),hi=i8(w[r].y);float dr=unpackHalf2x16(d[r]).x;
+        [[unroll]]for(uint z=0;z<COLS;z++)s[r][z]=fma(dot(lo,x[z][0])+dot(hi,x[z][1]),dr,s[r][z]);}
+}
+[[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint z=0;z<COLS;z++){float v=subgroupAdd(s[r][z]);
+    if(lane==0&&first+r<rows&&z<nb){uint o=z*rows+first+r;
+        if(mat==0)c_f.v[o]=v;else if(mat==1)f_f.v[o]=v;else a_f.v[o]=v;}}}

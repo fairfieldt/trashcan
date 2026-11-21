@@ -113,6 +113,18 @@ fn main() {
         "qwen4_stream_probe",
         "qwen4_cache_probe",
         "qwen4_moe_gu2",
+        // Inkling 2 Mini (inkling2)
+        "inkling_kv_hist",
+        "inkling_attn",
+        "inkling_attn_merge",
+        "inkling_route",
+        "inkling_moe_gu",
+        "inkling_moe_down",
+        "inkling_ctrl_z",
+        "inkling_ctrl_out",
+        "inkling_norm",
+        "inkling_qkv",
+        "inkling_prep",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",

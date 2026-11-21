@@ -1,0 +1,17 @@
+#version 460
+#include "common.glsl"
+// Combine inkling_attn's p.m partials of (token, head) with the sink (one extra logit of 0), normalize and multiply
+// by sigmoid of the gate. b: projection rows [t][q | gate | r] (p.k per token), f: partials [t][heads][p.m][130],
+// a: output [t][heads * 128].
+layout(local_size_x=128) in;
+void main(){
+uint c=gl_LocalInvocationID.x,t=gl_WorkGroupID.x/p.heads,h=gl_WorkGroupID.x%p.heads;
+if(t>=batch())return;
+uint base=(t*p.heads+h)*p.m*130;
+float M=0.0;
+for(uint i=0;i<p.m;i++)M=max(M,f_f.v[base+i*130]);
+float L=exp(-M),acc=0;
+for(uint i=0;i<p.m;i++){float s=exp(f_f.v[base+i*130]-M);L=fma(f_f.v[base+i*130+1],s,L);acc=fma(f_f.v[base+i*130+2+c],s,acc);}
+float gate=b_f.v[t*p.k+p.heads*128+h*128+c];
+a_f.v[(t*p.heads+h)*128+c]=acc/L/(1.0+exp(-gate));
+}

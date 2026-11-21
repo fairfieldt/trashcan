@@ -4,6 +4,7 @@ mod clocks;
 mod generation;
 mod gguf;
 mod gpu;
+mod inkling;
 mod link;
 mod linktest;
 mod micro;
@@ -382,6 +383,9 @@ enum Cmd {
     /// Qwen3.8-Flash-Next (qwen4exp) commands; see docs/qwen4.md.
     #[command(subcommand)]
     Qwen4(qwen4::cli::Cmd),
+    /// Inkling 2 Mini (inkling2) on a tensor-parallel group of GPUs and machines.
+    #[command(subcommand)]
+    Inkling(inkling::cli::Cmd),
     /// Dump a GGUF file's metadata and tensor inventory.
     Info {
         model: PathBuf,
@@ -1061,6 +1065,7 @@ fn main() -> Result<()> {
             tokens,
         } => qwen_ref(&model, &out, greedy, &tokens),
         Cmd::Qwen4(cmd) => qwen4::cli::run(cmd),
+        Cmd::Inkling(cmd) => inkling::cli::run(cmd),
         Cmd::Info { model, layers } => info(&model, &layers),
         Cmd::Tensor { model, name, n } => tensor(&model, &name, n),
         Cmd::Vocab { model } => vocab(&model),

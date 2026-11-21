@@ -6,10 +6,13 @@ ViT image encoder, and a 3-layer block drafter for speculative decoding. This do
 reference for running it on Mac Pros: the layer math, the weights and the chosen quant, the machine layout, the
 vision path, the drafter and the order of work.
 
-Status: planned. Nothing is implemented yet. Every number below was read from the GGUFs of
-`unsloth/Inkling-2-Mini-GGUF`, from the original safetensors header of `thinkingmachines/Inkling-2-Mini`, or from
-llama.cpp at `29b52d398` (`model : Inkling 2 Mini (#32694)`). Speeds are estimates from the Qwen3.8-27B TP4
-measurements in [qwen.md](qwen.md), not measurements.
+Status: text generation runs tensor-parallel on two Mac Pros (TP4, `engine/src/inkling/`, shaders
+`engine/shaders/inkling_*.comp`) from Unsloth's UD-Q4_K_XL as published. Checked against llama.cpp `29b52d398` (CPU,
+same GGUF): teacher-forced per-layer residual errors of 0.2-3% over all 48 applications on a 25- and a 109-token prompt,
+the same top token, and the reference's greedy tokens (16 of 16 on both prompts, 24 of 24 after a 2,761-token
+document). Decode 33 tok/s on two Macs over one cable; prefill is not optimized yet. Vision and the drafter are not
+implemented yet. Every number below was read from the GGUFs of `unsloth/Inkling-2-Mini-GGUF`, from the original
+safetensors header of `thinkingmachines/Inkling-2-Mini`, or from llama.cpp at `29b52d398`.
 
 | | |
 |---|---|
@@ -227,3 +230,18 @@ engine should get. Vision: the projector's output for fixed images, then the ima
 5. Vision encoder and image prompts.
 6. Decode performance, the DSpark drafter, prefix reuse, long context (Q8 K/V), the two-Mac deploy recipe; TP8 on
    four Macs if it pays.
+
+## Running
+
+```sh
+# the other Mac (machine 1)
+trashcan inkling node ~/models/inkling-2-mini/Inkling-2-Mini-UD-Q4_K_XL.gguf --listen 0.0.0.0:7073
+# the driver: chat, bench, or a check against a llama.cpp dump (tools/dump-activations, DUMP_FULL=l_out)
+trashcan inkling chat MODEL --tp-connect mac1.tb1:7073 "Hello"
+trashcan inkling bench MODEL --tp-connect mac1.tb1:7073 --pp 512 --tg 128
+trashcan inkling validate MODEL REFERENCE_DIR --ids PROMPT.ids --tp-connect mac1.tb1:7073
+```
+
+`TRASHCAN_INKLING_PROFILE=1` adds GPU time per kernel to `bench`. The all-reduces carry exact f32 sums;
+`TRASHCAN_TP_WIRE=f16` on the driver selects the compact payload of the Qwen groups.
+

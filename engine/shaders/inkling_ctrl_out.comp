@@ -1,0 +1,28 @@
+#version 460
+#include "common.glsl"
+// Inkling loop controller, second half: u_j[t][i] = u - tanh(W_forget_j[i] . z) * u + tanh(W_gain_j[i] . z) * m, in
+// place in a. Workgroup per 64 elements x (t * p.m + j): wave w sums the rank rows 16 w .. 16 w + 15 of its 64
+// elements (every load issued first), and wave 0 adds the four and writes.
+// Weights (set 0): gains [ctrl][p.n][d] f32 (rank-major), then forgets from word p.stride, controller p.offset + j.
+// a: u [j][t][d] (updated), c: m [j][t][d], d: z [t][p.m][p.n]. p.k = d, p.n = 64.
+layout(local_size_x=256) in;
+shared float gs[4][64],fs[4][64];
+void main(){
+uint lane=gl_SubgroupInvocationID,wv=gl_SubgroupID,tj=gl_WorkGroupID.y,nb=batch(),D=p.k;
+uint t=tj/p.m,j=tj%p.m,i=gl_WorkGroupID.x*64+lane;
+if(t>=nb)return;
+uint wo=(p.offset+j)*p.n*D+i,zb=(t*p.m+j)*p.n+wv*16;
+float wg[16],wf[16],z[16];
+[[unroll]]for(uint k=0;k<16;k++){uint r=wv*16+k;wg[k]=uintBitsToFloat(ww.words[wo+r*D]);wf[k]=uintBitsToFloat(ww.words[p.stride+wo+r*D]);z[k]=d_f.v[zb+k];}
+float g=0,f=0;
+[[unroll]]for(uint k=0;k<16;k++){g=fma(wg[k],z[k],g);f=fma(wf[k],z[k],f);}
+gs[wv][lane]=g;fs[wv][lane]=f;
+barrier();
+if(wv==0){
+    g=(gs[0][lane]+gs[1][lane])+(gs[2][lane]+gs[3][lane]);
+    f=(fs[0][lane]+fs[1][lane])+(fs[2][lane]+fs[3][lane]);
+    uint at=(j*nb+t)*D+i;
+    float u=a_f.v[at];
+    a_f.v[at]=(u-tanh(f)*u)+tanh(g)*c_f.v[at];
+}
+}

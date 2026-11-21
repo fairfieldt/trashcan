@@ -48,6 +48,34 @@ pub enum Kind {
     Q6,
 }
 
+/// The integer values of the NVFP4 nibbles (twice E2M1), multiplied by the halved UE4M3 scales.
+pub const NVFP4_VALUES: [i8; 16] = [0, 1, 2, 3, 4, 6, 8, 12, 0, -1, -2, -3, -4, -6, -8, -12];
+
+/// A UE4M3 scale as ggml reads it (`ggml_ue4m3_to_fp32`): the sign bit ignored, 0x00 and 0x7f (NaN) as zero, halved
+/// to match `NVFP4_VALUES`. Every result is exact in f16.
+pub fn ue4m3_half(x: u8) -> f32 {
+    if x == 0 || x == 0x7f {
+        return 0.;
+    }
+    let (e, m) = ((x >> 3) & 15, (x & 7) as f32);
+    let raw = if e == 0 { m * (2f32).powi(-9) } else { (1. + m / 8.) * (2f32).powi(e as i32 - 7) };
+    raw * 0.5
+}
+
+/// One ggml NVFP4 block of 64 weights, dequantized as ggml does (`dequantize_row_nvfp4`).
+pub fn nvfp4_block(b: &[u8; 36]) -> [f32; 64] {
+    let mut out = [0f32; 64];
+    for s in 0..4 {
+        let d = ue4m3_half(b[s]);
+        for j in 0..8 {
+            let q = b[4 + s * 8 + j];
+            out[s * 16 + j] = NVFP4_VALUES[(q & 15) as usize] as f32 * d;
+            out[s * 16 + j + 8] = NVFP4_VALUES[(q >> 4) as usize] as f32 * d;
+        }
+    }
+    out
+}
+
 impl Kind {
     /// Bytes per block in the GGUF, in the head plane and in the body plane.
     pub const fn sizes(self) -> (usize, usize, usize) {
@@ -216,6 +244,19 @@ mod tests {
         assert_eq!(r.len(), 20);
         assert_eq!(f32::from_le_bytes(r[..4].try_into().unwrap()), 3.);
         assert!(r[4..].iter().all(|x| *x == 3));
+    }
+
+    #[test]
+    fn ue4m3_matches_ggml() {
+        assert_eq!(ue4m3_half(0x38), 0.5); // exponent 7, mantissa 0: 1.0, halved
+        assert_eq!(ue4m3_half(0x7e), 448. * 0.5);
+        assert_eq!(ue4m3_half(0x01), (2f32).powi(-10));
+        assert_eq!(ue4m3_half(0xb8), 0.5); // the sign bit is ignored
+        assert_eq!((ue4m3_half(0), ue4m3_half(0x7f)), (0., 0.));
+        for x in 0..=255u8 {
+            let v = ue4m3_half(x);
+            assert_eq!(f16::from_f32(v).to_f32(), v, "{x:#x} is not exact in f16");
+        }
     }
 
     /// The repacks as they were written before the planes (whole matrices into one buffer; the heads padded to `align`

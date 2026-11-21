@@ -1,0 +1,67 @@
+#version 460
+#include "common.glsl"
+// Inkling attention inputs after the projections, one wave per item: waves 0 .. n * 2 * kvheads take (token, K or
+// V, KV head): the causal short
+// convolution (kernel 4, with a residual: static weight i on x[t - 3 + i], dynamic tap `lag` on x[t - lag], scaled by
+// 1/sqrt(5), or 1/3 with dynamic taps), K clipped to an L2 norm of at most p.r0 per head or V RMS-normed per head
+// (eps 1e-6), stored as f16 at cache position (pos + t) % p.cap; with p.flags 2 (one token) the wave also shifts its
+// channels' convolution history. The next n * heads waves take (token, query head): q times its clip scales clipped to p.r0 and r likewise to p.r1, both times tau on global layers (p.flags 1):
+// 1 + alpha ln(max(1, (pos + 1) / floor)), alpha and floor float bits in p.window and p.dim.
+// Weights (set 0, f32): K taps [C][4], V taps [C][4], q clip [heads][128], r clip [heads][16] (C = kvheads * 128).
+// a: projection rows [t][q | gate | r] (p.n floats per token, q and r updated), c: K pre [t][C], with from float p.m
+// the sinks [t][heads], the dynamic K taps [t][kvheads * 4] and V taps [t][kvheads * 4], d: V pre [t][C],
+// e: history [2][3][C], f: K cache, extra: V cache (f16 [p.cap][kvheads][128]).
+layout(local_size_x=64) in;
+float pre(uint kv,uint t,int lag,uint ch){
+    uint C=p.kvheads*128;int s=int(t)-lag;
+    if(s>=0)return kv==0?c_f.v[uint(s)*C+ch]:d_f.v[uint(s)*C+ch];
+    return e_f.v[(kv*3+uint(3+s))*C+ch];
+}
+void main(){
+uint lane=gl_SubgroupInvocationID,wg=gl_WorkGroupID.x,nb=batch(),H=p.heads,HK=p.kvheads,D=p.k,C=HK*128;
+bool glob=(p.flags&1)!=0;
+uint oconv=0,oqc=2*C*4,orc=oqc+H*128;
+if(wg<nb*2*HK){
+    uint t=wg/(2*HK),kv=(wg/HK)%2,h=wg%HK;
+    float tap[4];
+    [[unroll]]for(uint lag=0;lag<4;lag++)tap[lag]=0;
+    if(glob){uint at=p.m+nb*H+kv*nb*4*HK+t*4*HK+h*4;
+        [[unroll]]for(uint lag=0;lag<4;lag++)tap[lag]=c_f.v[at+lag];}
+    float o[2],y0[2];
+    [[unroll]]for(uint j=0;j<2;j++){
+        uint ch=h*128+lane+64*j,wo=oconv+(kv*C+ch)*4;
+        float y=pre(kv,t,0,ch),conv=0;y0[j]=y;
+        [[unroll]]for(uint i=0;i<4;i++)conv=fma(uintBitsToFloat(ww.words[wo+i]),pre(kv,t,3-int(i),ch),conv);
+        float dsum=0;
+        if(glob)[[unroll]]for(uint lag=0;lag<4;lag++)dsum=fma(tap[lag],pre(kv,t,int(lag),ch),dsum);
+        o[j]=(y+conv+dsum)*(glob?1.0/3.0:inversesqrt(5.0));
+    }
+    float ss=subgroupAdd(o[0]*o[0]+o[1]*o[1]);
+    float f=kv==0?clamp(uintBitsToFloat(p.r0)/(sqrt(ss)+1e-6),0.0,1.0):inversesqrt(ss/128.0+1e-6);
+    uint at=(((position()+t)%p.cap)*HK+h)*128+lane;
+    [[unroll]]for(uint j=0;j<2;j++){
+        uint16_t v=uint16_t(packHalf2x16(vec2(o[j]*f,0))&0xffffu);
+        if(kv==0)f_h.v[at+64*j]=v;else extra_h.v[at+64*j]=v;
+    }
+    if((p.flags&2)!=0){
+        [[unroll]]for(uint j=0;j<2;j++){uint ch=h*128+lane+64*j;
+            float h1=e_f.v[(kv*3+1)*C+ch],h2=e_f.v[(kv*3+2)*C+ch];
+            e_f.v[(kv*3)*C+ch]=h1;e_f.v[(kv*3+1)*C+ch]=h2;e_f.v[(kv*3+2)*C+ch]=y0[j];}
+    }
+    return;
+}
+uint q=wg-nb*2*HK,t=q/H,h=q%H;
+if(t>=nb)return;
+uint base=t*p.n;
+float tau=1.0;
+if(glob)tau=1.0+uintBitsToFloat(p.window)*log(max(1.0,float(position()+t+1)/uintBitsToFloat(p.dim)));
+float q0=a_f.v[base+h*128+lane]*uintBitsToFloat(ww.words[oqc+h*128+lane]);
+float q1=a_f.v[base+h*128+lane+64]*uintBitsToFloat(ww.words[oqc+h*128+lane+64]);
+float fq=clamp(uintBitsToFloat(p.r0)/(sqrt(subgroupAdd(q0*q0+q1*q1))+1e-6),0.0,1.0)*tau;
+uint ro=base+2*H*128+h*16;
+float r=lane<16?a_f.v[ro+lane]*uintBitsToFloat(ww.words[orc+h*16+lane]):0.0;
+float fr=clamp(uintBitsToFloat(p.r1)/(sqrt(subgroupAdd(r*r))+1e-6),0.0,1.0)*tau;
+a_f.v[base+h*128+lane]=q0*fq;
+a_f.v[base+h*128+lane+64]=q1*fq;
+if(lane<16)a_f.v[ro+lane]=r*fr;
+}

@@ -1,0 +1,61 @@
+#version 460
+#include "common.glsl"
+// Inkling attention, split over keys: workgroup (token t, query head h) x partition y of p.m takes the y-th of p.m
+// equal runs of the keys the token sees (the last p.window positions, or all with p.window 0), in chunks of KP with
+// an online softmax, and writes (max, sum of exponentials, unnormalized V sum) for
+// inkling_attn_merge. Score of key j at distance d: q . k / sqrt(128) + r . B[d] - sink, with B [p.r0][16] in set 0
+// and a zero bias for d >= p.r0. b: projection rows [t][q | gate | r] (p.k floats per token), c: sink [t][heads],
+// d: K cache, e: V cache (f16 [p.cap][kvheads][128], position % p.cap), f: partials [t][heads][p.m][130].
+// p.heads, p.kvheads: this rank's heads.
+#define KP 512
+layout(local_size_x=256) in;
+shared vec2 qs[64];
+shared float rs[16],sc[KP],red[4],accs[128];
+void main(){
+uint tid=gl_LocalInvocationID.x,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
+uint t=gl_WorkGroupID.x/p.heads,h=gl_WorkGroupID.x%p.heads,part=gl_WorkGroupID.y;
+if(t>=batch())return;
+uint g=h/(p.heads/p.kvheads),qp=position()+t,hi=qp+1;
+uint lo=p.window>0&&hi>p.window?hi-p.window:0;
+uint kp=(hi-lo+p.m-1)/p.m,s0=lo+part*kp,s1=min(s0+kp,hi);
+uint ob=((t*p.heads+h)*p.m+part)*130;
+if(s0>=s1){if(tid<130)f_f.v[ob+tid]=tid==0?-1e30:0.0;return;}
+uint qb=t*p.k+h*128;
+if(tid<64)qs[tid]=vec2(b_f.v[qb+2*tid],b_f.v[qb+2*tid+1]);
+if(tid<16)rs[tid]=b_f.v[t*p.k+2*p.heads*128+h*16+tid];
+barrier();
+float sink=c_f.v[t*p.heads+h],scale=inversesqrt(128.0);
+uint c=tid%128,half_=tid/128;
+float M=-1e30,L=0,acc=0;
+for(uint cs=s0;cs<s1;cs+=KP){
+    uint n=min(KP,s1-cs);
+    for(uint i=w;i<n;i+=4){
+        uint j=cs+i,row=((j%p.cap)*p.kvheads+g)*64;
+        vec2 k=unpackHalf2x16(uint(d_h.v[2*(row+lane)])|(uint(d_h.v[2*(row+lane)+1])<<16));
+        float dt=subgroupAdd(dot(k,qs[lane]));
+        uint dist=qp-j;
+        float b=lane<16&&dist<p.r0?rs[lane]*uintBitsToFloat(ww.words[dist*16+lane]):0.0;
+        float bias=subgroupAdd(b);
+        if(lane==0)sc[i]=dt*scale+bias-sink;
+    }
+    barrier();
+    float m=-1e30;
+    for(uint i=tid;i<n;i+=256)m=max(m,sc[i]);
+    m=subgroupMax(m);if(lane==0)red[w]=m;barrier();
+    float nm=max(M,max(max(red[0],red[1]),max(red[2],red[3])));
+    barrier();
+    float l=0;
+    for(uint i=tid;i<n;i+=256){float e=exp(sc[i]-nm);sc[i]=e;l+=e;}
+    l=subgroupAdd(l);if(lane==0)red[w]=l;barrier();
+    float f=exp(M-nm);
+    L=L*f+((red[0]+red[1])+(red[2]+red[3]));
+    acc*=f;
+    for(uint i=half_;i<n;i+=2){uint j=cs+i;acc=fma(sc[i],unpackHalf2x16(uint(e_h.v[((j%p.cap)*p.kvheads+g)*128+c])).x,acc);}
+    M=nm;
+    barrier();
+}
+if(half_==1)accs[c]=acc;
+barrier();
+if(half_==0)f_f.v[ob+2+c]=acc+accs[c];
+if(tid==0){f_f.v[ob]=M;f_f.v[ob+1]=L;}
+}

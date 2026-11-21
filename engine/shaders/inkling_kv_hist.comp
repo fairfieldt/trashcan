@@ -1,0 +1,18 @@
+#version 460
+#include "common.glsl"
+// After a batch: the K and V convolution histories become the last three pre-convolution inputs (from the batch, or
+// the old history for batches under three tokens). b: K pre [t][C], c: V pre [t][C], d: history [2][3][C] (updated
+// in place: every thread reads its old values before writing). p.k = C.
+layout(local_size_x=256) in;
+void main(){
+uint i=gl_GlobalInvocationID.x,C=p.k,n=batch();
+if(i>=2*C)return;
+uint kv=i/C,ch=i%C;
+float old[3];[[unroll]]for(uint s=0;s<3;s++)old[s]=d_f.v[(kv*3+s)*C+ch];
+[[unroll]]for(uint s=0;s<3;s++){
+    // New history slot s holds input n - 3 + s (negative: old history slot n + s).
+    int src=int(n)-3+int(s);
+    float v=src>=0?(kv==0?b_f.v[uint(src)*C+ch]:c_f.v[uint(src)*C+ch]):old[uint(int(s)+int(n))];
+    d_f.v[(kv*3+s)*C+ch]=v;
+}
+}

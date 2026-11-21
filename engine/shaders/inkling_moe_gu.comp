@@ -1,0 +1,54 @@
+#version 460
+#include "common.glsl"
+// Inkling expert gate and up projections of one rank's slice with the SITU activation, for every (token, slot):
+// act[t][k][row] = situ(gate_row . x * s[e], up_row . x * s[e]), e = ids[t][k], s = the expert's gate/up scale.
+// Weights (set 0, specialization FMT): 4 NVFP4 (quant::Kind::Nvfp4: two f16 scales per 32-weight block, one for
+// its low nibbles (weights 0..15) and one for its high nibbles (16..31), 16-byte bodies from word p.stride), 5 Q8_0
+// (one f16 scale per block, 32-byte bodies from word p.stride). Expert e's rows start at e * 2 * p.n: p.n gate rows,
+// then p.n up rows, each p.k weights. Four lanes per block, 16 blocks per wave step, ROWS row pairs per wave.
+// b: x [t][p.k], c: act [t][p.m][p.n], d: ids [t][p.m] (u32), extra: per-expert scales (f32).
+// SITU: beta p.r0, linear beta p.r1 (float bits).
+layout(constant_id=0) const uint FMT=4;
+#define ROWS 2
+layout(local_size_x=256) in;
+shared float NV[16];
+const float NVC[16]=float[16](0.,1.,2.,3.,4.,6.,8.,12.,0.,-1.,-2.,-3.,-4.,-6.,-8.,-12.);
+vec4 nlo(uint q){return vec4(NV[q&15u],NV[(q>>8)&15u],NV[(q>>16)&15u],NV[(q>>24)&15u]);}
+vec4 nhi(uint q){return vec4(NV[(q>>4)&15u],NV[(q>>12)&15u],NV[(q>>20)&15u],NV[(q>>28)&15u]);}
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+// part's partial dot of row's block b with token t's x.
+float blk(uint row,uint b,uint part,uint xb){
+    uint B=row*(p.k/32)+b;
+    if(FMT==4){
+        uint q=ww.words[p.stride+B*4+part];
+        vec4 x0=b_v4.v[xb+b*8+part],x1=b_v4.v[xb+b*8+part+4];
+        return dot(nlo(q),x0)*unpackHalf2x16(uint(wh.halves[2*B])).x+dot(nhi(q),x1)*unpackHalf2x16(uint(wh.halves[2*B+1])).x;
+    }
+    uint w0=ww.words[p.stride+B*8+2*part],w1=ww.words[p.stride+B*8+2*part+1];
+    vec4 x0=b_v4.v[xb+b*8+2*part],x1=b_v4.v[xb+b*8+2*part+1];
+    return (dot(i8(w0),x0)+dot(i8(w1),x1))*unpackHalf2x16(uint(wh.halves[B])).x;
+}
+void main(){
+if(gl_LocalInvocationID.x<16)NV[gl_LocalInvocationID.x]=NVC[gl_LocalInvocationID.x];
+barrier();
+uint lane=gl_SubgroupInvocationID,part=lane%4,bl=lane/4,w=gl_SubgroupID,tk=gl_WorkGroupID.y,t=tk/p.m;
+if(t>=batch())return;
+uint e=d_u.v[tk],first=gl_WorkGroupID.x*(4*ROWS)+w*ROWS,blocks=p.k/32,xb=t*(p.k/4);
+float g[ROWS],u[ROWS];
+[[unroll]]for(uint r=0;r<ROWS;r++){g[r]=0;u[r]=0;}
+for(uint b=bl;b<blocks;b+=16){
+    [[unroll]]for(uint r=0;r<ROWS;r++){
+        uint row=min(first+r,p.n-1);
+        g[r]+=blk(e*2*p.n+row,b,part,xb);
+        u[r]+=blk(e*2*p.n+p.n+row,b,part,xb);
+    }
+}
+float s=extra_f.v[e],beta=uintBitsToFloat(p.r0),lin=uintBitsToFloat(p.r1);
+[[unroll]]for(uint r=0;r<ROWS;r++){
+    float gs=subgroupAdd(g[r])*s,us=subgroupAdd(u[r])*s;
+    if(lane==0&&first+r<p.n){
+        float a=beta*tanh(gs/beta)/(1.0+exp(-gs));
+        c_f.v[tk*p.n+first+r]=a*lin*tanh(us/lin);
+    }
+}
+}

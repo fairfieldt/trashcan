@@ -25,6 +25,8 @@ impl ByteLevel {
         // llama.cpp's expansion of the tokenizer.json pattern, without the inline (?i:) group.
         let pattern = match g.get_str("tokenizer.ggml.pre")? {
             "qwen35" => r"(?:'[sS]|'[tT]|'[rR][eE]|'[vV][eE]|'[mM]|'[lL][lL]|'[dD])|[^\r\n\p{L}\p{N}]?[\p{L}\p{M}]+|\p{N}| ?[^\s\p{L}\p{M}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+",
+            // GPT-4o's (o200k) pattern from tokenizer.json, as tiktoken applies it.
+            "inkling2" => r"[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]*[\p{Ll}\p{Lm}\p{Lo}\p{M}]+(?i:'s|'t|'re|'ve|'m|'ll|'d)?|[^\r\n\p{L}\p{N}]?[\p{Lu}\p{Lt}\p{Lm}\p{Lo}\p{M}]+[\p{Ll}\p{Lm}\p{Lo}\p{M}]*(?i:'s|'t|'re|'ve|'m|'ll|'d)?|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n/]*|\s*[\r\n]+|\s+(?!\S)|\s+",
             other => anyhow::bail!("unsupported byte-level pre-tokenizer {other}"),
         };
         let mut encode = ['\0'; 256];

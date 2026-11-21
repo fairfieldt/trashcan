@@ -567,6 +567,17 @@ impl Device {
             ("qwen4_cache_probe", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_cache_probe.spv")).as_slice()),
             ("qwen4_moe_gu2", include_bytes!(concat!(env!("OUT_DIR"), "/qwen4_moe_gu2.spv")).as_slice()),
             // Cross-machine all-reduce benchmark
+            ("inkling_kv_hist", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_kv_hist.spv")).as_slice()),
+            ("inkling_attn", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_attn.spv")).as_slice()),
+            ("inkling_attn_merge", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_attn_merge.spv")).as_slice()),
+            ("inkling_route", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_route.spv")).as_slice()),
+            ("inkling_moe_gu", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_moe_gu.spv")).as_slice()),
+            ("inkling_moe_down", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_moe_down.spv")).as_slice()),
+            ("inkling_ctrl_z", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_ctrl_z.spv")).as_slice()),
+            ("inkling_ctrl_out", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_ctrl_out.spv")).as_slice()),
+            ("inkling_norm", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_norm.spv")).as_slice()),
+            ("inkling_qkv", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_qkv.spv")).as_slice()),
+            ("inkling_prep", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_prep.spv")).as_slice()),
             ("allreduce_partial", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_partial.spv")).as_slice()),
             ("allreduce_check", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_check.spv")).as_slice()),
             ("allreduce_work", include_bytes!(concat!(env!("OUT_DIR"), "/allreduce_work.spv")).as_slice()),
@@ -708,6 +719,9 @@ impl Device {
                     ("attention_merge_u64", Some(64)),
                     ("attention_merge_u128", Some(128)),
                 ],
+                "inkling_qkv" => &[("inkling_qkv", Some(1)), ("inkling_qkv_c2", Some(2)), ("inkling_qkv_c3", Some(3)), ("inkling_qkv_c4", Some(4))],
+                "inkling_moe_gu" => &[("inkling_moe_gu", Some(4)), ("inkling_moe_gu_q8", Some(5))],
+                "inkling_moe_down" => &[("inkling_moe_down", Some(4)), ("inkling_moe_down_q8", Some(5))],
                 _ => &[(name, None)],
             };
             for &(variant, parts) in variants {

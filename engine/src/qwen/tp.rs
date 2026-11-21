@@ -255,7 +255,7 @@ fn micro_count(n: usize) -> usize {
 /// Host threads that add partials and write totals (`TRASHCAN_TP_THREADS`), for all-reduces of at least
 /// PARALLEL_MIN elements; decode and verification batches stay on the calling thread. By default 6 when the
 /// group spans two machines, where the all-reduce of one micro-batch is on the path to the next segment, else 1.
-fn host_threads(peer: bool) -> usize {
+pub(crate) fn host_threads(peer: bool) -> usize {
     let default = if peer { 6 } else { 1 };
     std::env::var("TRASHCAN_TP_THREADS").ok().and_then(|v| v.parse().ok()).unwrap_or(default).clamp(1, 16)
 }
@@ -304,7 +304,7 @@ fn decode(bytes: &[u8]) -> Vec<Candidates> {
         .collect()
 }
 
-fn message(v: Value) -> Result<Vec<u8>> {
+pub(crate) fn message(v: Value) -> Result<Vec<u8>> {
     Ok(serde_json::to_vec(&v)?)
 }
 
@@ -318,14 +318,14 @@ fn message(v: Value) -> Result<Vec<u8>> {
 pub struct Mesh {
     pub machine: usize,
     /// Machines in the group, once known (the driver's probe, a node's setup).
-    machines: usize,
-    links: Vec<(usize, Lanes)>,
+    pub(crate) machines: usize,
+    pub(crate) links: Vec<(usize, Lanes)>,
     /// Payload format of the all-reduces of fewer than PARALLEL_MIN values (decode, verification and draft steps;
     /// prefill stays f32): the driver's choice, passed to the others at setup (`wire`).
-    wire: Wire,
+    pub(crate) wire: Wire,
     /// Full-mesh all-reduces: set by the driver when every machine is cabled to every other (`fully_cabled`) and passed
     /// on at setup. A single row (decode and draft steps) takes `once`, a batch of rows (verification, prefill) `direct`.
-    full: bool,
+    pub(crate) full: bool,
     /// Encoded slices sent and received in one step of a compact all-reduce, one per partner (per machine on a
     /// full mesh).
     sent: Vec<Vec<u8>>,
@@ -408,19 +408,19 @@ fn carve<'a>(mut buf: &'a mut [u8], ranges: &[(usize, usize)]) -> Vec<&'a mut [u
 }
 
 /// The machine that passes the driver's operations to machine `m`.
-fn parent(m: usize) -> usize {
+pub(crate) fn parent(m: usize) -> usize {
     m & (m - 1)
 }
 
 impl Mesh {
-    fn new(machine: usize, links: Vec<(usize, Lanes)>) -> Self {
+    pub(crate) fn new(machine: usize, links: Vec<(usize, Lanes)>) -> Self {
         Self { machine, machines: 0, links, wire: Wire::F32, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new(), stats: Stats::default() }
     }
 
     /// Open the lanes to every machine in `peers` (machine, addresses of its cables). Lower machines connect to this
     /// one's `listener`, all at once; this one then connects to the higher machines, so a group starts when its
     /// driver does. Each lane takes its cable's USB4STREAM when both machines have it (link/).
-    fn open(machine: usize, listener: Option<&TcpListener>, peers: &[(usize, Vec<String>)]) -> Result<Self> {
+    pub(crate) fn open(machine: usize, listener: Option<&TcpListener>, peers: &[(usize, Vec<String>)]) -> Result<Self> {
         let lower: Vec<usize> = peers.iter().map(|p| p.0).filter(|&m| m < machine).collect();
         let mut links = Vec::new();
         if !lower.is_empty() {
@@ -438,7 +438,7 @@ impl Mesh {
         Ok(Self::new(machine, links))
     }
 
-    fn lanes(&mut self, peer: usize) -> Result<&mut Lanes> {
+    pub(crate) fn lanes(&mut self, peer: usize) -> Result<&mut Lanes> {
         let me = self.machine;
         self.links.iter_mut().find(|l| l.0 == peer).map(|l| &mut l.1).with_context(|| format!("machine {me} has no lanes to machine {peer}"))
     }
@@ -447,17 +447,17 @@ impl Mesh {
         self.links.iter().map(|l| l.0).filter(|&p| p != 0 && parent(p) == self.machine).collect()
     }
 
-    fn rounds(&self) -> usize {
+    pub(crate) fn rounds(&self) -> usize {
         self.machines.trailing_zeros() as usize
     }
 
-    fn partner(&self, round: usize) -> usize {
+    pub(crate) fn partner(&self, round: usize) -> usize {
         self.machine ^ (1 << round)
     }
 
     /// Take part in a group of `machines`: check that this machine is cabled to its partner of every round, and with
     /// full-mesh all-reduces to every other machine.
-    fn join(&mut self, machines: usize) -> Result<()> {
+    pub(crate) fn join(&mut self, machines: usize) -> Result<()> {
         ensure!(machines >= 2 && machines.is_power_of_two(), "a tensor-parallel group spans 2, 4 or 8 machines, not {machines}");
         ensure!(self.machine < machines, "machine {} in a group of {machines}", self.machine);
         self.machines = machines;
@@ -475,7 +475,7 @@ impl Mesh {
 
     /// All-reduce `sum` (`remote` is scratch of the same length). Returns whether `remote` then holds the last addend,
     /// which the caller adds while it writes the total; otherwise `sum` holds the total.
-    fn all_reduce(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<bool> {
+    pub(crate) fn all_reduce(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<bool> {
         if self.full {
             if sum.len() > width && self.direct(sum, stall, threads, width)? {
                 return Ok(false);
@@ -491,7 +491,7 @@ impl Mesh {
     }
 
     /// The machines this one has lanes to.
-    fn peers(&self) -> Vec<usize> {
+    pub(crate) fn peers(&self) -> Vec<usize> {
         self.links.iter().map(|l| l.0).collect()
     }
 
@@ -863,7 +863,7 @@ impl Mesh {
     }
 
     /// Pass a message from the driver on to the machines that hear from this one.
-    fn tell_children(&mut self, bytes: &[u8]) -> Result<()> {
+    pub(crate) fn tell_children(&mut self, bytes: &[u8]) -> Result<()> {
         for c in self.children() {
             self.lanes(c)?.send_message(bytes)?;
         }
@@ -871,7 +871,7 @@ impl Mesh {
     }
 
     /// One message from each machine that hears from this one, waiting at most `first_byte` for each to start.
-    fn children_replies(&mut self, first_byte: Option<Duration>) -> Result<Vec<Value>> {
+    pub(crate) fn children_replies(&mut self, first_byte: Option<Duration>) -> Result<Vec<Value>> {
         let mut replies = Vec::new();
         for c in self.children() {
             let l = self.lanes(c)?;
@@ -884,20 +884,20 @@ impl Mesh {
         Ok(replies)
     }
 
-    fn tell_parent(&mut self, v: Value) -> Result<()> {
+    pub(crate) fn tell_parent(&mut self, v: Value) -> Result<()> {
         let p = parent(self.machine);
         self.lanes(p)?.send_message(&message(v)?)
     }
 
     /// The next message from the driver, without a deadline for its start (see `Lanes::recv_message_idle`).
-    fn hear(&mut self) -> Result<Vec<u8>> {
+    pub(crate) fn hear(&mut self) -> Result<Vec<u8>> {
         let p = parent(self.machine);
         self.lanes(p)?.recv_message_idle()
     }
 
     /// Send `mine` towards the driver with the payloads of the machines that hear from this one; the driver gets
     /// every machine's in machine order, the others nothing.
-    fn gather(&mut self, mine: Vec<u8>) -> Result<Vec<Vec<u8>>> {
+    pub(crate) fn gather(&mut self, mine: Vec<u8>) -> Result<Vec<Vec<u8>>> {
         let mut all = vec![(self.machine as u64, mine)];
         for c in self.children() {
             let l = self.lanes(c)?;
@@ -1411,7 +1411,7 @@ pub fn mesh(connect: &[String], peers: &[String]) -> Result<Option<Mesh>> {
 
 /// Add a probe reply's machines' cables (the machines each one has lanes to) to `cabled`; a machine that does not
 /// report them counts as cabled to no one.
-fn merge_cabled(cabled: &mut BTreeMap<usize, Vec<usize>>, reply: &Value) {
+pub(crate) fn merge_cabled(cabled: &mut BTreeMap<usize, Vec<usize>>, reply: &Value) {
     for (m, peers) in reply["cabled"].as_object().into_iter().flatten() {
         if let (Ok(m), Some(peers)) = (m.parse(), peers.as_array()) {
             cabled.insert(m, peers.iter().filter_map(Value::as_u64).map(|p| p as usize).collect());
@@ -1421,12 +1421,12 @@ fn merge_cabled(cabled: &mut BTreeMap<usize, Vec<usize>>, reply: &Value) {
 
 /// Whether a group of `machines` takes full-mesh all-reduces: four machines, each cabled to the three others (six
 /// cables). Measured against the ring's recursive doubling in results/qwen/tp8-mesh-20261009.
-fn fully_cabled(cabled: &BTreeMap<usize, Vec<usize>>, machines: usize) -> bool {
+pub(crate) fn fully_cabled(cabled: &BTreeMap<usize, Vec<usize>>, machines: usize) -> bool {
     machines == 4 && (0..machines).all(|a| (0..machines).all(|b| a == b || cabled.get(&a).is_some_and(|p| p.contains(&b))))
 }
 
 /// Add a probe reply's GPUs per machine to `counts`.
-fn merge_counts(counts: &mut BTreeMap<usize, usize>, reply: &Value) -> Result<()> {
+pub(crate) fn merge_counts(counts: &mut BTreeMap<usize, usize>, reply: &Value) -> Result<()> {
     for (m, n) in reply["gpus"].as_object().context("a machine did not report its GPUs")? {
         let n = n.as_u64().context("GPU count")? as usize;
         ensure!(counts.insert(m.parse()?, n).is_none(), "machine {m} answered twice");

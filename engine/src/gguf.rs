@@ -125,6 +125,7 @@ pub enum GgmlType {
     IQ4NL,
     IQ4XS,
     MXFP4,
+    NVFP4,
     Q2_0,
     Other(u32),
 }
@@ -145,6 +146,7 @@ impl GgmlType {
             20 => GgmlType::IQ4NL,
             23 => GgmlType::IQ4XS,
             39 => GgmlType::MXFP4,
+            40 => GgmlType::NVFP4,
             42 => GgmlType::Q2_0,
             12 => GgmlType::Q4K,
             13 => GgmlType::Q5K,
@@ -171,6 +173,7 @@ impl GgmlType {
             GgmlType::IQ4NL => (32, 18),
             GgmlType::IQ4XS => (256, 136),
             GgmlType::MXFP4 => (32, 17),
+            GgmlType::NVFP4 => (64, 36),
             GgmlType::Q2_0 => (64, 18),
             GgmlType::Q5K => (256, 176),
             GgmlType::Q6K => (256, 210),

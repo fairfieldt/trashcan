@@ -1,0 +1,17 @@
+#version 460
+#include "common.glsl"
+// RMS norm with a weight of each row: a[j][t] = b[j][t] / rms * w[p.offset + j] (w[p.offset] for every j with p.flags
+// 1), eps p.r0 bits, rows of p.k. Workgroup x = t, y = j. Weights (set 0): norm vectors [..][p.k].
+layout(local_size_x=256) in;
+shared float red[4];
+void main(){
+uint t=gl_WorkGroupID.x,j=gl_WorkGroupID.y,nb=batch(),D=p.k,tid=gl_LocalInvocationID.x;
+if(t>=nb)return;
+uint base=(j*nb+t)*D;
+float s=0;
+for(uint i=tid;i<D;i+=256){float v=b_f.v[base+i];s=fma(v,v,s);}
+s=subgroupAdd(s);if(gl_SubgroupInvocationID==0)red[gl_SubgroupID]=s;barrier();
+float inv=inversesqrt(((red[0]+red[1])+(red[2]+red[3]))/float(D)+uintBitsToFloat(p.r0));
+uint wo=(p.offset+((p.flags&1)!=0?0:j))*D;
+for(uint i=tid;i<D;i+=256)a_f.v[base+i]=b_f.v[base+i]*inv*uintBitsToFloat(ww.words[wo+i]);
+}
