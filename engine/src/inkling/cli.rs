@@ -74,6 +74,23 @@ pub enum Cmd {
         #[arg(long)]
         free: bool,
     },
+    /// Full-vocabulary logits of every position of fixed chunks of a token stream, for KL-divergence comparisons with
+    /// llama.cpp (tools/dump-logits writes the same format; scripts/inkling-kld.py compares them). Every chunk starts
+    /// from an empty context and runs in prefill batches of --batch tokens; OUT/chunk-NNN.f32 holds CTX rows of the
+    /// real vocabulary's softcapped logits (f32), row i being the prediction after token i.
+    Logits {
+        model: PathBuf,
+        /// Token ids (whitespace separated), split into chunks of --ctx (a last partial chunk is dropped).
+        ids: PathBuf,
+        out: PathBuf,
+        #[command(flatten)]
+        run: Run,
+        #[arg(long, default_value_t = 2048)]
+        ctx: usize,
+        /// Chunk indices (default: all).
+        #[arg(long, value_delimiter = ',')]
+        chunks: Option<Vec<usize>>,
+    },
     /// Chat (interactive without a prompt).
     Chat {
         model: PathBuf,
@@ -160,6 +177,7 @@ fn read_ids(path: &Path) -> Result<Vec<u32>> {
 pub fn run(cmd: Cmd) -> Result<()> {
     match cmd {
         Cmd::Validate { model, reference, run, ids, greedy, free } => validate(&model, &reference, &run, &ids, greedy, free),
+        Cmd::Logits { model, ids, out, run, ctx, chunks } => logits(&model, &ids, &out, &run, ctx, chunks),
         Cmd::Chat { model, prompt, run, system, effort, max_tokens, temperature, top_k, top_p, seed, mmproj, image } => {
             let mut group = run.group(&model, 0)?;
             let t = Tokenizer::new(&group.gguf)?;
@@ -298,6 +316,47 @@ fn validate(model: &Path, reference: &Path, run: &Run, ids: &Path, greedy: usize
     println!("greedy ours      {ours:?}");
     println!("greedy reference {:?}", &want[..want.len().min(greedy)]);
     println!("greedy agree for {same} of {}", greedy.min(want.len()));
+    Ok(())
+}
+
+fn logits(model: &Path, ids: &Path, out: &Path, run: &Run, ctx: usize, chunks: Option<Vec<usize>>) -> Result<()> {
+    let tokens = read_ids(ids)?;
+    let count = tokens.len() / ctx;
+    let chunks = chunks.unwrap_or_else(|| (0..count).collect());
+    ensure!(chunks.iter().all(|&c| c < count), "{} tokens make {count} chunks of {ctx}", tokens.len());
+    ensure!(ctx <= run.context, "--ctx {ctx} exceeds --context {}", run.context);
+    std::fs::create_dir_all(out)?;
+    let mut group = run.group(model, 0)?;
+    let vocab = group.c.vocab;
+    std::fs::write(
+        out.join("meta.tsv"),
+        format!("model\t{}\nids\t{}\nctx\t{ctx}\nvocab\t{vocab}\nbatch\t{}\nbackend\ttrashcan-{}\n", model.display(), ids.display(), run.batch, group.ranks),
+    )?;
+    group.keep_logits(true)?;
+    for &c in &chunks {
+        let start = Instant::now();
+        group.reset()?;
+        let mut rows = Vec::with_capacity(ctx * vocab);
+        let mut check = 0f32;
+        for (b, batch) in tokens[c * ctx..(c + 1) * ctx].chunks(run.batch).enumerate() {
+            let last = (b + 1) * run.batch >= ctx;
+            // The last batch also scores its last row on the usual path, as a check of the gathered rows.
+            let top = group.forward(batch, if last { Score::Last } else { Score::None }, None)?;
+            let all = group.logits_all()?;
+            let (n, slice) = (batch.len(), all.len() / (group.ranks * batch.len()));
+            for r in 0..n {
+                for v in 0..vocab {
+                    rows.push(all[(v / slice) * n * slice + r * slice + v % slice]);
+                }
+            }
+            if let Some((logit, id)) = top.first().and_then(|t| t.first()).copied() {
+                check = (rows[rows.len() - vocab + id as usize] - logit).abs();
+            }
+        }
+        std::fs::write(out.join(format!("chunk-{c:03}.f32")), bytemuck::cast_slice::<f32, u8>(&rows))?;
+        println!("chunk {c}: {ctx} tokens in {:.1} s, last row's top logit differs from the decode head's by {check:.2e}", start.elapsed().as_secs_f64());
+    }
+    group.keep_logits(false)?;
     Ok(())
 }
 

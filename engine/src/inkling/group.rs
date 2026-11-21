@@ -113,6 +113,9 @@ pub struct Group {
     /// The DSpark drafter, when loaded (`enable_draft`), and what speculative decoding keeps of the last forward.
     drafter: Option<Drafter>,
     spec: Spec,
+    /// Keep every row's head input (`hidden`) after each forward, for `logits_all` (`inkling logits`).
+    keep_logits: bool,
+    hidden: Vec<f32>,
 }
 
 /// The drafter on this machine's ranks, and the recurrent head's context of the latest committed positions.
@@ -254,6 +257,8 @@ impl Group {
             ranks,
             drafter: None,
             spec: Spec::default(),
+            keep_logits: false,
+            hidden: Vec::new(),
             c,
         })
     }
@@ -591,6 +596,9 @@ impl Group {
                 }
             }
         }
+        if self.keep_logits {
+            self.keep_hidden(&flows, n);
+        }
         self.pos += n;
         if self.drafter.is_some() && !self.spec.verifying {
             self.commit_context(n)?;
@@ -830,6 +838,90 @@ impl Group {
         Ok(addend)
     }
 
+    /// Keep every row's head input after each forward (on every machine), for `logits_all`.
+    pub fn keep_logits(&mut self, on: bool) -> Result<()> {
+        self.tell(json!({"keep_logits": on}))?;
+        self.keep_logits = on;
+        self.hidden.clear();
+        Ok(())
+    }
+
+    /// The head input of every row of the last forward: the output mix of the block states and the residual, normed
+    /// with `output_norm` (what the head segment would receive).
+    fn keep_hidden(&mut self, flows: &[Flow], n: usize) {
+        let d = self.c.d;
+        self.hidden.clear();
+        self.hidden.resize(n * d, 0.);
+        let (mut cur_n, mut m) = (vec![0f32; d], vec![0f32; d]);
+        for f in flows {
+            for t in 0..f.n {
+                rms_into(&f.cur[t * d..(t + 1) * d], None, 1e-6, &mut cur_n);
+                let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[..]]).collect();
+                mix(&states, &self.hw.out_query, &mut m);
+                let at = (f.row0 + t) * d;
+                rms_into(&m, Some(&self.hw.out_norm), self.c.eps, &mut self.hidden[at..at + d]);
+            }
+        }
+    }
+
+    /// Full-vocabulary softcapped logits of every row of the last forward (`keep_logits` must be on): every rank runs
+    /// the head over the kept rows, eight at a time, and the machines gather their slices. On the driver the result
+    /// is [rank][row][rows of the rank's vocabulary slice] over all ranks (vocabulary id = rank * slice + index,
+    /// including the padded rows); the other machines return an empty vector. Outside the decode and prefill paths.
+    pub fn logits_all(&mut self) -> Result<Vec<f32>> {
+        self.tell(json!({"logits_all": true}))?;
+        self.logits_local()
+    }
+
+    fn logits_local(&mut self) -> Result<Vec<f32>> {
+        const ROWS: usize = 8;
+        let d = self.c.d;
+        ensure!(self.keep_logits && !self.hidden.is_empty(), "no kept rows: keep_logits, then forward");
+        let n = self.hidden.len() / d;
+        let vn = self.shards[0].vocab_rows().1;
+        let local = self.shards.len();
+        let first = self.shards[0].vocab_rows().0 / vn;
+        let machines = self.mesh.as_ref().map_or(1, |m| m.machines);
+        let me = self.mesh.as_ref().map_or(0, |m| m.machine);
+        ensure!(self.ranks == machines * local && first == me * local, "full logits need the same number of GPUs on every machine");
+        let per_rank = n * vn;
+        let mut all = vec![0f32; self.ranks * per_rank];
+        let cap = self.c.softcap;
+        for s in self.shards.iter_mut() {
+            s.retire()?;
+        }
+        for r0 in (0..n).step_by(ROWS) {
+            let rows = ROWS.min(n - r0);
+            let mut tickets = Vec::with_capacity(local);
+            for s in self.shards.iter_mut() {
+                s.hin(0, rows * d).copy_from_slice(&self.hidden[r0 * d..(r0 + rows) * d]);
+                tickets.push(s.submit(Seg::Head { rows }, rows, 0)?);
+            }
+            for (i, (s, t)) in self.shards.iter_mut().zip(tickets).enumerate() {
+                s.wait(t, 0)?;
+                let out = &mut all[(first + i) * per_rank + r0 * vn..][..rows * vn];
+                out.copy_from_slice(s.logits(rows));
+                if cap > 0. {
+                    out.iter_mut().for_each(|x| *x = cap * (*x / cap).tanh());
+                }
+            }
+        }
+        // Recursive doubling: in round k every machine holds the slices of its block of 2^k machines and swaps them
+        // with its partner's block.
+        if let Some(m) = self.mesh.as_mut() {
+            let block = local * per_rank;
+            for round in 0..m.rounds() {
+                let partner = m.partner(round);
+                let size = (1usize << round) * block;
+                let (mine, theirs) = ((me >> round << round) * block, (partner >> round << round) * block);
+                let (lo, hi) = all.split_at_mut(mine.max(theirs));
+                let (out, inp) = if mine < theirs { (&lo[mine..mine + size], &mut hi[..size]) } else { (&hi[..size], &mut lo[theirs..theirs + size]) };
+                m.lanes(partner)?.exchange(bytemuck::cast_slice(out), bytemuck::cast_slice_mut(inp))?;
+            }
+        }
+        Ok(if self.driver { all } else { Vec::new() })
+    }
+
     /// The best TOP_K candidates of each of `rows` scored rows: softcapped logits of the real vocabulary from every
     /// local rank, merged, then merged with the other machines' in the all-reduce rounds.
     fn candidates(&mut self, rows: usize) -> Result<Vec<Candidates>> {
@@ -911,6 +1003,11 @@ impl Group {
                 let x = self.embed_rows(&tokens, &rows)?;
                 let micro = f["micro"].as_u64().unwrap_or(1) as usize;
                 self.run(x, tokens.len(), score, reference.as_mut(), micro)?;
+            } else if let Some(v) = m.get("keep_logits") {
+                self.keep_logits = v.as_bool().unwrap_or(false);
+                self.hidden.clear();
+            } else if m.get("logits_all").is_some() {
+                self.logits_local()?;
             } else if m.get("reset").is_some() {
                 self.reset_local()?;
             } else if m.get("bye").is_some() {
