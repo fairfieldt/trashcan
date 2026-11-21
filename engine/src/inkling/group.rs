@@ -624,13 +624,22 @@ impl Group {
     /// other's output and prepares its next segment, which then waits in the queue.
     fn drive(&mut self, flows: &mut [Flow], gated: bool, mut reference: Option<&mut Reference>) -> Result<()> {
         let d = self.c.d;
-        for f in flows.iter_mut() {
+        // A segment's output is copied to host memory by the submission after it, under that one's kernels, when
+        // that submission is another micro-batch's and so is made before this segment is waited for: segment `j`
+        // of the next flow, or after the last flow segment `j + 1` of the first. With two flows only the MoE
+        // outputs (odd segments) wait for it: the host needs an attention output before the other flow's shorter
+        // attention segment ends, and its copy cannot wait for the submission that the host is late with.
+        let lens: Vec<usize> = flows.iter().map(|f| f.plan.len()).collect();
+        let deferred = |i: usize, j: usize| {
+            (lens.len() > 2 || (lens.len() == 2 && j % 2 == 1)) && if i + 1 < lens.len() { j < lens[i + 1] } else { j + 1 < lens[0] }
+        };
+        for (i, f) in flows.iter_mut().enumerate() {
             self.advance(f, None, Some(0), false);
-            self.launch(f, 0, gated)?;
+            self.launch(f, 0, gated, deferred(i, 0))?;
         }
         let segments = flows.iter().map(|f| f.plan.len()).max().unwrap_or(0);
         for j in 0..segments {
-            for f in flows.iter_mut() {
+            for (i, f) in flows.iter_mut().enumerate() {
                 if j >= f.plan.len() {
                     continue;
                 }
@@ -664,7 +673,7 @@ impl Group {
                     }
                 }
                 if let Some(next) = next {
-                    self.launch(f, next, gated)?;
+                    self.launch(f, next, gated, deferred(i, next))?;
                 }
             }
         }
@@ -673,12 +682,12 @@ impl Group {
 
     /// Start segment `j` of `f` on every local rank (its inputs are in their `hin`): a submission queued behind the
     /// ones in flight, or the next segment of the gated graph.
-    fn launch(&mut self, f: &mut Flow, j: usize, gated: bool) -> Result<()> {
+    fn launch(&mut self, f: &mut Flow, j: usize, gated: bool, defer_out: bool) -> Result<()> {
         let g = Instant::now();
         let seg = f.plan[j];
         for (s, ticket) in self.shards.iter_mut().zip(f.tickets.iter_mut()) {
             if !gated {
-                *ticket = s.submit(seg, f.n, f.mb)?;
+                *ticket = s.submit(seg, f.n, f.mb, defer_out)?;
             } else if j == 0 {
                 s.start_gated(&f.plan, f.n)?;
             } else {
@@ -912,7 +921,7 @@ impl Group {
             let mut tickets = Vec::with_capacity(local);
             for s in self.shards.iter_mut() {
                 s.hin(0, rows * d).copy_from_slice(&self.hidden[r0 * d..(r0 + rows) * d]);
-                tickets.push(s.submit(Seg::Head { rows }, rows, 0)?);
+                tickets.push(s.submit(Seg::Head { rows }, rows, 0, false)?);
             }
             for (i, (s, t)) in self.shards.iter_mut().zip(tickets).enumerate() {
                 s.wait(t, 0)?;

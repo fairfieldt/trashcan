@@ -231,8 +231,19 @@ pub struct Shard {
     ids: Buffer,
     wts: Buffer,
     act: Buffer,
-    /// A prefill segment's partial output before it is copied to `part`.
-    pout: Buffer,
+    /// A prefill segment's partial output before it is copied to `part`, per micro-batch.
+    pout: [Buffer; MICRO],
+    /// Deferred copies of `pout` to `part` (`submit`): the copy of a segment's output is recorded in the next
+    /// submission, after that one's first long dispatch, so the command processor copies while the shader cores
+    /// work. `carry`: the micro-batch and tokens of the output the next submission copies; `carrying`: the same
+    /// while that submission is recorded. The copy ends with `mark` (host memory, a number per deferred output)
+    /// copied behind `part`, which is how the host sees that the output has arrived (`awaited`).
+    carry: Cell<Option<(usize, usize)>>,
+    carrying: Cell<Option<(usize, usize)>>,
+    defer_out: Cell<bool>,
+    mark: [Buffer; MICRO],
+    marks: u32,
+    awaited: [Option<u32>; MICRO],
     /// Prefill experts: the tiles and the pairs listed by expert (qwen4_moe_tiles), and each pair's down output.
     tiles: Buffer,
     list: Buffer,
@@ -470,7 +481,13 @@ impl Shard {
             vin,
             raw: fb(6 * nb * (d + 1))?,
             z: fb(nb * 3 * c.gate_rank)?,
-            part: [hb(nb * d)?, hb(nb * d)?],
+            part: [hb(nb * d + 1)?, hb(nb * d + 1)?],
+            carry: Cell::new(None),
+            carrying: Cell::new(None),
+            defer_out: Cell::new(false),
+            mark: [hb(1)?, hb(1)?],
+            marks: 0,
+            awaited: [None; MICRO],
             logits: hb(nb.min(16) * vn)?,
             params: [hb(64)?, hb(64)?],
             mb: Cell::new(0),
@@ -485,7 +502,7 @@ impl Shard {
             ids: fb(nb * c.used)?,
             wts: fb(nb * c.used)?,
             act: fb(nb * c.used * f)?,
-            pout: fb(if nb > GATED_MAX { nb * d } else { 1 })?,
+            pout: [fb(if nb > GATED_MAX { nb * d } else { 1 })?, fb(if nb > GATED_MAX { nb * d } else { 1 })?],
             tiles: fb(1 + 2 * ((nb * c.used).div_ceil(TILE) + c.experts))?,
             list: fb(nb * c.used)?,
             ypair: fb(if nb > GATED_MAX { nb * c.used * d } else { 1 })?,
@@ -658,14 +675,36 @@ impl Shard {
     /// Submit one segment of micro-batch `mb` on its own (prefill batches): the host has written its inputs into
     /// `hin`. It runs after the submissions before it; `wait` takes the returned ticket, before the micro-batch's
     /// next segment is submitted.
-    pub fn submit(&mut self, seg: Seg, n: usize, mb: usize) -> Result<u64> {
+    ///
+    /// With `defer_out` the segment leaves its partial output in VRAM and the next submission copies it to `part`
+    /// while its own kernels run: the caller submits that one (another micro-batch's segment) before it waits
+    /// for this one.
+    pub fn submit(&mut self, seg: Seg, n: usize, mb: usize, defer_out: bool) -> Result<u64> {
         let cmd = self.gpu.begin()?;
         self.start_stamps(cmd, mb);
         self.gpu.host_barrier(cmd, false);
         self.mb.set(mb);
+        self.carrying.set(self.carry.take());
+        self.defer_out.set(defer_out && !matches!(seg, Seg::Head { .. }));
+        if self.carrying.get().is_some() {
+            // The output to copy is complete before this submission's first dispatch starts.
+            self.gpu.barrier(cmd);
+        }
+        if matches!(seg, Seg::Head { .. }) {
+            // The head has no long dispatch to copy under.
+            self.carry_out(cmd);
+        }
         let recorded = self.record(cmd, seg, n);
         self.mb.set(0);
+        let deferred = self.defer_out.replace(false);
         recorded?;
+        ensure!(self.carrying.get().is_none(), "a deferred output was not copied");
+        if deferred {
+            self.marks = self.marks.wrapping_add(1).max(1);
+            self.mark[mb].write(bytemuck::bytes_of(&self.marks))?;
+            self.carry.set(Some((mb, n)));
+            self.awaited[mb] = Some(self.marks);
+        }
         self.gpu.host_barrier(cmd, true);
         self.stamp_labels[mb] = self.take_stamps();
         self.gpu.finish(cmd)?;
@@ -680,6 +719,14 @@ impl Shard {
     /// its profiling.
     pub fn wait(&mut self, ticket: u64, mb: usize) -> Result<()> {
         let start = std::time::Instant::now();
+        if let Some(mark) = self.awaited[mb].take() {
+            // A deferred output: the copy in the next submission ends with the mark behind `part`.
+            let at = unsafe { self.part[mb].ptr.add(self.max_batch * self.c.d * 4).cast::<u32>() };
+            while unsafe { at.read_volatile() } != mark {
+                ensure!(start.elapsed().as_secs() < 10, "a GPU segment's output did not arrive");
+                std::hint::spin_loop();
+            }
+        }
         while unsafe { self.gpu.dev.get_semaphore_counter_value(self.timeline)? } < ticket {
             ensure!(start.elapsed().as_secs() < 10, "GPU segment did not finish");
             std::hint::spin_loop();
@@ -783,6 +830,8 @@ impl Shard {
         for (_, cmd) in self.cmds.drain(..) {
             unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]) };
         }
+        self.carry.set(None);
+        self.awaited = [None; MICRO];
         self.gated = false;
         (0..MICRO).try_for_each(|mb| self.collect_stamps(mb))
     }
@@ -826,8 +875,9 @@ impl Shard {
         u[10] = first as u32;
         if n > GATED_MAX {
             // 8 tokens per workgroup in the first half, 32 in the second.
-            let p = self.push([0, raw, 0, self.z.address, 0, 0], 0, u);
+            let p = self.push([0, raw, 0, self.z.address, 0, 0], 0, u).defer_barrier(true);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z", p, kinds as u32, n.div_ceil(8) as u32, down)?;
+            self.carry_then_barrier(cmd);
             u[3] = *stride as u32;
             let p = self.push([self.xin.address, raw, 0, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(32)) as u32, gf)?;
@@ -891,9 +941,17 @@ impl Shard {
                 }
                 Ok(())
             })();
-            self.defer.set(false);
-            small?;
-            self.matrix(cmd, &l.qgr, xq, self.qgr.address, n)?;
+            if n > GATED_MAX {
+                // Prefill: the q projection too, then a deferred copy under them all.
+                let last = small.and_then(|()| self.matrix(cmd, &l.qgr, xq, self.qgr.address, n));
+                self.defer.set(false);
+                last?;
+                self.carry_then_barrier(cmd);
+            } else {
+                self.defer.set(false);
+                small?;
+                self.matrix(cmd, &l.qgr, xq, self.qgr.address, n)?;
+            }
         }
         let mut u = [0u32; 16];
         u[0] = self.qgr_w as u32;
@@ -960,7 +1018,7 @@ impl Shard {
             self.gpu.dispatch(cmd, "inkling_attn_merge", p, (n * hq) as u32, 1);
         }
         if n > GATED_MAX {
-            self.matrix(cmd, &l.wo, self.aout.address, self.pout.address, n)?;
+            self.matrix(cmd, &l.wo, self.aout.address, self.pout[self.mb.get()].address, n)?;
             self.part_out(cmd, n);
             return Ok(());
         }
@@ -975,7 +1033,15 @@ impl Shard {
         let l = &self.layers[phys];
         let kinds = if l.swa { 1 } else { 3 };
         self.inputs(cmd, l, n, 1, 1, controlled.then_some(3), kinds, false)?;
-        self.matf32(cmd, &l.router, c.experts, d, self.xin.address, self.rlog.address, n)?;
+        if n > GATED_MAX {
+            self.defer.set(true);
+            let router = self.matf32(cmd, &l.router, c.experts, d, self.xin.address, self.rlog.address, n);
+            self.defer.set(false);
+            router?;
+            self.carry_then_barrier(cmd);
+        } else {
+            self.matf32(cmd, &l.router, c.experts, d, self.xin.address, self.rlog.address, n)?;
+        }
         let mut u = [0u32; 16];
         u[0] = c.experts as u32;
         u[2] = c.used as u32;
@@ -1012,7 +1078,7 @@ impl Shard {
             let mut u = [0u32; 16];
             u[0] = d as u32;
             u[2] = c.used as u32;
-            let p = self.push([0, self.ypair.address, self.pout.address, 0, 0, 0], 0, u);
+            let p = self.push([0, self.ypair.address, self.pout[self.mb.get()].address, 0, 0, 0], 0, u);
             self.gpu.dispatch(cmd, "inkling_moe_sum", p, d.div_ceil(256) as u32, n as u32);
             self.part_out(cmd, n);
             return Ok(());
@@ -1047,15 +1113,43 @@ impl Shard {
     /// into host memory took several times the kernel itself. The copy goes in regions under 4096 bytes, which RADV
     /// hands to the command processor's DMA: its compute-shader copy of larger regions moved 2.8 GB/s into host
     /// memory, the DMA 10 GB/s (out of host memory the shader copy is the faster one, 9.6 against 7.4 GB/s).
+    ///
+    /// With `defer_out` the next submission makes this copy (`carry_out`).
     fn part_out(&self, cmd: vk::CommandBuffer, n: usize) {
+        if self.defer_out.get() {
+            return;
+        }
+        self.gpu.barrier(cmd);
+        self.copy_out(cmd, self.mb.get(), n, false);
+        self.gpu.barrier(cmd);
+    }
+
+    /// The copy of micro-batch `mb`'s partial output (`n` tokens) to `part`; with `mark` followed by its mark.
+    fn copy_out(&self, cmd: vk::CommandBuffer, mb: usize, n: usize, mark: bool) {
         const REGION: u64 = 4032;
         let size = (n * self.c.d * 4) as u64;
         let regions: Vec<vk::BufferCopy> = (0..size).step_by(REGION as usize).map(|o| vk::BufferCopy { src_offset: o, dst_offset: o, size: REGION.min(size - o) }).collect();
-        self.gpu.barrier(cmd);
         self.gpu.stamp(cmd, false, || "copy-out".into());
-        unsafe { self.gpu.dev.cmd_copy_buffer(cmd, self.pout.buf, self.part_buf().buf, &regions) };
+        unsafe { self.gpu.dev.cmd_copy_buffer(cmd, self.pout[mb].buf, self.part[mb].buf, &regions) };
+        if mark {
+            let at = vk::BufferCopy { src_offset: 0, dst_offset: (self.max_batch * self.c.d * 4) as u64, size: 4 };
+            unsafe { self.gpu.dev.cmd_copy_buffer(cmd, self.mark[mb].buf, self.part[mb].buf, &[at]) };
+        }
         self.gpu.stamp(cmd, true, || "copy-out".into());
-        self.gpu.barrier(cmd);
+    }
+
+    /// Copy the output the previous submission left in VRAM, if any (`submit`). Recorded after a dispatch without
+    /// its barrier, the copy runs on the command processor while that dispatch's waves run.
+    fn carry_out(&self, cmd: vk::CommandBuffer) {
+        if let Some((mb, n)) = self.carrying.take() {
+            self.copy_out(cmd, mb, n, true);
+        }
+    }
+
+    /// After a dispatch recorded without its barrier: the deferred copy, then the barrier.
+    fn carry_then_barrier(&self, cmd: vk::CommandBuffer) {
+        self.carry_out(cmd);
+        self.gpu.compute_barrier(cmd, 0);
     }
 
     /// Record the head over `rows` normed rows the host wrote into `hin`: this rank's logits (before the softcap)
