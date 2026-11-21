@@ -542,7 +542,7 @@ impl Shard {
         &self.part[self.mb.get()]
     }
 
-    /// A Q8_0 matrix times `n` columns of `x` into `y` (decode kernels up to 4 columns, inkling_q8_gemm above).
+    /// A Q8_0 matrix times `n` columns of `x` into `y` (decode kernels for gated batches).
     fn matrix(&self, cmd: vk::CommandBuffer, m: &Matrix, x: u64, y: u64, n: usize) -> Result<()> {
         self.matrix_with(cmd, m, x, y, n, 0)
     }
