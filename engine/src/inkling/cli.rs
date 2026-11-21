@@ -27,8 +27,9 @@ pub struct Run {
     pub tp_peer: Vec<String>,
     #[arg(long, default_value_t = 32768)]
     pub context: usize,
-    /// Tokens per prefill batch.
-    #[arg(long, default_value_t = 512)]
+    /// Tokens per prefill batch. A batch runs as up to four micro-batches of at most 256 tokens (a quarter of the
+    /// batch each above 1,024), and the GPUs hold scratch for the largest of them.
+    #[arg(long, default_value_t = 1024)]
     pub batch: usize,
     /// The DSpark drafter GGUF (dspark-*.gguf): speculative decoding (the same path on every machine).
     #[arg(long)]

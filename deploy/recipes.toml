@@ -47,7 +47,7 @@ macs = 2
 kind = "tp2"
 models = ["inkling2-mini", "inkling2-mini-mmproj"]
 node = ["inkling", "node", "{inkling2-mini}"]
-driver = ["serve", "{inkling2-mini}", "--port", "{serve_port}", "--mmproj", "{inkling2-mini-mmproj}", "--context", "32768"]
+driver = ["serve", "{inkling2-mini}", "--port", "{serve_port}", "--mmproj", "{inkling2-mini-mmproj}", "--context", "32768", "--batch", "1024"]
 # Inkling reasons briefly even at the lowest effort, so the greedy smoke answer needs a longer budget.
 smoke_tokens = 192
 load_deadline_s = 300

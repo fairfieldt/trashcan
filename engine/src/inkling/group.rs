@@ -151,8 +151,20 @@ struct Spec {
 /// The applications whose input residual the drafter reads (execution order), then the final hidden state.
 const FEATURE_VISITS: [usize; 3] = [5, 23, 41];
 
-/// Batches of at least this many tokens run as two micro-batches (`Group::drive`).
+/// Batches of at least this many tokens run as micro-batches (`Group::drive`): two, or as many of up to
+/// `MICRO_ROWS` tokens as the batch fills, at most `MICRO`. With three or four in flight the host's work on one
+/// (the exchange, its pass over the rows) has two or three GPU segments to hide behind instead of one.
 const MICRO_MIN: usize = 64;
+const MICRO_ROWS: usize = 256;
+
+/// The micro-batches of a batch of `n` tokens.
+fn micro_count(n: usize) -> usize {
+    if n < MICRO_MIN {
+        1
+    } else {
+        n.div_ceil(MICRO_ROWS).clamp(2, MICRO)
+    }
+}
 
 /// The host state of one micro-batch of a forward: `n` rows of the batch with their own input and output buffers
 /// on every rank (`mb`).
@@ -179,7 +191,7 @@ fn message(v: Value) -> Result<Vec<u8>> {
     tp::message(v)
 }
 
-fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usize, max_batch: usize) -> Result<(Gguf, Config, Vec<Shard>)> {
+fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usize, max_batch: usize, flows: usize) -> Result<(Gguf, Config, Vec<Shard>)> {
     let gguf = Gguf::open(model)?;
     let c = Config::new(&gguf)?;
     let inst = Rc::new(Instance::new()?);
@@ -190,7 +202,7 @@ fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context
         let dev = Device::new(inst.clone(), pd)?;
         dev.use_arena();
         let t = Instant::now();
-        let s = Shard::new(dev, &gguf, &c, Split { rank: first + i, ranks }, context, max_batch)?;
+        let s = Shard::new(dev, &gguf, &c, Split { rank: first + i, ranks }, context, max_batch, flows)?;
         eprintln!("inkling: rank {} on GPU {gi} loaded in {:.1} s, {:.0} MiB", first + i, t.elapsed().as_secs_f64(), s.device_mib());
         shards.push(s);
     }
@@ -203,7 +215,8 @@ impl Group {
         ensure!(max_batch > 0, "--batch must be positive");
         ensure!(forced_rows <= max_batch, "the teacher-forced prompt must fit one batch (--batch)");
         // Each segment uses one micro-batch. Short forwards and teacher-forced prompts run whole.
-        let shard_rows = max_batch.div_ceil(MICRO).max(max_batch.min(MICRO_MIN - 1)).max(forced_rows);
+        let shard_rows = (1..=max_batch).map(|n| n.div_ceil(micro_count(n))).max().unwrap_or(1).max(forced_rows);
+        let flows = micro_count(max_batch);
         let mut counts = BTreeMap::from([(0usize, gpus.len())]);
         if let Some(m) = mesh.as_mut() {
             m.tell_children(&message(json!({"probe": true}))?)?;
@@ -230,12 +243,12 @@ impl Group {
         let firsts: Vec<usize> = counts.values().scan(0, |at, &n| { *at += n; Some(*at - n) }).collect();
         let ranks: usize = counts.values().sum();
         if let Some(m) = mesh.as_mut() {
-            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "wire": m.wire.name(), "full": m.full});
+            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "flows": flows, "wire": m.wire.name(), "full": m.full});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
         let wire = mesh.as_ref().map_or("none", |m| m.wire.name());
         eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}, small all-reduces in {wire}", counts.len(), counts.values().collect::<Vec<_>>());
-        let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows)?;
+        let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows, flows)?;
         if let Some(m) = mesh.as_mut() {
             for reply in m.children_replies(Some(Duration::from_secs(10 * 60))).context("waiting for the other machines to load")? {
                 ensure!(reply.get("ok").is_some(), "another machine failed: {}", reply["error"]);
@@ -494,7 +507,7 @@ impl Group {
             let mine = &rows[used * d..(used + k) * d];
             used += k;
             // Two micro-batches overlap the host's work with the GPUs'; forcing takes the batch whole.
-            let micro = if chunk.len() >= MICRO_MIN && reference.is_none() && s != Score::All { MICRO } else { 1 };
+            let micro = if reference.is_none() && s != Score::All { micro_count(chunk.len()) } else { 1 };
             self.tell(json!({"forward": {"tokens": chunk, "score": score_name(s), "force": force, "image_rows": k, "micro": micro}}))?;
             if k > 0 {
                 if let (true, Some(m)) = (self.driver, self.mesh.as_mut()) {
@@ -1581,7 +1594,7 @@ fn session(model: &Path, gpus: &[usize], mut mesh: Mesh) -> Result<()> {
             mesh.full = s["full"].as_bool().unwrap_or(false);
             mesh.join(num("machines")?)?;
             mesh.wire = Wire::parse(s["wire"].as_str().unwrap_or("f32"))?;
-            load_shards(model, gpus, first, num("ranks")?, num("context")?, num("batch")?)
+            load_shards(model, gpus, first, num("ranks")?, num("context")?, num("batch")?, num("flows")?)
         })();
         let (gguf, c, shards) = match loaded {
             Ok(v) => v,

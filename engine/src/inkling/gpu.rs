@@ -204,14 +204,14 @@ pub struct Shard {
     f: usize,
     qgr_w: usize,
     // Host-visible: input rows, partial outputs and params of each micro-batch, head logits.
-    hin: [Buffer; MICRO],
+    hin: Vec<Buffer>,
     /// Prefill batches (more than `GATED_MAX` tokens) take their input rows in host-mapped VRAM instead of `hin`:
     /// the host's threads push the rows over PCIe while the GPU runs the other micro-batch, and the kernels read
     /// them without a copy (the copy from host memory took 7% of a prefill batch's GPU time).
-    vin: Option<[Buffer; MICRO]>,
-    part: [Buffer; MICRO],
+    vin: Option<Vec<Buffer>>,
+    part: Vec<Buffer>,
     logits: Buffer,
-    params: [Buffer; MICRO],
+    params: Vec<Buffer>,
     /// The micro-batch whose segment is being recorded.
     mb: Cell<usize>,
     /// The dispatches being recorded are independent and run together: no barrier after them (the next dispatch
@@ -232,7 +232,7 @@ pub struct Shard {
     wts: Buffer,
     act: Buffer,
     /// A prefill segment's partial output before it is copied to `part`, per micro-batch.
-    pout: [Buffer; MICRO],
+    pout: Vec<Buffer>,
     /// Deferred copies of `pout` to `part` (`submit`): the copy of a segment's output is recorded in the next
     /// submission, after that one's first long dispatch, so the command processor copies while the shader cores
     /// work. `carry`: the micro-batch and tokens of the output the next submission copies; `carrying`: the same
@@ -241,9 +241,9 @@ pub struct Shard {
     carry: Cell<Option<(usize, usize)>>,
     carrying: Cell<Option<(usize, usize)>>,
     defer_out: Cell<bool>,
-    mark: [Buffer; MICRO],
+    mark: Vec<Buffer>,
     marks: u32,
-    awaited: [Option<u32>; MICRO],
+    awaited: Vec<Option<u32>>,
     /// Prefill experts: the tiles and the pairs listed by expert (qwen4_moe_tiles), and each pair's down output.
     tiles: Buffer,
     list: Buffer,
@@ -258,8 +258,8 @@ pub struct Shard {
     gated: bool,
     /// Profiling (`TRASHCAN_INKLING_PROFILE=1`): a timestamp pool, the labels of the segment in flight, and GPU
     /// milliseconds per kernel and in whole segments.
-    stamp_pool: Option<[vk::QueryPool; MICRO]>,
-    stamp_labels: [Vec<String>; MICRO],
+    stamp_pool: Option<Vec<vk::QueryPool>>,
+    stamp_labels: Vec<Vec<String>>,
     pub profile: std::collections::BTreeMap<String, (u64, f64)>,
 }
 
@@ -302,8 +302,9 @@ struct Graph {
 /// Pairs per tile of the prefill expert kernels (inkling_moe_mm).
 const TILE: usize = 8;
 
-/// Micro-batches of a prefill batch that can be in flight together.
-pub const MICRO: usize = 2;
+/// The most micro-batches of a prefill batch that can be in flight together (a shard is built for as many as its
+/// group runs, `Shard::new`'s `flows`).
+pub const MICRO: usize = 4;
 
 /// Forwards of at most this many tokens are event-gated graphs (one submission per forward); longer ones submit
 /// each segment (a gated submission lasts the whole forward, and amdgpu resets a GPU whose job runs past 2 s).
@@ -315,8 +316,10 @@ const GATE_STAGES: vk::PipelineStageFlags = vk::PipelineStageFlags::from_raw(
 );
 
 impl Shard {
-    pub fn new(gpu: Rc<Device>, g: &Gguf, c: &Config, split: Split, context: usize, max_batch: usize) -> Result<Self> {
+    /// `max_batch`: the tokens of the largest (micro-)batch; `flows`: the micro-batches in flight together.
+    pub fn new(gpu: Rc<Device>, g: &Gguf, c: &Config, split: Split, context: usize, max_batch: usize, flows: usize) -> Result<Self> {
         split.check(c)?;
+        ensure!((1..=MICRO).contains(&flows), "1 to {MICRO} micro-batches, not {flows}");
         let d = c.d;
         let (h0, hq) = split.heads(c);
         let (g0, hk) = split.kv_heads(c);
@@ -460,36 +463,35 @@ impl Shard {
         };
         let stamp_pool = if std::env::var("TRASHCAN_INKLING_PROFILE").is_ok() {
             let info = vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(crate::vulkan::STAMP_CAPACITY);
-            Some(unsafe { [gpu.dev.create_query_pool(&info, None)?, gpu.dev.create_query_pool(&info, None)?] })
+            Some((0..flows).map(|_| unsafe { gpu.dev.create_query_pool(&info, None) }).collect::<ash::prelude::VkResult<Vec<_>>>()?)
         } else {
             None
         };
+        // One of each per micro-batch.
+        let each = |make: &dyn Fn() -> Result<Buffer>| (0..flows).map(|_| make()).collect::<Result<Vec<_>>>();
         let vin = if nb > GATED_MAX {
-            let vb = || gpu.buffer_mapped_vram(6 * nb * (d + 1) * 4);
-            match (vb(), vb()) {
-                (Ok(a), Ok(b)) => Some([a, b]),
-                _ => {
-                    eprintln!("inkling: no host-mapped VRAM for the prefill inputs; they go through host memory");
-                    None
-                }
+            let mapped = each(&|| gpu.buffer_mapped_vram(6 * nb * (d + 1) * 4));
+            if mapped.is_err() {
+                eprintln!("inkling: no host-mapped VRAM for the prefill inputs; they go through host memory");
             }
+            mapped.ok()
         } else {
             None
         };
         Ok(Self {
-            hin: [hb(6 * nb * (d + 1))?, hb(6 * nb * (d + 1))?],
+            hin: each(&|| hb(6 * nb * (d + 1)))?,
             vin,
             raw: fb(6 * nb * (d + 1))?,
             z: fb(nb * 3 * c.gate_rank)?,
-            part: [hb(nb * d + 1)?, hb(nb * d + 1)?],
+            part: each(&|| hb(nb * d + 1))?,
             carry: Cell::new(None),
             carrying: Cell::new(None),
             defer_out: Cell::new(false),
-            mark: [hb(1)?, hb(1)?],
+            mark: each(&|| hb(1))?,
             marks: 0,
-            awaited: [None; MICRO],
+            awaited: vec![None; flows],
             logits: hb(nb.min(16) * vn)?,
-            params: [hb(64)?, hb(64)?],
+            params: each(&|| hb(64))?,
             mb: Cell::new(0),
             defer: Cell::new(false),
             xin: fb(3 * nb * d)?,
@@ -502,7 +504,7 @@ impl Shard {
             ids: fb(nb * c.used)?,
             wts: fb(nb * c.used)?,
             act: fb(nb * c.used * f)?,
-            pout: [fb(if nb > GATED_MAX { nb * d } else { 1 })?, fb(if nb > GATED_MAX { nb * d } else { 1 })?],
+            pout: each(&|| fb(if nb > GATED_MAX { nb * d } else { 1 }))?,
             tiles: fb(1 + 2 * ((nb * c.used).div_ceil(TILE) + c.experts))?,
             list: fb(nb * c.used)?,
             ypair: fb(if nb > GATED_MAX { nb * c.used * d } else { 1 })?,
@@ -522,7 +524,7 @@ impl Shard {
             graphs: Default::default(),
             gate,
             gated: false,
-            stamp_labels: Default::default(),
+            stamp_labels: vec![Vec::new(); flows],
             profile: Default::default(),
             timeline,
             counter: 0,
@@ -650,7 +652,7 @@ impl Shard {
 
     /// Profile the submission being recorded with micro-batch `mb`'s timestamps.
     fn start_stamps(&self, cmd: vk::CommandBuffer, mb: usize) {
-        if let Some(pool) = self.stamp_pool.map(|p| p[mb]) {
+        if let Some(pool) = self.stamp_pool.as_ref().map(|p| p[mb]) {
             unsafe { self.gpu.dev.cmd_reset_query_pool(cmd, pool, 0, crate::vulkan::STAMP_CAPACITY) };
             *self.gpu.stamps.borrow_mut() = Some(crate::vulkan::Stamps { pool, labels: Vec::new(), dispatches: true });
         }
@@ -744,9 +746,9 @@ impl Shard {
     /// Add the timestamps of micro-batch `mb`'s finished submission to the profile.
     fn collect_stamps(&mut self, mb: usize) -> Result<()> {
         let labels = std::mem::take(&mut self.stamp_labels[mb]);
-        let (Some(pools), false) = (self.stamp_pool, labels.is_empty()) else { return Ok(()) };
+        let (Some(pool), false) = (self.stamp_pool.as_ref().map(|p| p[mb]), labels.is_empty()) else { return Ok(()) };
         let mut ticks = vec![0u64; labels.len()];
-        unsafe { self.gpu.dev.get_query_pool_results(pools[mb], 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+        unsafe { self.gpu.dev.get_query_pool_results(pool, 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
         let period = self.gpu.period as f64 * 1e-6;
         // Stamps come in (top, bottom) pairs per segment, dispatch and copy; matrix kernels are told apart by shape.
         let mut open: std::collections::HashMap<&str, u64> = Default::default();
@@ -831,9 +833,9 @@ impl Shard {
             unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]) };
         }
         self.carry.set(None);
-        self.awaited = [None; MICRO];
+        self.awaited.fill(None);
         self.gated = false;
-        (0..MICRO).try_for_each(|mb| self.collect_stamps(mb))
+        (0..self.stamp_labels.len()).try_for_each(|mb| self.collect_stamps(mb))
     }
 
     /// Record the inputs of a sublayer into `xin` ([kinds][n][d]) from the host's rows in `hin`: `mixes` row sets of
