@@ -322,12 +322,31 @@ impl Group {
         let pos = self.spec.pos;
         for start in (0..rows).step_by(64) {
             let n = (rows - start).min(64);
-            let mut ctx = Vec::with_capacity(n * nl * d);
-            for t in start..start + n {
-                let (c, rnn) = dr.host.contexts(&self.spec.features[t * 4 * d..(t + 1) * 4 * d], d);
-                ctx.extend(c);
-                let p = pos + t;
-                dr.rnn[p % (super::draft::BLOCK + 1)] = (p, rnn);
+            let mut ctx = vec![0f32; n * nl * d];
+            let mut rnn = vec![0f32; n * d];
+            {
+                let (host, feats) = (&dr.host, &self.spec.features);
+                let (cp, rp) = (SendPtr(ctx.as_mut_ptr()), SendPtr(rnn.as_mut_ptr()));
+                let row = |t: usize| {
+                    let (c, r) = host.contexts(&feats[(start + t) * 4 * d..(start + t + 1) * 4 * d], d);
+                    // SAFETY: every token writes its own rows of `ctx` and `rnn`.
+                    unsafe {
+                        std::ptr::copy_nonoverlapping(c.as_ptr(), cp.at(t * nl * d), nl * d);
+                        std::ptr::copy_nonoverlapping(r.as_ptr(), rp.at(t * d), d);
+                    }
+                };
+                // A prefill batch's rows are mixed on the pool (4 of a chunk's 6.4 ms were this loop on one thread);
+                // a verification batch's few rows stay on this thread.
+                if n > GATED_MAX {
+                    self.pool.run(n, row);
+                } else {
+                    (0..n).for_each(row);
+                }
+            }
+            // The recurrent head reads the latest positions' contexts only.
+            for t in n.saturating_sub(super::draft::BLOCK + 1)..n {
+                let p = pos + start + t;
+                dr.rnn[p % (super::draft::BLOCK + 1)] = (p, rnn[t * d..(t + 1) * d].to_vec());
             }
             let pend = dr.ranks.iter().map(|r| r.inject(&ctx, pos + start, n)).collect::<Result<Vec<_>>>()?;
             super::draft::wait_all(pend)?;
@@ -606,16 +625,23 @@ impl Group {
         if self.drafter.is_some() {
             // The final hidden state of every row: the drafter's fourth feature.
             for f in &flows {
-                let mut cur_n = vec![0f32; f.cur.len()];
-                for (a, b) in f.cur.chunks_exact(d).zip(cur_n.chunks_exact_mut(d)) {
-                    super::rms_into(a, None, 1e-6, b);
-                }
-                for t in 0..f.n {
-                    let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
+                let feats = SendPtr(self.spec.features.as_mut_ptr());
+                let (hw, eps) = (&self.hw, c.eps);
+                let row = |t: usize| {
+                    let mut cur_n = vec![0f32; d];
+                    super::rms_into(&f.cur[t * d..(t + 1) * d], None, 1e-6, &mut cur_n);
+                    let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[..]]).collect();
                     let mut m = vec![0.; d];
-                    super::mix(&states, &self.hw.out_query, &mut m);
-                    let at = ((f.row0 + t) * 4 + 3) * d;
-                    super::rms_into(&m, Some(&self.hw.out_norm), c.eps, &mut self.spec.features[at..at + d]);
+                    super::mix(&states, &hw.out_query, &mut m);
+                    // SAFETY: every row writes its own feature.
+                    let out = unsafe { std::slice::from_raw_parts_mut(feats.at(((f.row0 + t) * 4 + 3) * d), d) };
+                    super::rms_into(&m, Some(&hw.out_norm), eps, out);
+                };
+                // Prefill rows on the pool; a decode or verification batch's rows on this thread.
+                if f.n > GATED_MAX {
+                    self.pool.run(f.n, row);
+                } else {
+                    (0..f.n).for_each(row);
                 }
             }
         }
