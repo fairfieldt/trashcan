@@ -116,6 +116,7 @@ fn main() {
         // Inkling 2 Mini (inkling2)
         "inkling_kv_hist",
         "inkling_attn",
+        "inkling_attn_grp",
         "inkling_attn_merge",
         "inkling_route",
         "inkling_moe_gu",

@@ -1,0 +1,91 @@
+#version 460
+#include "common.glsl"
+// Inkling attention for prefill batches, grouped by KV head (after qwen4_attention_grouped): one workgroup per
+// (KV head, token) serves the G = 3 query heads that share the head's K/V, so each K/V row of the positions the
+// token sees (the last p.window, or all with p.window 0) is read once. The four waves take turns of 64 positions.
+// In a turn a lane takes one position: it scores its K row against the 3 queries (the same for every lane, so they
+// come through scalar loads) and adds each head's relative bias r . B[distance] (B [p.r0][16] in set 0; no bias from
+// distance p.r0 on) minus the head's sink; the wave's running maximum per head moves on (online softmax, the sums
+// stay per lane until the end); then the lanes take 2 dims each and add the 64 positions' V rows times their
+// probabilities. The waves' results merge in shared memory; the softmax has one more logit of 0 (the sink), and the
+// output is multiplied by sigmoid of the gate.
+// a: output [t][heads][128], b: projection rows [t][q | gate | r] (p.k floats per token), c: sinks [t][heads],
+// d: K cache, e: V cache (f16 [p.cap][kvheads][128], position % p.cap). p.heads, p.kvheads: this rank's heads.
+#define G 3u
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer BiasRows { vec4 v[]; } brow;
+layout(set=2,binding=3,std430) readonly restrict buffer KRows { uvec4 v[]; } krow;
+layout(set=2,binding=4,std430) readonly restrict buffer VWords { uint v[]; } vword;
+// Per wave: the probabilities of its turn's 64 positions (a head per component); after the loop, the merged output
+// [head][64 lanes] (2 dims each).
+shared vec4 buf[4u*64u];
+shared uint skey[4u*64u];
+shared float sm[4u*G],sl[4u*G];
+void main(){
+uint kh=gl_WorkGroupID.x,t=gl_WorkGroupID.y,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
+if(t>=batch())return;
+uint qp=position()+t,hi=qp+1u,lo=p.window>0u&&hi>p.window?hi-p.window:0u,total=hi-lo;
+uint h0=kh*G,qb=t*p.k+h0*128u,rb=t*p.k+2u*p.heads*128u+h0*16u;
+float M[G],L[G],sink[G];vec2 o[G];
+[[unroll]]for(uint h=0u;h<G;h++){M[h]=-1e30;L[h]=0.0;o[h]=vec2(0.0);sink[h]=c_f.v[t*p.heads+h0+h];}
+float scale=inversesqrt(128.0);
+uint turns=(total+63u)/64u;
+for(uint c=w;c<turns;c+=4u){
+    uint i=c*64u+lane;bool valid=i<total;
+    uint j=lo+(valid?i:0u),key=j%p.cap,kr=(key*p.kvheads+kh)*16u;
+    float s[G];[[unroll]]for(uint h=0u;h<G;h++)s[h]=0.0;
+    for(uint d16=0u;d16<8u;d16++){
+        uvec4 ka=krow.v[kr+d16*2u],kb=krow.v[kr+d16*2u+1u];
+        float k[16];
+        [[unroll]]for(uint x=0u;x<4u;x++){vec2 a=unpackHalf2x16(ka[x]),b=unpackHalf2x16(kb[x]);
+            k[2u*x]=a.x;k[2u*x+1u]=a.y;k[8u+2u*x]=b.x;k[8u+2u*x+1u]=b.y;}
+        [[unroll]]for(uint h=0u;h<G;h++){uint q=qb+h*128u+d16*16u;
+            [[unroll]]for(uint x=0u;x<16u;x++)s[h]=fma(b_f.v[q+x],k[x],s[h]);}
+    }
+    uint dist=qp-j;bool near=dist<p.r0;
+    uint bo=(near?dist:0u)*4u;
+    vec4 B[4];[[unroll]]for(uint x=0u;x<4u;x++)B[x]=brow.v[bo+x];
+    vec4 e=vec4(0.0);
+    [[unroll]]for(uint h=0u;h<G;h++){
+        float bias=0.0;
+        [[unroll]]for(uint x=0u;x<16u;x++)bias=fma(b_f.v[rb+h*16u+x],B[x/4u][x%4u],bias);
+        float sh=s[h]*scale+(near?bias:0.0)-sink[h];
+        float mn=max(M[h],subgroupMax(valid?sh:-1e30)),r=exp(M[h]-mn);
+        e[h]=valid?exp(sh-mn):0.0;
+        L[h]=L[h]*r+e[h];M[h]=mn;o[h]*=r;
+    }
+    buf[w*64u+lane]=e;
+    skey[w*64u+lane]=valid?key:0u;
+    subgroupMemoryBarrierShared();subgroupBarrier();
+    // Positions past the end of the last turn have probability 0 and row 0, so the loop runs whole groups of 8.
+    uint cnt=min(64u,(total-c*64u+7u)&~7u);
+    for(uint j0=0u;j0<cnt;j0+=8u){
+        vec2 v[8];
+        [[unroll]]for(uint x=0u;x<8u;x++)v[x]=unpackHalf2x16(vword.v[(skey[w*64u+j0+x]*p.kvheads+kh)*64u+lane]);
+        [[unroll]]for(uint x=0u;x<8u;x++){vec4 pq=buf[w*64u+j0+x];
+            o[0]=fma(vec2(pq.x),v[x],o[0]);o[1]=fma(vec2(pq.y),v[x],o[1]);o[2]=fma(vec2(pq.z),v[x],o[2]);}
+    }
+    subgroupMemoryBarrierShared();subgroupBarrier();
+}
+// Merge: the waves' maxima and sums and the sink's logit 0, then each wave adds its rescaled accumulators in turn.
+[[unroll]]for(uint h=0u;h<G;h++)L[h]=subgroupAdd(L[h]);
+if(lane==0u){[[unroll]]for(uint h=0u;h<G;h++){sm[w*G+h]=M[h];sl[w*G+h]=L[h];}}
+barrier();
+float f[G],den[G];
+[[unroll]]for(uint h=0u;h<G;h++){
+    float mg=max(max(sm[h],sm[G+h]),max(sm[2u*G+h],sm[3u*G+h]));
+    f[h]=exp(M[h]-mg);
+    den[h]=sl[h]*exp(sm[h]-mg)+sl[G+h]*exp(sm[G+h]-mg)+sl[2u*G+h]*exp(sm[2u*G+h]-mg)+sl[3u*G+h]*exp(sm[3u*G+h]-mg)+exp(-mg);
+}
+for(uint k=0u;k<4u;k++){
+    if(w==k){
+        [[unroll]]for(uint h=0u;h<G;h++){vec2 x=o[h]*f[h];if(k>0u)x+=buf[h*64u+lane].xy;
+            if(k<3u)buf[h*64u+lane].xy=x;
+            else{uint c=(h0+h)*128u+2u*lane,gb=t*p.k+p.heads*128u+c;
+                a_f.v[t*p.heads*128u+c]=x.x/den[h]/(1.0+exp(-b_f.v[gb]));
+                a_f.v[t*p.heads*128u+c+1u]=x.y/den[h]/(1.0+exp(-b_f.v[gb+1u]));}
+        }
+    }
+    barrier();
+}
+}

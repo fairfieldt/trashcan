@@ -44,9 +44,9 @@ impl Split {
     }
     pub fn check(&self, c: &Config) -> Result<()> {
         ensure!(
-            c.heads % self.ranks == 0 && c.kv_heads % self.ranks == 0 && (c.ff / self.ranks) % (9 * 32) == 0
+            c.heads % self.ranks == 0 && c.kv_heads % self.ranks == 0 && c.heads == 3 * c.kv_heads && (c.ff / self.ranks) % (9 * 32) == 0
                 && c.vocab_padded % self.ranks == 0 && c.ff % self.ranks == 0,
-            "inkling: {} ranks do not divide the heads, KV heads, expert rows (in runs of 9 blocks of 32) and vocabulary",
+            "inkling: {} ranks do not divide the heads (three per KV head), KV heads, expert rows (in runs of 9 blocks of 32) and vocabulary",
             self.ranks
         );
         Ok(())
@@ -239,17 +239,18 @@ pub struct Shard {
     pub profile: std::collections::BTreeMap<String, (u64, f64)>,
 }
 
-/// Batches up to this many tokens split each token's keys into partitions (decode, verification); larger ones
-/// (prefill) take one partition per token and head.
+/// Batches up to this many tokens split each token's keys into partitions per query head (decode, verification:
+/// inkling_attn and inkling_attn_merge); larger ones (prefill) take a workgroup per token and KV head
+/// (inkling_attn_grp).
 const SPLIT_MAX: usize = 16;
 
-/// Attention partitions per token and head for `n` tokens: the kernel divides the visible keys among them at run
-/// time, so a recorded graph serves every position.
-pub fn partitions(n: usize, swa: bool) -> usize {
-    match (n > SPLIT_MAX, swa) {
-        (true, _) => 1,
-        (false, true) => 8,
-        (false, false) => 32,
+/// Attention partitions per token and head of a batch of up to `SPLIT_MAX` tokens: the kernel divides the visible
+/// keys among them at run time, so a recorded graph serves every position.
+fn partitions(swa: bool) -> usize {
+    if swa {
+        8
+    } else {
+        32
     }
 }
 
@@ -444,7 +445,7 @@ impl Shard {
             qgr: fb(nb * qgr_w)?,
             kpre: fb(nb * hk * 128 + nb * hq + 2 * nb * hk * 4)?,
             vpre: fb(nb * hk * 128)?,
-            apart: fb((nb * hq * 130).max(SPLIT_MAX.min(nb) * hq * 32 * 130))?,
+            apart: fb(SPLIT_MAX.min(nb) * hq * 32 * 130)?,
             aout: fb(nb * hq * 128)?,
             rlog: fb(nb * c.experts)?,
             ids: fb(nb * c.used)?,
@@ -827,7 +828,21 @@ impl Shard {
             self.gpu.dispatch(cmd, "inkling_kv_hist", p, (2 * ch).div_ceil(256) as u32, 1);
         }
         let window = if l.swa { c.window } else { 0 };
-        let parts = partitions(n, l.swa);
+        if n > SPLIT_MAX {
+            // Prefill: a workgroup per (KV head, token) reads each K/V row once for the head's three query heads and
+            // writes the gated output.
+            let mut u = [0u32; 16];
+            u[1] = self.qgr_w as u32;
+            u[4] = hq as u32;
+            u[5] = hk as u32;
+            u[7] = s.cap as u32;
+            u[8] = window as u32;
+            u[12] = c.rel_extent as u32;
+            let p = self.push([self.aout.address, self.qgr.address, self.kpre.address + (sink_off * 4) as u64, s.k.address, s.v.address, 0], 0, u);
+            self.gpu.dispatch_matrix(cmd, "inkling_attn_grp", p, hk as u32, n as u32, &l.relb)?;
+            return self.matrix(cmd, &l.wo, self.aout.address, self.part_buf().address, n);
+        }
+        let parts = partitions(l.swa);
         let mut u = [0u32; 16];
         u[1] = self.qgr_w as u32;
         u[2] = parts as u32;

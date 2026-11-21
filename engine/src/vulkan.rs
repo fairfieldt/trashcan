@@ -569,6 +569,7 @@ impl Device {
             // Cross-machine all-reduce benchmark
             ("inkling_kv_hist", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_kv_hist.spv")).as_slice()),
             ("inkling_attn", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_attn.spv")).as_slice()),
+            ("inkling_attn_grp", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_attn_grp.spv")).as_slice()),
             ("inkling_attn_merge", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_attn_merge.spv")).as_slice()),
             ("inkling_route", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_route.spv")).as_slice()),
             ("inkling_moe_gu", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_moe_gu.spv")).as_slice()),
