@@ -106,6 +106,7 @@ and compares activations against [`tests/reference-vulkan/`](tests/reference-vul
 - [docs/engine-spec.md](docs/engine-spec.md): Gemma 4 math, constants, formats, tokenizer and GPU details
 - [docs/qwen.md](docs/qwen.md): Qwen3.8-27B and Qwen3.5-9B: stages, tensor parallelism, MTP, prefix reuse
 - [docs/qwen4.md](docs/qwen4.md): Qwen3.8-Flash-Next on a chain of Mac Pros
+- [docs/inkling.md](docs/inkling.md): Inkling 2 Mini (planned): looped MoE layers, NVFP4, vision, two-Mac tensor parallelism
 - [docs/server.md](docs/server.md): the Responses API server
 - [docs/lights.md](docs/lights.md): the port lights as blinkenlights and a music visualizer (optional)
 
