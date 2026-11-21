@@ -6,6 +6,9 @@
 // Weights (set 0): gains [ctrl][p.n][d] f32 (rank-major), then forgets from word p.stride, controller p.offset + j.
 // a: u' [j][t][d], b: u [p.cap][t][d] (one set for all controllers with p.cap 1), c: m [j][t][d],
 // d: z [t][p.m][p.n]. p.k = d, p.n = 64.
+// Specialization 1: the weights are 16 bits each, the high halves of the f32 values (BF16).
+layout(constant_id=0) const uint HALF=0;
+float wt(uint i){return HALF!=0u?uintBitsToFloat(uint(wh.halves[i])<<16):uintBitsToFloat(ww.words[i]);}
 #define TOK 8
 layout(local_size_x=256) in;
 shared float gs[TOK][4][64],fs[TOK][4][64];
@@ -15,7 +18,7 @@ uint j=gl_WorkGroupID.y%p.m,t0=(gl_WorkGroupID.y/p.m)*TOK,i=gl_WorkGroupID.x*64+
 if(t0>=nb)return;
 uint wo=(p.offset+j)*p.n*D+i;
 float wg[16],wf[16];
-[[unroll]]for(uint k=0;k<16;k++){uint r=wv*16+k;wg[k]=uintBitsToFloat(ww.words[wo+r*D]);wf[k]=uintBitsToFloat(ww.words[p.stride+wo+r*D]);}
+[[unroll]]for(uint k=0;k<16;k++){uint r=wv*16+k;wg[k]=wt(wo+r*D);wf[k]=wt(p.stride+wo+r*D);}
 for(uint z=0;z<TOK;z++){
     uint t=t0+z;
     if(t>=nb)break;

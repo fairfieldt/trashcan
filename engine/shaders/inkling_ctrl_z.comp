@@ -5,6 +5,9 @@
 // controller j): its 256 threads hold 9 weights of each half of the row in registers and take 9 elements of u and m of
 // each token, adding through LDS. Weights (set 0): W_down [ctrl][p.n][2 * d] f32, controller p.offset + j.
 // b: u [p.cap][t][d] (one set for all controllers with p.cap 1), c: m [j][t][d], d: z [t][p.m][p.n]. p.k = d = 2304.
+// Specialization 1: the weights are 16 bits each, the high halves of the f32 values (BF16).
+layout(constant_id=0) const uint HALF=0;
+float wt(uint i){return HALF!=0u?uintBitsToFloat(uint(wh.halves[i])<<16):uintBitsToFloat(ww.words[i]);}
 #define TOK 8
 layout(local_size_x=256) in;
 shared float red[TOK][4][4];
@@ -14,7 +17,7 @@ uint j=gl_WorkGroupID.y%p.m,t0=(gl_WorkGroupID.y/p.m)*TOK,D=p.k;
 if(t0>=nb)return;
 uint wo=((p.offset+j)*p.n+r)*2*D;
 float wu[9],wm[9];
-[[unroll]]for(uint k=0;k<9;k++){uint i=tid+256*k;wu[k]=uintBitsToFloat(ww.words[wo+i]);wm[k]=uintBitsToFloat(ww.words[wo+D+i]);}
+[[unroll]]for(uint k=0;k<9;k++){uint i=tid+256*k;wu[k]=wt(wo+i);wm[k]=wt(wo+D+i);}
 for(uint z=0;z<TOK;z++){
     uint t=t0+z;
     if(t>=nb)break;

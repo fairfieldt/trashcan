@@ -467,8 +467,8 @@ What changed, with the tok/s at 1,024 tokens on inflight and alight after each s
   kernel went from 29.1 to 14.2 ms per 256 tokens and the router from 10.2 to 6.0, both having run at the
   bandwidth of their weights. The second controller kernel held 128 weights per lane in 140 registers, which
   leaves one wave per SIMD; walking them four ranks at a time for 16 tokens needs 44 registers and took it from
-  18.4 to 9.3 ms. The results are bit-identical. `Layer::ctrl16` holds both controller matrices in 16 bits on
-  every shard, so that the decode kernels can move to them and the f32 copies can go.
+  18.4 to 9.3 ms. The results are bit-identical. The decode kernels read the same 16-bit matrices
+  (24.4 to 23.0 and 18.3 to 15.9 us per controlled segment on incite), so a shard holds no f32 copy of them.
 - **DSpark context.** After a prefill batch the drafter's context took 114 ms per 1,024 tokens: 13 ms for the
   rows' final hidden states and 6.4 ms per 64-token chunk, of which recording and running the GPU work took
   2.4 ms and one host thread mixing features the rest. Those loops now run on the host pool: document prefill
@@ -496,14 +496,13 @@ the Q8_0 experts 28.8 against 23.6). Inflight's cards carry another revision of 
 0x500056a9 against 0x500066aa) and run looser memory timings at the same 1370 MHz (`MC_ARB_DRAM_TIMING`
 0x1a17090c against 0x14110709 under load). A tensor-parallel group waits for its slowest GPU at every segment.
 
-Memory at 32K context: 4,962 MiB per rank at batch 1024, 4,930 at batch 512 and 5,065 at batch 2048, against
-4,846 before: 57 MiB of input buffers in the BAR heap (28 at batch 512), 7 MiB more of per-micro-batch outputs,
-69 MiB of 16-bit copies, less 14 MiB of controller scratch. The device arena grows in 256 MiB chunks, so near a chunk
-boundary a small increase costs a whole chunk: with the drafter loaded a GPU uses 5,883 MiB at batch 1024 against
-5,573 before, and the BF16 projector then no longer fits on its GPU (the kernel moves buffers to host memory;
-the 108-token image encode took 0.65 s instead of 0.30 s, text speeds were unchanged). With the drafter and the
-projector together, `--batch 512` fits (6,113 MiB on the projector GPU against 6,086 before) until the decode
-kernels read the 16-bit controller matrices and the f32 copies (112 MiB) are dropped.
+Memory at 32K context: 4,854 MiB per rank at batch 1024, against 4,846 before the prefill work: 57 MiB of input
+buffers in the BAR heap (28 at batch 512), 7 MiB more of per-micro-batch outputs and 14 MiB less of controller
+scratch, while the controllers' 16-bit matrices take 56 MiB less than the f32 ones they replace (the router keeps
+both forms on shards that run prefill batches). Before the decode kernels read the 16-bit matrices the shards
+held both (4,962 MiB), and with the drafter loaded the BF16 projector no longer fitted on its GPU at batch 1024:
+the device arena grows in 256 MiB chunks, the kernel moved buffers to host memory, and the 108-token image encode
+took 0.66 s instead of 0.30 s. With one copy it fits again (0.30 s on incite and enlight, the same answer).
 
 Validation of `4837aacb`: all 48 teacher-forced layer errors of the chat and tool fixtures equal the published
 ones (worst 0.02983 and 0.02864), 16/16 greedy tokens each and 24/24 after the 2,761-token prompt, with and
