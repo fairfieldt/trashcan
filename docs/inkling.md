@@ -210,8 +210,9 @@ pull request:
   (state - cand)` (rank 256, from zero); the logits are `30 tanh((base + head(hidden_out latent + b)) / 30)`, and
   `prev` is their first maximum (the anchor token for row 1).
 
-So each drafted token costs a second pass over the 201,024-row head, in sequence, and verification must roll the
-target's K/V positions and its K, V and sublayer-output convolution histories back to the accepted token.
+Both terms inside the softcap use the same linear vocabulary head. The engine adds the normalized block row to
+the Markov correction before projecting it, which lets each recurrent step score its token in one pass over the
+head. Target verification restores K/V positions and convolution histories to the accepted prefix.
 
 ### Implementation (`inkling/draft.rs`, `inkling/spec.rs`)
 
@@ -220,12 +221,13 @@ the four feature rows of each token (`Group::drive`); once tokens are committed 
 (`DraftHost::contexts`) and each rank writes the context K/V of its own copy in one submission. A round
 (`spec::step`) after the pending token `t`:
 
-1. **Draft.** Every rank runs the block, the base logits of its vocabulary rows and the first Markov step after `t`
-   in one submission; then one submission per further step. The ranks are launched together and waited on together;
-   their first maxima (value, then lowest id) meet over the mesh, 8 bytes per round of the exchange.
+1. **Draft.** Every rank runs the block and the first Markov step after `t` in one submission, then one submission
+   per further step. For each head, the eight queries share a tile of keys and values. Long key ranges split over
+   workgroups and a second kernel merges their softmax results. Ranks exchange their first maxima (value, then
+   lowest id), 8 bytes per round of the exchange.
 2. **Verify.** One gated forward of `[t, d1..dk]` (at most 8 rows) scores every row. Before it each slot saves its
    K/V convolution history and the batch's pre-convolution K/V rows (`inkling_hist_restore` reads them back); the
-   host saves its attention- and MoE-output histories and the batch's pre-convolution rows.
+   host holds its attention- and MoE-output histories at the start of the round and saves the pre-convolution rows.
 3. **Accept.** The target samples row 0; while its sample equals the next draft, that draft is kept and the next row
    is sampled. The first mismatch is the new pending token. The acceptance procedure preserves the target's
    sampling distribution given the same logits. Batched and single-row kernels can round logits differently.
@@ -327,6 +329,57 @@ two seeded samples in JSON and SSE, vision, and the native tool-result continuat
 The native optimizer also tried reusing the prefill expert tiles in small verification batches. In its four-row
 probe after a 64-token prompt, that increased verification from 57.55 to 67.19 ms. The gate/up portion alone
 rose from 8.25 to 16.05 ms. Small batches use the per-token expert kernels.
+
+### DSpark decode on the released small-batch verification path
+
+The following runs compare `84b41601b944` with a fresh build of `26adafade0` on incite and enlight.
+Each `inkling bench` command used the same prompt on both builds, two repetitions, batch 256, context capacity
+32,768 and an f32 wire. The code prompt generated 192 tokens and the document generated 128. All four D700s
+sustained 850/1370 MHz core/memory during decoding.
+
+| Prompt | Draft tokens | Baseline tok/s | Updated tok/s | Emitted tokens/round, both builds |
+|---|---:|---:|---:|---:|
+| Code, 33 tokens | 0 | 38.74–38.77 | 38.69–38.74 | 1.00 |
+| Code, 33 tokens | 3 | 45.94–46.11 | 48.91–48.96 | 3.00 |
+| Document, 2,770 tokens | 3 | 44.71–44.89 | 50.77–50.94 | 3.28 |
+| Document, 2,770 tokens | 5 | 42.20–42.33 | 46.38–46.42 | 3.88 |
+
+A second baseline run after the updated build gave 38.56–38.67 tok/s plain and 46.06–46.08 tok/s drafted
+on code, and 44.56–44.77 tok/s on the document with three drafts.
+
+On the document with three drafts, prefill plus decode fell from 10.22–10.24 s to 9.89–9.91 s. Prefill alone
+was 375.3–376.0 versus 374.9–375.5 tok/s. Device usage with DSpark rose by 4.65 MiB per rank.
+Mean milliseconds per round across the two repetitions were as follows. Rollback includes drafter context updates.
+
+| Prompt and drafts | Drafter block, before → after | Further Markov steps | Verification | Rollback |
+|---|---:|---:|---:|---:|
+| Code, 3 | 9.56 → 6.59 | 2.07 → 2.05 | 52.26 → 51.21 | 1.15 → 1.31 |
+| Document, 3 | 16.21 → 8.59 | 2.04 → 2.01 | 53.88 → 52.63 | 1.00 → 1.20 |
+| Document, 5 | 16.23 → 9.22 | 4.05 → 3.99 | 69.84 → 68.60 | 1.48 → 1.58 |
+
+The head change alone saved about 2 ms per round on both prompts. On the document, sharing tiled K/V across the
+eight queries and splitting long key ranges saved another 4.9 ms. With three drafts, the final block layer
+needs only the first four rows after attention. Limiting its output projection and MLP to those rows saved
+0.74 ms on code. Deferring host convolution history updates until acceptance lowered four-row verification
+from 52.14–52.20 to 51.26–51.31 ms in an independent code run.
+
+The code prompt's 126 full four-row rounds covered 6,048 layer visits. The 32 routed slots per visit selected
+19.64 distinct experts on average. Pairing slots for the same expert could share 28.1% of gate/up weight walks.
+A kernel that computed those pairs together increased verification to 52.90–53.01 ms and lowered decode from
+47.72–47.73 to 47.10–47.20 tok/s on the same drafter. That candidate was discarded.
+
+The first tile layout used 33.5 KiB of workgroup shared memory and exited during pipeline creation on D700.
+Reusing one tile for keys and values reduces this to 17.5 KiB. The resulting kernel matched an f64 CPU
+reference within 7.4e-7 maximum absolute error, including
+a 1,025-token wrapped window, the one-to-two partition boundary, and global attention at position 32,765.
+All 48 teacher-forced layer errors matched the published measurements for both chat and tools. Free greedy
+generation matched llama.cpp on 16/16 tokens for each and 24/24 after the 2,761-token prompt. The final
+five-draft Responses server matched the published plain output on seeds 7 and 17 in JSON and SSE, output
+limits, the image fixture and the tool-result continuation. The standalone vision reference had cosine 0.999781.
+
+Build commands, runner scripts, candidate sources, clocks and raw outputs are archived in
+`results/inkling/decode-8e9561`. The release build and all 112 engine tests ran CPU-only on Voyage with
+`cargo build --release --offline -p trashcan` and `cargo test --release --offline -p trashcan`.
 
 ## Order of work
 
