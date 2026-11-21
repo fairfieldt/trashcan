@@ -112,9 +112,11 @@ against UD-Q8_K_XL (BF16 plus the native NVFP4 experts, i.e. the release weights
 | UD-Q2_K_XL | 13 formats, IQ1/IQ2 experts | 9.14 GB | 0.0595 | 91.6% |
 
 **Choice: UD-Q4_K_XL as published.** It needs two weight formats, NVFP4 (new) and Q8_0 (the existing
-`qwen4_q8_*` kernels), no requantization, and has the best quality of the files. Since Q4_K_M (Q5_K gate/up in
-layers 20-23) loses almost nothing against it, most of the 0.0107 likely comes from the BF16 dense matrices at Q8_0.
-To check: our own KLD runs, attributing the divergence to the dense matrices, the head and layers 20-23. A lossless
+`qwen4_q8_*` kernels), no requantization, and has the best quality of the files. Our own runs
+([KL divergence](#kl-divergence)) found that most of the published KLD comes from llama.cpp's CUDA default, which
+multiplies the NVFP4 experts with 4-bit activations. With 8-bit activations, UD-Q4_K_XL is 0.0027 from UD-Q8_K_XL,
+near the 0.0024 between two computations of the same weights. That leaves little for a per-tensor attribution to
+resolve. A lossless
 build (BF16 dense matrices and head, layers 20-23 repacked to MXFP8, about 17.9 GB) would read about 35% more bytes
 per token; it is kept only if the measured quality difference justifies that.
 
@@ -257,9 +259,10 @@ The reference is llama.cpp `29b52d398` with the loop-scale patch, built with CUD
 `Shard_Rewrite` files: UD-Q8_K_XL (the release weights) for quality and KLD baselines, UD-Q4_K_XL for activations to
 compare against the engine with the same weights. There is no separate CPU reference in the engine: each GPU stage
 is checked against `tools/dump-activations` output from the reference, layer by layer on llama.cpp's own inputs (as
-`qwen4 layer-check` does), then end to end (logits and greedy tokens). The CUDA backend computes some products in
-reduced precision, so a few prompts are also dumped with the same build on the CPU backend to bound how close the
-engine should get. Vision: the projector's output for fixed images, then the image prompt's logits.
+`qwen4 layer-check` does), then end to end (logits and greedy tokens). The per-layer checks use dumps from the CPU
+backend. They are a consistency check, not an exact bound: ggml's CPU backend rounds activations to 8 bits in every
+quantized product and stores K/V in f16 (see [KL divergence](#kl-divergence)). Vision: the projector's output for fixed
+images, then the image prompt's logits.
 
 On `80ce8c6b`, the two-Mac run compared all 48 layer applications on 25-token chat and 109-token tool prompts.
 The worst relative residual errors against the same-quant llama.cpp CPU dumps were 2.983% and 2.864%.
@@ -269,6 +272,63 @@ fixture agreed with the llama.cpp mtmd projector to 2.10% relative error (0.9997
 image chat produced identical reasoning and answer with and without drafting, over 65 generated tokens.
 The Responses server also matched with and without drafting on streamed 1- and 4-token limits, two seeded
 samples in JSON and SSE, an image request, and a native tool-result continuation.
+
+### KL divergence
+
+`trashcan inkling logits MODEL IDS OUT` runs chunks of a token stream through the group and writes the full softcapped
+logits of every position (each rank runs the head over the kept output rows and the machines gather their vocabulary
+slices; nothing changes on the prefill and decode paths). `tools/dump-logits` writes the same files from llama.cpp,
+and `scripts/inkling-kld.py` compares two sets over the whole vocabulary in float64. All runs below use the same token
+ids: the quality corpus as llama-perplexity tokenizes it, in 21 chunks of 2048 tokens, each from an empty context in
+batches of 512, with every position scored (42,987 positions). The engine ran on `69c26fab` on invite and indite.
+
+A llama.cpp reference without activation rounding comes from `tools/dump-logits/dequant`: it writes UD-Q4_K_XL with
+the Q8_0 tensors converted to F32 and the NVFP4 tensors to F16, both exactly, so ggml multiplies by the same weights.
+That run uses the CPU backend with an f32 K/V cache. It still rounds the NVFP4 experts' activations to f16. It was run
+on every third chunk (14,329 positions). It is called "f32 reference" below.
+
+| P | Q | positions | mean KLD | median | p99 | max | same top token |
+|---|---|---:|---:|---:|---:|---:|---:|
+| f32 reference | engine | 14,329 | 0.00126 ± 0.00004 | 0.00013 | 0.017 | 0.26 | 98.8% |
+| f32 reference | llama.cpp CPU | 14,329 | 0.00238 ± 0.00007 | 0.00031 | 0.029 | 0.35 | 98.5% |
+| f32 reference | llama.cpp CUDA, 8-bit activations | 14,329 | 0.00244 ± 0.00008 | 0.00030 | 0.028 | 0.42 | 98.5% |
+| llama.cpp CPU | engine | 42,987 | 0.00238 ± 0.00004 | 0.00020 | 0.032 | 0.41 | 98.6% |
+| llama.cpp CPU | llama.cpp CUDA, 8-bit activations | 42,987 | 0.00243 ± 0.00005 | 0.00020 | 0.031 | 1.38 | 98.5% |
+| llama.cpp CUDA, 8-bit activations | engine | 42,987 | 0.00240 ± 0.00004 | 0.00019 | 0.032 | 0.52 | 98.5% |
+| llama.cpp CPU | llama.cpp CUDA, default | 42,987 | 0.00667 ± 0.00011 | 0.00057 | 0.076 | 1.38 | 97.4% |
+| UD-Q8_K_XL, CUDA, 8-bit activations | UD-Q4_K_XL, same | 14,329 | 0.00269 ± 0.00008 | 0.00036 | 0.033 | 0.43 | 98.4% |
+
+Every row except the last uses UD-Q4_K_XL. The ± values are standard errors of the mean. The two GGUF layouts hold the
+same tensors: `tools/inkling-gguf-compare.py` found all 744 `Shard_Rewrite` tensors byte for byte in the root file,
+with the loop message queries rearranged as in [GGUF layouts](#gguf-layouts).
+
+What this shows:
+
+- The engine is closer to the f32 reference than either llama.cpp backend is. Its KLD from the f32 reference is about
+  half of the CPU backend's (0.00126 against 0.00238) on the same positions, and it agrees on the top token more often.
+  The engine-versus-CPU KLD (0.00238) is no larger than CPU versus CUDA with 8-bit activations (0.00243). It equals
+  the CPU backend's own distance from the f32 reference. The per-layer errors against the CPU dumps and the higher
+  free-run top logits on the fixtures are therefore not evidence of an engine error.
+- The divergences are not uniform logit shifts. Between the CPU backend and the engine, the probability-weighted mean
+  logit difference averages 0.14 in magnitude per position and the softmax removes it. A spread of 0.04 remains around
+  that mean, and it explains the KLD (correlation 0.81, against 0.05 for the shift). KLD does not grow with the
+  position in the chunk: the means of the eight 256-position bins range from 0.0020 to 0.0027.
+- This model amplifies small numerical differences. Every pair of computations, including the f32 reference against
+  the engine, has its largest KLD at the same positions: the Spearman rank correlations of per-position KLD between
+  pairs are 0.87–0.92. Those positions are uncertain ones: where KLD is in the top 1%, the mean top-token probability
+  is 0.44, against 0.76 overall. The top 1% of positions carries about 26% of each pair's total.
+- llama.cpp's CUDA default is much noisier than the CPU backend. On Blackwell it multiplies the NVFP4 experts with
+  4-bit activations. With `GGML_CUDA_MMQ_PREC=q8` the CPU-versus-CUDA KLD drops from 0.0067 to 0.0024, and that
+  setting alone accounts for 0.0067 between two CUDA runs. The archived llama-perplexity baseline (UD-Q8_K_XL, CUDA
+  default) gives UD-Q4_K_XL a KLD of 0.0080 on CUDA. Against that baseline, over the same 21,483 second-half positions,
+  the engine scores 0.0067, the CPU backend 0.0067 and CUDA with 8-bit activations 0.0068. So most of the
+  0.008–0.011 published for UD-Q4_K_XL reflects the arithmetic of the CUDA default. With 8-bit activations on both sides,
+  UD-Q4_K_XL is 0.0027 from UD-Q8_K_XL, close to the 0.0024 that separates two computations of the same weights.
+
+What it does not show: the f32 reference still rounds the expert activations to f16, so the engine's distance from
+exact arithmetic is not measured. The table also cannot say which of the engine's roundings dominates its 0.00126.
+It shares the f16 K/V cache with the CPU backend, which is one reason their errors are correlated. The raw outputs and
+commands are archived in `results/inkling/kld-69c26fab` on Pinkerton.
 
 ## Performance
 

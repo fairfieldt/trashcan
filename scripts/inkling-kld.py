@@ -4,7 +4,8 @@
 Each set is a directory of chunk-NNN.f32 files (CTX rows of n_vocab f32 logits, row i predicting token i + 1), as
 written by tools/dump-logits (llama.cpp) and `trashcan inkling logits` (the engine). The reference P may instead be a
 llama-perplexity `--kl-divergence-base` file (`--base FILE`), which holds log-probabilities quantized to 16 bits for
-the second half of every chunk (positions CTX/2 .. CTX-2), as llama.cpp's own KLD uses them.
+the second half of every chunk (positions CTX/2 .. CTX-2); as llama.cpp's own KLD does, tokens with a base
+log-probability at or below -16 are then left out of the sum.
 
 For every position: KLD(P || Q) = sum_i p_i (log p_i - log q_i) over the whole vocabulary in float64, whether the two
 argmaxes agree, the difference of the next token's probability, and the logit difference d = q - p summarised by
@@ -66,15 +67,19 @@ class Base:
 def chunk_stats(args):
     p_src, q_dir, c, ids, ctx, vocab = args
     q = np.memmap(os.path.join(q_dir, f"chunk-{c:03d}.f32"), dtype=np.float32, mode="r").reshape(ctx, vocab)
-    if isinstance(p_src, str):
+    if p_src[0] == "dir":
+        p_src = p_src[1]
         p = np.memmap(os.path.join(p_src, f"chunk-{c:03d}.f32"), dtype=np.float32, mode="r").reshape(ctx, vocab)
         rows = range(0, ctx - 1)
+        floor = -np.inf
         get_p = lambda a, b: log_softmax(p[a:b])
         p_raw = lambda a, b: p[a:b].astype(np.float64)
     else:
-        base = Base(p_src)
+        base = Base(p_src[1])
         lp_all = base.logp(c)
         rows = range(base.first, ctx - 1)
+        # As llama.cpp: entries at the file's floor (16 below the top logit, stored as 0) are left out of the sum.
+        floor = -16.0
         get_p = lambda a, b: lp_all[a - base.first:b - base.first]
         p_raw = get_p  # log-probabilities: the logit differences are then shifted by a constant per row
     out = {k: [] for k in ("pos", "kld", "same", "dp", "shift", "spread", "dmax", "ptop", "lse_p", "lse_q")}
@@ -87,7 +92,7 @@ def chunk_stats(args):
         lse_q = mq + np.log(np.exp(qq - mq).sum(axis=1, keepdims=True))
         lq = qq - lse_q
         pp = np.exp(lp)
-        kld = (pp * (lp - lq)).sum(axis=1)
+        kld = np.where(lp > floor, pp * (lp - lq), 0).sum(axis=1)
         nxt = ids[c * ctx + a + 1:c * ctx + b + 1]
         idx = np.arange(b - a)
         dp = np.exp(lq[idx, nxt]) - pp[idx, nxt]
@@ -159,14 +164,14 @@ def main():
     ids = np.array(open(a.ids).read().split(), dtype=np.int64)
     have = sorted(int(re.search(r"chunk-(\d+)", f)[1]) for f in glob.glob(os.path.join(a.q, "chunk-*.f32")))
     chunks = [int(c) for c in a.chunks.split(",")] if a.chunks else have
-    src = a.p if a.p else a.base
+    src = ("dir", a.p) if a.p else ("base", a.base)
     with Pool(a.jobs) as pool:
         parts = pool.map(chunk_stats, [(src, a.q, c, ids, ctx, vocab) for c in chunks])
     r = {k: np.concatenate([p[k] for p in parts]) for k in parts[0]}
     every = np.ones(len(r["kld"]), bool)
     second = r["pos"] >= ctx // 2
     res = {
-        "p": src, "q": a.q, "chunks": chunks, "ctx": ctx,
+        "p": src[1], "q": a.q, "chunks": chunks, "ctx": ctx,
         "all": summary(r, every),
         "second_half": summary(r, second),
         "by_position": [dict(start=s, **summary(r, (r["pos"] >= s) & (r["pos"] < s + 256))) for s in range(0, ctx, 256)
