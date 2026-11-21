@@ -1,0 +1,30 @@
+#version 460
+#include "common.glsl"
+// f32 matrix times a batch of more than four columns (prefill; the router, the sink rows and the dynamic
+// convolution taps): a lane owns one row and walks a quarter of it (wave w of the workgroup takes the w-th quarter)
+// for COLS columns, whose inputs are the same for every lane (scalar loads); the four waves' sums meet in shared
+// memory. Workgroup x covers 64 rows, y covers COLS columns. Weights (set 0): [p.n][p.k] f32, p.k a multiple of 64.
+// b: x [t][p.k], c: y [t][p.n].
+#define COLS 8
+layout(local_size_x=256) in;
+layout(binding=0,std430) readonly restrict buffer WeightVec { vec4 v[]; } wv4;
+shared float red[3][64][COLS];
+#define DOT4(A_,W_,X_) A_=fma(W_.x,X_.x,A_);A_=fma(W_.y,X_.y,A_);A_=fma(W_.z,X_.z,A_);A_=fma(W_.w,X_.w,A_);
+void main(){
+uint nb=batch(),t0=gl_WorkGroupID.y*COLS,lane=gl_SubgroupInvocationID,wv=gl_SubgroupID;
+if(t0>=nb)return;
+uint row=gl_WorkGroupID.x*64+lane,quarter=p.k/16,wb=min(row,p.n-1)*(p.k/4)+wv*quarter;
+uint xb[COLS];float acc[COLS];
+[[unroll]]for(uint t=0;t<COLS;t++){xb[t]=min(t0+t,nb-1)*(p.k/4)+wv*quarter;acc[t]=0;}
+for(uint k=0;k<quarter;k+=4){
+    vec4 w0=wv4.v[wb+k],w1=wv4.v[wb+k+1],w2=wv4.v[wb+k+2],w3=wv4.v[wb+k+3];
+    [[unroll]]for(uint t=0;t<COLS;t++){
+        vec4 x0=b_v4.v[xb[t]+k],x1=b_v4.v[xb[t]+k+1],x2=b_v4.v[xb[t]+k+2],x3=b_v4.v[xb[t]+k+3];
+        DOT4(acc[t],w0,x0) DOT4(acc[t],w1,x1) DOT4(acc[t],w2,x2) DOT4(acc[t],w3,x3)
+    }
+}
+if(wv>0)[[unroll]]for(uint t=0;t<COLS;t++)red[wv-1][lane][t]=acc[t];
+barrier();
+if(wv==0&&row<p.n)[[unroll]]for(uint t=0;t<COLS;t++)
+    if(t0+t<nb)c_f.v[(t0+t)*p.n+row]=(acc[t]+red[0][lane][t])+(red[1][lane][t]+red[2][lane][t]);
+}

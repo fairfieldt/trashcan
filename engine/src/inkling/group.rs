@@ -5,8 +5,8 @@
 //! operation down the mesh first.
 use super::{
     embed,
-    gpu::{Seg, Shard, Split, GATED_MAX, MICRO},
-    conv_row, mix, rms_into, App, Config, HostLayer, HostWeights, MIX_STATES,
+    gpu::{Seg, Shard, Split, GATED_MAX, MICRO, WIDE_FROM},
+    conv_row, mix, rms_into, rms_inv, App, Config, HostLayer, HostWeights, MIX_STATES,
 };
 use crate::{
     gguf::Gguf,
@@ -321,7 +321,7 @@ impl Group {
             for a in &self.sched {
                 let controlled = a.pass > 0;
                 let kinds = if controlled || !c.swa(a.phys) { 3 } else { 1 };
-                plan.push(Seg::Attn { slot: a.slot, phys: a.phys, kinds, controlled });
+                plan.push(Seg::Attn { slot: a.slot, phys: a.phys, kinds, controlled, wide: self.pos + n > WIDE_FROM });
                 plan.push(Seg::Moe { phys: a.phys, controlled });
             }
             // The scored rows are the last micro-batch's.
@@ -505,7 +505,7 @@ impl Group {
             normed: f.normed.iter_mut().map(|v| SendPtr(v.as_mut_ptr())).collect(),
             prelude: SendPtr(f.prelude.0.as_mut_ptr()),
             bank: [SendPtr(f.bank[0].as_mut_ptr()), SendPtr(f.bank[1].as_mut_ptr())],
-            hin: self.shards.iter().map(|s| SendPtr(s.hin(f.mb, 6 * len).as_mut_ptr())).collect(),
+            hin: self.shards.iter().map(|s| SendPtr(s.hin(f.mb, 6 * len + 6 * n).as_mut_ptr())).collect(),
         };
         // SAFETY: every task takes its own rows of the flow's state and of `hin`; `sum`, `remote` and the history are
         // only read.
@@ -577,17 +577,17 @@ impl Group {
             let (v0, vn) = s.vocab_rows();
             let logits = s.logits(rows);
             for (r, col) in cols.iter_mut().enumerate() {
-                let row = &logits[r * vn..(r + 1) * vn];
-                let mut top: Candidates = Vec::with_capacity(vn);
-                for (i, &x) in row.iter().enumerate() {
-                    let id = v0 + i;
-                    if id < vocab {
-                        top.push((if cap > 0. { cap * (x / cap).tanh() } else { x }, id as u32));
-                    }
-                }
+                // The softcap keeps the order, so only the selected logits take it.
+                let row = &logits[r * vn..r * vn + vn.min(vocab.saturating_sub(v0))];
+                let mut top: Candidates = row.iter().enumerate().map(|(i, &x)| (x, (v0 + i) as u32)).collect();
                 let k = TOP_K.min(top.len());
-                top.select_nth_unstable_by(k - 1, |a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+                if k > 0 {
+                    top.select_nth_unstable_by(k - 1, |a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
+                }
                 top.truncate(k);
+                if cap > 0. {
+                    top.iter_mut().for_each(|e| e.0 = cap * (e.0 / cap).tanh());
+                }
                 col.extend(top);
             }
         }
@@ -742,8 +742,14 @@ impl Pass<'_> {
     /// Write `row` as input row `at` of every local rank.
     #[inline(always)]
     unsafe fn write(&self, at: usize, row: &[f32]) {
+        self.write_floats(at * self.d, &row[..self.d])
+    }
+
+    /// Write `values` from float `at` of every local rank's inputs.
+    #[inline(always)]
+    unsafe fn write_floats(&self, at: usize, values: &[f32]) {
         for h in &self.hin {
-            std::ptr::copy_nonoverlapping(row.as_ptr(), h.at(at * self.d), self.d);
+            std::ptr::copy_nonoverlapping(values.as_ptr(), h.at(at), values.len());
         }
     }
 
@@ -820,26 +826,31 @@ impl Pass<'_> {
             // The loop messages of a controlled segment mix the bank's two states.
             let bank = || -> [&[f32]; 2] { [row(self.bank[0], t), row(self.bank[1], t)] };
             match next {
-                Seg::Attn { kinds, controlled, .. } => {
+                Seg::Attn { controlled, .. } => {
                     let l = self.layer.unwrap();
+                    // One mix on sliding-window layers (their q, k and v inputs differ only by the messages), three
+                    // on global ones.
+                    let mixes = if self.swa { 1 } else { 3 };
+                    let mut iu = [0f32; 3];
                     match &l.attn_query {
-                        // One mix on sliding-window layers (their q, k and v inputs differ only by the messages),
-                        // three on global ones.
                         Some(q) => {
-                            for k in 0..kinds {
-                                if k == 0 || !self.swa {
-                                    mix(states, &q[k], u);
-                                }
+                            for k in 0..mixes {
+                                mix(states, &q[k], u);
                                 self.write(k * n + t, u);
+                                if controlled {
+                                    iu[k] = rms_inv(u, 1e-6);
+                                }
                             }
                         }
                         None => self.write(t, cur),
                     }
                     if controlled {
+                        // The q, k and v messages, then every controller's inverse RMS of its input and message.
                         let q = l.msg.as_ref().unwrap();
                         for k in 0..3 {
                             mix(&bank(), &q[k], u);
-                            self.write((3 + k) * n + t, u);
+                            self.write((mixes + k) * n + t, u);
+                            self.write_floats((mixes + 3) * n * d + (k * n + t) * 2, &[iu[k.min(mixes - 1)], rms_inv(u, 1e-6)]);
                         }
                     }
                 }
@@ -848,8 +859,10 @@ impl Pass<'_> {
                     mix(states, &l.ffn_query, u);
                     self.write(t, u);
                     if controlled {
+                        let iu = rms_inv(u, 1e-6);
                         mix(&bank(), &l.msg.as_ref().unwrap()[3], u);
                         self.write(n + t, u);
+                        self.write_floats(2 * n * d + t * 2, &[iu, rms_inv(u, 1e-6)]);
                     }
                 }
                 Seg::Head { rows } => {

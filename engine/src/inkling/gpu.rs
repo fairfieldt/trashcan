@@ -206,6 +206,9 @@ pub struct Shard {
     params: [Buffer; MICRO],
     /// The micro-batch whose segment is being recorded.
     mb: Cell<usize>,
+    /// The dispatches being recorded are independent and run together: no barrier after them (the next dispatch
+    /// recorded without this flag ends the group).
+    defer: Cell<bool>,
     // Device scratch.
     raw: Buffer,
     xin: Buffer,
@@ -246,21 +249,26 @@ pub struct Shard {
 /// (inkling_attn_grp).
 const SPLIT_MAX: usize = 16;
 
-/// Attention partitions per token and head of a batch of up to `SPLIT_MAX` tokens: the kernel divides the visible
-/// keys among them at run time, so a recorded graph serves every position.
-fn partitions(swa: bool) -> usize {
-    if swa {
-        8
-    } else {
-        32
+/// Attention partitions of a batch of up to `SPLIT_MAX` tokens, per token and query head, or with `wide` per token
+/// and KV head: the kernels divide the visible positions among them at run time, so a recorded graph serves every
+/// position. A full sliding window gives a wide partition 256 positions, one turn per wave.
+fn partitions(swa: bool, wide: bool) -> usize {
+    match (swa, wide) {
+        (true, true) => 4,
+        (true, false) => 8,
+        (false, _) => 32,
     }
 }
+
+/// Forwards that reach past this position take the wide attention kernel in decode-sized batches (`Seg::Attn`).
+pub const WIDE_FROM: usize = 256;
 
 /// One segment of a forward.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Seg {
     /// Attention of application `slot` (physical layer `phys`): `kinds` input row sets (1 or 3), with messages.
-    Attn { slot: usize, phys: usize, kinds: usize, controlled: bool },
+    /// `wide`: the forward reaches past position `WIDE_FROM` (decode-sized batches then take the grouped kernel).
+    Attn { slot: usize, phys: usize, kinds: usize, controlled: bool, wide: bool },
     Moe { phys: usize, controlled: bool },
     /// The head over `rows` rows.
     Head { rows: usize },
@@ -436,13 +444,14 @@ impl Shard {
             None
         };
         Ok(Self {
-            hin: [hb(6 * nb * d)?, hb(6 * nb * d)?],
-            raw: fb(6 * nb * d)?,
+            hin: [hb(6 * nb * (d + 1))?, hb(6 * nb * (d + 1))?],
+            raw: fb(6 * nb * (d + 1))?,
             z: fb(nb * 3 * c.gate_rank)?,
             part: [hb(nb * d)?, hb(nb * d)?],
             logits: hb(nb.min(16) * vn)?,
             params: [hb(64)?, hb(64)?],
             mb: Cell::new(0),
+            defer: Cell::new(false),
             xin: fb(3 * nb * d)?,
             qgr: fb(nb * qgr_w)?,
             kpre: fb(nb * hk * 128 + nb * hq + 2 * nb * hk * 4)?,
@@ -490,8 +499,10 @@ impl Shard {
         self.split.vocab(&self.c)
     }
 
-    /// The host-visible input rows of micro-batch `mb` (`3 * n * d` floats for attention, `n * d` for the MoE and
-    /// the head).
+    /// The host-visible inputs of micro-batch `mb`. Attention: the residual mixes [1 or 3][n][d] (one on
+    /// sliding-window layers); with loop controllers then the q, k and v messages [3][n][d] and every controller's
+    /// inverse RMS of its input and its message [3][n][2]. MoE: [n][d], with a controller then the message [n][d]
+    /// and [n][2]. Head: the rows to score.
     pub fn hin(&self, mb: usize, len: usize) -> &mut [f32] {
         assert!(len <= self.hin[mb].size / 4);
         unsafe { std::slice::from_raw_parts_mut(self.hin[mb].ptr.cast::<f32>(), len) }
@@ -515,7 +526,7 @@ impl Shard {
     }
 
     fn push(&self, ptr: [u64; 6], extra: u64, u: [u32; 16]) -> Push {
-        Push { ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params[self.mb.get()].address, extra], u }
+        Push { ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params[self.mb.get()].address, extra], u }.defer_barrier(self.defer.get())
     }
     /// The input rows and the partial output of the micro-batch being recorded.
     fn hin_buf(&self) -> &Buffer {
@@ -568,7 +579,7 @@ impl Shard {
         match n {
             1 => self.gpu.dispatch_matrix(cmd, "qwen4_matf32", p, rows.div_ceil(4) as u32, 1, w),
             2..=4 => self.gpu.dispatch_matrix(cmd, "qwen4_matf32_c4", p, rows.div_ceil(4) as u32, 1, w),
-            _ => self.gpu.dispatch_matrix(cmd, "qwen_matf32", p, rows.div_ceil(4) as u32, n.div_ceil(8) as u32, w),
+            _ => self.gpu.dispatch_matrix(cmd, "inkling_f32_gemm", p, rows.div_ceil(64) as u32, n.div_ceil(8) as u32, w),
         }
     }
 
@@ -588,7 +599,7 @@ impl Shard {
     fn record(&self, cmd: vk::CommandBuffer, seg: Seg, n: usize) -> Result<()> {
         self.gpu.stamp(cmd, false, || "(segment)".into());
         match seg {
-            Seg::Attn { slot, phys, kinds, controlled } => self.rec_attention(cmd, slot, phys, n, kinds, controlled)?,
+            Seg::Attn { slot, phys, kinds, controlled, wide } => self.rec_attention(cmd, slot, phys, n, kinds, controlled, wide)?,
             Seg::Moe { phys, controlled } => self.rec_moe(cmd, phys, n, controlled)?,
             Seg::Head { rows } => self.rec_head(cmd, rows)?,
         }
@@ -645,7 +656,7 @@ impl Shard {
         // Stamps come in (top, bottom) pairs per segment, dispatch and copy; matrix kernels are told apart by shape.
         let mut open: std::collections::HashMap<&str, u64> = Default::default();
         for (l, &t) in labels.iter().zip(&ticks) {
-            let key = if l.contains("gemm") || l.contains("matf32") { l.as_str() } else { l.split(' ').next().unwrap_or(l) };
+            let key = if l.contains("gemm") || l.contains("matf32") || l.contains("attn") { l.as_str() } else { l.split(' ').next().unwrap_or(l) };
             if let Some(t0) = open.remove(key) {
                 let e = self.profile.entry(key.to_owned()).or_default();
                 e.0 += 1;
@@ -728,56 +739,69 @@ impl Shard {
         (0..MICRO).try_for_each(|mb| self.collect_stamps(mb))
     }
 
-    /// Record the inputs of a sublayer: copy the host's `kinds` rows of `n` tokens (and with `ctrl`, `kinds` message
-    /// rows after them) from `hin`, apply the loop controllers `ctrl` (first controller index), then the RMS norms
-    /// (vector `norm`, or `norm + j` with `per_kind`) into `xin` ([kinds][n][d]).
-    fn inputs(&self, cmd: vk::CommandBuffer, l: &Layer, n: usize, kinds: usize, ctrl: Option<usize>, norm: usize, per_kind: bool) -> Result<()> {
+    /// Record the inputs of a sublayer into `xin` ([kinds][n][d]) from the host's rows in `hin`: `mixes` row sets of
+    /// `n` tokens, RMS-normed with vector `norm` (or `norm + j` with `per_kind`); with `ctrl` (the first controller's
+    /// index) the loop controllers gate them first with the `kinds` message row sets that follow, `mixes` 1 giving
+    /// every controller the same rows.
+    #[allow(clippy::too_many_arguments)]
+    fn inputs(&self, cmd: vk::CommandBuffer, l: &Layer, n: usize, kinds: usize, mixes: usize, ctrl: Option<usize>, norm: usize, per_kind: bool) -> Result<()> {
         let c = &self.c;
         let d = c.d;
-        // The controllers read their rows from many workgroups: copy them to VRAM first. A norm alone reads the host's
-        // rows once.
-        let src = if ctrl.is_some() {
-            self.gpu.copy(cmd, self.hin_buf(), 0, &self.raw, 0, 2 * kinds * n * d * 4);
-            self.gpu.barrier(cmd);
-            self.raw.address
-        } else {
-            self.hin_buf().address
-        };
-        if let Some(first) = ctrl {
-            let (down, gf, stride) = l.ctrl.as_ref().context("controllers of a layer outside the loop")?;
-            let m = self.raw.address + (kinds * n * d * 4) as u64;
+        let normed = |src: u64| {
             let mut u = [0u32; 16];
-            u[0] = c.gate_rank as u32;
             u[1] = d as u32;
-            u[2] = kinds as u32;
-            u[10] = first as u32;
+            u[10] = norm as u32;
+            u[11] = u32::from(!per_kind);
+            u[12] = c.eps.to_bits();
+            let p = self.push([self.xin.address, src, 0, 0, 0, 0], 0, u);
+            self.gpu.dispatch_matrix(cmd, "inkling_norm", p, n as u32, kinds as u32, &l.norms)
+        };
+        let Some(first) = ctrl else {
+            ensure!(mixes == kinds, "a sublayer without controllers takes its own row sets");
+            return normed(self.hin_buf().address);
+        };
+        // The controllers read their rows from many workgroups: copy them (and the inverse RMS table) to VRAM first.
+        self.gpu.copy(cmd, self.hin_buf(), 0, &self.raw, 0, ((mixes + kinds) * n * d + kinds * n * 2) * 4);
+        self.gpu.barrier(cmd);
+        let (down, gf, stride) = l.ctrl.as_ref().context("controllers of a layer outside the loop")?;
+        let mut u = [0u32; 16];
+        u[0] = c.gate_rank as u32;
+        u[1] = d as u32;
+        u[2] = kinds as u32;
+        u[7] = mixes as u32;
+        u[10] = first as u32;
+        if n > GATED_MAX {
+            // 8 tokens per workgroup in the first half, 32 in the second.
+            let p = self.push([0, self.raw.address, 0, self.z.address, 0, 0], 0, u);
+            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z", p, kinds as u32, n.div_ceil(8) as u32, down)?;
+            u[3] = *stride as u32;
+            let p = self.push([self.xin.address, self.raw.address, 0, self.z.address, 0, 0], 0, u);
+            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(32)) as u32, gf)?;
+        } else {
+            let m = self.raw.address + (mixes * n * d * 4) as u64;
             let p = self.push([0, self.raw.address, m, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_z", p, c.gate_rank as u32, (n.div_ceil(8) * kinds) as u32, down)?;
             u[3] = *stride as u32;
-            let p = self.push([self.raw.address, 0, m, self.z.address, 0, 0], 0, u);
+            let p = self.push([self.xin.address, self.raw.address, m, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_out", p, d.div_ceil(64) as u32, (n.div_ceil(8) * kinds) as u32, gf)?;
         }
-        let mut u = [0u32; 16];
-        u[1] = d as u32;
-        u[10] = norm as u32;
-        u[11] = u32::from(!per_kind);
-        u[12] = c.eps.to_bits();
-        let p = self.push([self.xin.address, src, 0, 0, 0, 0], 0, u);
-        self.gpu.dispatch_matrix(cmd, "inkling_norm", p, n as u32, kinds as u32, &l.norms)
+        // The gated rows are in `xin`: norm them in place.
+        normed(self.xin.address)
     }
 
     /// Submit the attention segment of application `slot` (physical layer `phys`) for `n` tokens at `pos`. The host
     /// has written into `hin` the mixed inputs: one row set (SWA layers outside later loop passes), or q, k and v
     /// (`3 * n * d`), followed with `controlled` by the q, k and v messages. The partial output projection lands in
     /// `part`.
-    fn rec_attention(&self, cmd: vk::CommandBuffer, slot: usize, phys: usize, n: usize, kinds: usize, controlled: bool) -> Result<()> {
+    #[allow(clippy::too_many_arguments)]
+    fn rec_attention(&self, cmd: vk::CommandBuffer, slot: usize, phys: usize, n: usize, kinds: usize, controlled: bool, wide: bool) -> Result<()> {
         let c = &self.c;
         let d = c.d;
         let (hq, hk) = (self.hq, self.hk);
         let ch = hk * 128;
         let l = &self.layers[phys];
         let s = &self.slots[slot];
-        self.inputs(cmd, l, n, kinds, controlled.then_some(0), 0, !l.swa)?;
+        self.inputs(cmd, l, n, kinds, if l.swa { 1 } else { 3 }, controlled.then_some(0), 0, !l.swa)?;
         let step = if kinds == 3 { (n * d * 4) as u64 } else { 0 };
         let (xq, xk, xv) = (self.xin.address, self.xin.address + step, self.xin.address + 2 * step);
         let sink_off = self.max_batch * ch;
@@ -800,15 +824,22 @@ impl Shard {
             let groups = (l.qgr.rows + l.wk.rows + l.wv.rows) / 8 + l.nrows32.div_ceil(4);
             self.gpu.dispatch_matrix(cmd, name, p, groups as u32, 1, &l.qgr.buf)?;
         } else {
-            self.matrix(cmd, &l.qgr, xq, self.qgr.address, n)?;
-            self.matrix(cmd, &l.wk, xk, self.kpre.address, n)?;
-            self.matrix(cmd, &l.wv, xv, self.vpre.address, n)?;
+            // The projections read `xin` and write apart: they run together, the largest last, before one barrier.
+            self.defer.set(true);
             let at = |floats: usize| self.kpre.address + ((sink_off + floats) * 4) as u64;
-            self.matf32(cmd, &l.sinkw, hq, d, xq, at(0), n)?;
-            if let Some((kt, vt)) = &l.tapw {
-                self.matf32(cmd, kt, hk * 4, d, xk, at(n * hq), n)?;
-                self.matf32(cmd, vt, hk * 4, d, xv, at(n * hq + n * hk * 4), n)?;
-            }
+            let small = (|| -> Result<()> {
+                self.matrix(cmd, &l.wk, xk, self.kpre.address, n)?;
+                self.matrix(cmd, &l.wv, xv, self.vpre.address, n)?;
+                self.matf32(cmd, &l.sinkw, hq, d, xq, at(0), n)?;
+                if let Some((kt, vt)) = &l.tapw {
+                    self.matf32(cmd, kt, hk * 4, d, xk, at(n * hq), n)?;
+                    self.matf32(cmd, vt, hk * 4, d, xv, at(n * hq + n * hk * 4), n)?;
+                }
+                Ok(())
+            })();
+            self.defer.set(false);
+            small?;
+            self.matrix(cmd, &l.qgr, xq, self.qgr.address, n)?;
         }
         let mut u = [0u32; 16];
         u[0] = self.qgr_w as u32;
@@ -832,39 +863,46 @@ impl Shard {
             self.gpu.dispatch(cmd, "inkling_kv_hist", p, (2 * ch).div_ceil(256) as u32, 1);
         }
         let window = if l.swa { c.window } else { 0 };
-        if n > SPLIT_MAX {
-            // Prefill: a workgroup per (KV head, token) reads each K/V row once for the head's three query heads and
-            // writes the gated output.
-            let mut u = [0u32; 16];
-            u[1] = self.qgr_w as u32;
-            u[4] = hq as u32;
-            u[5] = hk as u32;
-            u[7] = s.cap as u32;
-            u[8] = window as u32;
-            u[12] = c.rel_extent as u32;
-            let p = self.push([self.aout.address, self.qgr.address, self.kpre.address + (sink_off * 4) as u64, s.k.address, s.v.address, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, "inkling_attn_grp", p, hk as u32, n as u32, &l.relb)?;
-            self.matrix(cmd, &l.wo, self.aout.address, self.pout.address, n)?;
-            self.part_out(cmd, n);
-            return Ok(());
-        }
-        let parts = partitions(l.swa);
         let mut u = [0u32; 16];
+        // (The kernels do not read u[0]: it tells sliding-window and global layers apart in the profile.)
+        u[0] = window as u32;
         u[1] = self.qgr_w as u32;
-        u[2] = parts as u32;
         u[4] = hq as u32;
         u[5] = hk as u32;
         u[7] = s.cap as u32;
         u[8] = window as u32;
         u[12] = c.rel_extent as u32;
-        let p = self.push([0, self.qgr.address, self.kpre.address + (sink_off * 4) as u64, s.k.address, s.v.address, self.apart.address], 0, u);
-        self.gpu.dispatch_matrix(cmd, "inkling_attn", p, (n * hq) as u32, parts as u32, &l.relb)?;
-        let mut u = [0u32; 16];
-        u[1] = self.qgr_w as u32;
-        u[2] = parts as u32;
-        u[4] = hq as u32;
-        let p = self.push([self.aout.address, self.qgr.address, 0, 0, 0, self.apart.address], 0, u);
-        self.gpu.dispatch(cmd, "inkling_attn_merge", p, (n * hq) as u32, 1);
+        let sinks = self.kpre.address + (sink_off * 4) as u64;
+        if n > SPLIT_MAX {
+            // Prefill: a workgroup per (KV head, token) reads each K/V row once for the head's three query heads and
+            // writes the gated output.
+            let p = self.push([self.aout.address, self.qgr.address, sinks, s.k.address, s.v.address, 0], 0, u);
+            self.gpu.dispatch_matrix(cmd, "inkling_attn_grp", p, hk as u32, n as u32, &l.relb)?;
+        } else {
+            // Decode and verification: partial results over runs of the positions, then the merge with the sink and
+            // the gate. Past a few hundred positions the grouped kernel (a workgroup per KV head, run and token; a
+            // lane per position) is the faster one: 69 against 136 us per layer at 1040 positions, but 58 against
+            // 28 us at 100, where the kernel with a workgroup per query head, run and token stays.
+            let parts = partitions(l.swa, wide);
+            u[2] = parts as u32;
+            let p = self.push([0, self.qgr.address, sinks, s.k.address, s.v.address, self.apart.address], 0, u);
+            if wide {
+                self.gpu.dispatch_matrix(cmd, "inkling_attn_grp_parts", p, (hk * parts) as u32, n as u32, &l.relb)?;
+            } else {
+                self.gpu.dispatch_matrix(cmd, "inkling_attn", p, (n * hq) as u32, parts as u32, &l.relb)?;
+            }
+            let mut u = [0u32; 16];
+            u[1] = self.qgr_w as u32;
+            u[2] = parts as u32;
+            u[4] = hq as u32;
+            let p = self.push([self.aout.address, self.qgr.address, 0, 0, 0, self.apart.address], 0, u);
+            self.gpu.dispatch(cmd, "inkling_attn_merge", p, (n * hq) as u32, 1);
+        }
+        if n > GATED_MAX {
+            self.matrix(cmd, &l.wo, self.aout.address, self.pout.address, n)?;
+            self.part_out(cmd, n);
+            return Ok(());
+        }
         self.matrix(cmd, &l.wo, self.aout.address, self.part_buf().address, n)
     }
 
@@ -875,7 +913,7 @@ impl Shard {
         let d = c.d;
         let l = &self.layers[phys];
         let kinds = if l.swa { 1 } else { 3 };
-        self.inputs(cmd, l, n, 1, controlled.then_some(3), kinds, false)?;
+        self.inputs(cmd, l, n, 1, 1, controlled.then_some(3), kinds, false)?;
         self.matf32(cmd, &l.router, c.experts, d, self.xin.address, self.rlog.address, n)?;
         let mut u = [0u32; 16];
         u[0] = c.experts as u32;
@@ -938,9 +976,18 @@ impl Shard {
     }
 
     /// Copy a prefill segment's partial output from `pout` to the host-visible `part`: the kernels' scattered stores
-    /// into host memory took several times the kernel itself.
+    /// into host memory took several times the kernel itself. The copy goes in regions under 4096 bytes, which RADV
+    /// hands to the command processor's DMA: its compute-shader copy of larger regions moved 2.8 GB/s into host
+    /// memory, the DMA 10 GB/s (out of host memory the shader copy is the faster one, 9.6 against 7.4 GB/s).
     fn part_out(&self, cmd: vk::CommandBuffer, n: usize) {
-        self.gpu.copy(cmd, &self.pout, 0, self.part_buf(), 0, n * self.c.d * 4);
+        const REGION: u64 = 4032;
+        let size = (n * self.c.d * 4) as u64;
+        let regions: Vec<vk::BufferCopy> = (0..size).step_by(REGION as usize).map(|o| vk::BufferCopy { src_offset: o, dst_offset: o, size: REGION.min(size - o) }).collect();
+        self.gpu.barrier(cmd);
+        self.gpu.stamp(cmd, false, || "copy-out".into());
+        unsafe { self.gpu.dev.cmd_copy_buffer(cmd, self.pout.buf, self.part_buf().buf, &regions) };
+        self.gpu.stamp(cmd, true, || "copy-out".into());
+        self.gpu.barrier(cmd);
     }
 
     /// Record the head over `rows` normed rows the host wrote into `hin`: this rank's logits (before the softcap)

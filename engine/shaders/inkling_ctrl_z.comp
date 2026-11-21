@@ -4,7 +4,7 @@
 // controllers j of a sublayer (rms: no weight, eps 1e-6). Workgroup per (row r of p.n = 64) x (group of 8 tokens,
 // controller j): its 256 threads hold 9 weights of each half of the row in registers and take 9 elements of u and m of
 // each token, adding through LDS. Weights (set 0): W_down [ctrl][p.n][2 * d] f32, controller p.offset + j.
-// b: u [j][t][d], c: m [j][t][d], d: z [t][p.m][p.n]. p.k = d = 2304.
+// b: u [p.cap][t][d] (one set for all controllers with p.cap 1), c: m [j][t][d], d: z [t][p.m][p.n]. p.k = d = 2304.
 #define TOK 8
 layout(local_size_x=256) in;
 shared float red[TOK][4][4];
@@ -18,9 +18,9 @@ float wu[9],wm[9];
 for(uint z=0;z<TOK;z++){
     uint t=t0+z;
     if(t>=nb)break;
-    uint ub=(j*nb+t)*D;
+    uint ub=(min(j,p.cap-1)*nb+t)*D,mb=(j*nb+t)*D;
     float su=0,sm=0,du=0,dm=0;
-    [[unroll]]for(uint k=0;k<9;k++){uint i=tid+256*k;float u=b_f.v[ub+i],m=c_f.v[ub+i];
+    [[unroll]]for(uint k=0;k<9;k++){uint i=tid+256*k;float u=b_f.v[ub+i],m=c_f.v[mb+i];
         su=fma(u,u,su);sm=fma(m,m,sm);du=fma(wu[k],u,du);dm=fma(wm[k],m,dm);}
     su=subgroupAdd(su);sm=subgroupAdd(sm);du=subgroupAdd(du);dm=subgroupAdd(dm);
     if(lane==0){red[z][0][wv]=su;red[z][1][wv]=sm;red[z][2][wv]=du;red[z][3][wv]=dm;}

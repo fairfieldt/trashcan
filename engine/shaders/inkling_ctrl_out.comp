@@ -1,10 +1,11 @@
 #version 460
 #include "common.glsl"
-// Inkling loop controller, second half: u_j[t][i] = u - tanh(W_forget_j[i] . z) * u + tanh(W_gain_j[i] . z) * m, in
-// place in a. Workgroup per 64 elements x (group of 8 tokens, controller j): wave w holds the rank rows 16 w ..
+// Inkling loop controller, second half: u'_j[t][i] = u - tanh(W_forget_j[i] . z) * u + tanh(W_gain_j[i] . z) * m.
+// Workgroup per 64 elements x (group of 8 tokens, controller j): wave w holds the rank rows 16 w ..
 // 16 w + 15 of its 64 elements in registers and sums them for each token; wave 0 adds the four and writes.
 // Weights (set 0): gains [ctrl][p.n][d] f32 (rank-major), then forgets from word p.stride, controller p.offset + j.
-// a: u [j][t][d] (updated), c: m [j][t][d], d: z [t][p.m][p.n]. p.k = d, p.n = 64.
+// a: u' [j][t][d], b: u [p.cap][t][d] (one set for all controllers with p.cap 1), c: m [j][t][d],
+// d: z [t][p.m][p.n]. p.k = d, p.n = 64.
 #define TOK 8
 layout(local_size_x=256) in;
 shared float gs[TOK][4][64],fs[TOK][4][64];
@@ -31,7 +32,7 @@ if(wv==0){
         float g=(gs[z][0][lane]+gs[z][1][lane])+(gs[z][2][lane]+gs[z][3][lane]);
         float f=(fs[z][0][lane]+fs[z][1][lane])+(fs[z][2][lane]+fs[z][3][lane]);
         uint at=(j*nb+t)*D+i;
-        float u=a_f.v[at];
+        float u=b_f.v[(min(j,p.cap-1)*nb+t)*D+i];
         a_f.v[at]=(u-tanh(f)*u)+tanh(g)*c_f.v[at];
     }
 }

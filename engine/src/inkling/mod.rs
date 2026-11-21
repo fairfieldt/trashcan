@@ -229,8 +229,17 @@ pub fn vector(g: &Gguf, t: &TensorInfo) -> Result<Vec<f32>> {
 /// without AVX: `group` inlines these loops into functions compiled for it).
 #[inline(always)]
 pub fn rms_into(x: &[f32], w: Option<&[f32]>, eps: f32, out: &mut [f32]) {
-    let d = out.len();
-    debug_assert_eq!(x.len(), d);
+    debug_assert_eq!(x.len(), out.len());
+    let inv = rms_inv(x, eps);
+    match w {
+        Some(w) => out.iter_mut().zip(x).zip(w).for_each(|((o, &v), &wv)| *o = v * inv * wv),
+        None => out.iter_mut().zip(x).for_each(|(o, &v)| *o = v * inv),
+    }
+}
+
+/// The inverse RMS of `x`: `1 / sqrt(mean(x^2) + eps)`.
+#[inline(always)]
+pub fn rms_inv(x: &[f32], eps: f32) -> f32 {
     let mut acc = [0f32; 8];
     for c in x.chunks_exact(8) {
         for j in 0..8 {
@@ -238,11 +247,7 @@ pub fn rms_into(x: &[f32], w: Option<&[f32]>, eps: f32, out: &mut [f32]) {
         }
     }
     let ss = ((acc[0] + acc[1]) + (acc[2] + acc[3])) + ((acc[4] + acc[5]) + (acc[6] + acc[7]));
-    let inv = 1.0 / (ss / d as f32 + eps).sqrt();
-    match w {
-        Some(w) => out.iter_mut().zip(x).zip(w).for_each(|((o, &v), &wv)| *o = v * inv * wv),
-        None => out.iter_mut().zip(x).for_each(|(o, &v)| *o = v * inv),
-    }
+    1.0 / (ss / x.len() as f32 + eps).sqrt()
 }
 
 #[inline(always)]

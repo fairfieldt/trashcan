@@ -1,31 +1,48 @@
 #version 460
 #include "common.glsl"
-// Inkling attention for prefill batches, grouped by KV head (after qwen4_attention_grouped): one workgroup per
-// (KV head, token) serves the G = 3 query heads that share the head's K/V, so each K/V row of the positions the
-// token sees (the last p.window, or all with p.window 0) is read once. The four waves take turns of 64 positions.
+// Inkling attention grouped by KV head (after qwen4_attention_grouped): one workgroup per (KV head, token) serves
+// the G = 3 query heads that share the head's K/V, so each K/V row of the positions the token sees (the last
+// p.window, or all with p.window 0) is read once. The four waves take turns of 64 positions.
 // In a turn a lane takes one position: it scores its K row against the 3 queries (the same for every lane, so they
 // come through scalar loads) and adds each head's relative bias r . B[distance] (B [p.r0][16] in set 0; no bias from
 // distance p.r0 on) minus the head's sink; the wave's running maximum per head moves on (online softmax, the sums
 // stay per lane until the end); then the lanes take 2 dims each and add the 64 positions' V rows times their
-// probabilities. The waves' results merge in shared memory; the softmax has one more logit of 0 (the sink), and the
-// output is multiplied by sigmoid of the gate.
+// probabilities. The waves' results merge in shared memory.
+// PARTIAL 0 (prefill batches): the softmax takes one more logit of 0 (the sink) and the output is multiplied by
+// sigmoid of the gate. PARTIAL 1 (decode, verification): workgroup x = KV head * p.m + partition; the token's
+// positions are cut in p.m equal runs, and the workgroup writes its run's (max, sum of exponentials, unnormalized V
+// sum) per head for inkling_attn_merge, so a token's positions spread over many workgroups.
 // a: output [t][heads][128], b: projection rows [t][q | gate | r] (p.k floats per token), c: sinks [t][heads],
-// d: K cache, e: V cache (f16 [p.cap][kvheads][128], position % p.cap). p.heads, p.kvheads: this rank's heads.
+// d: K cache, e: V cache (f16 [p.cap][kvheads][128], position % p.cap), f: partials [t][heads][p.m][130].
+// p.heads, p.kvheads: this rank's heads.
+layout(constant_id=0) const uint PARTIAL=0;
 #define G 3u
 layout(local_size_x=256) in;
 layout(binding=0,std430) readonly restrict buffer BiasRows { vec4 v[]; } brow;
 layout(set=2,binding=3,std430) readonly restrict buffer KRows { uvec4 v[]; } krow;
 layout(set=2,binding=4,std430) readonly restrict buffer VWords { uint v[]; } vword;
-// Per wave: the probabilities of its turn's 64 positions (a head per component); after the loop, the merged output
-// [head][64 lanes] (2 dims each).
+// Per wave: the probabilities of its turn's 64 positions (a head per component). After the loop: the rescaled
+// accumulators of waves 1 to 3 ([wave - 1][head][64 lanes], 2 dims each), which wave 0 adds to its own.
 shared vec4 buf[4u*64u];
+shared vec2 mo[3u*G*64u];
 shared uint skey[4u*64u];
 shared float sm[4u*G],sl[4u*G];
 void main(){
-uint kh=gl_WorkGroupID.x,t=gl_WorkGroupID.y,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
+uint kh=gl_WorkGroupID.x,part=0u,t=gl_WorkGroupID.y,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
+if(PARTIAL==1u){kh=gl_WorkGroupID.x/p.m;part=gl_WorkGroupID.x%p.m;}
 if(t>=batch())return;
 uint qp=position()+t,hi=qp+1u,lo=p.window>0u&&hi>p.window?hi-p.window:0u,total=hi-lo;
 uint h0=kh*G,qb=t*p.k+h0*128u,rb=t*p.k+2u*p.heads*128u+h0*16u;
+if(PARTIAL==1u){
+    // This partition's run of the positions; an empty one adds nothing to the merge.
+    uint kp=(total+p.m-1u)/p.m,s0=lo+part*kp;
+    if(s0>=hi){
+        if(gl_LocalInvocationID.x<130u)[[unroll]]for(uint h=0u;h<G;h++)
+            f_f.v[((t*p.heads+h0+h)*p.m+part)*130u+gl_LocalInvocationID.x]=gl_LocalInvocationID.x==0u?-1e30:0.0;
+        return;
+    }
+    lo=s0;total=min(kp,hi-s0);
+}
 float M[G],L[G],sink[G];vec2 o[G];
 [[unroll]]for(uint h=0u;h<G;h++){M[h]=-1e30;L[h]=0.0;o[h]=vec2(0.0);sink[h]=c_f.v[t*p.heads+h0+h];}
 float scale=inversesqrt(128.0);
@@ -67,7 +84,7 @@ for(uint c=w;c<turns;c+=4u){
     }
     subgroupMemoryBarrierShared();subgroupBarrier();
 }
-// Merge: the waves' maxima and sums and the sink's logit 0, then each wave adds its rescaled accumulators in turn.
+// Merge: the waves' maxima and sums and the sink's logit 0, then wave 0 adds the waves' rescaled accumulators.
 [[unroll]]for(uint h=0u;h<G;h++)L[h]=subgroupAdd(L[h]);
 if(lane==0u){[[unroll]]for(uint h=0u;h<G;h++){sm[w*G+h]=M[h];sl[w*G+h]=L[h];}}
 barrier();
@@ -75,17 +92,18 @@ float f[G],den[G];
 [[unroll]]for(uint h=0u;h<G;h++){
     float mg=max(max(sm[h],sm[G+h]),max(sm[2u*G+h],sm[3u*G+h]));
     f[h]=exp(M[h]-mg);
-    den[h]=sl[h]*exp(sm[h]-mg)+sl[G+h]*exp(sm[G+h]-mg)+sl[2u*G+h]*exp(sm[2u*G+h]-mg)+sl[3u*G+h]*exp(sm[3u*G+h]-mg)+exp(-mg);
+    den[h]=sl[h]*exp(sm[h]-mg)+sl[G+h]*exp(sm[G+h]-mg)+sl[2u*G+h]*exp(sm[2u*G+h]-mg)+sl[3u*G+h]*exp(sm[3u*G+h]-mg);
+    if(PARTIAL==0u)den[h]+=exp(-mg);
+    else if(gl_LocalInvocationID.x==0u){uint ob=((t*p.heads+h0+h)*p.m+part)*130u;f_f.v[ob]=mg;f_f.v[ob+1u]=den[h];}
 }
-for(uint k=0u;k<4u;k++){
-    if(w==k){
-        [[unroll]]for(uint h=0u;h<G;h++){vec2 x=o[h]*f[h];if(k>0u)x+=buf[h*64u+lane].xy;
-            if(k<3u)buf[h*64u+lane].xy=x;
-            else{uint c=(h0+h)*128u+2u*lane,gb=t*p.k+p.heads*128u+c;
-                a_f.v[t*p.heads*128u+c]=x.x/den[h]/(1.0+exp(-b_f.v[gb]));
-                a_f.v[t*p.heads*128u+c+1u]=x.y/den[h]/(1.0+exp(-b_f.v[gb+1u]));}
-        }
-    }
-    barrier();
+if(w>0u)[[unroll]]for(uint h=0u;h<G;h++)mo[((w-1u)*G+h)*64u+lane]=o[h]*f[h];
+barrier();
+if(w>0u)return;
+[[unroll]]for(uint h=0u;h<G;h++){
+    vec2 x=(o[h]*f[h]+mo[h*64u+lane])+(mo[(G+h)*64u+lane]+mo[(2u*G+h)*64u+lane]);
+    if(PARTIAL==1u){uint ob=((t*p.heads+h0+h)*p.m+part)*130u+2u+2u*lane;f_f.v[ob]=x.x;f_f.v[ob+1u]=x.y;}
+    else{uint c=(h0+h)*128u+2u*lane,gb=t*p.k+p.heads*128u+c;
+        a_f.v[t*p.heads*128u+c]=x.x/den[h]/(1.0+exp(-b_f.v[gb]));
+        a_f.v[t*p.heads*128u+c+1u]=x.y/den[h]/(1.0+exp(-b_f.v[gb+1u]));}
 }
 }

@@ -1,0 +1,30 @@
+#version 460
+#include "common.glsl"
+// Inkling loop controller for prefill batches, second half: u'_j[t][i] = u - tanh(W_forget_j[i] . z) * u +
+// tanh(W_gain_j[i] . z) * m. Workgroup (x: 64 elements, y: COLS tokens of controller j): a lane owns element i and
+// holds its 64 gain and 64 forget weights in registers for the COLS tokens (with 8 tokens per workgroup the weights
+// were read 16 times per 128-token batch, and the kernel ran at their bandwidth); z is the same for every lane.
+// Weights
+// (set 0): gains [ctrl][p.n][D] f32 (rank-major), then forgets from word p.stride, controller p.offset + j.
+// a: u' [j][t][D], b: the sublayer's inputs: u rows [p.cap][t][D] (one set for all controllers with p.cap 1), then
+// m rows [p.m][t][D]; d: z [t][p.m][p.n]. p.k = D, p.n = 64.
+#define COLS 32
+layout(local_size_x=64) in;
+layout(set=2,binding=3,std430) readonly restrict buffer ZRows { vec4 v[]; } zrow;
+void main(){
+uint nb=batch(),D=p.k,groups=(nb+COLS-1)/COLS,j=gl_WorkGroupID.y/groups,t0=(gl_WorkGroupID.y%groups)*COLS;
+uint i=gl_WorkGroupID.x*64+gl_LocalInvocationID.x;
+if(t0>=nb)return;
+uint wo=(p.offset+j)*p.n*D+i,us=min(j,p.cap-1),ms=p.cap+j;
+float wg[64],wf[64];
+[[unroll]]for(uint r=0;r<64;r++){wg[r]=uintBitsToFloat(ww.words[wo+r*D]);wf[r]=uintBitsToFloat(ww.words[p.stride+wo+r*D]);}
+for(uint tt=t0;tt<min(t0+COLS,nb);tt++){
+    uint zb=((tt*p.m+j)*p.n)/4;
+    float g=0,f=0;
+    [[unroll]]for(uint r=0;r<16;r++){vec4 z=zrow.v[zb+r];
+        g=fma(wg[4*r],z.x,g);g=fma(wg[4*r+1],z.y,g);g=fma(wg[4*r+2],z.z,g);g=fma(wg[4*r+3],z.w,g);
+        f=fma(wf[4*r],z.x,f);f=fma(wf[4*r+1],z.y,f);f=fma(wf[4*r+2],z.z,f);f=fma(wf[4*r+3],z.w,f);}
+    float u=b_f.v[(us*nb+tt)*D+i],m=b_f.v[(ms*nb+tt)*D+i];
+    a_f.v[(j*nb+tt)*D+i]=(u-tanh(f)*u)+tanh(g)*m;
+}
+}
