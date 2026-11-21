@@ -300,6 +300,46 @@ For a 2,770-token document rendered as a low-effort chat prompt, `inkling bench 
 Drafting costs additional prefill time to build its context. Three drafts saved about 0.24 seconds overall on
 this document and output length. Five drafts took longer overall.
 
+### Prefill batch size
+
+Inkling chat, bench and the Responses server default to 512 prompt tokens per batch. A full batch runs as
+two 256-row micro-batches. Each GPU reserves scratch space and sliding-window cache headroom for the largest
+micro-batch it executes. Prompts below 64 tokens run whole, as do teacher-forced comparisons. At 32K context capacity
+the default target allocations total 4,846 MiB per rank, the same as batch 256 on `26adafade0`.
+For long prompts, `--batch 1024` uses 4,902 MiB per rank before the drafter and projector.
+
+Measured on incite and enlight with UD-Q4_K_XL, f32 exchanges, the performance governor, a 0 µs CPU latency
+request and active clocks of 850/1370 MHz (core/memory) on all four D700s (`scripts/with-clocks.sh`). Each case used
+`inkling bench MODEL --context 32768 --batch B --tg 32 --reps 3` with `--pp N` for synthetic tokens or
+`--prompt "$document"` for the low-effort document. The table gives warm medians (last two repetitions).
+Prefill time includes the final scored row. The table uses greedy decode with drafting disabled.
+
+| Prompt | Published batch 256 (s, tok/s) | Batch 512 (s, tok/s) | Batch 1024 (s, tok/s) | Decode tok/s, published / 512 |
+|---|---:|---:|---:|---:|
+| 64 tokens | 0.292, 219 | 0.253, 253 | — | 39.1 / 38.9 |
+| 1,024 tokens | 2.392, 428 | 2.178, 470 | 2.107, 486 | 36.5 / 36.4 |
+| 2,770-token document | 7.050, 393 | 6.380, 434 | 6.043, 458 | 36.6 / 36.3 |
+
+Starting the overlap at 64 tokens also reduced 96-token prefill from 0.395 to 0.299 s (243 to 321 tok/s)
+at fixed batch 512. Both configurations decoded at 38.8 tok/s.
+
+Changing only the batch on the published binary also gave 469 and 434 tok/s at batch 512 on the two
+longer prompts. At that batch size, 16 expert pairs per wave dropped the warm 1K result to 426–427 tok/s.
+Scaling each Q8 weight before accumulation gave 466–467 tok/s. A Q8 workgroup covering 64 rows and
+16 columns gave 461–462 tok/s. The raw runs and candidate sources are archived under
+`results/inkling/prefill-f11b03b5b7` on Pinkerton.
+
+With three DSpark drafts, warm document prefill rose from 376 to 413 tok/s (7.37 to 6.70 s),
+with decode at 48.2 tok/s on both builds. Both allocated 5,486 MiB per rank including the drafter.
+The default matched all 48 reported llama.cpp layer errors for both chat and tool fixtures
+(worst 0.02983 and 0.02864), all 16 greedy tokens for each, and all 24 after the 2,761-token
+prompt with and without drafting. The 108-token projector fixture retained cosine similarity 0.999781.
+
+With DSpark and the BF16 projector loaded, a 2,770-token Responses request with one output token
+and zero cached input tokens took 7.39 s on the published server, 6.71 s at batch 512 and 6.38 s
+at batch 1024. During the document, image and tool checks, peak sampled driver VRAM was
+6,086 MiB on the projector GPU and 5,573 MiB on the other GPU at all three settings.
+
 ### Small verification batches
 
 `ad764296` uses decode matrix kernels for 5–8 rows, schedules one host task per row in gated batches, and selects
