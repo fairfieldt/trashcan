@@ -178,12 +178,16 @@ The projector (`mmproj-BF16.gguf`, 318M parameters, 0.64 GB) is a ViT run once p
   block.
 - CLS dropped, 2 x 2 patches merged (4096), projector `mm.1` 4096 -> 4096, erf GELU, `mm.2` 4096 -> 2304, no biases.
 
-A 1024 x 1024 image is 2704 patches and 676 image tokens: about 2.3 TFLOP, roughly 1.3 s on one D700 or 0.35 s over
-four (estimate). The chat template puts each image in its own user message block,
-`<|message_user|><|content_image|>` + image embeddings + `<|end_message|>` (the placeholder token is
-`<|unused_200054|>`); the embeddings skip `token_embd_norm` and take one position each. Plan: the encoder runs
-tensor-parallel over the driver Mac's two GPUs (BF16 weights read as the upper half of f32, 0.32 GB per GPU), and the
-image tokens then prefill like text.
+Implementation (`inkling/vision.rs`, shaders `vit_*.comp`): the tower runs on the driver's first GPU, one submission
+per block (a 4096-token image keeps every GPU job well under amdgpu's 2 s limit). The linear layers are quantized
+from BF16 to Q8_0 at load and use the Q8_0 GEMM; LayerNorm, the 2D RoPE, the bias/GELU/layer-scale steps and the
+attention (16 queries per workgroup, K/V chunks of 32 staged in LDS, online softmax) have their own kernels. The
+patches and the resized position table are built on the host, as is the 2 x 2 merge. Against llama.cpp's mtmd (CPU,
+BF16 projector) on a 480 x 360 PNG (108 image tokens), the projector output agrees to 2.1% relative error (cosine
+0.99978), and it takes 0.31 s on one D700. `trashcan inkling vision-check MMPROJ IMAGE --reference DIR` repeats that
+comparison; `inkling chat --mmproj MMPROJ --image IMAGE` and `serve --mmproj MMPROJ` (`input_image` parts as base64 data
+URLs) take images. The image rows enter the language model in place of the placeholder, skip `token_embd_norm`, and
+reach the other machines as one binary message with the forward.
 
 ## Speculative decoding
 

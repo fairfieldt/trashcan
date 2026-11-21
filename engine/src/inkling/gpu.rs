@@ -704,10 +704,10 @@ impl Shard {
             u[2] = kinds as u32;
             u[10] = first as u32;
             let p = self.push([0, self.raw.address, m, self.z.address, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_z", p, c.gate_rank as u32, (n * kinds) as u32, down)?;
+            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_z", p, c.gate_rank as u32, (n.div_ceil(8) * kinds) as u32, down)?;
             u[3] = *stride as u32;
             let p = self.push([self.raw.address, 0, m, self.z.address, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_out", p, d.div_ceil(64) as u32, (n * kinds) as u32, gf)?;
+            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_out", p, d.div_ceil(64) as u32, (n.div_ceil(8) * kinds) as u32, gf)?;
         }
         let mut u = [0u32; 16];
         u[1] = d as u32;

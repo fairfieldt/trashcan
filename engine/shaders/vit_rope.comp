@@ -1,0 +1,22 @@
+#version 460
+#include "common.glsl"
+// 2D RoPE of the Inkling vision tower, in place on q (a) and k (c), rows [p.n positions][p.heads][64]: the first 32
+// dimensions of each head rotate in adjacent pairs by the column position, the last 32 by the row position (ggml
+// rope mode 0 on each half, base p.r0 bits): position 0 is the CLS token at (0, 0), position i > 0 patch i - 1 at
+// column (i - 1) % p.k + 1, row (i - 1) / p.k + 1. Thread per (position, head, pair of 32).
+layout(local_size_x=256) in;
+void main(){
+uint id=gl_GlobalInvocationID.x;
+uint pair=id%32,h=(id/32)%p.heads,t=id/(32*p.heads);
+if(t>=p.n)return;
+uint half_=pair/16,j=pair%16;
+float pos=0.0;
+if(t>0)pos=half_==0?float((t-1)%p.k+1):float((t-1)/p.k+1);
+float theta=pos*pow(uintBitsToFloat(p.r0),-2.0*float(j)/32.0);
+float cs=cos(theta),sn=sin(theta);
+uint at=(t*p.heads+h)*64+half_*32+2*j;
+float x0=a_f.v[at],x1=a_f.v[at+1];
+a_f.v[at]=x0*cs-x1*sn;a_f.v[at+1]=x0*sn+x1*cs;
+float y0=c_f.v[at],y1=c_f.v[at+1];
+c_f.v[at]=y0*cs-y1*sn;c_f.v[at+1]=y0*sn+y1*cs;
+}

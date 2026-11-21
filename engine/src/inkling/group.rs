@@ -27,6 +27,8 @@ use std::{
 };
 
 pub type Candidates = Vec<(f32, u32)>;
+/// A prompt slot that takes an image embedding row (`Group::forward_rows`).
+pub const IMAGE_ROW: u32 = u32::MAX;
 pub const TOP_K: usize = 64;
 
 /// What a forward scores: the last row, or every row of a batch up to 16 (verification).
@@ -207,6 +209,11 @@ impl Group {
         v
     }
 
+    /// The first local GPU (the vision tower runs there).
+    pub fn first_gpu(&self) -> std::rc::Rc<crate::vulkan::Device> {
+        self.shards[0].gpu.clone()
+    }
+
     pub fn device_mib(&self) -> Vec<f64> {
         self.shards.iter().map(Shard::device_mib).collect()
     }
@@ -234,17 +241,52 @@ impl Group {
 
     /// Forward `tokens` at the current position (which then advances), in batches of at most `max_batch`; the
     /// candidates of the scored rows of the last batch.
-    pub fn forward(&mut self, tokens: &[u32], score: Score, mut reference: Option<&mut Reference>) -> Result<Vec<Candidates>> {
+    pub fn forward(&mut self, tokens: &[u32], score: Score, reference: Option<&mut Reference>) -> Result<Vec<Candidates>> {
+        self.forward_rows(tokens, &[], score, reference)
+    }
+
+    /// `forward` where every `IMAGE_ROW` entry of `tokens` takes the next row of `rows` (image embeddings, used as
+    /// they are) instead of a token embedding.
+    pub fn forward_rows(&mut self, tokens: &[u32], rows: &[f32], score: Score, mut reference: Option<&mut Reference>) -> Result<Vec<Candidates>> {
+        let d = self.c.d;
+        ensure!(tokens.iter().filter(|&&t| t == IMAGE_ROW).count() * d == rows.len(), "image rows do not match their slots");
         let mut out = Vec::new();
+        let mut used = 0;
         for (i, chunk) in tokens.chunks(self.max_batch).enumerate() {
             let last = (i + 1) * self.max_batch >= tokens.len();
             let s = if last { score } else { Score::None };
             let force = reference.as_ref().map(|r| r.dir.display().to_string());
-            self.tell(json!({"forward": {"tokens": chunk, "score": score_name(s), "force": force}}))?;
-            let x = embed(&self.gguf, &self.c, &self.hw, chunk)?;
+            let k = chunk.iter().filter(|&&t| t == IMAGE_ROW).count();
+            let mine = &rows[used * d..(used + k) * d];
+            used += k;
+            self.tell(json!({"forward": {"tokens": chunk, "score": score_name(s), "force": force, "image_rows": k}}))?;
+            if k > 0 {
+                if let (true, Some(m)) = (self.driver, self.mesh.as_mut()) {
+                    m.tell_children(bytemuck::cast_slice(mine))?;
+                }
+            }
+            let x = self.embed_rows(chunk, mine)?;
             out = self.run(x, chunk.len(), s, reference.as_deref_mut())?;
         }
         Ok(out)
+    }
+
+    fn embed_rows(&self, tokens: &[u32], rows: &[f32]) -> Result<Vec<f32>> {
+        let d = self.c.d;
+        if rows.is_empty() {
+            return embed(&self.gguf, &self.c, &self.hw, tokens);
+        }
+        let mut x = vec![0f32; tokens.len() * d];
+        let mut next = 0;
+        for (o, &t) in x.chunks_exact_mut(d).zip(tokens) {
+            if t == IMAGE_ROW {
+                o.copy_from_slice(&rows[next * d..(next + 1) * d]);
+                next += 1;
+            } else {
+                o.copy_from_slice(&embed(&self.gguf, &self.c, &self.hw, &[t])?);
+            }
+        }
+        Ok(x)
     }
 
     /// One batch of `n` embedded rows `x` at `self.pos`.
@@ -556,7 +598,15 @@ impl Group {
                 let tokens: Vec<u32> = serde_json::from_value(f["tokens"].clone())?;
                 let score = parse_score(f["score"].as_str().unwrap_or("last"))?;
                 let mut reference = f["force"].as_str().map(|p| Reference::new(Path::new(p)));
-                let x = embed(&self.gguf, &self.c, &self.hw, &tokens)?;
+                let rows: Vec<f32> = if f["image_rows"].as_u64().unwrap_or(0) > 0 {
+                    let mesh = self.mesh.as_mut().context("no driver")?;
+                    let bytes = mesh.hear()?;
+                    mesh.tell_children(&bytes)?;
+                    bytes.chunks_exact(4).map(|b| f32::from_le_bytes(b.try_into().unwrap())).collect()
+                } else {
+                    Vec::new()
+                };
+                let x = self.embed_rows(&tokens, &rows)?;
                 self.run(x, tokens.len(), score, reference.as_mut())?;
             } else if m.get("reset").is_some() {
                 self.reset_local()?;

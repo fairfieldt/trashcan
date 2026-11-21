@@ -1,0 +1,37 @@
+#version 460
+#include "common.glsl"
+#extension GL_KHR_shader_subgroup_clustered : require
+// Full (non-causal) attention of the Inkling vision tower: workgroup (16 queries) x (head y), head size 64, scale
+// 1/8. Keys arrive in chunks of 32 staged in LDS; each query's 16 threads (consecutive lanes) score two keys each,
+// share an online softmax through clustered reductions, and accumulate 4 output dimensions each.
+// b: q, c: k, d: v ([p.n][p.heads][64]); a: output [p.n][p.heads * 64].
+#define QT 16
+#define KC 32
+layout(local_size_x=256) in;
+shared vec4 ks[KC][16],vs[KC][16];
+shared float ps[QT][KC];
+void main(){
+uint tid=gl_LocalInvocationID.x,q=tid/16,sub=tid%16,h=gl_WorkGroupID.y,H=p.heads,N=p.n;
+uint t=gl_WorkGroupID.x*QT+q,tc=min(t,N-1);
+vec4 qv[16];
+[[unroll]]for(uint c=0;c<16;c++)qv[c]=b_v4.v[(tc*H+h)*16+c];
+float m=-1e30,l=0;vec4 acc=vec4(0);
+for(uint k0=0;k0<N;k0+=KC){
+    for(uint e=tid;e<KC*16;e+=256){uint j=e/16,c=e%16,kk=min(k0+j,N-1);
+        ks[j][c]=c_v4.v[(kk*H+h)*16+c];vs[j][c]=d_v4.v[(kk*H+h)*16+c];}
+    barrier();
+    float s0=0,s1=0;
+    [[unroll]]for(uint c=0;c<16;c++){s0+=dot(qv[c],ks[sub][c]);s1+=dot(qv[c],ks[sub+16][c]);}
+    s0=k0+sub<N?s0*0.125:-1e30;s1=k0+sub+16<N?s1*0.125:-1e30;
+    float nm=max(m,subgroupClusteredMax(max(s0,s1),16));
+    float f=exp(m-nm),p0=exp(s0-nm),p1=exp(s1-nm);
+    l=l*f+subgroupClusteredAdd(p0+p1,16);
+    m=nm;
+    ps[q][sub]=p0;ps[q][sub+16]=p1;
+    barrier();
+    acc*=f;
+    [[unroll]]for(uint j=0;j<KC;j++)acc=fma(vec4(ps[q][j]),vs[j][sub],acc);
+    barrier();
+}
+if(t<N)a_v4.v[(t*H+h)*16+sub]=acc/l;
+}

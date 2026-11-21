@@ -83,6 +83,29 @@ fn content(v: &Value) -> Result<String> {
     Ok(text)
 }
 
+/// A user message's content for a model that takes images (Inkling): text as a string, or with images the parts
+/// in order, `{"type":"text","text":..}` and `{"type":"image","image_url":..}`.
+fn content_with_images(v: &Value) -> Result<Value> {
+    let Some(parts) = v.as_array() else { return Ok(Value::String(content(v)?)) };
+    if !parts.iter().any(|p| p["type"] == "input_image") {
+        return Ok(Value::String(content(v)?));
+    }
+    let mut out = Vec::new();
+    for part in parts {
+        match part["type"].as_str() {
+            Some("input_text" | "output_text" | "text") => {
+                out.push(json!({"type":"text","text":part["text"].as_str().context("text content requires a text string")?}))
+            }
+            Some("input_image") => {
+                let url = part.get("image_url").and_then(Value::as_str).context("input_image requires an image_url (a data URL)")?;
+                out.push(json!({"type":"image","image_url":url}));
+            }
+            other => bail!("unsupported content part type {other:?}"),
+        }
+    }
+    Ok(Value::Array(out))
+}
+
 fn qualified(name: &str, namespace: Option<&str>) -> String {
     namespace
         .map(|n| format!("{n}.{name}"))
@@ -333,6 +356,13 @@ impl Request {
                             matches!(role, "system" | "developer" | "user" | "assistant"),
                             "unsupported message role: {role}"
                         );
+                        if native == Native::Inkling && role == "user" {
+                            let value = content_with_images(&item["content"])?;
+                            if value.is_array() {
+                                messages.push(json!({"role":role,"content":value}));
+                                continue;
+                            }
+                        }
                         let text = content(&item["content"])?;
                         if role == "system" || role == "developer" {
                             system.push(text);

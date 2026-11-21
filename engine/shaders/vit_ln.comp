@@ -1,0 +1,19 @@
+#version 460
+#include "common.glsl"
+// LayerNorm of each row of p.k values: a[t] = (b[t] - mean) / sqrt(var + eps) * w + bias (eps p.r0 bits). Weights
+// (set 0): w [p.k], then bias [p.k]. Workgroup per row; p.n rows.
+layout(local_size_x=256) in;
+shared float red[2][4];
+void main(){
+uint t=gl_WorkGroupID.x,tid=gl_LocalInvocationID.x,D=p.k;
+if(t>=p.n)return;
+float s=0,s2=0;
+for(uint i=tid;i<D;i+=256){float v=b_f.v[t*D+i];s+=v;s2=fma(v,v,s2);}
+s=subgroupAdd(s);s2=subgroupAdd(s2);
+if(gl_SubgroupInvocationID==0){red[0][gl_SubgroupID]=s;red[1][gl_SubgroupID]=s2;}
+barrier();
+float mean=((red[0][0]+red[0][1])+(red[0][2]+red[0][3]))/float(D);
+float var=((red[1][0]+red[1][1])+(red[1][2]+red[1][3]))/float(D)-mean*mean;
+float inv=inversesqrt(max(var,0.0)+uintBitsToFloat(p.r0));
+for(uint i=tid;i<D;i+=256)a_f.v[t*D+i]=(b_f.v[t*D+i]-mean)*inv*uintBitsToFloat(ww.words[i])+uintBitsToFloat(ww.words[D+i]);
+}

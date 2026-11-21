@@ -92,6 +92,9 @@ pub struct Options {
     /// Flash-Next: split the LM head by vocabulary rows over the last N stages (see `qwen4 bench --head-split`).
     #[arg(long, default_value_t = 1)]
     head_split: usize,
+    /// Inkling: the vision projector GGUF (mmproj); requests may then carry images (input_image data URLs).
+    #[arg(long)]
+    mmproj: Option<PathBuf>,
     /// Flash-Next: QSA K/V cache, f16, q8 or k16v8.
     #[arg(long, default_value = "f16")]
     kv: String,
@@ -244,6 +247,61 @@ struct Inkling {
     specials: crate::inkling::chat::Specials,
     /// The tokens the group has processed since its last reset, for prefix reuse across turns.
     history: Vec<u32>,
+    vision: Option<crate::inkling::vision::Vision>,
+    /// The image rows of the prompt being prepared (`prompt` encodes them, `generate` feeds them).
+    rows: std::cell::RefCell<Vec<f32>>,
+}
+
+/// The bytes of a `data:` URL (base64).
+fn data_url(url: &str) -> Result<Vec<u8>> {
+    let (head, body) = url.split_once(',').context("images must be data URLs")?;
+    ensure!(head.starts_with("data:") && head.ends_with(";base64"), "images must be base64 data URLs");
+    let mut out = Vec::with_capacity(body.len() * 3 / 4);
+    let (mut acc, mut bits) = (0u32, 0);
+    for c in body.bytes().filter(|c| !c.is_ascii_whitespace()) {
+        let v = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' | b'-' => 62,
+            b'/' | b'_' => 63,
+            b'=' => break,
+            _ => anyhow::bail!("invalid base64 in data URL"),
+        };
+        acc = acc << 6 | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+        }
+    }
+    Ok(out)
+}
+
+impl Inkling {
+    /// Encode the request's images and put their rows in place of the image placeholders.
+    fn with_images(&self, request: &Request, ids: Vec<u32>) -> Result<Vec<u32>> {
+        let placeholder = self.tokenizer.id(crate::inkling::chat::IMAGE_PLACEHOLDER).context("missing the image placeholder")?;
+        self.rows.borrow_mut().clear();
+        if !ids.contains(&placeholder) {
+            return Ok(ids);
+        }
+        let vision = self.vision.as_ref().context("this server has no vision projector (--mmproj)")?;
+        let urls: Vec<&str> = request.messages.iter().filter_map(|m| m["content"].as_array()).flatten().filter(|p| p["type"] == "image").filter_map(|p| p["image_url"].as_str()).collect();
+        let mut out = Vec::new();
+        let mut images = urls.into_iter();
+        for id in ids {
+            if id != placeholder {
+                out.push(id);
+                continue;
+            }
+            let url = images.next().context("more image placeholders than images")?;
+            let (rows, n) = vision.encode(&data_url(url)?)?;
+            self.rows.borrow_mut().extend(rows);
+            out.extend(std::iter::repeat_n(crate::inkling::group::IMAGE_ROW, n));
+        }
+        Ok(out)
+    }
 }
 
 impl Backend for Inkling {
@@ -261,7 +319,8 @@ impl Backend for Inkling {
             (None, false) => Some(json!("none")),
             (None, true) => None,
         };
-        Some(crate::inkling::chat::render(&request.messages, &tools, effort.as_ref()).map(|r| self.tokenizer.encode(&r, false, true)))
+        let ids = crate::inkling::chat::render(&request.messages, &tools, effort.as_ref()).map(|r| self.tokenizer.encode(&r, false, true));
+        Some(ids.and_then(|ids| self.with_images(request, ids)))
     }
     fn generate<W: Write>(&mut self, options: &Options, request: &Request, ids: &[u32], output: &mut Output<W>) -> Result<Value> {
         use crate::inkling::{chat::Event, group::Score};
@@ -269,13 +328,15 @@ impl Backend for Inkling {
         let mut sampler = Sampler::new(p.temperature, p.top_k, p.top_p, p.seed)?;
         let g = &mut self.group;
         // Continue after the tokens already processed when the prompt extends them.
-        let reuse = !options.no_prefix_cache && !self.history.is_empty() && self.history.len() < ids.len() && ids.starts_with(&self.history);
+        let rows = std::mem::take(&mut *self.rows.borrow_mut());
+        let images = !rows.is_empty() || self.history.contains(&crate::inkling::group::IMAGE_ROW);
+        let reuse = !images && !options.no_prefix_cache && !self.history.is_empty() && self.history.len() < ids.len() && ids.starts_with(&self.history);
         if !reuse {
             g.reset()?;
             self.history.clear();
         }
         let cached = self.history.len();
-        let mut top = g.forward(&ids[cached..], Score::Last, None)?;
+        let mut top = g.forward_rows(&ids[cached..], &rows, Score::Last, None)?;
         self.history.extend_from_slice(&ids[cached..]);
         let mut out = crate::inkling::chat::Output::new(self.specials);
         let budget = p.max_tokens.min(g.context - g.pos);
@@ -528,7 +589,8 @@ fn serve_inner(mut options: Options) -> Result<()> {
         let group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, options.batch.min(256))?;
         let tokenizer = Tokenizer::new(&group.gguf)?;
         let specials = crate::inkling::chat::Specials::new(&tokenizer)?;
-        return run(options, Inkling { group, tokenizer, specials, history: Vec::new() });
+        let vision = options.mmproj.as_ref().map(|m| crate::inkling::vision::Vision::new(group.first_gpu(), m)).transpose()?;
+        return run(options, Inkling { group, tokenizer, specials, history: Vec::new(), vision, rows: Default::default() });
     }
     if gguf.get_str("general.architecture")? == "qwen35" {
         let name = gguf.get_str("general.name").unwrap_or("qwen").to_lowercase().replace(' ', "-");

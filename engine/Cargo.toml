@@ -29,3 +29,5 @@ minijinja-contrib = { version = "2", features = ["pycompat"] }
 tiny_http = "0.12"
 dross-rt = { path = "../vendor/dross/user/rt", default-features = false, optional = true }
 fancy-regex = "0.19.2"
+# Decoding images for the Inkling vision tower (PNG and JPEG only).
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

@@ -11,6 +11,7 @@ pub mod chat;
 pub mod cli;
 pub mod gpu;
 pub mod group;
+pub mod vision;
 
 
 use crate::gguf::{GgmlType, Gguf, TensorInfo};

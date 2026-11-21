@@ -84,6 +84,12 @@ pub enum Cmd {
         top_p: f32,
         #[arg(long, default_value_t = 1)]
         seed: u64,
+        /// The vision projector GGUF (mmproj), for --image.
+        #[arg(long)]
+        mmproj: Option<PathBuf>,
+        /// Images (PNG or JPEG) placed before the first prompt's text.
+        #[arg(long)]
+        image: Vec<PathBuf>,
     },
     /// Measure prefill and greedy decode.
     Bench {
@@ -109,6 +115,16 @@ pub enum Cmd {
         #[arg(long, value_delimiter = ',')]
         gpus: Option<Vec<usize>>,
     },
+    /// Run the vision tower on one GPU and compare its output (and, given a reference dump from mtmd, its
+    /// encoder output) with llama.cpp's.
+    VisionCheck {
+        mmproj: PathBuf,
+        image: PathBuf,
+        #[arg(long)]
+        reference: Option<PathBuf>,
+        #[arg(long, default_value_t = 0)]
+        gpu: usize,
+    },
     /// Render one user message and print its token ids.
     Tokenize {
         model: PathBuf,
@@ -129,11 +145,47 @@ fn read_ids(path: &Path) -> Result<Vec<u32>> {
 pub fn run(cmd: Cmd) -> Result<()> {
     match cmd {
         Cmd::Validate { model, reference, run, ids, greedy, free } => validate(&model, &reference, &run, &ids, greedy, free),
-        Cmd::Chat { model, prompt, run, system, effort, max_tokens, temperature, top_k, top_p, seed } => {
+        Cmd::Chat { model, prompt, run, system, effort, max_tokens, temperature, top_k, top_p, seed, mmproj, image } => {
             let mut group = run.group(&model)?;
             let t = Tokenizer::new(&group.gguf)?;
             let mut sampler = Sampler::new(temperature, top_k, top_p, seed)?;
-            chat_loop(&mut group, &t, prompt, system, effort_value(&effort), max_tokens, &mut sampler)
+            let images = if image.is_empty() {
+                Vec::new()
+            } else {
+                let mm = mmproj.as_ref().context("--image needs --mmproj")?;
+                let v = super::vision::Vision::new(group.first_gpu(), mm)?;
+                let mut out = Vec::new();
+                for path in &image {
+                    let start = Instant::now();
+                    let (rows, n) = v.encode(&std::fs::read(path)?)?;
+                    eprintln!("[{}: {n} image tokens in {:.2} s]", path.display(), start.elapsed().as_secs_f64());
+                    out.push(rows);
+                }
+                out
+            };
+            chat_loop(&mut group, &t, prompt, system, effort_value(&effort), max_tokens, &mut sampler, images)
+        }
+        Cmd::VisionCheck { mmproj, image, reference, gpu } => {
+            let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
+            let pd = *inst.amd_gpus()?.get(gpu).context("no such GPU")?;
+            let dev = crate::vulkan::Device::new(inst, pd)?;
+            let v = super::vision::Vision::new(dev, &mmproj)?;
+            let start = Instant::now();
+            let (rows, n) = v.encode(&std::fs::read(&image)?)?;
+            println!("{n} image tokens in {:.2} s", start.elapsed().as_secs_f64());
+            if let Some(r) = reference {
+                let want = Reference::new(&r).read("projected")?;
+                ensure!(want.len() == rows.len(), "reference has {} values, ours {}", want.len(), rows.len());
+                let (mut num, mut den, mut dot, mut na) = (0f64, 0f64, 0f64, 0f64);
+                for (a, b) in rows.iter().zip(&want) {
+                    num += ((a - b) as f64).powi(2);
+                    den += (*b as f64).powi(2);
+                    dot += (*a as f64) * (*b as f64);
+                    na += (*a as f64).powi(2);
+                }
+                println!("projected: rel error {:.3e}, cosine {:.6}", (num / den).sqrt(), dot / (na.sqrt() * den.sqrt()));
+            }
+            Ok(())
         }
         Cmd::Bench { model, run, pp, tg, reps } => {
             let mut group = run.group(&model)?;
@@ -250,7 +302,14 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<Value> {
     }))
 }
 
-fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: Option<String>, effort: Option<Value>, max_tokens: usize, sampler: &mut Sampler) -> Result<()> {
+#[allow(clippy::too_many_arguments)]
+fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: Option<String>, effort: Option<Value>, max_tokens: usize, sampler: &mut Sampler, images: Vec<Vec<f32>>) -> Result<()> {
+    let placeholder = t.id(chat::IMAGE_PLACEHOLDER).context("missing the image placeholder token")?;
+    let d = group.c.d;
+    // Rows of every image of the conversation so far, in order, and each image's row count.
+    let mut all_rows: Vec<f32> = Vec::new();
+    let mut sizes: Vec<usize> = Vec::new();
+    let mut pending = images;
     let sp = Specials::new(t)?;
     let mut messages: Vec<Value> = system.into_iter().map(|s| json!({"role": "system", "content": s})).collect();
     let interactive = prompt.is_none();
@@ -277,12 +336,33 @@ fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: O
             }
             None => return Ok(()),
         };
-        messages.push(json!({"role": "user", "content": user}));
+        if pending.is_empty() {
+            messages.push(json!({"role": "user", "content": user}));
+        } else {
+            let mut parts: Vec<Value> = pending.iter().map(|_| json!({"type": "image"})).collect();
+            parts.push(json!({"type": "text", "text": user}));
+            messages.push(json!({"role": "user", "content": parts}));
+            for rows in pending.drain(..) {
+                sizes.push(rows.len() / d);
+                all_rows.extend(rows);
+            }
+        }
         let rendered = chat::render(&messages, &[], effort.as_ref())?;
-        let ids = t.encode(&rendered, false, true);
+        // Each image placeholder becomes as many image-row slots as its image has rows, in order.
+        let mut ids = Vec::new();
+        let mut next = 0;
+        for id in t.encode(&rendered, false, true) {
+            if id == placeholder {
+                let n = *sizes.get(next).context("more image placeholders than images")?;
+                ids.extend(std::iter::repeat_n(super::group::IMAGE_ROW, n));
+                next += 1;
+            } else {
+                ids.push(id);
+            }
+        }
         group.reset()?;
         let start = Instant::now();
-        let mut top = group.forward(&ids, Score::Last, None)?;
+        let mut top = group.forward_rows(&ids, &all_rows, Score::Last, None)?;
         let prefill = start.elapsed().as_secs_f64();
         let mut out = Output::new(sp);
         let start = Instant::now();

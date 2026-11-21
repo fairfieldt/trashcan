@@ -1,0 +1,27 @@
+#version 460
+#include "common.glsl"
+// Element-wise steps of the Inkling vision tower over p.n rows of p.k values, thread per element. p.flags selects:
+// 0: a += bias; 1: a = gelu(a + bias); 2: a = c + ls * (a + bias) (bias, then ls, in set 0); 3: a = gelu(a);
+// 4: a += b. gelu is the erf form (llama.cpp's FFN_GELU_ERF), erf by Abramowitz and Stegun 7.1.26 refined
+// (max error 1.5e-7). Weights (set 0): bias [p.k] (and ls [p.k] for mode 2).
+layout(local_size_x=256) in;
+float erf_(float x){
+    float t=1.0/(1.0+0.3275911*abs(x));
+    float y=1.0-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*exp(-x*x);
+    return x<0.0?-y:y;
+}
+float gelu(float x){return 0.5*x*(1.0+erf_(x*0.70710678118654752));}
+void main(){
+uint i=gl_GlobalInvocationID.x;
+if(i>=p.n*p.k)return;
+uint c=i%p.k;
+float v=a_f.v[i];
+switch(p.flags){
+case 0u: v+=uintBitsToFloat(ww.words[c]);break;
+case 1u: v=gelu(v+uintBitsToFloat(ww.words[c]));break;
+case 2u: v=c_f.v[i]+uintBitsToFloat(ww.words[p.k+c])*(v+uintBitsToFloat(ww.words[c]));break;
+case 3u: v=gelu(v);break;
+case 4u: v+=b_f.v[i];break;
+}
+a_f.v[i]=v;
+}

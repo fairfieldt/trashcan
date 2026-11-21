@@ -128,6 +128,10 @@ fn main() {
         "inkling_moe_group",
         "inkling_moe_sum",
         "inkling_moe_mm",
+        "vit_ln",
+        "vit_ops",
+        "vit_rope",
+        "vit_attn",
         // Cross-machine all-reduce benchmark
         "allreduce_partial",
         "allreduce_check",
