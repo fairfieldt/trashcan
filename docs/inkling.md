@@ -217,6 +217,30 @@ pull request:
 So each drafted token costs a second pass over the 201,024-row head, in sequence, and verification must roll the
 target's K/V positions and its K, V and sublayer-output convolution histories back to the accepted token.
 
+### Implementation (`inkling/draft.rs`, `inkling/spec.rs`)
+
+Every rank holds the whole drafter and the head rows of its quarter of the vocabulary. The target's forwards keep
+the four feature rows of each token (`Group::drive`); once tokens are committed the host mixes them
+(`DraftHost::contexts`) and each rank writes the context K/V of its own copy in one submission. A round
+(`spec::step`) after the pending token `t`:
+
+1. **Draft.** Every rank runs the block, the base logits of its vocabulary rows and the first Markov step after `t`
+   in one submission; then one submission per further step. The ranks are launched together and waited on together;
+   their first maxima (value, then lowest id) meet over the mesh, 8 bytes per round of the exchange.
+2. **Verify.** One gated forward of `[t, d1..dk]` (at most 8 rows) scores every row. Before it each slot saves its
+   K/V convolution history and the batch's pre-convolution K/V rows (`inkling_hist_restore` reads them back); the
+   host saves its attention- and MoE-output histories and the batch's pre-convolution rows.
+3. **Accept.** The target samples row 0; while its sample equals the next draft, that draft is kept and the next row
+   is sampled. The first mismatch is the new pending token. Every emitted token is the target's own sample, so the
+   output follows the target's distribution at any temperature, and greedy output is identical to plain decoding.
+4. **Roll back.** Position, GPU and host convolution histories return to just after the accepted rows (the K/V
+   cache needs nothing: later rows overwrite rejected positions before they are read), and the drafter's context
+   gets the accepted tokens.
+
+`--draft dspark-Inkling-2-Mini-Q8_0.gguf` (same path on every machine) turns it on for `chat`, `bench` and `serve`;
+`--draft-tokens` (default 3) sets k. `bench` reports `tg_tokens_per_round` and the mean milliseconds per round in
+block, steps, verify and rollback (`draft_round_ms`).
+
 ## Chat format
 
 `tokenizer.ggml.pre = inkling2` is GPT-4o's pre-tokenizer regex; no BOS. Messages are
