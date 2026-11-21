@@ -13,6 +13,7 @@ Supported models:
 | Qwen3.8-27B | 2 Mac Pros (tensor parallel) | 28.4 tok/s | 39.5 tok/s (MTP) |
 | Qwen3.8-27B | 4 Mac Pros (tensor parallel, fully cabled) | 40.7 tok/s | 52.0 tok/s (MTP) |
 | Qwen3.8-Flash-Next (177B MoE) | 6 Mac Pros (pipeline) | 22.6 tok/s | 31.3 tok/s (MTP) |
+| Inkling 2 Mini (26B looped MoE, vision) | 2 Mac Pros (tensor parallel) | 33 tok/s | |
 
 All rates are single-stream decode with greedy sampling on Mac Pros with two D700s each. See the model docs for
 prefill rates and test conditions.
@@ -54,6 +55,12 @@ python3 scripts/fetch-assistant.py   # optional: the draft model for speculative
 
 Qwen models need a Q4_0 GGUF quantized with the recipe in [docs/qwen.md](docs/qwen.md#quantization).
 Qwen3.8-Flash-Next needs the recipe in [docs/qwen4.md](docs/qwen4.md).
+
+Inkling 2 Mini runs Unsloth's GGUF as published (and its vision projector for images):
+
+```sh
+hf download unsloth/Inkling-2-Mini-GGUF Inkling-2-Mini-UD-Q4_K_XL.gguf mmproj-BF16.gguf --local-dir ~/models/inkling-2-mini
+```
 
 ## Run
 
@@ -106,7 +113,7 @@ and compares activations against [`tests/reference-vulkan/`](tests/reference-vul
 - [docs/engine-spec.md](docs/engine-spec.md): Gemma 4 math, constants, formats, tokenizer and GPU details
 - [docs/qwen.md](docs/qwen.md): Qwen3.8-27B and Qwen3.5-9B: stages, tensor parallelism, MTP, prefix reuse
 - [docs/qwen4.md](docs/qwen4.md): Qwen3.8-Flash-Next on a chain of Mac Pros
-- [docs/inkling.md](docs/inkling.md): Inkling 2 Mini (planned): looped MoE layers, NVFP4, vision, two-Mac tensor parallelism
+- [docs/inkling.md](docs/inkling.md): Inkling 2 Mini: looped MoE layers, NVFP4, vision, two-Mac tensor parallelism
 - [docs/server.md](docs/server.md): the Responses API server
 - [docs/lights.md](docs/lights.md): the port lights as blinkenlights and a music visualizer (optional)
 

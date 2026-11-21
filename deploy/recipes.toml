@@ -41,6 +41,17 @@ driver = ["serve", "{qwen38-27b}", "--port", "{serve_port}"]
 driver_mtp = ["--mtp", "{qwen38-27b-mtp}"]
 load_deadline_s = 300
 
+[recipe.2-inkling]
+description = "Inkling 2 Mini UD-Q4_K_XL on two Macs, tensor parallel over four GPUs (TP4), with its vision projector"
+macs = 2
+kind = "tp2"
+models = ["inkling2-mini", "inkling2-mini-mmproj"]
+node = ["inkling", "node", "{inkling2-mini}"]
+driver = ["serve", "{inkling2-mini}", "--port", "{serve_port}", "--mmproj", "{inkling2-mini-mmproj}", "--context", "32768"]
+# Inkling reasons briefly even at the lowest effort, so the greedy smoke answer needs a longer budget.
+smoke_tokens = 192
+load_deadline_s = 300
+
 [recipe.4-qwen27b]
 description = "Qwen3.8-27B on four Macs, tensor parallel over eight GPUs (TP8); cables 0-1, 0-2, 1-3, 2-3 or all six"
 macs = 4

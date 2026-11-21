@@ -9,6 +9,7 @@ covers checking, stopping, restarting and recovering it. Everything runs from yo
 | 1 | `1-gemma` | Gemma 4 12B QAT Q4_0 over both GPUs; `--mtp` adds the Gemma assistant | none |
 | 1 | `1-qwen9b` | Qwen3.5-9B, tensor parallel over both GPUs (TP2); `--mtp` adds its MTP layer | none |
 | 2 | `2-qwen27b` | Qwen3.8-27B, tensor parallel over four GPUs (TP4) | at least one between the two; one lane per cable, up to three |
+| 2 | `2-inkling` | Inkling 2 Mini UD-Q4_K_XL, tensor parallel over four GPUs (TP4), images through its vision projector | at least one between the two |
 | 4 | `4-qwen27b` | Qwen3.8-27B, tensor parallel over eight GPUs (TP8) | a ring: machines 0-1, 0-2, 1-3, 2-3 (or all six pairs) |
 | 6 | `6-flashnext` | Qwen3.8-Flash-Next G-iq4, 12 GPU stages, 112K context (Q8 K/V cache) | a chain along the Macs (the measured cabling is a ring, each Mac on bus 0 and bus 1) |
 
