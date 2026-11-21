@@ -548,7 +548,9 @@ impl Shard {
         u[0] = m.rows as u32;
         u[1] = m.k as u32;
         u[3] = m.stride as u32;
-        if n <= 4 {
+        if n <= GATED_MAX {
+            // Up to 4 columns per workgroup row; 5..8 columns (verification batches) as two groups of columns, each
+            // reading the weights once, instead of a 64-column GEMM tile.
             let wide = m.rows >= 4096;
             let names = if wide {
                 ["qwen4_q8_mvw4_r4", "qwen4_q8_mvw4_r4_c2", "qwen4_q8_mvw4_r4_c3", "qwen4_q8_mvw4_r4_c4"]
@@ -557,7 +559,8 @@ impl Shard {
             };
             let rpw = if wide { 16 } else { 8 };
             let p = self.push([0, x, y, 0, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, names[n - 1], p, m.rows.div_ceil(rpw) as u32, 1, &m.buf)
+            let name = names[n.min(4) - 1];
+            self.gpu.dispatch_matrix(cmd, name, p, m.rows.div_ceil(rpw) as u32, n.div_ceil(4) as u32, &m.buf)
         } else {
             // 128 rows and 8 columns per workgroup.
             let p = self.push([0, x, y, 0, 0, 0], 0, u);

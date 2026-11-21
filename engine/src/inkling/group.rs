@@ -138,6 +138,13 @@ struct Spec {
     /// Per slot, the pre-convolution rows of its attention and MoE outputs in this batch.
     attn_y: Vec<Vec<f32>>,
     ffn_y: Vec<Vec<f32>>,
+    /// Seconds in the drafter's block, its recurrent steps, verification forwards and rollbacks (with the context
+    /// writes), and the rounds.
+    t_block: f64,
+    t_steps: f64,
+    t_verify: f64,
+    t_rollback: f64,
+    rounds: usize,
 }
 
 /// The applications whose input residual the drafter reads (execution order), then the final hidden state.
@@ -270,6 +277,13 @@ impl Group {
         self.drafter.is_some()
     }
 
+    /// Mean milliseconds per speculative round: block, steps, verify, rollback; and the rounds.
+    pub fn draft_profile(&self) -> ([f64; 4], usize) {
+        let s = &self.spec;
+        let r = s.rounds.max(1) as f64 * 1e-3;
+        ([s.t_block / r, s.t_steps / r, s.t_verify / r, s.t_rollback / r], s.rounds)
+    }
+
     /// Write the drafter's context entries of the last forward's first `rows` rows (committed tokens).
     fn commit_context(&mut self, rows: usize) -> Result<()> {
         let d = self.c.d;
@@ -285,9 +299,8 @@ impl Group {
                 let p = pos + t;
                 dr.rnn[p % (super::draft::BLOCK + 1)] = (p, rnn);
             }
-            for r in &dr.ranks {
-                r.inject(&ctx, pos + start, n)?;
-            }
+            let pend = dr.ranks.iter().map(|r| r.inject(&ctx, pos + start, n)).collect::<Result<Vec<_>>>()?;
+            super::draft::wait_all(pend)?;
         }
         Ok(())
     }
@@ -311,20 +324,28 @@ impl Group {
             rows.extend_from_slice(&dr.host.mask);
         }
         let rnn = rnn.clone();
-        for r in &dr.ranks {
-            r.block(&rows, pos0, &rnn)?;
-        }
+        let t0 = std::time::Instant::now();
+        let pend = dr.ranks.iter().map(|r| r.block(&rows, pos0, &rnn, last)).collect::<Result<Vec<_>>>()?;
+        super::draft::wait_all(pend)?;
+        self.spec.t_block += t0.elapsed().as_secs_f64();
         let _ = d;
         let mut out = Vec::new();
-        let mut prev = last;
         for row in 1..=n_max {
+            let t1 = std::time::Instant::now();
+            let ranks = &self.drafter.as_ref().unwrap().ranks;
+            if row > 1 {
+                let prev = *out.last().unwrap();
+                let pend = ranks.iter().map(|r| r.step(row, prev)).collect::<Result<Vec<_>>>()?;
+                super::draft::wait_all(pend)?;
+            }
             let mut best = (f32::NEG_INFINITY, u32::MAX);
-            for r in &self.drafter.as_ref().unwrap().ranks {
-                let b = r.step(row, prev)?;
+            for r in ranks {
+                let b = r.top()?;
                 if b.0 > best.0 || (b.0 == best.0 && b.1 < best.1) {
                     best = b;
                 }
             }
+            self.spec.t_steps += t1.elapsed().as_secs_f64();
             if let Some(m) = self.mesh.as_mut() {
                 for round in 0..m.rounds() {
                     let mine = [best.0.to_le_bytes(), best.1.to_le_bytes()].concat();
@@ -336,8 +357,7 @@ impl Group {
                     }
                 }
             }
-            prev = best.1;
-            out.push(prev);
+            out.push(best.1);
         }
         Ok(out)
     }
@@ -346,8 +366,12 @@ impl Group {
     /// are kept until `rollback` says how many rows to keep.
     pub fn verify(&mut self, tokens: &[u32]) -> Result<Vec<Candidates>> {
         ensure!(tokens.len() > 1 && tokens.len() <= GATED_MAX, "a verification batch has 2 to {GATED_MAX} tokens");
+        let t0 = std::time::Instant::now();
         self.tell(json!({"forward": {"tokens": tokens, "score": "all", "verify": true}}))?;
-        self.verify_local(tokens)
+        let r = self.verify_local(tokens);
+        self.spec.t_verify += t0.elapsed().as_secs_f64();
+        self.spec.rounds += 1;
+        r
     }
 
     fn verify_local(&mut self, tokens: &[u32]) -> Result<Vec<Candidates>> {
@@ -364,8 +388,11 @@ impl Group {
     /// Keep the first `keep` rows of the last verification batch: the position, every convolution history and the
     /// drafter's context go back to just after them.
     pub fn rollback(&mut self, keep: usize) -> Result<()> {
+        let t0 = std::time::Instant::now();
         self.tell(json!({"rollback": keep}))?;
-        self.rollback_local(keep)
+        let r = self.rollback_local(keep);
+        self.spec.t_rollback += t0.elapsed().as_secs_f64();
+        r
     }
 
     fn rollback_local(&mut self, keep: usize) -> Result<()> {

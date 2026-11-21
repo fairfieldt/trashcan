@@ -17,6 +17,50 @@ use ash::vk;
 use std::rc::Rc;
 
 pub const BLOCK: usize = 8;
+
+/// A submitted command buffer: the group launches every rank's work, then waits for all of it.
+pub struct Pending {
+    gpu: Rc<Device>,
+    cmd: vk::CommandBuffer,
+    fence: vk::Fence,
+}
+
+impl Pending {
+    fn launch(gpu: &Rc<Device>, cmd: vk::CommandBuffer) -> Result<Self> {
+        gpu.finish(cmd)?;
+        let fence = unsafe { gpu.dev.create_fence(&vk::FenceCreateInfo::default(), None)? };
+        gpu.submit(cmd, None, None, fence)?;
+        Ok(Self { gpu: gpu.clone(), cmd, fence })
+    }
+
+    /// Spin on the fence (these submissions take a millisecond or two; a blocking wait adds a wakeup).
+    pub fn wait(self) -> Result<()> {
+        let start = std::time::Instant::now();
+        loop {
+            if unsafe { self.gpu.dev.get_fence_status(self.fence)? } {
+                break;
+            }
+            if start.elapsed().as_millis() > 2 {
+                unsafe { self.gpu.dev.wait_for_fences(&[self.fence], true, 60_000_000_000)? };
+                break;
+            }
+            std::hint::spin_loop();
+        }
+        unsafe {
+            self.gpu.dev.destroy_fence(self.fence, None);
+            self.gpu.dev.free_command_buffers(self.gpu.pool, &[self.cmd]);
+        }
+        Ok(())
+    }
+}
+
+/// Wait for every rank's submission.
+pub fn wait_all(p: Vec<Pending>) -> Result<()> {
+    for x in p {
+        x.wait()?;
+    }
+    Ok(())
+}
 /// Draft layers whose attention keeps a sliding window (llama.cpp: the trained 1024, plus the anchor).
 const WINDOW: usize = 1025;
 
@@ -229,7 +273,7 @@ impl DraftRank {
             hidden_b: up(&vector(g, t("dspark_hidden_out.bias")?)?)?,
             w1: gpu.upload(g.data(w1t))?,
             rank,
-            hin: hb(BLOCK.max(64) * d)?,
+            hin: hb((64 * layers_n).max(BLOCK) * d + rank + d)?,
             top: hb(2)?,
             x: fb(64 * d)?,
             n: fb(64 * d)?,
@@ -264,9 +308,12 @@ impl DraftRank {
         u[3] = m.stride as u32;
         u[15] = n as u32;
         let p = self.push([0, x, y, 0, 0, 0], u);
-        if n == 1 {
-            let (name, rpw) = if m.rows >= 4096 { ("qwen4_q8_mvw4_r4", 16) } else { ("qwen4_q8_mvw4_r2", 8) };
-            self.gpu.dispatch_matrix(cmd, name, p, m.rows.div_ceil(rpw) as u32, 1, &m.buf)
+        if n <= 8 {
+            // Decode kernels with up to 4 columns per workgroup row (the block's 8 rows as two groups).
+            let wide = m.rows >= 4096;
+            let c = ["", "_c2", "_c3", "_c4"][n.min(4) - 1];
+            let (name, rpw) = if wide { (format!("qwen4_q8_mvw4_r4{c}"), 16) } else { (format!("qwen4_q8_mvw4_r2{c}"), 8) };
+            self.gpu.dispatch_matrix(cmd, &name, p, m.rows.div_ceil(rpw) as u32, n.div_ceil(4) as u32, &m.buf)
         } else {
             self.gpu.dispatch_matrix(cmd, "qwen4_q8_gemm", p, m.rows.div_ceil(64) as u32, n.div_ceil(64) as u32, &m.buf)
         }
@@ -331,38 +378,46 @@ impl DraftRank {
         self.gpu.dispatch_matrix(cmd, "dspark_qk", p, (n * heads) as u32, 1, w)
     }
 
-    fn run(&self, cmd: vk::CommandBuffer) -> Result<()> {
-        self.gpu.finish(cmd)?;
-        self.gpu.run(cmd)
-    }
-
     /// Write the context entries of `n` committed tokens at positions `pos..pos + n`: `rows` [n][layers][d], each
     /// layer's normed target-feature mix (`DraftHost::contexts`).
-    pub fn inject(&self, rows: &[f32], pos: usize, n: usize) -> Result<()> {
+    pub fn inject(&self, rows: &[f32], pos: usize, n: usize) -> Result<Pending> {
         let d = self.d;
         let nl = self.layers.len();
         ensure!(rows.len() == n * nl * d && n <= 64, "context rows");
+        // Host layout [layer][token][d], so each layer's rows are one copy.
+        let mut mine = Vec::with_capacity(rows.len());
+        for l in 0..nl {
+            for t in 0..n {
+                mine.extend_from_slice(&rows[(t * nl + l) * d..(t * nl + l + 1) * d]);
+            }
+        }
+        self.hin.write(bytemuck::cast_slice(&mine))?;
+        let cmd = self.gpu.begin()?;
+        self.gpu.host_barrier(cmd, false);
         for (l, layer) in self.layers.iter().enumerate() {
-            let mine: Vec<f32> = (0..n).flat_map(|t| rows[(t * nl + l) * d..(t * nl + l + 1) * d].iter().copied()).collect();
-            self.hin.write(bytemuck::cast_slice(&mine))?;
-            let cmd = self.gpu.begin()?;
-            self.gpu.host_barrier(cmd, false);
-            self.gpu.copy(cmd, &self.hin, 0, &self.x, 0, n * d * 4);
+            if l > 0 {
+                self.gpu.barrier(cmd);
+            }
+            self.gpu.copy(cmd, &self.hin, l * n * d * 4, &self.x, 0, n * d * 4);
             self.gpu.barrier(cmd);
             self.mm(cmd, &layer.k_ctx, self.x.address, self.k.address, n)?;
             self.mm(cmd, &layer.v_ctx, self.x.address, self.v.address, n)?;
             self.qk(cmd, &layer.k_ctx_norm, self.k.address, self.kv_heads, pos, n, Some((layer, self.v.address)))?;
-            self.run(cmd)?;
         }
-        Ok(())
+        Pending::launch(&self.gpu, cmd)
     }
 
     /// Run the block (`rows`: [8][d] input rows, at positions `pos..pos + 8`) through the layers, the output norm and
-    /// this rank's head rows (the base logits), and reset the recurrent head with context `rnn` ([d]).
-    pub fn block(&self, rows: &[f32], pos: usize, rnn: &[f32]) -> Result<()> {
+    /// this rank's head rows (the base logits), reset the recurrent head with context `rnn` ([d]), and take the
+    /// first recurrent step after `prev` (the block's anchor token): read it with `top`.
+    pub fn block(&self, rows: &[f32], pos: usize, rnn: &[f32], prev: u32) -> Result<Pending> {
         let d = self.d;
         let n = BLOCK;
+        let tail = (64 * self.layers.len()).max(BLOCK) * d * 4;
         self.hin.write(bytemuck::cast_slice(rows))?;
+        let zero = vec![0f32; self.rank];
+        self.hin.write_at(tail, bytemuck::cast_slice(&zero))?;
+        self.hin.write_at(tail + self.rank * 4, bytemuck::cast_slice(rnn))?;
         let cmd = self.gpu.begin()?;
         self.gpu.host_barrier(cmd, false);
         self.gpu.copy(cmd, &self.hin, 0, &self.x, 0, n * d * 4);
@@ -394,21 +449,16 @@ impl DraftRank {
         // The hidden rows stay in n (normed), the base logits in base.
         self.norm(cmd, &self.out_norm, 0, self.x.address, self.n.address, n)?;
         self.mm(cmd, &self.head, self.n.address, self.base.address, n)?;
-        self.run(cmd)?;
-        let zero = vec![0f32; self.rank];
-        let staging = self.gpu.buffer((zero.len() + d) * 4, true, false, None)?;
-        staging.write(bytemuck::cast_slice(&zero))?;
-        staging.write_at(zero.len() * 4, bytemuck::cast_slice(rnn))?;
-        let cmd = self.gpu.begin()?;
-        self.gpu.copy(cmd, &staging, 0, &self.state, 0, self.rank * 4);
-        self.gpu.copy(cmd, &staging, self.rank * 4, &self.ctx, 0, d * 4);
-        self.run(cmd)
+        self.gpu.copy(cmd, &self.hin, tail, &self.state, 0, self.rank * 4);
+        self.gpu.copy(cmd, &self.hin, tail + self.rank * 4, &self.ctx, 0, d * 4);
+        self.gpu.barrier(cmd);
+        self.rec_step(cmd, 1, prev)?;
+        Pending::launch(&self.gpu, cmd)
     }
 
     /// One recurrent step for block row `row` after token `prev`: this rank's first maximum (value, token id).
-    pub fn step(&self, row: usize, prev: u32) -> Result<(f32, u32)> {
+    fn rec_step(&self, cmd: vk::CommandBuffer, row: usize, prev: u32) -> Result<()> {
         let (d, r) = (self.d, self.rank);
-        let cmd = self.gpu.begin()?;
         let mut u = [0u32; 16];
         u[0] = r as u32;
         u[1] = d as u32;
@@ -433,7 +483,18 @@ impl DraftRank {
         let p = self.push([self.top.address, self.base.address, self.bias.address, 0, 0, 0], u);
         self.gpu.dispatch(cmd, "dspark_argmax", p, 1, 1);
         self.gpu.host_barrier(cmd, true);
-        self.run(cmd)?;
+        Ok(())
+    }
+
+    /// Launch the recurrent step for block row `row` after token `prev`; read it with `top`.
+    pub fn step(&self, row: usize, prev: u32) -> Result<Pending> {
+        let cmd = self.gpu.begin()?;
+        self.rec_step(cmd, row, prev)?;
+        Pending::launch(&self.gpu, cmd)
+    }
+
+    /// The last step's first maximum over this rank's rows: (value, token id).
+    pub fn top(&self) -> Result<(f32, u32)> {
         let b = self.top.read(8)?;
         Ok((f32::from_le_bytes(b[..4].try_into().unwrap()), u32::from_le_bytes(b[4..8].try_into().unwrap())))
     }

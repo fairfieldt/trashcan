@@ -331,6 +331,7 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize, ids: &[u32], draft_k: usiz
         "pp_host_s": s1.host - s0.host,
         "tg_tok_s": tg as f64 / tg_s,
         "tg_tokens_per_round": if rounds > 0 { tg as f64 / rounds as f64 } else { 1.0 },
+        "draft_round_ms": group.draft_profile().0,
         "tg_ms": tg_s / tg as f64 * 1e3,
         "tg_gpu_wait_ms": per(after.gpu, before.gpu),
         "tg_exchange_ms": per(after.exchange, before.exchange),
