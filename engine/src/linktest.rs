@@ -3,7 +3,9 @@
 //! A server (`link-test serve`) answers sessions, one thread each; a client (`link-test run --connect ADDR,...`)
 //! opens lanes to it (one address per cable, as tensor parallelism does), sends the test, and both run it:
 //! - `pingpong`: SIZE bytes there and back, COUNT times (latency);
-//! - `exchange`: both send SIZE bytes at once over every lane, COUNT times (tensor-parallel all-reduce steps);
+//! - `exchange`: both send SIZE bytes at once over every lane, COUNT times (tensor-parallel all-reduce steps; with
+//!   `--gap-us` both sides wait that long before each, as machines that compute between two all-reduces do, so that
+//!   nothing of the next exchange moves the last one's frames along);
 //! - `bulk`: SIZE bytes one way and a short answer, COUNT times, then the other way (throughput);
 //! - `chain`: the Flash-Next chain's pattern per decode token, 40 KiB on, 10 KiB and a result back, with a 5 MiB
 //!   prompt chunk every 16 tokens (latency);
@@ -14,6 +16,8 @@
 //!
 //! Fault injection (client side, for tests only): `--drop N` / `--corrupt N` lose or damage every Nth stream frame
 //! the client sends; `--overdrive N` lets it send N frames past its credits, overrunning the other end's ring.
+//! `--push N` (on `serve` and on `run`, each for its own direction) writes N frames after every write on the stream
+//! instead of measuring what the direction holds back; `--profile` times the device's reads and writes.
 //!
 //! `link-test churn` runs sessions back to back, each a client process of its own, with normal exits, killed
 //! clients and server crashes mixed (`--server-exits`; run the server in a loop that restarts it): every session's
@@ -41,6 +45,8 @@ pub enum Cmd {
         listen: String,
         #[command(flatten)]
         load: Load,
+        #[command(flatten)]
+        link: LinkArgs,
     },
     /// Run a test against `link-test serve` and print one JSON line (soak: one every 10 s and a summary), after a
     /// line with `up_ms` as soon as the stream is up.
@@ -106,6 +112,24 @@ impl Load {
     }
 }
 
+/// How this side's links run (`serve` and `run` each take their own).
+#[derive(clap::Args, Clone, Copy)]
+pub struct LinkArgs {
+    /// Write this many frames after every write on the stream instead of measuring what the direction holds back
+    /// (3 is what the links did before they measured).
+    #[arg(long)]
+    push: Option<u32>,
+    /// Time the stream device's reads and writes (`reads`, `read_ns`, `writes`, `write_ns` in the lanes' stats).
+    #[arg(long)]
+    profile: bool,
+}
+
+impl LinkArgs {
+    fn tune(&self) -> Tuning {
+        Tuning { push: self.push, profile: self.profile, ..Tuning::default() }
+    }
+}
+
 #[derive(clap::Args)]
 pub struct Run {
     /// One address per cable to the other machine, e.g. mac1.tb0:7075.
@@ -113,6 +137,8 @@ pub struct Run {
     connect: Vec<String>,
     #[command(flatten)]
     test: Test,
+    #[command(flatten)]
+    link: LinkArgs,
     /// A name for the result line.
     #[arg(long, default_value = "")]
     label: String,
@@ -175,6 +201,11 @@ pub struct Test {
     #[arg(long, default_value_t = 0.)]
     #[serde(default)]
     server_exits: f64,
+    /// Both sides wait this many microseconds before each round of pingpong and exchange without touching the
+    /// link, as a machine does that computes between two all-reduces (a decode step's GPU work).
+    #[arg(long, default_value_t = 0)]
+    #[serde(default)]
+    gap_us: u64,
 }
 
 fn unix_now() -> f64 {
@@ -308,7 +339,10 @@ impl Lat {
         self.0.sort_by(f64::total_cmp);
         let q = |p: f64| self.0[((self.0.len() - 1) as f64 * p).round() as usize];
         let mean = self.0.iter().sum::<f64>() / self.0.len() as f64;
-        json!({"n": self.0.len(), "p50": q(0.5), "p90": q(0.9), "p99": q(0.99), "max": q(1.0), "mean": mean})
+        // `over_1ms`: round trips that waited for something (a nudge, a retransmission, a thread without its core).
+        let over = self.0.iter().filter(|&&us| us > 1000.).count();
+        json!({"n": self.0.len(), "p50": q(0.5), "p90": q(0.9), "p99": q(0.99), "p999": q(0.999), "max": q(1.0), "mean": mean,
+            "over_1ms": over})
     }
 }
 
@@ -364,6 +398,11 @@ struct Side<'a> {
     checked: u64,
     slow: Vec<Value>,
     start: Instant,
+    /// Wait before each round (`Test::gap_us`).
+    gap: Duration,
+    /// Exchanges: when the sends were issued and when the first byte arrived, from each exchange's start.
+    sent: Lat,
+    first: Lat,
 }
 
 impl Side<'_> {
@@ -400,9 +439,22 @@ impl Side<'_> {
         }
     }
 
+    /// Spin for the gap between rounds without touching the link.
+    fn pause(&self) {
+        if !self.gap.is_zero() {
+            let t = Instant::now();
+            while t.elapsed() < self.gap {
+                std::hint::spin_loop();
+            }
+        }
+    }
+
     fn pingpong(&mut self, size: usize, count: usize, base: u64, lat: &mut Lat) -> Result<()> {
         for k in 0..count as u64 {
             let i = base + k;
+            if self.dir == 0 {
+                self.pause();
+            }
             let t0 = Instant::now();
             if self.dir == 0 {
                 self.send(1, i, size)?;
@@ -423,11 +475,14 @@ impl Side<'_> {
         for k in 0..count as u64 {
             let i = base + k;
             self.pat.fill(&mut self.out[..size], Pattern::key(self.dir, 2, i));
+            self.pause();
             let t0 = Instant::now();
             let (out, inp) = (&self.out[..size], &mut self.inp[..size]);
-            self.lanes.exchange_within(out, inp, Duration::from_secs(10))?;
+            let trip = self.lanes.exchange_within(out, inp, Duration::from_secs(10))?;
             let d = t0.elapsed();
             lat.add(d);
+            self.sent.add(trip.sent);
+            self.first.add(trip.first);
             self.verify(2, i, size)?;
             self.slow("exchange", i, d);
         }
@@ -490,7 +545,19 @@ fn stats_json(lanes: &Lanes) -> Value {
 fn run_test(lanes: &mut Lanes, t: &Test, dir: u64, events: Option<&Arc<Events>>, report: &mut dyn FnMut(Value)) -> Result<Value> {
     let pat = Pattern::new(t.seed);
     let start = Instant::now();
-    let mut side = Side { lanes, pat: &pat, dir, out: vec![0; LARGEST], inp: vec![0; LARGEST], checked: 0, slow: Vec::new(), start };
+    let mut side = Side {
+        lanes,
+        pat: &pat,
+        dir,
+        out: vec![0; LARGEST],
+        inp: vec![0; LARGEST],
+        checked: 0,
+        slow: Vec::new(),
+        start,
+        gap: Duration::from_micros(t.gap_us),
+        sent: Lat::default(),
+        first: Lat::default(),
+    };
     let mut lat = Lat::default();
     let mut out = json!({});
     match t.mode {
@@ -545,6 +612,10 @@ fn run_test(lanes: &mut Lanes, t: &Test, dir: u64, events: Option<&Arc<Events>>,
     if t.mode != Mode::Soak && t.mode != Mode::Bulk {
         out["lat_us"] = lat.summary();
     }
+    if t.mode == Mode::Exchange {
+        out["sent_us"] = side.sent.summary();
+        out["first_us"] = side.first.summary();
+    }
     out["elapsed_s"] = json!(start.elapsed().as_secs_f64());
     out["checked_bytes"] = json!(side.checked);
     out["slow"] = json!(side.slow);
@@ -555,14 +626,15 @@ fn run_test(lanes: &mut Lanes, t: &Test, dir: u64, events: Option<&Arc<Events>>,
     Ok(out)
 }
 
-fn serve(listen: &str, load: Load) -> Result<()> {
+fn serve(listen: &str, load: Load, link: LinkArgs) -> Result<()> {
     let listener = TcpListener::bind(listen).with_context(|| format!("listening on {listen}"))?;
     eprintln!("link-test: serving on {listen}");
     let mut seed = unix_now().to_bits();
+    let o = Options { tune: link.tune(), ..Options::default() };
     loop {
         let (sock, peer) = listener.accept()?;
         // Lanes of one session come in a burst; take them here, run the session on a thread of its own.
-        let first = match Link::accept_with(sock, &Options::default()) {
+        let first = match Link::accept_with(sock, &o) {
             Ok(Accepted::Link(l, tag)) => {
                 seed = splitmix(seed);
                 load.start(seed);
@@ -574,7 +646,7 @@ fn serve(listen: &str, load: Load) -> Result<()> {
                 continue;
             }
         };
-        let lanes = match collect(&listener, first) {
+        let lanes = match collect(&listener, first, &o) {
             Ok(l) => l,
             Err(e) => {
                 eprintln!("link-test: {peer}: {e:#}");
@@ -621,7 +693,7 @@ fn serve(listen: &str, load: Load) -> Result<()> {
 }
 
 /// The rest of a session's lanes after its first (tag `linktest lane i/n`).
-fn collect(listener: &TcpListener, first: (Link, String)) -> Result<Lanes> {
+fn collect(listener: &TcpListener, first: (Link, String), o: &Options) -> Result<Lanes> {
     let (_, n) = first.1.rsplit_once('/').context("not a link-test session")?;
     let n: usize = n.parse()?;
     let mut links = vec![None; n];
@@ -629,7 +701,7 @@ fn collect(listener: &TcpListener, first: (Link, String)) -> Result<Lanes> {
     links[i] = Some(first.0);
     while links.iter().any(Option::is_none) {
         let (sock, _) = listener.accept()?;
-        match Link::accept_with(sock, &Options::default())? {
+        match Link::accept_with(sock, o)? {
             Accepted::Link(l, tag) => {
                 let i: usize = tag.rsplit_once(" lane ").and_then(|(_, r)| r.split_once('/')).and_then(|(i, _)| i.parse().ok()).context("lane")?;
                 links[i] = Some(l);
@@ -645,7 +717,7 @@ fn run(r: &Run) -> Result<()> {
     if r.drop > 0 || r.corrupt > 0 {
         o.streams = Arc::new(ChaosStreams { drop: r.drop, corrupt: r.corrupt });
     }
-    o.tune = Tuning { overdrive: r.overdrive, ..Tuning::default() };
+    o.tune = Tuning { overdrive: r.overdrive, ..r.link.tune() };
     let t0 = Instant::now();
     let mut lanes = Lanes::connect_with(&r.connect, "linktest", &o)?;
     let setup_ms = t0.elapsed().as_secs_f64() * 1e3;
@@ -808,7 +880,7 @@ fn crc_speed(size: usize, iters: usize) {
 
 pub fn main(cmd: &Cmd) -> Result<()> {
     match cmd {
-        Cmd::Serve { listen, load } => serve(listen, *load),
+        Cmd::Serve { listen, load, link } => serve(listen, *load, *link),
         Cmd::Run(r) => run(r),
         Cmd::Churn(c) => churn(c),
         Cmd::Crc { size, iters } => {

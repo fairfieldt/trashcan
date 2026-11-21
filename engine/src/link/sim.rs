@@ -6,8 +6,8 @@
 //! - closing an end sends a CLOSE, which the other end reads once as end of file;
 //! - faults: drop, damage or cut one frame in N (at random: a fixed period can line up with the sender's
 //!   retransmissions and hit the same record every time), lose everything (`dead`), refuse to open, and `hold`: the last
-//!   `hold` frames to arrive are not read until more follow them (the Mac Pros' NHIs hold up to three, results/kernel/
-//!   usb4stream-reliable-20261013).
+//!   `hold` frames to arrive are not read until more follow them (a direction of a cable between Mac Pros holds up
+//!   to three, docs/kernel.md); `hold_at` gives each receiving end its own.
 use super::device::{Found, Frames, Streams};
 use std::{
     collections::VecDeque,
@@ -24,6 +24,8 @@ pub struct Faults {
     pub dead: bool,
     pub refuse_open: bool,
     pub hold: usize,
+    /// Frames held at each receiving end (side 0, side 1), where that is more than `hold`.
+    pub hold_at: [usize; 2],
     /// Opening this side's end waits this long (as an open waits for an earlier close of the device).
     pub slow_open: Option<(usize, std::time::Duration)>,
     /// This side's first open reads nothing of what the other side writes (one direction of an epoch dead, as seen
@@ -164,7 +166,7 @@ pub struct End {
 impl Frames for End {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let mut w = self.pair.0.lock().unwrap();
-        let hold = w.faults.hold;
+        let hold = w.faults.hold.max(w.faults.hold_at[self.side]);
         let d = &mut w.dirs[self.side];
         let mut n = 0;
         while n < buf.len() {
@@ -280,6 +282,7 @@ impl Streams for SimStreams {
             local: format!("controller-{}", self.side),
             peer: format!("controller-{}", 1 - self.side),
             label: format!("sim end {}", self.side),
+            polled: true,
         })
     }
 

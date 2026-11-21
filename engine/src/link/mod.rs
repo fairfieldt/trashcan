@@ -53,6 +53,14 @@ const SEND_AHEAD: u64 = 1 << 20;
 const VERSION: u64 = 1;
 /// A closing link waits at most this long for its last bytes to arrive.
 const FINISH: Duration = Duration::from_secs(2);
+/// `connect` waits at most this long, once the stream is up, for both sides to have measured the hold of their
+/// directions (`proto.rs`); a link that has not by then goes on with the frames an unmeasured direction gets.
+const HOLD_WAIT: Duration = Duration::from_millis(100);
+/// An idle wait on a stream device that cannot wake a `poll()` (busy-polled rings, see `device.rs`) sleeps this
+/// long between looks, and `IDLE_NAP_LONG` once nothing has arrived for `IDLE_LONG`.
+const IDLE_NAP: Duration = Duration::from_micros(50);
+const IDLE_NAP_LONG: Duration = Duration::from_millis(1);
+const IDLE_LONG: Duration = Duration::from_millis(200);
 
 /// How a link finds its stream and its timing.
 #[derive(Clone)]
@@ -343,12 +351,15 @@ impl Link {
     }
 
     /// The connecting side, right after the handshake: with a stream at both ends, open epochs until one is up (the
-    /// link ends after `stream_wait` without), so that the session's data goes on the stream from its start.
+    /// link ends after `stream_wait` without), so that the session's data goes on the stream from its start, and
+    /// then give both sides up to `HOLD_WAIT` to measure the hold of their directions while nothing else is on the
+    /// stream (a few milliseconds on a cable that holds nothing).
     fn settle(&self, same: bool) -> Result<()> {
         if !same {
             return Ok(());
         }
         self.inner.lock().first_epoch(Instant::now());
+        let mut up: Option<Instant> = None;
         loop {
             if let Some(job) = self.inner.take_job() {
                 self.inner.run_job(job);
@@ -356,7 +367,12 @@ impl Link {
             let mut st = self.inner.lock();
             st.pump(Instant::now(), &mut Sink::none())?;
             if st.stream.phase == Phase::Up {
-                return Ok(());
+                let since = *up.get_or_insert_with(Instant::now);
+                if st.hold_measured() == (true, true) || since.elapsed() > HOLD_WAIT {
+                    return Ok(());
+                }
+            } else {
+                up = None;
             }
             drop(st);
             std::thread::sleep(Duration::from_micros(200));
@@ -488,16 +504,19 @@ impl Link {
             for p in parts {
                 st.queue(p)?;
             }
+            // The frames go before this turn reads anything: the other side may be waiting for them.
+            st.send_now(Instant::now())?;
         }
         let mut fds = Vec::new();
         let mut last = Instant::now();
         loop {
+            let mut polled = false;
             let (left, progress) = {
                 let mut st = self.lock();
                 let p = st.pump(Instant::now(), &mut Sink::none())?;
                 let left = st.unsent();
                 if left > SEND_AHEAD && !p {
-                    st.poll_fds(&mut fds);
+                    polled = st.poll_fds(&mut fds);
                 }
                 (left, p)
             };
@@ -510,7 +529,7 @@ impl Link {
             } else if now - last > STALL {
                 return Err(io::Error::new(ErrorKind::TimedOut, "sending stalled"));
             } else if now - last > Duration::from_micros(200) {
-                poll(&mut fds, 1);
+                idle_wait(&mut fds, 1, polled, now - last);
             } else {
                 std::hint::spin_loop();
             }
@@ -588,8 +607,8 @@ impl Link {
             if spin {
                 std::hint::spin_loop();
             } else {
-                self.inner.lock().poll_fds(&mut fds);
-                poll(&mut fds, 2);
+                let polled = self.inner.lock().poll_fds(&mut fds);
+                idle_wait(&mut fds, 2, polled, quiet);
             }
         }
     }
@@ -631,6 +650,34 @@ fn poll(fds: &mut [libc::pollfd], ms: i32) {
     }
     // SAFETY: fds is a valid array of pollfd for its length.
     unsafe { libc::poll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, ms) };
+}
+
+/// Sleep until one of `fds` is ready or `ms` have passed. With `polled`, the link's stream device is not among them
+/// (nothing wakes a sleeper when a frame arrives on busy-polled rings), so the sleep is a short one: `IDLE_NAP`
+/// while the link has been `quiet` for less than `IDLE_LONG`, then `IDLE_NAP_LONG`, so that a link nobody uses
+/// leaves its core alone.
+fn idle_wait(fds: &mut [libc::pollfd], ms: i32, polled: bool, quiet: Duration) {
+    if !polled {
+        return poll(fds, ms);
+    }
+    let nap = if quiet < IDLE_LONG { IDLE_NAP } else { IDLE_NAP_LONG };
+    #[cfg(target_os = "linux")]
+    {
+        // A thread's timers fire up to 50 us late by default (timer slack): too coarse for a 50 us nap.
+        thread_local!(static SLACK: std::cell::Cell<bool> = const { std::cell::Cell::new(false) });
+        if !SLACK.replace(true) {
+            // SAFETY: sets this thread's timer slack, in nanoseconds.
+            unsafe { libc::prctl(libc::PR_SET_TIMERSLACK, 1000 as libc::c_ulong) };
+        }
+        let ts = libc::timespec { tv_sec: 0, tv_nsec: nap.as_nanos() as libc::c_long };
+        // SAFETY: fds is a valid array of pollfd for its length, ts a valid timeout, and no signal mask is given.
+        unsafe { libc::ppoll(fds.as_mut_ptr(), fds.len() as libc::nfds_t, &ts, std::ptr::null()) };
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = fds;
+        std::thread::sleep(nap);
+    }
 }
 
 /// When an exchange had issued all its sends and when its first incoming byte arrived, as time since its start:
@@ -837,7 +884,9 @@ pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration
             rest = tail;
             let mut st = link.lock();
             st.queue(&out[cuts[i]..cuts[i + 1]])?;
-            st.pump(Instant::now(), &mut Sink::none()).with_context(|| format!("lane {i} to {}", st.label))?;
+            // The frames go before anything is read: the other side's exchange waits for them, and the turn that
+            // follows in the loop below reads.
+            st.send_now(Instant::now()).with_context(|| format!("lane {i} to {}", st.label))?;
             parts.push(Part { link, inp: chunk, got: 0, sent: false });
         }
     }
