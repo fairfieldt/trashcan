@@ -212,6 +212,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                     }
                     None => Vec::new(),
                 };
+                let pp = if ids.is_empty() { pp } else { ids.len() };
                 let (row, profiles) = bench(&mut group, pp, tg, &ids, run.draft_tokens)?;
                 println!("{}", json!({"rep": rep, "pp": pp, "tg": tg, "mib": group.device_mib(), "ranks": group.ranks, "result": row}));
                 // GPU milliseconds per kernel on the first rank: per prefill batch of 256 tokens, and per decoded token.

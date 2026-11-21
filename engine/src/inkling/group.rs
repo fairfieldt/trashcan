@@ -313,7 +313,6 @@ impl Group {
 
     fn draft_local(&mut self, last: u32, n_max: usize) -> Result<Vec<u32>> {
         use super::draft::BLOCK;
-        let d = self.c.d;
         let pos0 = self.pos;
         ensure!(pos0 > 0 && n_max < BLOCK, "drafting needs a committed token and at most {} drafts", BLOCK - 1);
         let dr = self.drafter.as_ref().context("no drafter loaded")?;
@@ -328,7 +327,6 @@ impl Group {
         let pend = dr.ranks.iter().map(|r| r.block(&rows, pos0, &rnn, last)).collect::<Result<Vec<_>>>()?;
         super::draft::wait_all(pend)?;
         self.spec.t_block += t0.elapsed().as_secs_f64();
-        let _ = d;
         let mut out = Vec::new();
         for row in 1..=n_max {
             let t1 = std::time::Instant::now();
