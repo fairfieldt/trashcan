@@ -124,8 +124,8 @@ struct Drafter {
 }
 
 /// The state of the last forward that speculative decoding needs: every row's target features for the drafter's
-/// context ([rows][4][d]), and for a verification batch the histories before it and each slot's sublayer outputs, so
-/// `rollback` can rebuild them at the accepted row.
+/// context ([rows][4][d]), and for a verification batch each slot's sublayer outputs.
+/// The host histories stay at the start of the batch until `rollback` commits its prefix.
 #[derive(Default)]
 struct Spec {
     features: Vec<f32>,
@@ -133,8 +133,6 @@ struct Spec {
     pos: usize,
     n: usize,
     verifying: bool,
-    attn_hist: Vec<Vec<f32>>,
-    ffn_hist: Vec<Vec<f32>>,
     /// Per slot, the pre-convolution rows of its attention and MoE outputs in this batch.
     attn_y: Vec<Vec<f32>>,
     ffn_y: Vec<Vec<f32>>,
@@ -316,6 +314,9 @@ impl Group {
         let pos0 = self.pos;
         ensure!(pos0 > 0 && n_max < BLOCK, "drafting needs a committed token and at most {} drafts", BLOCK - 1);
         let dr = self.drafter.as_ref().context("no drafter loaded")?;
+        if n_max == 0 {
+            return Ok(Vec::new());
+        }
         let (p, rnn) = &dr.rnn[(pos0 - 1) % (BLOCK + 1)];
         ensure!(*p == pos0 - 1, "the drafter's context of position {} is missing", pos0 - 1);
         let mut rows = embed(&self.gguf, &self.c, &self.hw, &[last])?;
@@ -324,7 +325,7 @@ impl Group {
         }
         let rnn = rnn.clone();
         let t0 = std::time::Instant::now();
-        let pend = dr.ranks.iter().map(|r| r.block(&rows, pos0, &rnn, last)).collect::<Result<Vec<_>>>()?;
+        let pend = dr.ranks.iter().map(|r| r.block(&rows, pos0, &rnn, last, n_max)).collect::<Result<Vec<_>>>()?;
         super::draft::wait_all(pend)?;
         self.spec.t_block += t0.elapsed().as_secs_f64();
         let mut out = Vec::new();
@@ -375,8 +376,6 @@ impl Group {
     fn verify_local(&mut self, tokens: &[u32]) -> Result<Vec<Candidates>> {
         ensure!(self.drafter.is_some(), "verification batches come from the drafter");
         self.spec.verifying = true;
-        self.spec.attn_hist = self.attn_hist.clone();
-        self.spec.ffn_hist = self.ffn_hist.clone();
         let x = embed(&self.gguf, &self.c, &self.hw, tokens)?;
         let r = self.run(x, tokens.len(), Score::All, None, 1);
         self.spec.verifying = r.is_ok();
@@ -397,23 +396,17 @@ impl Group {
         ensure!(self.spec.verifying && keep >= 1 && keep <= self.spec.n, "nothing to roll back");
         let d = self.c.d;
         let n = self.spec.n;
+        // Each slot runs once. Verification leaves its history at the pre-round position
+        // until the accepted prefix is known, then appends just those rows.
+        let appended = keep.min(3) * d;
+        let end = keep * d;
+        for (hist, rows) in self.attn_hist.iter_mut().zip(&self.spec.attn_y)
+            .chain(self.ffn_hist.iter_mut().zip(&self.spec.ffn_y))
+        {
+            hist.copy_within(appended.., 0);
+            hist[3 * d - appended..].copy_from_slice(&rows[end - appended..end]);
+        }
         if keep < n {
-            let rebuild = |old: &[f32], y: &[f32], out: &mut [f32]| {
-                // The last three inputs before row `keep`: old history rows, then the batch's rows.
-                for s in 0..3 {
-                    let src = keep as isize - 3 + s as isize;
-                    let row = if src >= 0 { &y[src as usize * d..(src as usize + 1) * d] } else { &old[(src + 3) as usize * d..(src + 4) as usize * d] };
-                    out[s * d..(s + 1) * d].copy_from_slice(row);
-                }
-            };
-            for slot in 0..self.attn_hist.len() {
-                if !self.spec.attn_y[slot].is_empty() {
-                    rebuild(&self.spec.attn_hist[slot], &self.spec.attn_y[slot], &mut self.attn_hist[slot]);
-                }
-                if !self.spec.ffn_y[slot].is_empty() {
-                    rebuild(&self.spec.ffn_hist[slot], &self.spec.ffn_y[slot], &mut self.ffn_hist[slot]);
-                }
-            }
             for s in self.shards.iter_mut() {
                 s.rollback(keep)?;
             }
@@ -564,8 +557,8 @@ impl Group {
             self.spec.pos = self.pos;
             self.spec.n = n;
             let slots = self.attn_hist.len();
-            self.spec.attn_y = vec![Vec::new(); slots];
-            self.spec.ffn_y = vec![Vec::new(); slots];
+            self.spec.attn_y.resize_with(slots, Vec::new);
+            self.spec.ffn_y.resize_with(slots, Vec::new);
         }
         let result = self.drive(&mut flows, gated, reference.as_deref_mut()).and_then(|()| match score {
             Score::None => Ok(Vec::new()),
@@ -773,22 +766,23 @@ impl Group {
         if hist.is_some() {
             if self.spec.verifying {
                 // A verification batch keeps every row's output for `rollback`.
-                let mut ys = vec![0f32; n * d];
+                let ys = match done {
+                    Some((Seg::Attn { slot, .. }, _)) => &mut self.spec.attn_y[slot],
+                    Some((Seg::Moe { .. }, Some(app))) => &mut self.spec.ffn_y[app.slot],
+                    _ => unreachable!(),
+                };
+                ys.resize(n * d, 0.);
                 for (t, row) in ys.chunks_exact_mut(d).enumerate() {
                     pass.load_y(t as isize, row);
                 }
-                match done {
-                    Some((Seg::Attn { slot, .. }, _)) => self.spec.attn_y[slot] = ys,
-                    Some((Seg::Moe { .. }, Some(app))) => self.spec.ffn_y[app.slot] = ys,
-                    _ => {}
+            } else {
+                let mut last = vec![0f32; 3 * d];
+                for (k, row) in last.chunks_exact_mut(d).enumerate() {
+                    pass.load_y(n as isize - 3 + k as isize, row);
                 }
+                drop(pass);
+                hist.unwrap().copy_from_slice(&last);
             }
-            let mut last = vec![0f32; 3 * d];
-            for (k, row) in last.chunks_exact_mut(d).enumerate() {
-                pass.load_y(n as isize - 3 + k as isize, row);
-            }
-            drop(pass);
-            hist.unwrap().copy_from_slice(&last);
         }
         self.seconds.host_in += h0.elapsed().as_secs_f64();
     }

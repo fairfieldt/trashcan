@@ -1,52 +1,66 @@
 #version 460
 #include "common.glsl"
-// Inkling DSpark drafter attention: block row t (position p.offset + t) and query head h attend, without a causal
-// mask, to the 8 block rows (K, V f32 [8][p.kvheads][128] in c, d) and to the context cache (f16 [p.cap][p.kvheads]
-// [128] in e, f) at positions before p.offset: all of them, or with p.window > 0 those with qpos - kpos < p.window.
-// Scale 1/sqrt(128), online softmax over chunks of KC keys. b: q [rows][p.heads][128]; a: output, same shape.
-#define KC 256
+#extension GL_KHR_shader_subgroup_clustered : require
+// One workgroup scores all eight block queries of one head against its range of keys.
+// The cache is packed f16, followed logically by the eight non-causal f32 block rows.
 layout(local_size_x=256) in;
-shared vec2 qs[64];
-shared float sc[KC],red[4],accs[128];
-float kdot(uint j,uint ctx,uint g,uint lane){
-    vec2 k;
-    if(j<ctx){uint row=((j%p.cap)*p.kvheads+g)*64;k=unpackHalf2x16(uint(e_h.v[2*(row+lane)])|(uint(e_h.v[2*(row+lane)+1])<<16));}
-    else{uint row=(((j-ctx)*p.kvheads+g)*128);k=vec2(c_f.v[row+2*lane],c_f.v[row+2*lane+1]);}
-    return dot(k,qs[lane]);
-}
-float vval(uint j,uint ctx,uint g,uint c){
-    if(j<ctx)return unpackHalf2x16(uint(f_h.v[((j%p.cap)*p.kvheads+g)*128+c])).x;
-    return d_f.v[((j-ctx)*p.kvheads+g)*128+c];
-}
-void main(){
-uint tid=gl_LocalInvocationID.x,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
-uint t=gl_WorkGroupID.x/p.heads,h=gl_WorkGroupID.x%p.heads,g=h/(p.heads/p.kvheads);
-uint qp=p.offset+t,ctx=p.offset;
-uint lo=p.window>0&&qp>=p.window?qp+1-p.window:0;
-if(tid<64){uint qb=(t*p.heads+h)*128;qs[tid]=vec2(b_f.v[qb+2*tid],b_f.v[qb+2*tid+1]);}
-barrier();
-// Keys: context lo..ctx, then the 8 block rows (indices ctx..ctx+7).
-uint s0=min(lo,ctx),s1=ctx+8;
-uint c=tid%128,half_=tid/128;
-float M=-1e30,L=0,acc=0;
-for(uint cs=s0;cs<s1;cs+=KC){
-    uint n=min(KC,s1-cs);
-    for(uint i=w;i<n;i+=4){float dt=subgroupAdd(kdot(cs+i,ctx,g,lane));if(lane==0)sc[i]=dt*inversesqrt(128.0);}
-    barrier();
-    float m=-1e30;for(uint i=tid;i<n;i+=256)m=max(m,sc[i]);
-    m=subgroupMax(m);if(lane==0)red[w]=m;barrier();
-    float nm=max(M,max(max(red[0],red[1]),max(red[2],red[3])));
-    barrier();
-    float l=0;for(uint i=tid;i<n;i+=256){float e=exp(sc[i]-nm);sc[i]=e;l+=e;}
-    l=subgroupAdd(l);if(lane==0)red[w]=l;barrier();
-    float f=exp(M-nm);
-    L=L*f+((red[0]+red[1])+(red[2]+red[3]));
-    acc*=f;
-    for(uint i=half_;i<n;i+=2)acc=fma(sc[i],vval(cs+i,ctx,g,c),acc);
-    M=nm;
-    barrier();
-}
-if(half_==1)accs[c]=acc;
-barrier();
-if(half_==0)a_f.v[(t*p.heads+h)*128+c]=(acc+accs[c])/L;
+// The same LDS tile holds transposed keys and then values. The extra column avoids
+// bank conflicts on the transpose. Keep values in registers until scoring finishes.
+shared vec4 data[32][33];
+shared float probabilities[8][32];
+
+void main() {
+    uint tid = gl_LocalInvocationID.x, t = tid / 32u, lane = tid % 32u;
+    uint part = gl_WorkGroupID.x, h = gl_WorkGroupID.y, g = h / (p.heads / p.kvheads);
+    uint first = p.window > 0u && p.offset >= p.window ? p.offset + 1u - p.window : 0u;
+    uint end = p.offset + 8u, width = (end - first + p.m - 1u) / p.m;
+    uint start = first + part * width, stop = min(start + width, end);
+    uint qbase = (t * p.heads + h) * 32u;
+    float maximum = -1e30, sum = 0.0;
+    vec4 weighted = vec4(0.0);
+    for (uint tile = start; tile < stop; tile += 32u) {
+        vec4 vrow[4];
+        [[unroll]] for (uint step = 0u; step < 4u; step++) {
+            uint i = tid + step * 256u;
+            uint j = i / 32u, c = i % 32u, pos = min(tile + j, stop - 1u);
+            vec4 k, v;
+            if (pos < p.offset) {
+                uint base = ((pos % p.cap * p.kvheads + g) * 32u + c) * 2u;
+                k = vec4(unpackHalf2x16(e_u.v[base]), unpackHalf2x16(e_u.v[base + 1u]));
+                v = vec4(unpackHalf2x16(f_u.v[base]), unpackHalf2x16(f_u.v[base + 1u]));
+            } else {
+                uint base = ((pos - p.offset) * p.kvheads + g) * 32u + c;
+                k = c_v4.v[base]; v = d_v4.v[base];
+            }
+            data[c][j] = k; vrow[step] = v;
+        }
+        barrier();
+        float s = 0.0;
+        [[unroll]] for (uint c = 0u; c < 32u; c++) s += dot(b_v4.v[qbase + c], data[c][lane]);
+        uint pos = tile + lane;
+        bool valid = pos < stop && (p.window == 0u || pos >= p.offset || pos + p.window > p.offset + t);
+        s = valid ? s * inversesqrt(128.0) : -1e30;
+        float m = max(maximum, subgroupClusteredMax(s, 32));
+        float w = valid ? exp(s - m) : 0.0;
+        float scale = exp(maximum - m);
+        barrier();
+        [[unroll]] for (uint step = 0u; step < 4u; step++)
+            data[t + step * 8u][lane] = vrow[step];
+        probabilities[t][lane] = w;
+        sum = sum * scale + subgroupClusteredAdd(w, 32);
+        maximum = m;
+        weighted *= scale;
+        barrier();
+        [[unroll]] for (uint j = 0u; j < 32u; j++)
+            weighted = fma(vec4(probabilities[t][j]), data[j][lane], weighted);
+        barrier();
+    }
+    uint row = t * p.heads + h;
+    if (p.m == 1u) {
+        a_v4.v[row * 32u + lane] = weighted / sum;
+    } else {
+        uint base = (row * p.m + part) * 33u;
+        a_v4.v[base + lane] = weighted;
+        if (lane == 0u) a_v4.v[base + 32u] = vec4(maximum, sum, 0.0, 0.0);
+    }
 }
