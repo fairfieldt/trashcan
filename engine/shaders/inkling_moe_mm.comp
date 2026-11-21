@@ -1,74 +1,137 @@
 #version 460
 #include "common.glsl"
-// Inkling expert matrices over a prefill batch, one chunk of up to 32 pairs of one expert (inkling_moe_group) per
-// workgroup row y: a 64-row tile (workgroup x) times every pair of the chunk. Lane = row, wave w = pairs 8w..8w+7;
-// each 32-weight block of a row is decoded once into registers and multiplied with the 8 pairs' inputs, which the
-// workgroup stages in LDS block by block (every lane of a wave reads the same element: a broadcast).
-// MODE (specialization constant / 16): 0 gate/up with SITU: rows are (gate row r, up row r) pairs of the expert's
-// slice (expert e's rows from e * 2 * p.n: p.n gate rows, then p.n up rows, p.k weights each); act[pair][r] =
-// situ(gate . x * s[e], up . x * s[e]) into c, x [t][p.k] in b (row of pair = pair / p.m). 1 down: rows of the expert
-// (from e * p.n, p.k weights each); y_pair[pair][row] = w[pair] * s[e] * (row . act[pair]) into c, act [pair][p.k]
-// in b, weights [pair] in e. FMT (specialization constant % 16): 4 NVFP4, 5 Q8_0, as inkling_moe_gu.
-// d: groups (chunk count, chunks of (expert, first, pairs), list from word p.offset), extra: per-expert scales.
-// SITU: beta p.r0, linear beta p.r1 (float bits).
+// Inkling expert matrices over a prefill batch, grouped by expert (qwen4_moe_tiles): workgroup row y takes one tile
+// of up to TILE (token, slot) pairs routed to one expert, and every lane owns one row of the expert's matrix and
+// walks it whole, so each weight is decoded once for all of the tile's pairs. The pairs' inputs are the same for
+// every lane (scalar loads) and no sums cross lanes; a lane loads a row's blocks a 64-byte line (or the whole short
+// row) at a time. One copy of the walk per pair count keeps the pair loop free of branches.
+// MODE (specialization constant / 16): 0 gate/up with SITU: lane i owns gate row i and up row i of the expert's
+// slice (expert e's rows from e * 2 * p.n: p.n gate rows, then p.n up rows, p.k weights each, p.k / 32 a multiple
+// of 4); act[pair][i] = situ(gate . x * s[e], up . x * s[e]) into c, x [t][p.k] in b. 1 down: lane i owns row i of
+// the expert (from e * p.n, p.k weights each, p.k / 32 a multiple of 9); y_pair[pair][i] = w[pair] * s[e] *
+// (row . act[pair]) into c, act [pair][p.k] in b, weights [pair] in f. FMT (specialization constant % 16): 4 NVFP4,
+// 5 Q8_0, as inkling_moe_gu. d: tiles (count, then expert and first list entry | pairs << 16 of each), e: list
+// (token << 16 | pair), extra: per-expert scales. SITU: beta p.r0, linear beta p.r1 (float bits).
 layout(constant_id=0) const uint SPEC=4;
 const uint FMT=SPEC%16,MODE=SPEC/16;
-#define PAIRS 32
-layout(local_size_x=256) in;
+#define TILE 8
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
 shared float NV[16];
-shared vec4 xs[PAIRS][8];
 const float NVC[16]=float[16](0.,1.,2.,3.,4.,6.,8.,12.,0.,-1.,-2.,-3.,-4.,-6.,-8.,-12.);
-// The 32 weights of block B (row-major blocks) as 8 vec4 in weight order.
-void decode(uint B,out vec4 v[8]){
+vec4 nlo(uint q){return vec4(NV[q&15u],NV[(q>>8)&15u],NV[(q>>16)&15u],NV[(q>>24)&15u]);}
+vec4 nhi(uint q){return vec4(NV[(q>>4)&15u],NV[(q>>12)&15u],NV[(q>>20)&15u],NV[(q>>28)&15u]);}
+vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
+#define DOT4(A_,W_,X_) A_=fma(W_.x,X_.x,A_);A_=fma(W_.y,X_.y,A_);A_=fma(W_.z,X_.z,A_);A_=fma(W_.w,X_.w,A_);
+// The tile's pairs, the first vec4 of each pair's input row, this lane's row and its expert's scale.
+uint pair[TILE],xb[TILE],ri;
+float es;
+// Gate and up: rg and ru are the first blocks of the lane's gate and up rows.
+void walk_gu(const uint C,uint rg,uint ru){
+    uint blocks=p.k/32;
+    float g[TILE],u[TILE];
+    [[unroll]]for(uint t=0;t<C;t++){g[t]=0;u[t]=0;}
     if(FMT==4){
-        uvec4 q=uvec4(ww.words[p.stride+B*4],ww.words[p.stride+B*4+1],ww.words[p.stride+B*4+2],ww.words[p.stride+B*4+3]);
-        float slo=unpackHalf2x16(uint(wh.halves[2*B])).x,shi=unpackHalf2x16(uint(wh.halves[2*B+1])).x;
-        [[unroll]]for(uint w=0;w<4;w++){uint x=q[w];
-            v[w]=vec4(NV[x&15u],NV[(x>>8)&15u],NV[(x>>16)&15u],NV[(x>>24)&15u])*slo;
-            v[4+w]=vec4(NV[(x>>4)&15u],NV[(x>>12)&15u],NV[(x>>20)&15u],NV[(x>>28)&15u])*shi;}
+        uvec4 g0,g1,g2,g3,u0,u1,u2,u3,hg,hu;
+        for(uint b=0;b<blocks;b++){
+            if((b&3u)==0){
+                uint a=p.stride/4+rg+b,c=p.stride/4+ru+b;
+                g0=wq.q[a];g1=wq.q[a+1];g2=wq.q[a+2];g3=wq.q[a+3];u0=wq.q[c];u1=wq.q[c+1];u2=wq.q[c+2];u3=wq.q[c+3];
+                hg=wq.q[(rg+b)>>2];hu=wq.q[(ru+b)>>2];
+            }
+            uvec4 qg=g0,qu=u0;
+            g0=g1;g1=g2;g2=g3;u0=u1;u1=u2;u2=u3;
+            vec2 sg=unpackHalf2x16(hg.x),su=unpackHalf2x16(hu.x);
+            hg=hg.yzwx;hu=hu.yzwx;
+            [[unroll]]for(uint w=0;w<4;w++){
+                vec4 gl=nlo(qg[w])*sg.x,gh=nhi(qg[w])*sg.y,ul=nlo(qu[w])*su.x,uh=nhi(qu[w])*su.y;
+                [[unroll]]for(uint t=0;t<C;t++){
+                    vec4 x0=b_v4.v[xb[t]+b*8+w],x1=b_v4.v[xb[t]+b*8+w+4];
+                    DOT4(g[t],gl,x0) DOT4(g[t],gh,x1) DOT4(u[t],ul,x0) DOT4(u[t],uh,x1)
+                }
+            }
+        }
     }else{
-        float sc=unpackHalf2x16(uint(wh.halves[B])).x;
-        [[unroll]]for(uint w=0;w<8;w++){uint x=ww.words[p.stride+B*8+w];v[w]=vec4(ivec4(x<<24,x<<16,x<<8,x)>>24)*sc;}
-    }
-}
-void main(){
-if(gl_LocalInvocationID.x<16)NV[gl_LocalInvocationID.x]=NVC[gl_LocalInvocationID.x];
-uint tid=gl_LocalInvocationID.x,lane=gl_SubgroupInvocationID,wv=gl_SubgroupID,ch=gl_WorkGroupID.y;
-barrier();
-if(ch>=d_u.v[0])return;
-uint e=d_u.v[1+3*ch],first=d_u.v[2+3*ch],cnt=d_u.v[3+3*ch];
-uint rows=MODE==0?p.n:p.n,blocks=p.k/32;
-uint r=gl_WorkGroupID.x*64+lane,rc=min(r,rows-1);
-bool live=8*wv<cnt;
-float g[8],u[8];
-[[unroll]]for(uint z=0;z<8;z++){g[z]=0;u[z]=0;}
-// The staging thread's pair and row of the input.
-uint sp=tid/8,sj=tid%8;
-uint spair=d_u.v[p.offset+first+min(sp,cnt-1)];
-uint srow=MODE==0?(spair/p.m):spair;
-for(uint b=0;b<blocks;b++){
-    xs[sp][sj]=sp<cnt?b_v4.v[srow*(p.k/4)+b*8+sj]:vec4(0);
-    barrier();
-    if(live){
-        vec4 w0[8],w1[8];
-        if(MODE==0){decode((e*2*p.n+rc)*blocks+b,w0);decode((e*2*p.n+p.n+rc)*blocks+b,w1);}
-        else decode((e*p.n+rc)*blocks+b,w0);
-        [[unroll]]for(uint z=0;z<8;z++){
-            uint pz=8*wv+z;
-            float sg=0,su=0;
-            [[unroll]]for(uint j=0;j<8;j++){vec4 x=xs[pz][j];sg+=dot(w0[j],x);if(MODE==0)su+=dot(w1[j],x);}
-            g[z]+=sg;if(MODE==0)u[z]+=su;
+        // Q8_0: two blocks (a line) of each row at a time.
+        uvec4 g0,g1,g2,g3,u0,u1,u2,u3;
+        for(uint b=0;b<blocks;b++){
+            if((b&1u)==0){
+                uint a=p.stride/4+(rg+b)*2,c=p.stride/4+(ru+b)*2;
+                g0=wq.q[a];g1=wq.q[a+1];g2=wq.q[a+2];g3=wq.q[a+3];u0=wq.q[c];u1=wq.q[c+1];u2=wq.q[c+2];u3=wq.q[c+3];
+            }
+            uvec4 qg[2]=uvec4[2](g0,g1),qu[2]=uvec4[2](u0,u1);
+            g0=g2;g1=g3;u0=u2;u1=u3;
+            float sg=unpackHalf2x16(uint(wh.halves[rg+b])).x,su=unpackHalf2x16(uint(wh.halves[ru+b])).x;
+            [[unroll]]for(uint w=0;w<8;w++){
+                vec4 gw=i8(qg[w/4][w%4])*sg,uw=i8(qu[w/4][w%4])*su;
+                [[unroll]]for(uint t=0;t<C;t++){
+                    vec4 x=b_v4.v[xb[t]+b*8+w];
+                    DOT4(g[t],gw,x) DOT4(u[t],uw,x)
+                }
+            }
         }
     }
-    barrier();
+    float beta=uintBitsToFloat(p.r0),lin=uintBitsToFloat(p.r1);
+    if(ri<p.n)[[unroll]]for(uint t=0;t<C;t++){
+        float gs=g[t]*es,us=u[t]*es;
+        c_f.v[pair[t]*p.n+ri]=beta*tanh(gs/beta)/(1.0+exp(-gs))*lin*tanh(us/lin);
+    }
 }
-if(!live||r>=rows)return;
-float s=extra_f.v[e],beta=uintBitsToFloat(p.r0),lin=uintBitsToFloat(p.r1);
-[[unroll]]for(uint z=0;z<8;z++){
-    uint pz=8*wv+z;
-    if(pz>=cnt)break;
-    uint pair=d_u.v[p.offset+first+pz];
-    if(MODE==0){float gs=g[z]*s,us=u[z]*s;c_f.v[pair*p.n+r]=beta*tanh(gs/beta)/(1.0+exp(-gs))*lin*tanh(us/lin);}
-    else c_f.v[pair*p.n+r]=g[z]*e_f.v[pair]*s;
+// Down: r is the first block of the lane's row.
+void walk_down(const uint C,uint r){
+    uint blocks=p.k/32;
+    float acc[TILE];
+    [[unroll]]for(uint t=0;t<C;t++)acc[t]=0;
+    if(FMT==4){
+        for(uint b0=0;b0<blocks;b0+=9){
+            uvec4 q[9];uint h[9];
+            [[unroll]]for(uint i=0;i<9;i++)q[i]=wq.q[p.stride/4+r+b0+i];
+            [[unroll]]for(uint i=0;i<9;i++)h[i]=ww.words[r+b0+i];
+            [[unroll]]for(uint i=0;i<9;i++){
+                vec2 s=unpackHalf2x16(h[i]);
+                [[unroll]]for(uint w=0;w<4;w++){
+                    vec4 lo=nlo(q[i][w])*s.x,hi=nhi(q[i][w])*s.y;
+                    [[unroll]]for(uint t=0;t<C;t++){
+                        vec4 x0=b_v4.v[xb[t]+(b0+i)*8+w],x1=b_v4.v[xb[t]+(b0+i)*8+w+4];
+                        DOT4(acc[t],lo,x0) DOT4(acc[t],hi,x1)
+                    }
+                }
+            }
+        }
+    }else{
+        for(uint b=0;b<blocks;b++){
+            uvec4 q[2]=uvec4[2](wq.q[p.stride/4+(r+b)*2],wq.q[p.stride/4+(r+b)*2+1]);
+            float s=unpackHalf2x16(uint(wh.halves[r+b])).x;
+            [[unroll]]for(uint w=0;w<8;w++){
+                vec4 ww_=i8(q[w/4][w%4])*s;
+                [[unroll]]for(uint t=0;t<C;t++){
+                    vec4 x=b_v4.v[xb[t]+b*8+w];
+                    DOT4(acc[t],ww_,x)
+                }
+            }
+        }
+    }
+    if(ri<p.n)[[unroll]]for(uint t=0;t<C;t++)c_f.v[pair[t]*p.n+ri]=acc[t]*f_f.v[pair[t]]*es;
+}
+void main(){
+if(FMT==4){if(gl_LocalInvocationID.x<16)NV[gl_LocalInvocationID.x]=NVC[gl_LocalInvocationID.x];barrier();}
+uint tile=gl_WorkGroupID.y;if(tile>=d_u.v[0])return;
+uint e=d_u.v[1+2*tile],pk=d_u.v[2+2*tile],cnt=pk>>16;
+ri=gl_WorkGroupID.x*64+gl_LocalInvocationID.x;
+[[unroll]]for(uint t=0;t<TILE;t++){uint en=e_u.v[(pk&0xffffu)+min(t,cnt-1)];pair[t]=en&0xffffu;xb[t]=(MODE==0?en>>16:pair[t])*(p.k/4);}
+es=extra_f.v[e];
+uint row=min(ri,p.n-1),blocks=p.k/32;
+if(MODE==0){
+    uint rg=(e*2*p.n+row)*blocks,ru=rg+p.n*blocks;
+    switch(cnt){
+    case 1u:walk_gu(1u,rg,ru);break;case 2u:walk_gu(2u,rg,ru);break;case 3u:walk_gu(3u,rg,ru);break;
+    case 4u:walk_gu(4u,rg,ru);break;case 5u:walk_gu(5u,rg,ru);break;case 6u:walk_gu(6u,rg,ru);break;
+    case 7u:walk_gu(7u,rg,ru);break;default:walk_gu(8u,rg,ru);break;}
+}else{
+    uint r=(e*p.n+row)*blocks;
+    switch(cnt){
+    case 1u:walk_down(1u,r);break;case 2u:walk_down(2u,r);break;case 3u:walk_down(3u,r);break;
+    case 4u:walk_down(4u,r);break;case 5u:walk_down(5u,r);break;case 6u:walk_down(6u,r);break;
+    case 7u:walk_down(7u,r);break;default:walk_down(8u,r);break;}
 }
 }

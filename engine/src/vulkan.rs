@@ -578,7 +578,6 @@ impl Device {
             ("inkling_norm", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_norm.spv")).as_slice()),
             ("inkling_qkv", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_qkv.spv")).as_slice()),
             ("inkling_prep", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_prep.spv")).as_slice()),
-            ("inkling_moe_group", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_moe_group.spv")).as_slice()),
             ("inkling_moe_sum", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_moe_sum.spv")).as_slice()),
             ("inkling_moe_mm", include_bytes!(concat!(env!("OUT_DIR"), "/inkling_moe_mm.spv")).as_slice()),
             ("vit_ln", include_bytes!(concat!(env!("OUT_DIR"), "/vit_ln.spv")).as_slice()),
