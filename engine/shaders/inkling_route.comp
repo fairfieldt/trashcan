@@ -1,9 +1,13 @@
 #version 460
 #include "common.glsl"
+#extension GL_KHR_shader_subgroup_ballot : require
 // Inkling routing of each token: s = sigmoid(router logit) for the p.n (128) experts, the top p.m (8) by s + bias
 // (ties to the lower expert), their weights s / (sum s + 1e-20) * scale (p.r0 bits). One wave per token, two
-// experts per lane. b: logits [t][n], c: ids [t][m] (u32), d: weights [t][m]. Bias (f32 [n]) in set 0.
+// experts per lane. Each selection is one subgroup maximum: the winner's index comes from ballots and its s from
+// LDS (three reductions per selection took 24 us per layer on Tahiti, where a reduction is some 70 instructions).
+// b: logits [t][n], c: ids [t][m] (u32), d: weights [t][m]. Bias (f32 [n]) in set 0.
 layout(local_size_x=64) in;
+shared float S[128];
 void main(){
 uint lane=gl_SubgroupInvocationID,t=gl_WorkGroupID.x;
 if(t>=batch())return;
@@ -11,13 +15,15 @@ float s[2],sel[2];
 [[unroll]]for(uint j=0;j<2;j++){uint e=lane+64*j;
     s[j]=e<p.n?1.0/(1.0+exp(-b_f.v[t*p.n+e])):0.0;
     sel[j]=e<p.n?s[j]+uintBitsToFloat(ww.words[e]):-1e30;}
+S[lane]=s[0];S[lane+64]=s[1];
+barrier();
 float total=0,mine=0;uint myid=0;
 for(uint k=0;k<p.m;k++){
-    float best=max(sel[0],sel[1]);
-    uint bi=sel[0]>=sel[1]?lane:lane+64;
-    float wb=subgroupMax(best);
-    uint wi=subgroupMin(best==wb?bi:0xffffffffu);
-    float sv=subgroupMax((wi==lane)?s[0]:((wi==lane+64)?s[1]:-1e30));
+    float wb=subgroupMax(max(sel[0],sel[1]));
+    // The lowest expert at the maximum: lanes hold experts `lane` and `lane + 64`.
+    uvec4 lo=subgroupBallot(sel[0]==wb);
+    uint wi=(lo.x|lo.y)!=0u?subgroupBallotFindLSB(lo):64u+subgroupBallotFindLSB(subgroupBallot(sel[1]==wb));
+    float sv=S[wi];
     if(wi==lane)sel[0]=-1e30;
     if(wi==lane+64)sel[1]=-1e30;
     total+=sv;
