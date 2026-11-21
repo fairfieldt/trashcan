@@ -151,11 +151,14 @@ cleanly either way. After a reboot, the Mac's Thunderbolt links to other Macs ca
 
   `index` in each directory gives the `/dev/tbstreamX` number. Each group also has `ring_size`, `throttling` (the
   rings' interrupt throttle, 8192 ns by default, separate from `thunderbolt_net`'s) and, new in 7.3, `busy_poll`
-  (0 by default): set before the stream is opened, it runs the stream's rings without interrupts, `read()` and
-  `write()` poll them, and `poll()` returns `EPOLLERR`. The engine's links (`engine/src/link`) find a link's
-  stream from the TCP connection's interface and move their data to it, with their own sequence numbers,
-  acknowledgements, CRC32C, credits and retransmission, falling back to TCP. Measured on a loopback cable: 25 us
-  round trip for 64 B, 9.6-9.7 Gb/s one way per cable, 15.9 Gb/s with one stream on each of three cables at once.
+  (0 by default): set while nothing has the stream open, it runs the stream's rings without interrupts, `read()`
+  and `write()` poll them, and `poll()` returns `EPOLLERR`. `tblink` sets it on its streams when
+  `/etc/tblink/busy_poll` holds `1` (no node has that by default); each end of a cable has its own setting. The
+  engine's links (`engine/src/link`) find a link's stream from the TCP connection's interface and move their data
+  to it, with their own sequence numbers, acknowledgements, CRC32C, credits and retransmission, falling back to
+  TCP; on a busy-polled stream an idle link sleeps in 50 us naps (1 ms once nothing has come for 200 ms) where it
+  would sleep in `poll()` on the device. Measured on a loopback cable: 25 us round trip for 64 B, 9.6-9.7 Gb/s one
+  way per cable, 15.9 Gb/s with one stream on each of three cables at once.
 - What the driver does (measured on 7.2.9 with 0005, between two Macs):
   a receiving controller reads a frame only once up to three more have arrived behind it on that stream (0, 1 or 3
   by receiving end, the same at every ring position and with the interrupt throttling at 0; a ping-pong of single
@@ -172,18 +175,59 @@ cleanly either way. After a reboot, the Mac's Thunderbolt links to other Macs ca
 - On 7.3: without 0006, once a stream device has read a CLOSE every later read returns end of file and every write
   fails with `ENXIO` until it is closed; with 0007 a close takes under a millisecond. `busy_poll` does not release
   held frames. The hold belongs to a direction of a cable (0-3 frames, surviving Thunderbolt resets), not to the
-  paths' settings, which are the same on every cable; a CLOSE it holds reaches the other end's next session.
-- Between two Macs with the engine's links (link-test, every byte checked, three extra frames after every write): a
-  64 B ping-pong takes 32-47 us p50 on a stream against 40-95 us over TCP, a 40 KiB exchange 79-88 us against 169-219,
-  a chain token (40 KiB on, 10 KiB back) 121-160 us against 283-351, and 5 MiB one way runs at 556-604 MB/s against
-  292-470. End to end on six Macs, Flash-Next decodes 2.2% and MTP 2.0% faster on the streams than over TCP; Qwen3.8-27B
-  TP4 on two Macs decodes 10.7% faster (MTP 4.0% slower in one pair). The old lanes only exchanged: 13.5 us for 64 B
-  and 21.8 us for 20 KiB over three streams, against 38 and 71-116 us over TCP.
+  paths' settings, which are the same on every cable; a CLOSE it holds reaches the other end's next session. It has
+  differed between opens of a device (0 in 47 of 48 opens on 7.3.0-rc7 with 0001-0007, 1 in the other), and the
+  cable between invite and indite held nothing either way on 2026-11-21, with interrupts and with `busy_poll`
+  (the engine's links measure it at each open: nothing from start to end in 76 of 89, and in the others, all with
+  interrupts, an estimate that rose on the waits described below and fell back).
+- What a frame costs (7.3.0-rc7-p2p, E5-2697 v2 and E5-1650 v2, page-table isolation and the MDS buffer clear on):
+  a write of one frame takes 1.7-2.3 us and each further 4 KiB frame of the same write 0.9-1.2 us (10 frames
+  10-13 us); a read that finds nothing 0.8-1.4 us. A 64 B frame is with the other side's reader about 12 us after
+  its write began; 4 KiB frames follow one another 3.4 us apart (1.2 GB/s). With interrupts (`busy_poll` 0) a
+  frame is readable only after its interrupt and the ring's work item have run: a few microseconds in a tight
+  ping-pong, but 50 us more on the median round trip and 100 us more on the 99th percentile of an exchange when
+  the link was quiet for 200 us before (idle cores sleep), and over a millisecond once in 10,000 round trips.
+  With `busy_poll` the read sees the completed descriptor itself.
+- The engine's links measure the hold of each direction when a stream comes up and with every keepalive of an
+  idle link (a ping written alone, then one more frame at a time until it is answered), and follow every write on
+  the stream with that many frames; until 2026-11 they wrote three after every write, about 2 us each. Between
+  invite and indite over one cable (link-test, every byte checked, 20,000 round trips a run, the median p50 and
+  the range of p99 over two or three runs, both ends averaged; "after a pause": both ends wait 200 us before each
+  round trip, as machines that compute between two all-reduces do):
+
+  | us, p50 (p99) | interrupts, three frames | interrupts, measured | `busy_poll`, three frames | `busy_poll`, measured |
+  |---|---|---|---|---|
+  | 64 B ping-pong | 44.8 (59-64) | 33.0 (46-48) | 28.6 (35-49) | 23.2 (31-33) |
+  | 4,608 B exchange | 28.0 (34-52) | 20.5 (30-62) | 25.5 (38-41) | 18.6 (30-33) |
+  | 9,216 B exchange | 35.2 (51-56) | 32.4 (50-79) | 32.9 (51-56) | 26.2 (41-43) |
+  | 18,432 B exchange | 49.7 (76-91) | 42.1 (64-69) | 47.5 (73-87) | 38.0 (50-58) |
+  | 36,864 B exchange | 81.7 (121-162) | 70.4 (90-96) | 74.5 (119-133) | 67.7 (85-87) |
+  | 64 B ping-pong after a pause | 80.5 (119-127) | 74.0 (95-112) | 41.7 (52-60) | 24.6 (34-36) |
+  | 4,608 B exchange after a pause | 47.6 (166-167) | 45.3 (148-149) | 28.6 (43-45) | 20.3 (32-38) |
+  | 9,216 B exchange after a pause | 54.5 (172-177) | 49.4 (148-153) | 35.2 (53-56) | 27.4 (40-42) |
+  | 18,432 B exchange after a pause | 61.7 (187-190) | 61.1 (152-154) | 49.3 (77-79) | 41.9 (57-65) |
+  | 36,864 B exchange after a pause | 88.4 (212-224) | 86.4 (153-167) | 75.3 (121-136) | 68.0 (87-87) |
+
+  A chain token (40 KiB on, 10 KiB back) takes 116 us with interrupts and 108 with `busy_poll` against 140 and
+  151 before, and 5 MiB one way runs at 510-620 MB/s (430-560 before). With interrupts the numbers move by several
+  microseconds from run to run, and one round trip in 10,000 takes over a millisecond with three frames after
+  every write as without (31 and 30 of 300,000 exchanges of 9,216 B after a pause; with `busy_poll` 3 and 1). A
+  link whose data stays unacknowledged for 1.5 ms while nothing moves writes one more frame (a nudge), and takes
+  such waits for a hold only when two come in close succession: with interrupts that happened once in 500,000
+  round trips after a pause (one push after every write for a second, then none again), with `busy_poll` never in
+  1.5 million.
+- The same links on 7.2.9 with three frames after every write, six Macs (2026-10-14): a 64 B ping-pong took 32-47
+  us p50 on a stream against 40-95 us over TCP, a 40 KiB exchange 79-88 us against 169-219, a chain token 121-160
+  us against 283-351, and 5 MiB one way ran at 556-604 MB/s against 292-470. End to end on six Macs, Flash-Next
+  decodes 2.2% and MTP 2.0% faster on the streams than over TCP; Qwen3.8-27B TP4 on two Macs decodes 10.7% faster
+  (MTP 4.0% slower in one pair). The old lanes only exchanged: 13.5 us for 64 B and 21.8 us for 20 KiB over three
+  streams, against 38 and 71-116 us over TCP. (An exchange of 64 B is one trip, a ping-pong two: 13.5 us is the 12 us
+  above.)
 - Fixes worth making in the driver (proposed, not applied; the engine works without them):
 
   | Fix | Expected benefit |
   |---|---|
-  | Read a received frame as soon as it arrives (7.3's `busy_poll`, which polls the rings, does not: the frame is not completed) | No extra frames after each write; request/reply traffic at the stream's latency |
+  | Read a received frame as soon as it arrives: `read()` could look at the ring itself as it does with `busy_poll`, and keep the interrupt for `poll()` | With interrupts, request/reply traffic after a pause at `busy_poll`'s latency (the table above) while `poll()` keeps working; a frame the controller has not completed (the hold) stays where it is either way |
   | Flush only the Tx ring on release (the Rx ring's in-flight list never empties): done in 0007 | A close in milliseconds instead of at least 0.5 s: faster session turnover, `rmmod` and resets not held up |
   | Re-post frames flagged with a CRC error or a buffer overrun instead of returning their bytes, and count them (a configfs attribute) | Damaged data never reaches a reader; the loss shows as a gap and in a counter instead of in dmesg |
   | When the XDomain goes away under an open fd, stop its rings and fail later reads, writes and polls (`-ENXIO`/`EPOLLHUP`) until it is reopened | A dead stream is reported at once instead of found by timeouts |

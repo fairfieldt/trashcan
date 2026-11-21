@@ -8,7 +8,11 @@
 //! - `read` returns the bytes of consecutive frames back to back;
 //! - a close sends a CLOSE frame, which the other side reads once as end of file, and then waits up to 0.5 s for the
 //!   receive ring to drain, which it never does, so every close takes at least half a second;
-//! - an fd kept open while the XDomain connection goes away and comes back stays valid but carries nothing.
+//! - an fd kept open while the XDomain connection goes away and comes back stays valid but carries nothing;
+//! - with `busy_poll` set in the stream's configfs group the rings run without interrupts: `read` and `write` look
+//!   at the rings themselves (a frame is read as soon as the controller has completed it, without the interrupt and
+//!   the work item that otherwise come first), and `poll()` on the device only returns an error, so a link on such
+//!   a device sleeps in short naps instead (`Frames::fd` is none).
 //!
 //! `tblink` (nodes/macpro) creates the stream `trashcan` with HopIDs 15/15 on every link to another node.
 //!
@@ -32,13 +36,21 @@ pub const STREAM_NAME: &str = "trashcan";
 pub trait Frames: Send {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
     fn writev(&mut self, bufs: &[IoSlice]) -> io::Result<usize>;
-    /// For poll().
+    /// For poll(): none when nothing wakes a sleeper on this device (busy-polled rings, the simulator).
     fn fd(&self) -> Option<i32> {
         None
     }
+    /// How much later than its arrival a frame may become readable on this device without being held back by the
+    /// cable: nothing where `read` looks at the ring itself, the interrupt and the work item that complete a frame
+    /// on an interrupt-driven stream device (over 100 us for one frame in ten after 200 us of quiet on the Mac
+    /// Pros, whose idle cores sleep).
+    fn late(&self) -> std::time::Duration {
+        std::time::Duration::ZERO
+    }
 }
 
-pub struct Device(File);
+/// A stream device and whether its rings are busy-polled.
+pub struct Device(File, bool);
 
 impl Frames for Device {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
@@ -48,7 +60,14 @@ impl Frames for Device {
         self.0.write_vectored(bufs)
     }
     fn fd(&self) -> Option<i32> {
-        Some(self.0.as_raw_fd())
+        (!self.1).then(|| self.0.as_raw_fd())
+    }
+    fn late(&self) -> std::time::Duration {
+        if self.1 {
+            std::time::Duration::ZERO
+        } else {
+            std::time::Duration::from_millis(1)
+        }
     }
 }
 
@@ -65,6 +84,8 @@ pub struct Found {
     pub peer: String,
     /// For messages, e.g. `0-3.1/trashcan /dev/tbstream2`.
     pub label: String,
+    /// The stream's rings are busy-polled (`busy_poll` in its configfs group).
+    pub polled: bool,
 }
 
 /// Where a link finds and opens its stream.
@@ -141,11 +162,13 @@ impl Sysfs {
             return Err(format!("stream {svc}/{STREAM_NAME} has no HopIDs ({inh}, {outh})"));
         }
         let ring = num("ring_size").unwrap_or(256) as u32;
+        let polled = num("busy_poll") == Some(1);
         let path = format!("/dev/tbstream{index}");
         if !Path::new(&path).exists() {
             return Err(format!("{path} is missing"));
         }
-        Ok(Found { label: format!("{svc}/{STREAM_NAME} {path}"), path, ring, local, peer })
+        let how = if polled { ", busy-polled" } else { "" };
+        Ok(Found { label: format!("{svc}/{STREAM_NAME} {path}{how}"), path, ring, local, peer, polled })
     }
 }
 
@@ -173,6 +196,7 @@ impl Sysfs {
             ring: info.get("ring").and_then(|r| r.parse().ok()).unwrap_or(256),
             local: info.get("local").cloned().unwrap_or_default(),
             peer: info.get("peer").cloned().unwrap_or_default(),
+            polled: false,
         })
     }
 }
@@ -192,7 +216,7 @@ impl Streams for Sysfs {
         if found.path.ends_with(".ring") {
             return open_tbd(Path::new(&found.path));
         }
-        Ok(Box::new(open_device(Path::new(&found.path))?))
+        Ok(Box::new(open_device(Path::new(&found.path), found.polled)?))
     }
 }
 
@@ -235,7 +259,7 @@ pub fn open_tbd(path: &Path) -> io::Result<Box<dyn Frames>> {
 
 /// Open a stream device for this process alone (an exclusive `flock`: a second process on the same cable is told
 /// so at once and keeps to TCP) and drop whatever its receive ring already holds.
-pub fn open_device(path: &Path) -> io::Result<Device> {
+pub fn open_device(path: &Path, polled: bool) -> io::Result<Device> {
     let f = OpenOptions::new().read(true).write(true).custom_flags(libc::O_NONBLOCK).open(path)?;
     // SAFETY: flock on an fd this function owns.
     if unsafe { libc::flock(f.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
@@ -246,7 +270,7 @@ pub fn open_device(path: &Path) -> io::Result<Device> {
             e
         });
     }
-    let mut d = Device(f);
+    let mut d = Device(f, polled);
     drain(&mut d);
     Ok(d)
 }

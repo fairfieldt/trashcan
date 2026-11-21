@@ -13,6 +13,22 @@
 //! for `dead` the stream is given up. Each attempt to use a stream is an epoch, opened over TCP (START) by the
 //! connecting side and confirmed on the stream itself (PROBE both ways); records of other sessions or epochs are
 //! ignored, so frames that sat in a ring or a closed device from earlier never get mixed in.
+//!
+//! The hold. On the Mac Pros a direction of a cable can keep the last frames written to it from the reader until
+//! more frames follow: 0, 1, 2 or 3 of them, the same for every frame of an open (docs/kernel.md). So a write on the
+//! stream ends with that many more frames, acknowledgements ("pushes"). The connecting side measures the hold of its
+//! sending direction once the epoch is up (hold probes: a ping written alone, then one more frame at a time until
+//! the other side reports it read) and again with every keepalive of an idle link; the accepting side reads the hold
+//! of its direction from those pings, which say how many of its frames have been read. Until a side has measured
+//! it sends `PUSH` frames. Between probes the estimate follows the frame counters every record carries
+//! (`hold_sample`): the frames written here less the frames the other side says it has read are never fewer than
+//! the hold, so a smaller number lowers it; and an acknowledgement says for how long its sender had found nothing
+//! to read, so the frames written here before that and still unread were held, and their number raises it. A wrong
+//! estimate costs time, never data: a side whose data stays unacknowledged while nothing moves writes one more
+//! frame, a ping (a nudge, after `Tuning::nudge`, long before the retransmission timer). The estimate goes up only
+//! on a second sign of held frames soon after a first: a frame that sticks once in ten thousand (interrupt-driven
+//! stream devices do that, docs/kernel.md) is cheaper to nudge than to push every write for. What was not measured
+//! by a probe is tried again without, after `HOLD_STICK` and then at ever longer intervals.
 use super::{
     device::{close_later, Frames, Found},
     record::{crc, crcs, find_magic, kind, Header, FRAME, HEADER, PING, REPORT, STREAM_PAYLOAD, TCP_PAYLOAD},
@@ -55,6 +71,14 @@ pub struct Tuning {
     /// A link with a stream at both ends whose stream is not up this long after it started (or after an epoch that
     /// had not carried data yet failed) ends.
     pub stream_wait: Duration,
+    /// With data unacknowledged (or a hold probe unanswered), nothing written and nothing heard for this long, write
+    /// one more frame: the other side's receiver may be holding the last ones back.
+    pub nudge: Duration,
+    /// Frames to write after every write on the stream, instead of measuring the hold (tests and
+    /// `trashcan link-test --push`).
+    pub push: Option<u32>,
+    /// Time the device's reads and writes (`Stats::read_ns` and `write_ns`; `trashcan link-test --profile`).
+    pub profile: bool,
 }
 
 impl Tuning {
@@ -85,13 +109,64 @@ impl Default for Tuning {
             inq_limit: 32 << 20,
             overdrive: 0,
             stream_wait: Duration::from_secs(20),
+            // Longer than a peer takes to answer when only its maintenance thread turns the link (1 ms): a nudge
+            // that was not needed costs a frame each way, and one that was costs this wait once, after which the
+            // estimate covers it.
+            nudge: Duration::from_micros(1500),
+            push: None,
+            profile: false,
         }
     }
 }
 
-/// Frames written after every write on the stream, so that its last frames are read: the receiving NHIs here read a
-/// frame only once up to three more have arrived behind it (results/kernel/usb4stream-reliable-20261013).
+/// Frames written after a write on the stream while the hold of its direction is not known (while an epoch opens,
+/// and until the first hold probe is answered), so that its last frames are read: the receiving NHIs here read a
+/// frame only once up to three more have arrived behind it (docs/kernel.md).
 const PUSH: usize = 3;
+
+/// The largest hold the link assumes (and so the most frames it writes after a write). Three is the most measured.
+const HOLD_MAX: u32 = 4;
+
+/// Hold probes the connecting side runs when its epoch comes up, before it calls its direction measured; the
+/// estimate is the smallest of what they found (a frame in flight while the answer was written makes one read high,
+/// never low).
+const HOLD_PROBES: u32 = 3;
+
+/// Nudges per stall (they stop when the other side shows progress): enough to release `HOLD_MAX` held frames.
+const NUDGE_MAX: u32 = HOLD_MAX;
+
+/// A hold probe starts when this side has written nothing for this long, so that its ping arrives alone and the
+/// answers to earlier frames are in.
+const QUIET: Duration = Duration::from_micros(150);
+
+/// A frame of ours counts as held by the other side when it was written this much or more before the other side
+/// found nothing to read (by its record's `age`, see `stream_control`): more than a frame takes to get there, with
+/// room for the jitter of the path.
+const HELD_MARGIN: Duration = Duration::from_micros(100);
+
+/// Writes on the stream remembered (their first frame and when they began and ended), for `held`.
+const TX_LOG: usize = 64;
+
+/// An estimate that went up without a hold probe behind it stays for this long (lower readings are ignored
+/// meanwhile) and is then tried one lower; if it goes up again it stays twice as long, up to `HOLD_STICK_MAX`. A
+/// hold that is there costs two stalls each time it is tried without, an unneeded push costs microseconds on every
+/// write.
+const HOLD_STICK: Duration = Duration::from_secs(1);
+const HOLD_STICK_MAX: Duration = Duration::from_secs(256);
+
+/// Signs of held frames (`hold_sample`), each within `SIGN_FRAMES` frames written here of the one before, that raise
+/// the estimate: a hold shows at every write that is followed by a pause, while one sign alone can be a frame that
+/// stuck once (a missed interrupt at the receiver), a peer that was late, or a thread that lost its core.
+const SIGNS: u32 = 2;
+const SIGN_FRAMES: u32 = 64;
+
+/// Flag of a stream record written without a read just before (`send_now`) when the last read was longer ago than
+/// `STALE_AFTER`: its `rx` may miss frames that have arrived since, so it says nothing about what is held.
+pub const STALE: u8 = 8;
+const STALE_AFTER: Duration = Duration::from_micros(200);
+
+/// Flag of a stream record: its sender has measured the hold of its direction (`Link::settle` waits for both).
+pub const MEASURED: u8 = 4;
 
 /// Stream probes go every 2 ms for the first `PROBE_FAST` of an epoch (the other end's device may open late: an open
 /// waits for an earlier close of it), then every 50 ms.
@@ -196,6 +271,20 @@ pub struct Stats {
     pub tcp_failovers: u64,
     /// Frames written after a write on the stream so that its last frame is read (`send`).
     pub pushes: u64,
+    /// The hold of this side's sending direction as now estimated, in frames (none: not measured, `PUSH` frames
+    /// follow every write), and the hold probes of this side that were answered.
+    pub hold: Option<u32>,
+    pub hold_probes: u64,
+    /// Times the estimate went up after the first measurement, and frames written because data stayed
+    /// unacknowledged or a hold probe unanswered (`Tuning::nudge`).
+    pub hold_raises: u64,
+    pub nudges: u64,
+    /// With `Tuning::profile`: calls of the device's read and write, reads that found nothing, and the time in them.
+    pub reads: u64,
+    pub reads_empty: u64,
+    pub read_ns: u64,
+    pub writes: u64,
+    pub write_ns: u64,
     /// Acknowledgements and credits sent over TCP because the stream had no room for them.
     pub tcp_reports: u64,
 }
@@ -408,6 +497,54 @@ pub struct StreamPath {
     sums: Vec<u32>,
     /// The last reason logged for having no stream.
     why: String,
+    /// The hold of this side's sending direction in this epoch (see the module documentation): the estimate (none
+    /// until the first hold probe is answered), when it last went up, and the hold probes answered.
+    hold: Option<u32>,
+    hold_raised: Option<Instant>,
+    hold_stick: Duration,
+    hold_probes: u32,
+    /// What the last exact measurement of the hold found (a hold probe answered, or the two bounds of
+    /// `hold_sample` agreeing): an estimate above it is tried one lower when `hold_stick` is over.
+    hold_probed: Option<u32>,
+    /// Signs of held frames close to one another (`SIGNS`): how many, the fewest frames any of them showed held,
+    /// and the frames written when the last came. The first record that acknowledged the data of the stall under
+    /// way (its `rx`, and whether it was stale), and whether the estimate has gone up before in this epoch.
+    signs: u32,
+    sign_held: u32,
+    sign_tx: u32,
+    resolved: Option<(u32, bool)>,
+    hold_went_up: bool,
+    /// When the device was last read (a turn began), whether the frames of this turn are written without a read
+    /// after a pause (`STALE`), and how late a frame may show on this device (`Frames::late`).
+    turn_at: Instant,
+    stale: bool,
+    late: Duration,
+    /// A hold probe under way: the other side's `rx` that shows its ping read, and whether another frame of ours
+    /// followed the ping at once (then the reading says nothing about a frame written alone).
+    probe: Option<u32>,
+    probe_spoiled: bool,
+    probe_at: Instant,
+    /// When this side last wrote a frame of the epoch, and the frames written since the other side last showed
+    /// progress because nothing moved (`Tuning::nudge`).
+    last_tx: Instant,
+    nudges: u32,
+    /// The bytes queued when the first of those was written (the stall is over once they are acknowledged) and the
+    /// frames written when the last was.
+    nudge_mark: u64,
+    nudge_tx: u32,
+    /// From the acknowledgements among the records just read that said how long their sender had read nothing
+    /// (`hold_sample`): the most frames of ours any of them shows held, and that number from the last of them that
+    /// left no other frame of ours unread (the hold exactly).
+    held_seen: Option<u32>,
+    exact_seen: Option<u32>,
+    /// This turn (begun then) read the device until it had nothing more, so an acknowledgement written now can say
+    /// for how long nothing has been readable: since `read_at`, when a read last returned frames.
+    dry: Option<Instant>,
+    read_at: Instant,
+    /// The last writes of the epoch: the number of their first frame, when the write began and when it returned.
+    txlog: std::collections::VecDeque<(u32, Instant, Instant)>,
+    /// The other side has measured its direction.
+    pub peer_measured: bool,
 }
 
 impl StreamPath {
@@ -464,6 +601,32 @@ impl StreamPath {
             spans: Vec::new(),
             sums: Vec::new(),
             why: String::new(),
+            hold: None,
+            hold_raised: None,
+            hold_stick: HOLD_STICK,
+            hold_probes: 0,
+            hold_probed: None,
+            signs: 0,
+            sign_held: 0,
+            sign_tx: 0,
+            resolved: None,
+            hold_went_up: false,
+            turn_at: now,
+            stale: false,
+            late: Duration::ZERO,
+            probe: None,
+            probe_spoiled: false,
+            probe_at: now,
+            last_tx: now,
+            nudges: 0,
+            nudge_mark: 0,
+            nudge_tx: 0,
+            held_seen: None,
+            exact_seen: None,
+            dry: None,
+            read_at: now,
+            txlog: std::collections::VecDeque::with_capacity(TX_LOG),
+            peer_measured: false,
         }
     }
 
@@ -484,6 +647,51 @@ impl StreamPath {
         self.behind_reports = 0;
         self.probe_seen = false;
         self.max_gap = Duration::ZERO;
+        self.hold = None;
+        self.hold_raised = None;
+        self.hold_stick = HOLD_STICK;
+        self.hold_probes = 0;
+        self.hold_probed = None;
+        self.signs = 0;
+        self.sign_held = 0;
+        self.sign_tx = 0;
+        self.resolved = None;
+        self.hold_went_up = false;
+        self.turn_at = now;
+        self.stale = false;
+        self.probe = None;
+        self.probe_spoiled = false;
+        self.probe_at = now;
+        self.last_tx = now;
+        self.nudges = 0;
+        self.held_seen = None;
+        self.exact_seen = None;
+        self.dry = None;
+        self.read_at = now;
+        self.txlog.clear();
+        self.peer_measured = false;
+    }
+
+    /// Remember a write of frames from number `first` on.
+    fn wrote(&mut self, first: u32, began: Instant) {
+        if self.txlog.len() == TX_LOG {
+            self.txlog.pop_front();
+        }
+        self.txlog.push_back((first, began, Instant::now()));
+        self.last_tx = began;
+    }
+
+    /// Of our frames from number `rx` on, how many the other side must have had in front of it, unreadable, when it
+    /// wrote a record saying that it had read frames below `rx` and then nothing for `age`: those whose write had
+    /// returned `HELD_MARGIN` or more before that time was up, counted from when the write of frame `rx - 1` began
+    /// (the earliest the other side can have read it). None when that write is no longer remembered.
+    fn held(&self, rx: u32, age: Duration) -> Option<u32> {
+        let last = rx.checked_sub(1)?;
+        let base = self.txlog.iter().rev().find(|w| w.0 <= last)?.1;
+        let limit = (base + age).checked_sub(HELD_MARGIN)?;
+        // Frames from `rx` up to the first write that returned too late.
+        let end = self.txlog.iter().find(|w| w.2 > limit).map_or(self.tx, |w| w.0);
+        Some(end.saturating_sub(rx))
     }
 
     /// Probes sent in this epoch and whether the other side has been heard (tests).
@@ -728,6 +936,26 @@ impl State {
             self.slow(now, format!("a turn took {took:.0?}"));
         }
         r
+    }
+
+    /// Send what is queued without reading first, for a caller that goes on to wait for the answer (`pump` follows):
+    /// the read a turn starts with costs two system calls, and on an exchange the other side waits for these frames.
+    /// The acknowledgement and credits the frames carry are those of the last turn.
+    pub fn send_now(&mut self, now: Instant) -> io::Result<()> {
+        if let Some(e) = self.error() {
+            return Err(e);
+        }
+        if self.stream.phase == Phase::Up {
+            // Nothing was read in this turn: its records do not say that nothing was readable, and after a pause
+            // their `rx` is old.
+            self.stream.dry = None;
+            self.stream.stale = now.saturating_duration_since(self.stream.turn_at) > STALE_AFTER;
+            self.send(now);
+            if let Some(e) = self.error() {
+                return Err(e);
+            }
+        }
+        Ok(())
     }
 
     /// Say that the link was held up (at most once a second), with this thread's page faults and involuntary context
@@ -1000,16 +1228,29 @@ impl State {
     }
 
     fn read_stream(&mut self, now: Instant, sink: &mut Sink) -> bool {
+        self.stream.dry = None;
+        self.stream.stale = false;
+        self.stream.turn_at = now;
         if self.full || !matches!(self.stream.phase, Phase::Probing | Phase::Up) {
             return false;
         }
         let mut progress = false;
+        let records = self.stream.records;
         for _ in 0..8 {
             let r = {
                 let s = &mut self.stream;
                 let Some(dev) = s.dev.as_mut() else { return progress };
                 let space = s.rbuf.space();
-                dev.read(space)
+                if self.tune.profile {
+                    let t = Instant::now();
+                    let r = dev.read(space);
+                    self.stats.reads += 1;
+                    self.stats.reads_empty += r.is_err() as u64;
+                    self.stats.read_ns += t.elapsed().as_nanos() as u64;
+                    r
+                } else {
+                    dev.read(space)
+                }
             };
             match r {
                 Ok(0) => {
@@ -1025,10 +1266,15 @@ impl State {
                 }
                 Ok(n) => {
                     self.stream.rbuf.filled(n);
+                    self.stream.read_at = Instant::now();
                     progress = true;
                     self.parse_stream(now, sink);
                 }
-                Err(e) if e.kind() == ErrorKind::WouldBlock => break,
+                Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                    // (Dry since this turn began at the latest, if nothing was read in it.)
+                    self.stream.dry = Some(now);
+                    break;
+                }
                 Err(e) if e.kind() == ErrorKind::Interrupted => continue,
                 Err(e) => {
                     self.stream_down(now, &format!("read: {e}"), true);
@@ -1039,7 +1285,122 @@ impl State {
                 break;
             }
         }
+        if self.stream.records != records {
+            self.hold_sample(now);
+        }
         progress
+    }
+
+    /// What the records just read say about the hold of this side's sending direction. The other side reads a frame
+    /// of ours only once the hold's worth of later frames have reached it, so:
+    /// - the frames written here less the frames it says it has read (`rx`, in every record) are never fewer than
+    ///   the hold: a smaller number lowers the estimate;
+    /// - an acknowledgement written in a turn that found nothing more to read says for how long that had been so
+    ///   since the last frame read (its `seq`, less what its device may be late by): our frames after that one that
+    ///   were written within that time (less `HELD_MARGIN`) were in front of the other side, unreadable (`held`).
+    ///   With a hold that number is not more than the hold, so a larger one is a sign that the estimate is low;
+    /// - the answer to a hold probe (a ping written alone and nothing else until it is answered) is the hold
+    ///   exactly, and so is a record for which the two numbers above agree: the accepting side's first estimate
+    ///   comes from the connecting side's probe pings that way;
+    /// - when data of ours was acknowledged only after nudges, by a record that still did not show the last nudge
+    ///   read (and was not `STALE`), the frames it had not read up to that nudge are what was held: a sign too.
+    ///
+    /// `SIGNS` signs close to one another raise the estimate to the fewest frames any of them showed held.
+    fn hold_sample(&mut self, now: Instant) {
+        let s = &mut self.stream;
+        let (held, exact, resolved) = (s.held_seen.take(), s.exact_seen.take(), s.resolved.take());
+        if s.phase != Phase::Up || s.peer_rx == 0 || self.tune.push.is_some() {
+            return;
+        }
+        let unread = s.tx.wrapping_sub(s.peer_rx).min(HOLD_MAX);
+        let answered = s.probe.is_some_and(|p| s.peer_rx >= p);
+        let was = s.hold;
+        // Exact: a probe's answer, or the two bounds agreeing where that does not raise the estimate (a rise from
+        // the bounds is a sign like any other).
+        let measured = if answered && !s.probe_spoiled { Some(unread) } else { exact.filter(|&n| was.is_none_or(|e| n <= e)) };
+        if let Some(n) = measured {
+            s.hold = Some(n);
+            s.hold_probed = Some(n);
+            s.hold_raised = None;
+            s.signs = 0;
+        } else if let Some(e) = s.hold {
+            // What this batch shows held beyond the estimate, if anything.
+            let mut sign = held.filter(|&n| n > e);
+            if let Some((rx, stale)) = resolved {
+                // A stall is over: its data is acknowledged. Did that take the nudges?
+                let behind = s.nudge_tx.saturating_sub(rx).min(e + s.nudges).min(HOLD_MAX);
+                if !stale && behind > e {
+                    sign = Some(sign.map_or(behind, |n| n.max(behind)));
+                }
+            }
+            let mut to = e;
+            if let Some(n) = sign {
+                let near = s.signs > 0 && s.tx.wrapping_sub(s.sign_tx) <= SIGN_FRAMES;
+                s.sign_held = if near { s.sign_held.min(n) } else { n };
+                s.signs = if near { s.signs + 1 } else { 1 };
+                s.sign_tx = s.tx;
+                if s.signs >= SIGNS {
+                    to = s.sign_held;
+                }
+            }
+            if to > e {
+                s.hold = Some(to);
+                if std::mem::replace(&mut s.hold_went_up, true) {
+                    s.hold_stick = (s.hold_stick * 2).min(HOLD_STICK_MAX);
+                }
+                s.hold_raised = Some(now);
+                s.signs = 0;
+            } else if unread < e && s.hold_raised.is_none_or(|t| now.saturating_duration_since(t) >= s.hold_stick) {
+                s.hold = Some(unread);
+            }
+        }
+        if s.hold > was && was.is_some() {
+            self.stats.hold_raises += 1;
+        }
+        if answered {
+            if !s.probe_spoiled {
+                s.hold_probes += 1;
+                self.stats.hold_probes += 1;
+            }
+            s.probe = None;
+            s.probe_at = now;
+        }
+        if resolved.is_some() || answered {
+            s.nudges = 0;
+        }
+        self.stats.hold = s.hold;
+    }
+
+    /// An estimate above the last exact measurement that has stood for `hold_stick` is tried one lower (see
+    /// `HOLD_STICK`): if the hold is there, the stalls that follow put it back for twice as long.
+    fn hold_decay(&mut self, now: Instant) {
+        let s = &mut self.stream;
+        let (Some(e), Some(at)) = (s.hold, s.hold_raised) else { return };
+        if e > s.hold_probed.unwrap_or(0) && now.saturating_duration_since(at) >= s.hold_stick {
+            s.hold = Some(e - 1);
+            // The next step down waits as long again.
+            s.hold_raised = (e - 1 > s.hold_probed.unwrap_or(0)).then_some(now);
+            self.stats.hold = s.hold;
+        }
+    }
+
+    /// Frames to write after a write on the stream so that the other side reads its last frame.
+    fn pushes(&self) -> usize {
+        match self.tune.push {
+            Some(n) => n as usize,
+            None => self.stream.hold.map_or(PUSH, |h| h as usize),
+        }
+    }
+
+    /// This side has measured the hold of its sending direction in this epoch (or does not measure): the connecting
+    /// side with its hold probes, the accepting side from the first of their pings.
+    fn measured(&self) -> bool {
+        self.tune.push.is_some() || if self.connector { self.stream.hold_probes >= HOLD_PROBES } else { self.stream.hold.is_some() }
+    }
+
+    /// Whether this side has measured its direction, and the other side its own (`Link::settle`).
+    pub fn hold_measured(&self) -> (bool, bool) {
+        (self.measured(), self.stream.peer_measured)
     }
 
     /// The other side closed its stream device while the stream was up. Its process ended, it closed the link (a
@@ -1167,12 +1528,31 @@ impl State {
         if h.kind == kind::PROBE && s.phase == Phase::Up {
             s.probe_seen = true;
         }
+        if h.flags & MEASURED != 0 {
+            s.peer_measured = true;
+        }
         self.on_ack(h.ack);
+        let s = &mut self.stream;
+        if s.nudges > 0 && s.probe.is_none() && s.resolved.is_none() && self.acked >= s.nudge_mark {
+            s.resolved = Some((h.rx, h.flags & STALE != 0));
+        }
         match h.kind {
             kind::DATA => self.on_data(h.seq, payload, true, now, sink),
             kind::ACK => {
                 if h.flags & PING != 0 {
                     self.pong_due = true;
+                }
+                // An acknowledgement's `seq`: one more than the microseconds since its sender last read a frame,
+                // when its turn had found nothing more to read (0: it does not say).
+                let s = &mut self.stream;
+                if h.seq > 0 && s.phase == Phase::Up && h.rx <= s.tx {
+                    if let Some(n) = s.held(h.rx, Duration::from_micros(h.seq - 1)) {
+                        let n = n.min(HOLD_MAX);
+                        s.held_seen = Some(s.held_seen.map_or(n, |m| m.max(n)));
+                        if n == s.tx - h.rx {
+                            s.exact_seen = Some(n);
+                        }
+                    }
                 }
             }
             kind::NAK => {
@@ -1304,6 +1684,7 @@ impl State {
             }
             Ok((d, found)) => {
                 let s = &mut self.stream;
+                s.late = d.late();
                 s.dev = Some(d);
                 s.dev_at = Some(now);
                 if self.connector {
@@ -1419,6 +1800,7 @@ impl State {
                 }
             }
             Phase::Up => {
+                self.hold_decay(now);
                 let window = self.window();
                 let written = self.written();
                 let s = &mut self.stream;
@@ -1452,7 +1834,10 @@ impl State {
                         self.stream_down(now, &why, true);
                         return;
                     }
-                    if now - s.last_rx > self.tune.ping && now - s.last_ping > self.tune.ping {
+                    // The connecting side's keepalives are hold probes, and the accepting side reads its own
+                    // direction's hold from them; its own keepalive comes later, when those stop arriving.
+                    let ping = if self.connector { self.tune.ping } else { self.tune.ping * 3 / 2 };
+                    if now - s.last_rx > ping && now - s.last_ping > ping {
                         self.ping_due = true;
                     }
                 }
@@ -1549,7 +1934,11 @@ impl State {
         let ack = self.expected > self.ack_sent
             && (self.expected - self.ack_sent >= 256 << 10 || self.ack_due.is_some_and(|t| now - t >= self.tune.ack_delay));
         let reply = self.stream.probe_reply && self.stream.phase == Phase::Up;
-        if self.pong_due || self.ping_due || credits || ack || reply {
+        // The keepalive of an idle link goes as a hold probe (below): a ping alone, which measures the hold again.
+        let keepalive = self.ping_due && !(self.pong_due || credits || ack || reply) && self.stream.tx == tx0 && self.hold_probe_fits(now);
+        if keepalive {
+            self.hold_probe(now);
+        } else if self.pong_due || self.ping_due || credits || ack || reply {
             let flags = if self.ping_due { PING } else { 0 };
             let sent = if self.stream.phase == Phase::Up {
                 self.stream_control(kind::ACK, flags, 0)
@@ -1579,14 +1968,26 @@ impl State {
                 self.ack_due = None;
             }
         }
-        // The last frames to arrive are not read on these NHIs until up to three more follow them (results/kernel/
-        // usb4stream-reliable-20261013): every write on the stream ends with PUSH more, acknowledgements.
-        if self.stream.phase == Phase::Up && self.stream.tx != tx0 {
-            for _ in 0..PUSH {
-                if !self.stream_control(kind::ACK, 0, 0) {
-                    break;
+        if self.stream.phase == Phase::Up {
+            if keepalive {
+                // Alone: nothing follows it.
+            } else if self.stream.tx != tx0 {
+                // The last frames to arrive are not read on these NHIs until as many more as the direction holds
+                // follow them (the module documentation): every write on the stream ends with that many more,
+                // acknowledgements.
+                if self.stream.probe.is_some() {
+                    self.stream.probe_spoiled = true;
                 }
-                self.stats.pushes += 1;
+                for _ in 0..self.pushes() {
+                    if !self.stream_control(kind::ACK, 0, 0) {
+                        break;
+                    }
+                    self.stats.pushes += 1;
+                }
+            } else if !self.nudge(now) && self.connector && self.stream.hold_probes < HOLD_PROBES && self.hold_probe_fits(now) {
+                // Nothing to send: measure the hold of this direction while the link is quiet. (One side probes:
+                // the answer to a ping would follow the other side's own ping, which would no longer be alone.)
+                self.hold_probe(now);
             }
         }
         // Our frames of the epoch read and written, over TCP, while the epoch opens and, once up, while the other
@@ -1610,6 +2011,68 @@ impl State {
             }
         }
         progress
+    }
+
+    /// A hold probe can go now: the epoch is up, the link measures, none is under way, and this direction is quiet
+    /// (nothing unacknowledged, nothing written for `QUIET`, and `QUIET` since the last probe was answered), so that
+    /// its ping arrives alone.
+    fn hold_probe_fits(&self, now: Instant) -> bool {
+        let s = &self.stream;
+        s.phase == Phase::Up
+            && self.tune.push.is_none()
+            && s.probe.is_none()
+            && self.acked >= self.written()
+            && now.saturating_duration_since(s.last_tx) >= QUIET
+            && now.saturating_duration_since(s.probe_at) >= QUIET
+    }
+
+    /// Start a hold probe: a ping with nothing behind it. The other side answers a ping at once, and its answer
+    /// says how many of our frames it has read: with a hold the ping stays unread until nudges follow it, and the
+    /// frames it took are the hold (`hold_sample`).
+    fn hold_probe(&mut self, now: Instant) {
+        if self.stream_control(kind::ACK, PING, 0) {
+            let s = &mut self.stream;
+            s.probe = Some(s.tx);
+            s.probe_spoiled = false;
+            s.probe_at = now;
+            s.nudges = 0;
+            s.last_ping = now;
+            self.ping_due = false;
+        }
+    }
+
+    /// With data unacknowledged (or a hold probe unanswered), nothing written and nothing heard for `Tuning::nudge`:
+    /// one more frame, a ping, in case the other side's receiver holds our last frames back (the estimate of the
+    /// hold is too low, or the hold changed) or ours holds its acknowledgement (its answer brings it). At most
+    /// `NUDGE_MAX` per stall; the retransmission timer goes on as before. Returns whether a frame was written.
+    fn nudge(&mut self, now: Instant) -> bool {
+        let written = self.written();
+        let s = &mut self.stream;
+        if self.tune.push.is_some() || self.full || self.peer_full {
+            return false;
+        }
+        if self.acked >= written && s.probe.is_none() {
+            // (Acknowledged over TCP, or nothing to wait for.)
+            s.nudges = 0;
+            s.resolved = None;
+            return false;
+        }
+        let wait = self.tune.nudge;
+        if s.nudges >= NUDGE_MAX || now.saturating_duration_since(s.last_tx) < wait || now.saturating_duration_since(s.last_rx) < wait {
+            return false;
+        }
+        let first = s.nudges == 0;
+        if !self.stream_control(kind::ACK, PING, 0) {
+            return false;
+        }
+        let s = &mut self.stream;
+        if first {
+            s.nudge_mark = written;
+        }
+        s.nudges += 1;
+        s.nudge_tx = s.tx;
+        self.stats.nudges += 1;
+        true
     }
 
     fn send_probe(&mut self, now: Instant) {
@@ -1640,14 +2103,23 @@ impl State {
 
     /// One header-only record on the stream; false if it could not go now.
     fn stream_control(&mut self, k: u8, flags: u8, seq: u64) -> bool {
+        let measured = if self.measured() { MEASURED } else { 0 };
         let s = &mut self.stream;
         let Some(dev) = s.dev.as_mut() else { return false };
         if s.tx.wrapping_sub(s.peer_rx) + 4 > s.peer_ring && k != kind::PROBE {
             return false;
         }
+        let t = Instant::now();
+        // An acknowledgement written in a turn that read the device dry says for how long nothing had been readable
+        // when the turn began: since the last frames were read (the other side's `hold_sample`).
+        let seq = match s.dry {
+            Some(dry) if k == kind::ACK && s.rx_last > 0 => 1 + dry.saturating_duration_since(s.read_at).saturating_sub(s.late).as_micros() as u64,
+            _ => seq,
+        };
+        let stale = if s.stale { STALE } else { 0 };
         let h = Header {
             kind: k,
-            flags,
+            flags: flags | measured | stale,
             len: 0,
             session: self.session as u32,
             epoch: s.epoch,
@@ -1657,10 +2129,16 @@ impl State {
             rx: s.rx_last,
             pcrc: 0,
         };
-        match dev.writev(&[IoSlice::new(&h.encode())]) {
+        let r = dev.writev(&[IoSlice::new(&h.encode())]);
+        if self.tune.profile {
+            self.stats.writes += 1;
+            self.stats.write_ns += t.elapsed().as_nanos() as u64;
+        }
+        match r {
             Ok(_) => {
+                s.wrote(s.tx, t);
                 s.tx += 1;
-                s.first_tx_at.get_or_insert_with(Instant::now);
+                s.first_tx_at.get_or_insert(t);
                 s.rx_reported = s.rx_last;
                 self.ack_sent = self.expected;
                 self.stats.frames += 1;
@@ -1678,6 +2156,7 @@ impl State {
     fn send_stream_data(&mut self, now: Instant) -> bool {
         let mut progress = false;
         let written = self.written();
+        let measured = if self.measured() { MEASURED } else { 0 } | if self.stream.stale { STALE } else { 0 };
         while self.stream.next < written && self.stream.phase == Phase::Up && !self.peer_full {
             let s = &mut self.stream;
             let window = self.tune.window(s.peer_ring);
@@ -1715,7 +2194,7 @@ impl State {
             for (k, &len) in s.lens.iter().enumerate() {
                 let h = Header {
                     kind: kind::DATA,
-                    flags: 0,
+                    flags: measured,
                     len: len as u16,
                     session: self.session as u32,
                     epoch: s.epoch,
@@ -1728,6 +2207,7 @@ impl State {
                 s.hdrs.push(h.encode());
                 seq += len as u64;
             }
+            let began;
             let r = {
                 let mut iov = Vec::with_capacity(2 * s.lens.len());
                 let mut at = s.next;
@@ -1737,7 +2217,13 @@ impl State {
                     iov.push(IoSlice::new(&self.sbuf[off..off + len]));
                     at += len as u64;
                 }
-                s.dev.as_mut().map(|d| d.writev(&iov))
+                began = Instant::now();
+                let r = s.dev.as_mut().map(|d| d.writev(&iov));
+                if self.tune.profile {
+                    self.stats.writes += 1;
+                    self.stats.write_ns += began.elapsed().as_nanos() as u64;
+                }
+                r
             };
             match r {
                 Some(Ok(mut n)) => {
@@ -1753,6 +2239,9 @@ impl State {
                         bytes += len as u64;
                     }
                     debug_assert!(n == 0 || n < FRAME, "a record was cut");
+                    if records > 0 {
+                        s.wrote(s.tx, began);
+                    }
                     s.tx += records as u32;
                     s.next += bytes;
                     s.rx_reported = s.rx_last;
@@ -1819,16 +2308,23 @@ impl State {
         progress
     }
 
-    /// File descriptors to wait on and their events.
-    pub fn poll_fds(&self, out: &mut Vec<libc::pollfd>) {
+    /// File descriptors to wait on and their events. Returns whether the stream device is not among them though it
+    /// may bring something (its rings are busy-polled: nothing wakes a `poll()` on it), so that the caller sleeps
+    /// only briefly.
+    pub fn poll_fds(&self, out: &mut Vec<libc::pollfd>) -> bool {
         out.clear();
         let read = if self.full { 0 } else { libc::POLLIN };
         for p in self.tcp.iter().filter(|p| p.alive) {
             let ev = read | if p.pending() > 0 { libc::POLLOUT } else { 0 };
             out.push(libc::pollfd { fd: p.sock.as_raw_fd(), events: ev, revents: 0 });
         }
-        if let Some(fd) = self.stream.dev.as_ref().and_then(|d| d.fd()) {
-            out.push(libc::pollfd { fd, events: read, revents: 0 });
+        match self.stream.dev.as_ref().map(|d| d.fd()) {
+            Some(Some(fd)) => {
+                out.push(libc::pollfd { fd, events: read, revents: 0 });
+                false
+            }
+            Some(None) => !self.full && matches!(self.stream.phase, Phase::Probing | Phase::Up),
+            None => false,
         }
     }
 
@@ -1846,7 +2342,7 @@ impl State {
         // On the stream too, ahead of the CLOSE that closing the device sends, so that the other side does not take
         // that for a failed stream (with the frames that make the receiver read it).
         if self.stream.phase == Phase::Up && self.stream_control(kind::BYE, 0, 0) {
-            for _ in 0..PUSH {
+            for _ in 0..self.pushes() {
                 if !self.stream_control(kind::ACK, 0, 0) {
                     break;
                 }

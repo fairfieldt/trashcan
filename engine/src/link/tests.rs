@@ -647,3 +647,152 @@ fn a_peer_that_stops_for_a_second_does_not_lose_its_stream() {
     let (sa, sb) = (a.stats(), b.stats());
     assert_eq!(sa.fallbacks + sb.fallbacks, 0, "{sa:?} {sb:?}");
 }
+
+/// `rounds` ping-pongs of 64 bytes, `a` first; the time they took.
+fn ping_pongs(a: &Link, b: &Link, rounds: u64) -> Duration {
+    let start = Instant::now();
+    thread::scope(|s| {
+        s.spawn(|| {
+            let mut buf = [0u8; 64];
+            for _ in 0..rounds {
+                b.read_exact(&mut buf, Wait::Stall(Duration::from_secs(5))).unwrap();
+                b.send(&[&buf]).unwrap();
+            }
+        });
+        let mut buf = [0u8; 64];
+        for i in 0..rounds {
+            let m = pattern(0, i * 64, 64);
+            a.send(&[&m]).unwrap();
+            a.read_exact(&mut buf, Wait::Stall(Duration::from_secs(5))).unwrap();
+            assert!(buf[..] == m[..], "round {i}");
+        }
+    });
+    start.elapsed()
+}
+
+/// `rounds` exchanges of `len` bytes between the two ends of one link, checked, `a` waiting `gap` before each (as a
+/// machine that computes between two all-reduces: nothing of the next exchange pushes the last one's frames along);
+/// the time they took.
+fn exchanges(a: &Link, b: &Link, rounds: usize, len: usize, gap: Duration) -> Duration {
+    let (mut la, mut lb) = (Lanes::from_links(vec![a.clone()]), Lanes::from_links(vec![b.clone()]));
+    let start = Instant::now();
+    thread::scope(|s| {
+        s.spawn(|| {
+            for i in 0..rounds {
+                let mut inp = vec![0; len];
+                lb.exchange(&payload(len, 1, i), &mut inp).unwrap();
+                assert_eq!(inp, payload(len, 0, i));
+            }
+        });
+        for i in 0..rounds {
+            if !gap.is_zero() {
+                thread::sleep(gap);
+            }
+            let mut inp = vec![0; len];
+            la.exchange(&payload(len, 0, i), &mut inp).unwrap();
+            assert_eq!(inp, payload(len, 1, i));
+        }
+    });
+    start.elapsed()
+}
+
+#[test]
+fn each_direction_gets_the_pushes_its_hold_needs() {
+    // The hold belongs to a direction of the cable. Both sides have measured theirs when `connect` returns, a write
+    // is followed by that many frames and no more, and nothing waits for a nudge or a retransmission.
+    for hold_at in [[0, 0], [0, 1], [3, 0], [2, 1], [3, 3]] {
+        let p = Pair::new(256);
+        p.set_faults(Faults { hold_at, ..Default::default() });
+        let tune = Tuning { rto: Duration::from_millis(50), ..fast() };
+        let (a, b) = link_pair(Some(&p), 256, tune);
+        assert_eq!((a.path(), b.path()), ("stream", "stream"));
+        // The connecting side (end 0) sends toward end 1. A reading can be one high (a frame in flight), never low.
+        let (ha, hb) = (a.stats().hold.expect("measured"), b.stats().hold.expect("measured"));
+        assert!(ha >= hold_at[1] as u32 && hb >= hold_at[0] as u32, "{hold_at:?}: {ha} {hb}");
+        wait_for("exact estimates", Duration::from_secs(3), || {
+            (a.stats().hold, b.stats().hold) == (Some(hold_at[1] as u32), Some(hold_at[0] as u32))
+        });
+        let (pa, pb) = (a.stats().pushes, b.stats().pushes);
+        let rounds = 300;
+        let took = ping_pongs(&a, &b, rounds);
+        let (sa, sb) = (a.stats(), b.stats());
+        assert!(took < Duration::from_secs(2), "{hold_at:?}: {rounds} round trips took {took:?}\n{sa:?}\n{sb:?}");
+        assert_eq!(sa.rewinds + sb.rewinds, 0, "{hold_at:?}: {sa:?}\n{sb:?}");
+        // One write a round, each followed by the direction's hold in frames (an acknowledgement on its own now
+        // and then adds a few).
+        for (s, before, hold) in [(&sa, pa, hold_at[1]), (&sb, pb, hold_at[0])] {
+            let pushed = s.pushes - before;
+            assert!(pushed >= rounds * hold as u64 && pushed <= (rounds + 20) * hold as u64, "{hold_at:?}: {pushed} pushes\n{s:?}");
+        }
+        // Exchanges with a pause between them. (A thread of a busy test machine that loses its core for a
+        // millisecond brings a nudge from the other side; the estimates must not follow those.)
+        let took = exchanges(&a, &b, 200, 9216, Duration::from_micros(300));
+        let (sa, sb) = (a.stats(), b.stats());
+        assert!(took < Duration::from_secs(2), "{hold_at:?}: 200 exchanges took {took:?}\n{sa:?}\n{sb:?}");
+        assert_eq!(sa.rewinds + sb.rewinds, 0, "{hold_at:?}: {sa:?}\n{sb:?}");
+        assert_eq!((sa.hold, sb.hold), (Some(hold_at[1] as u32), Some(hold_at[0] as u32)), "{hold_at:?}: {sa:?}\n{sb:?}");
+    }
+}
+
+#[test]
+fn a_hold_that_grows_costs_a_nudge_and_is_learnt() {
+    // The link measured no hold; then the receivers start to hold frames back (the hold of a direction has differed
+    // between opens of a device; within one it has not been seen to change, but nothing promises that). The first
+    // messages wait for nudges (1 ms each here, not the 50 ms retransmission timer) or for the acknowledgements
+    // that say what is held, the estimates go up, and the rest run as before. Ping-pongs first, where a message is
+    // one frame and only nudges get it through, then exchanges with a pause between them, where both sides wait at
+    // once.
+    let gap = Duration::from_micros(300);
+    for exchange in [false, true] {
+        let p = Pair::new(256);
+        let tune = Tuning { rto: Duration::from_millis(50), nudge: Duration::from_millis(1), ..fast() };
+        let (a, b) = link_pair(Some(&p), 256, tune);
+        wait_for("estimates", Duration::from_secs(3), || (a.stats().hold, b.stats().hold) == (Some(0), Some(0)));
+        p.set_faults(Faults { hold_at: [2, 3], ..Default::default() });
+        let took = if exchange { exchanges(&a, &b, 300, 9216, gap) } else { ping_pongs(&a, &b, 300) };
+        let (sa, sb) = (a.stats(), b.stats());
+        assert!(took < Duration::from_secs(2), "exchange {exchange}: 300 rounds took {took:?}\n{sa:?}\n{sb:?}");
+        assert!(sa.hold_raises > 0 && sb.hold_raises > 0, "exchange {exchange}: {sa:?}\n{sb:?}");
+        assert!(sa.hold >= Some(3) && sb.hold >= Some(2), "exchange {exchange}: {sa:?}\n{sb:?}");
+        assert!(sa.rewinds + sb.rewinds <= 2, "exchange {exchange}: {sa:?}\n{sb:?}");
+        // Once learnt, nothing waits, and the estimates stay.
+        let raises = sa.hold_raises + sb.hold_raises;
+        let took = if exchange { exchanges(&a, &b, 300, 9216, gap) } else { ping_pongs(&a, &b, 300) };
+        let (sa, sb) = (a.stats(), b.stats());
+        assert!(took < Duration::from_millis(600), "exchange {exchange}: 300 more rounds took {took:?}\n{sa:?}\n{sb:?}");
+        assert_eq!(sa.hold_raises + sb.hold_raises, raises, "exchange {exchange}: {sa:?}\n{sb:?}");
+        assert_eq!((a.path(), b.path()), ("stream", "stream"));
+    }
+}
+
+#[test]
+fn an_idle_link_follows_its_hold_up_and_down() {
+    // The connecting side's keepalives are hold probes: an idle link notices that its directions hold more, or
+    // less, within a few keepalives, and the accepting side learns its own direction's hold from the same pings.
+    let p = Pair::new(256);
+    p.set_faults(Faults { hold_at: [3, 2], ..Default::default() });
+    let (a, b) = link_pair(Some(&p), 256, fast());
+    wait_for("estimates", Duration::from_secs(3), || (a.stats().hold, b.stats().hold) == (Some(2), Some(3)));
+    p.set_faults(Faults::default());
+    wait_for("lower estimates", Duration::from_secs(5), || (a.stats().hold, b.stats().hold) == (Some(0), Some(0)));
+    p.set_faults(Faults { hold_at: [1, 2], ..Default::default() });
+    wait_for("higher estimates", Duration::from_secs(5), || (a.stats().hold, b.stats().hold) == (Some(2), Some(1)));
+    let (sa, sb) = (a.stats(), b.stats());
+    assert_eq!(sa.fallbacks + sb.fallbacks + sa.rewinds + sb.rewinds, 0, "{sa:?}\n{sb:?}");
+    both_ways(&a, &b, 2 << 20);
+    assert_eq!((a.path(), b.path()), ("stream", "stream"));
+}
+
+#[test]
+fn a_fixed_number_of_pushes_is_kept() {
+    // `Tuning::push` (link-test's `--push`): no measuring, no nudges.
+    let p = Pair::new(256);
+    p.set_faults(Faults { hold: 2, ..Default::default() });
+    let tune = Tuning { push: Some(2), rto: Duration::from_millis(50), ..fast() };
+    let (a, b) = link_pair(Some(&p), 256, tune);
+    let took = ping_pongs(&a, &b, 200);
+    let (sa, sb) = (a.stats(), b.stats());
+    assert!(took < Duration::from_secs(2), "{took:?}\n{sa:?}\n{sb:?}");
+    assert_eq!((sa.hold, sa.hold_probes, sa.nudges, sb.nudges), (None, 0, 0, 0), "{sa:?}\n{sb:?}");
+    assert!(sa.pushes >= 400 && sa.pushes < 480, "{sa:?}");
+}
