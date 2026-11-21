@@ -233,8 +233,8 @@ pub struct Shard {
     gated: bool,
     /// Profiling (`TRASHCAN_INKLING_PROFILE=1`): a timestamp pool, the labels of the segment in flight, and GPU
     /// milliseconds per kernel and in whole segments.
-    stamp_pool: Option<vk::QueryPool>,
-    stamp_labels: Vec<String>,
+    stamp_pool: Option<[vk::QueryPool; MICRO]>,
+    stamp_labels: [Vec<String>; MICRO],
     pub profile: std::collections::BTreeMap<String, (u64, f64)>,
 }
 
@@ -423,9 +423,8 @@ impl Shard {
             (gpu.dev.create_event(&vk::EventCreateInfo::default(), None)?, gpu.dev.create_event(&vk::EventCreateInfo::default(), None)?)
         };
         let stamp_pool = if std::env::var("TRASHCAN_INKLING_PROFILE").is_ok() {
-            Some(unsafe {
-                gpu.dev.create_query_pool(&vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(crate::vulkan::STAMP_CAPACITY), None)?
-            })
+            let info = vk::QueryPoolCreateInfo::default().query_type(vk::QueryType::TIMESTAMP).query_count(crate::vulkan::STAMP_CAPACITY);
+            Some(unsafe { [gpu.dev.create_query_pool(&info, None)?, gpu.dev.create_query_pool(&info, None)?] })
         } else {
             None
         };
@@ -465,7 +464,7 @@ impl Shard {
             graphs: Default::default(),
             gate,
             gated: false,
-            stamp_labels: Vec::new(),
+            stamp_labels: Default::default(),
             profile: Default::default(),
             timeline,
             counter: 0,
@@ -563,8 +562,9 @@ impl Shard {
         }
     }
 
-    fn start_stamps(&self, cmd: vk::CommandBuffer) {
-        if let Some(pool) = self.stamp_pool {
+    /// Profile the submission being recorded with micro-batch `mb`'s timestamps.
+    fn start_stamps(&self, cmd: vk::CommandBuffer, mb: usize) {
+        if let Some(pool) = self.stamp_pool.map(|p| p[mb]) {
             unsafe { self.gpu.dev.cmd_reset_query_pool(cmd, pool, 0, crate::vulkan::STAMP_CAPACITY) };
             *self.gpu.stamps.borrow_mut() = Some(crate::vulkan::Stamps { pool, labels: Vec::new(), dispatches: true });
         }
@@ -587,18 +587,18 @@ impl Shard {
     }
 
     /// Submit one segment of micro-batch `mb` on its own (prefill batches): the host has written its inputs into
-    /// `hin`. It runs after the submissions before it; `wait` takes the returned ticket. With profiling only one
-    /// submission may be in flight.
+    /// `hin`. It runs after the submissions before it; `wait` takes the returned ticket, before the micro-batch's
+    /// next segment is submitted.
     pub fn submit(&mut self, seg: Seg, n: usize, mb: usize) -> Result<u64> {
         let cmd = self.gpu.begin()?;
-        self.start_stamps(cmd);
+        self.start_stamps(cmd, mb);
         self.gpu.host_barrier(cmd, false);
         self.mb.set(mb);
         let recorded = self.record(cmd, seg, n);
         self.mb.set(0);
         recorded?;
         self.gpu.host_barrier(cmd, true);
-        self.stamp_labels = self.take_stamps();
+        self.stamp_labels[mb] = self.take_stamps();
         self.gpu.finish(cmd)?;
         self.counter += 1;
         self.gpu.submit(cmd, None, Some((self.timeline, self.counter)), vk::Fence::null())?;
@@ -607,20 +607,13 @@ impl Shard {
         Ok(self.counter)
     }
 
-    /// Whether profiling is on (`TRASHCAN_INKLING_PROFILE`): batches then run as one micro-batch.
-    pub fn profiling(&self) -> bool {
-        self.stamp_pool.is_some()
-    }
-
-    /// Wait for the submission `ticket` (`submit`) and free the command buffers up to it.
-    pub fn wait(&mut self, ticket: u64) -> Result<()> {
+    /// Wait for micro-batch `mb`'s submission `ticket` (`submit`), free the command buffers up to it and collect
+    /// its profiling.
+    pub fn wait(&mut self, ticket: u64, mb: usize) -> Result<()> {
         let start = std::time::Instant::now();
         while unsafe { self.gpu.dev.get_semaphore_counter_value(self.timeline)? } < ticket {
             ensure!(start.elapsed().as_secs() < 10, "GPU segment did not finish");
             std::hint::spin_loop();
-        }
-        if ticket == self.counter {
-            return self.retire();
         }
         let gpu = &self.gpu;
         self.cmds.retain(|&(t, cmd)| {
@@ -629,6 +622,28 @@ impl Shard {
             }
             t > ticket
         });
+        self.collect_stamps(mb)
+    }
+
+    /// Add the timestamps of micro-batch `mb`'s finished submission to the profile.
+    fn collect_stamps(&mut self, mb: usize) -> Result<()> {
+        let labels = std::mem::take(&mut self.stamp_labels[mb]);
+        let (Some(pools), false) = (self.stamp_pool, labels.is_empty()) else { return Ok(()) };
+        let mut ticks = vec![0u64; labels.len()];
+        unsafe { self.gpu.dev.get_query_pool_results(pools[mb], 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
+        let period = self.gpu.period as f64 * 1e-6;
+        // Stamps come in (top, bottom) pairs per segment, dispatch and copy.
+        let mut open: std::collections::HashMap<&str, u64> = Default::default();
+        for (l, &t) in labels.iter().zip(&ticks) {
+            let key = l.split(' ').next().unwrap_or(l);
+            if let Some(t0) = open.remove(key) {
+                let e = self.profile.entry(key.to_owned()).or_default();
+                e.0 += 1;
+                e.1 += (t.saturating_sub(t0)) as f64 * period;
+            } else {
+                open.insert(key, t);
+            }
+        }
         Ok(())
     }
 
@@ -640,7 +655,7 @@ impl Shard {
         let key = (n, plan.to_vec());
         if !self.graphs.contains_key(&key) {
             let cmd = self.gpu.begin()?;
-            self.start_stamps(cmd);
+            self.start_stamps(cmd, 0);
             self.gpu.host_barrier(cmd, false);
             for (j, &seg) in plan.iter().enumerate() {
                 if j > 0 {
@@ -663,7 +678,7 @@ impl Shard {
         }
         self.counter += 1;
         self.gpu.submit(g.cmd, None, Some((self.timeline, self.counter)), vk::Fence::null())?;
-        self.stamp_labels = g.labels.clone();
+        self.stamp_labels[0] = g.labels.clone();
         self.gated = true;
         Ok(())
     }
@@ -700,25 +715,7 @@ impl Shard {
             unsafe { self.gpu.dev.free_command_buffers(self.gpu.pool, &[cmd]) };
         }
         self.gated = false;
-        if let (Some(pool), false) = (self.stamp_pool, self.stamp_labels.is_empty()) {
-            let labels = std::mem::take(&mut self.stamp_labels);
-            let mut ticks = vec![0u64; labels.len()];
-            unsafe { self.gpu.dev.get_query_pool_results(pool, 0, &mut ticks, vk::QueryResultFlags::TYPE_64 | vk::QueryResultFlags::WAIT)? };
-            let period = self.gpu.period as f64 * 1e-6;
-            // Stamps come in (top, bottom) pairs per segment, dispatch and copy.
-            let mut open: std::collections::HashMap<&str, u64> = Default::default();
-            for (l, &t) in labels.iter().zip(&ticks) {
-                let key = l.split(' ').next().unwrap_or(l);
-                if let Some(t0) = open.remove(key) {
-                    let e = self.profile.entry(key.to_owned()).or_default();
-                    e.0 += 1;
-                    e.1 += (t.saturating_sub(t0)) as f64 * period;
-                } else {
-                    open.insert(key, t);
-                }
-            }
-        }
-        Ok(())
+        (0..MICRO).try_for_each(|mb| self.collect_stamps(mb))
     }
 
     /// Record the inputs of a sublayer: copy the host's `kinds` rows of `n` tokens (and with `ctrl`, `kinds` message

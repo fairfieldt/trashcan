@@ -225,7 +225,9 @@ pub fn vector(g: &Gguf, t: &TensorInfo) -> Result<Vec<f32>> {
 }
 
 /// RMS norm of each row of `x` (width `w.len()` or `d`) times `w` (none: no weight), eps 1e-6 as llama.cpp's
-/// `ggml_rms_norm` uses here. Eight running sums in a fixed order, so every machine gets the same bits.
+/// `ggml_rms_norm` uses here. Eight running sums in a fixed order, so every machine gets the same bits (with or
+/// without AVX: `group` inlines these loops into functions compiled for it).
+#[inline(always)]
 pub fn rms_into(x: &[f32], w: Option<&[f32]>, eps: f32, out: &mut [f32]) {
     let d = out.len();
     debug_assert_eq!(x.len(), d);
@@ -243,6 +245,7 @@ pub fn rms_into(x: &[f32], w: Option<&[f32]>, eps: f32, out: &mut [f32]) {
     }
 }
 
+#[inline(always)]
 pub fn dot(a: &[f32], b: &[f32]) -> f32 {
     let mut acc = [0f32; 8];
     for (x, y) in a.chunks_exact(8).zip(b.chunks_exact(8)) {
@@ -253,42 +256,65 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
     ((acc[0] + acc[1]) + (acc[2] + acc[3])) + ((acc[4] + acc[5]) + (acc[6] + acc[7]))
 }
 
+/// Most states a residual mix takes (the block states and the current residual).
+pub const MIX_STATES: usize = 16;
+
 /// Attention over depth for one token: `normed` are the RMS-normed states (earlier blocks, then the current
-/// residual); the result is their softmax mix by the query.
+/// residual; at most `MIX_STATES`); the result is their softmax mix by the query.
+#[inline(always)]
 pub fn mix(normed: &[&[f32]], query: &[f32], out: &mut [f32]) {
     let scale = 1.0 / (query.len() as f32).sqrt();
-    let scores: Vec<f32> = normed.iter().map(|s| dot(s, query) * scale).collect();
-    let m = scores.iter().copied().fold(f32::NEG_INFINITY, f32::max);
-    let e: Vec<f32> = scores.iter().map(|s| (s - m).exp()).collect();
-    let sum: f32 = e.iter().sum();
-    out.fill(0.);
-    for (s, w) in normed.iter().zip(&e) {
+    let mut e = [0f32; MIX_STATES];
+    let e = &mut e[..normed.len()];
+    let mut m = f32::NEG_INFINITY;
+    for (x, s) in e.iter_mut().zip(normed) {
+        *x = dot(s, query) * scale;
+        m = m.max(*x);
+    }
+    let mut sum = 0f32;
+    for x in e.iter_mut() {
+        *x = (*x - m).exp();
+        sum += *x;
+    }
+    for (i, (s, w)) in normed.iter().zip(e.iter()).enumerate() {
         let p = w / sum;
-        for (o, v) in out.iter_mut().zip(s.iter()) {
-            *o += p * v;
+        if i == 0 {
+            out.iter_mut().zip(s.iter()).for_each(|(o, v)| *o = p * v);
+        } else {
+            out.iter_mut().zip(s.iter()).for_each(|(o, v)| *o += p * v);
         }
     }
 }
 
-/// Causal depthwise convolution with a residual, of one token's `y` (pre-convolution values) given the last three
-/// inputs `hist` (oldest first, `3 x len`), as llama.cpp's `convolve` without dynamic taps: weights `w` [len][4]
-/// with `w[c][3]` on the current input. Shifts `y` into `hist`.
-pub fn conv_step(y: &[f32], hist: &mut [f32], w: &[f32], out: &mut [f32]) {
+/// Causal depthwise convolution with a residual, of one token's `y` (pre-convolution values) given the three
+/// inputs before it (`prev`, oldest first), as llama.cpp's `convolve` without dynamic taps. `taps` are the weights
+/// by tap (`conv_taps`): `taps[i * len + c]` is on `prev[i][c]` for i < 3 and on `y[c]` for i = 3.
+#[inline(always)]
+pub fn conv_row(y: &[f32], prev: [&[f32]; 3], taps: &[f32], out: &mut [f32]) {
     let n = y.len();
     let scale = 1.0 / 5f32.sqrt();
+    let (t0, rest) = taps.split_at(n);
+    let (t1, rest) = rest.split_at(n);
+    let (t2, t3) = rest.split_at(n);
+    let (a, b, cc) = (&prev[0][..n], &prev[1][..n], &prev[2][..n]);
+    let (t3, out) = (&t3[..n], &mut out[..n]);
     for c in 0..n {
-        let wc = &w[c * 4..c * 4 + 4];
-        let conv = wc[0] * hist[c] + wc[1] * hist[n + c] + wc[2] * hist[2 * n + c] + wc[3] * y[c];
+        let conv = t0[c] * a[c] + t1[c] * b[c] + t2[c] * cc[c] + t3[c] * y[c];
         out[c] = (y[c] + conv) * scale;
     }
-    hist.copy_within(n.., 0);
-    hist[2 * n..].copy_from_slice(y);
+}
+
+/// Convolution weights `w` [len][4] (GGUF order: `w[c][3]` on the current input) by tap: [4][len].
+pub fn conv_taps(w: &[f32]) -> Vec<f32> {
+    let n = w.len() / 4;
+    (0..4 * n).map(|k| w[(k % n) * 4 + k / n]).collect()
 }
 
 /// The host's weights of one physical layer.
 pub struct HostLayer {
     pub attn_query: Option<Vec<Vec<f32>>>,
     pub ffn_query: Vec<f32>,
+    /// The sublayer-output convolutions' weights by tap (`conv_taps`).
     pub attn_post_conv: Vec<f32>,
     pub ffn_post_conv: Vec<f32>,
     /// Core layers: the message queries for q, k, v, ffn (the GPUs hold the controllers).
@@ -319,8 +345,8 @@ impl HostWeights {
             layers.push(HostLayer {
                 attn_query,
                 ffn_query: v("ffn_res_query.weight")?,
-                attn_post_conv: v("attn_post_conv.weight")?,
-                ffn_post_conv: v("ffn_post_conv.weight")?,
+                attn_post_conv: conv_taps(&v("attn_post_conv.weight")?),
+                ffn_post_conv: conv_taps(&v("ffn_post_conv.weight")?),
                 msg,
             });
         }
@@ -350,13 +376,14 @@ pub fn embed(g: &Gguf, c: &Config, w: &HostWeights, tokens: &[u32]) -> Result<Ve
 mod tests {
     use super::*;
     #[test]
-    fn conv_step_shifts_history_oldest_first() {
-        let w = vec![1., 2., 3., 4.];
-        let mut hist = vec![10., 20., 30.];
-        let mut out = [0f32];
-        conv_step(&[5.], &mut hist, &w, &mut out);
+    fn conv_row_takes_the_history_oldest_first() {
+        // Two channels with the GGUF weights [1, 2, 3, 4] and [0, 0, 0, 1].
+        let taps = conv_taps(&[1., 2., 3., 4., 0., 0., 0., 1.]);
+        assert_eq!(taps, vec![1., 0., 2., 0., 3., 0., 4., 1.]);
+        let mut out = [0f32; 2];
+        conv_row(&[5., 7.], [&[10., 0.], &[20., 0.], &[30., 0.]], &taps, &mut out);
         assert!((out[0] - (5. + 10. + 40. + 90. + 20.) / 5f32.sqrt()).abs() < 1e-4);
-        assert_eq!(hist, vec![20., 30., 5.]);
+        assert!((out[1] - 14. / 5f32.sqrt()).abs() < 1e-5);
     }
     #[test]
     fn mix_of_one_state_is_that_state() {

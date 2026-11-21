@@ -6,7 +6,7 @@
 use super::{
     embed,
     gpu::{Seg, Shard, Split, GATED_MAX, MICRO},
-    mix, rms_into, App, Config, HostWeights,
+    conv_row, mix, rms_into, App, Config, HostLayer, HostWeights, MIX_STATES,
 };
 use crate::{
     gguf::Gguf,
@@ -23,6 +23,7 @@ use std::{
     net::TcpListener,
     path::{Path, PathBuf},
     rc::Rc,
+    sync::{Arc, Condvar, Mutex},
     time::{Duration, Instant},
 };
 
@@ -47,12 +48,9 @@ pub struct Phases {
     /// Waits for attention and MoE segments.
     pub gpu_attn: f64,
     pub gpu_moe: f64,
-    /// Host work around the segments (mixes, inputs, convolutions).
+    /// The host's passes over the rows between segments (convolutions, residual, mixes, input writes), and adding
+    /// the local ranks' partials.
     pub host_in: f64,
-    /// Parts of it: residual mixes, input writes, convolutions and residual updates, local partial sums.
-    pub host_mix: f64,
-    pub host_write: f64,
-    pub host_conv: f64,
     pub host_sum: f64,
     pub exchange: f64,
     pub forwards: u64,
@@ -108,6 +106,7 @@ pub struct Group {
     ffn_hist: Vec<Vec<f32>>,
     sum: Vec<f32>,
     remote: Vec<f32>,
+    pool: Pool,
     pub seconds: Phases,
     /// GPUs on every machine, for reports.
     pub ranks: usize,
@@ -127,10 +126,9 @@ struct Flow {
     normed: Vec<Vec<f32>>,
     /// The prelude's output and its number of blocks.
     prelude: (Vec<f32>, usize),
-    /// Per core layer: the q, k, v and ffn messages of the pass in progress (n rows each).
-    messages: Vec<[Vec<f32>; 4]>,
-    /// The residual the MoE output is added to.
-    ffn_inp: Vec<f32>,
+    /// The bank of the loop pass before the one in progress, RMS-normed: its block after the first core block, and
+    /// its output. The loop messages are mixes of the two.
+    bank: [Vec<f32>; 2],
     /// The submission of the segment in flight on every local rank.
     tickets: Vec<u64>,
 }
@@ -201,6 +199,7 @@ impl Group {
             ffn_hist: vec![vec![0.; 3 * d]; slots],
             sum: vec![0.; max_batch * d],
             remote: vec![0.; max_batch * d],
+            pool: Pool::new(HOST_THREADS - 1),
             driver: mesh.as_ref().is_none_or(|m| m.machine == 0),
             gguf,
             hw,
@@ -215,9 +214,9 @@ impl Group {
         })
     }
 
-    /// GPU milliseconds per kernel of the first local rank since the group started (TRASHCAN_INKLING_PROFILE=1).
-    pub fn profile(&self) -> Vec<(String, u64, f64)> {
-        let mut v: Vec<_> = self.shards[0].profile.iter().map(|(k, (n, ms))| (k.clone(), *n, *ms)).collect();
+    /// GPU milliseconds per kernel of the first local rank since the last call (TRASHCAN_INKLING_PROFILE=1).
+    pub fn take_profile(&mut self) -> Vec<(String, u64, f64)> {
+        let mut v: Vec<_> = std::mem::take(&mut self.shards[0].profile).into_iter().map(|(k, (n, ms))| (k, n, ms)).collect();
         v.sort_by(|a, b| b.2.total_cmp(&a.2));
         v
     }
@@ -272,8 +271,8 @@ impl Group {
             let k = chunk.iter().filter(|&&t| t == IMAGE_ROW).count();
             let mine = &rows[used * d..(used + k) * d];
             used += k;
-            // Two micro-batches overlap the host's work with the GPUs'; forcing and profiling take one at a time.
-            let micro = if chunk.len() >= MICRO_MIN && reference.is_none() && s != Score::All && !self.shards[0].profiling() { MICRO } else { 1 };
+            // Two micro-batches overlap the host's work with the GPUs'; forcing takes the batch whole.
+            let micro = if chunk.len() >= MICRO_MIN && reference.is_none() && s != Score::All { MICRO } else { 1 };
             self.tell(json!({"forward": {"tokens": chunk, "score": score_name(s), "force": force, "image_rows": k, "micro": micro}}))?;
             if k > 0 {
                 if let (true, Some(m)) = (self.driver, self.mesh.as_mut()) {
@@ -343,8 +342,7 @@ impl Group {
                 cur: x[row0 * d..(row0 + rows) * d].to_vec(),
                 normed: Vec::new(),
                 prelude: (Vec::new(), 0),
-                messages: Vec::new(),
-                ffn_inp: Vec::new(),
+                bank: [Vec::new(), Vec::new()],
                 tickets: vec![0; self.shards.len()],
             });
             row0 += rows;
@@ -373,7 +371,7 @@ impl Group {
     fn drive(&mut self, flows: &mut [Flow], gated: bool, mut reference: Option<&mut Reference>) -> Result<()> {
         let d = self.c.d;
         for f in flows.iter_mut() {
-            self.prepare(f, 0, reference.as_deref_mut())?;
+            self.advance(f, None, Some(0), false);
             self.launch(f, 0, gated)?;
         }
         let segments = flows.iter().map(|f| f.plan.len()).max().unwrap_or(0);
@@ -383,27 +381,27 @@ impl Group {
                     continue;
                 }
                 self.wait(f, j, gated)?;
-                if !matches!(f.plan[j], Seg::Head { .. }) {
-                    self.allreduce(f.mb, f.n * d)?;
+                let head = matches!(f.plan[j], Seg::Head { .. });
+                let addend = !head && self.allreduce(f.mb, f.n * d)?;
+                let next = (j + 1 < f.plan.len()).then_some(j + 1);
+                match reference.as_deref_mut() {
+                    // Teacher forcing: the residual after an application is compared and replaced before the next
+                    // segment's inputs are made from it.
+                    Some(r) => {
+                        self.advance(f, Some(j), None, addend);
+                        if let Seg::Moe { .. } = f.plan[j] {
+                            r.check(&format!("l_out-{}", self.sched[j / 2].slot), &mut f.cur, true)?;
+                        }
+                        self.advance(f, None, next, false);
+                    }
+                    None => self.advance(f, Some(j), next, addend),
                 }
-                self.absorb(f, j, reference.as_deref_mut())?;
-                if j + 1 < f.plan.len() {
-                    self.prepare(f, j + 1, reference.as_deref_mut())?;
-                    self.launch(f, j + 1, gated)?;
+                if let Some(next) = next {
+                    self.launch(f, next, gated)?;
                 }
             }
         }
         Ok(())
-    }
-
-    /// Write a segment's input rows into every local rank's `hin` of micro-batch `mb` (write-only: the host never
-    /// reads that memory).
-    fn write_inputs(&mut self, mb: usize, rows: &[f32]) {
-        let t = Instant::now();
-        for s in &self.shards {
-            s.hin(mb, rows.len()).copy_from_slice(rows);
-        }
-        self.seconds.host_write += t.elapsed().as_secs_f64();
     }
 
     /// Start segment `j` of `f` on every local rank (its inputs are in their `hin`): a submission queued behind the
@@ -431,7 +429,7 @@ impl Group {
             if gated {
                 s.wait_gated()?;
             } else {
-                s.wait(ticket)?;
+                s.wait(ticket, f.mb)?;
             }
         }
         self.gpu_time(f.plan[j], g.elapsed().as_secs_f64());
@@ -447,158 +445,126 @@ impl Group {
         }
     }
 
-    /// Write the inputs of segment `j` of `f` into the local ranks' `hin`.
-    fn prepare(&mut self, f: &mut Flow, j: usize, reference: Option<&mut Reference>) -> Result<()> {
+    /// One pass over the rows of `f` (`Pass`): take the all-reduced output of its segment `done` (in `self.sum`, to
+    /// which `self.remote` is still to be added with `addend`) into the residual, then write the inputs of its
+    /// segment `next` into the local ranks' `hin`.
+    fn advance(&mut self, f: &mut Flow, done: Option<usize>, next: Option<usize>, addend: bool) {
         let h0 = Instant::now();
-        let (c, d, n) = (self.c.clone(), self.c.d, f.n);
+        let (c, d, n) = (&self.c, self.c.d, f.n);
         let len = n * d;
-        match f.plan[j] {
-            Seg::Attn { phys, kinds, controlled, .. } => {
-                let app = self.sched[j / 2];
-                if phys == c.core_start {
-                    if app.pass == 0 {
-                        f.prelude = (f.cur.clone(), f.normed.len());
-                    } else {
-                        // The bank of the previous pass: its blocks after the first core block, and its output.
-                        let out_n = rows_rms(&f.cur, d);
-                        let mut bank: Vec<&[f32]> = f.normed[f.prelude.1 + 1..].iter().map(Vec::as_slice).collect();
-                        bank.push(&out_n);
-                        f.messages = (c.core_start..c.core_end)
-                            .map(|p| {
-                                let q = self.hw.layers[p].msg.as_ref().unwrap();
-                                std::array::from_fn(|k| mix_rows(&bank, &q[k], n, d))
-                            })
-                            .collect();
-                        f.cur = f.prelude.0.clone();
-                        f.normed.truncate(f.prelude.1);
-                    }
-                }
-                // Attention inputs: the residual mixes (one, or q/k/v on global layers), then with messages the
-                // q/k/v messages; the GPUs apply the controllers and the norms.
-                let mixes = if c.swa(phys) { 1 } else { 3 };
-                debug_assert_eq!(kinds, if controlled { 3 } else { mixes });
-                let mut input = vec![0f32; if controlled { 6 * len } else { kinds * len }];
-                let l = &self.hw.layers[phys];
-                let cur_n = rows_rms(&f.cur, d);
-                let mut states: Vec<&[f32]> = f.normed.iter().map(Vec::as_slice).collect();
-                states.push(&cur_n);
-                for k in 0..kinds {
-                    let o = &mut input[k * len..(k + 1) * len];
-                    match &l.attn_query {
-                        Some(q) if k < mixes => mix_rows_into(&states, &q[k], d, o),
-                        Some(_) => {
-                            let (done, rest) = input.split_at_mut(k * len);
-                            rest[..len].copy_from_slice(&done[..len]);
-                        }
-                        None => o.copy_from_slice(&f.cur),
-                    }
-                }
-                if controlled {
-                    let m = &f.messages[phys - c.core_start];
-                    for k in 0..3 {
-                        input[(3 + k) * len..(4 + k) * len].copy_from_slice(&m[k]);
-                    }
-                }
-                self.seconds.host_mix += h0.elapsed().as_secs_f64();
-                self.write_inputs(f.mb, &input);
+        // The segments with their layer applications (the head has none).
+        let done = done.map(|j| (f.plan[j], self.sched.get(j / 2).copied()));
+        let next = next.map(|j| (f.plan[j], self.sched.get(j / 2).copied()));
+        // The output's convolution: its weights and the slot's history.
+        let (taps, hist): (&[f32], Option<&mut Vec<f32>>) = match done {
+            Some((Seg::Attn { slot, phys, .. }, _)) => (&self.hw.layers[phys].attn_post_conv, Some(&mut self.attn_hist[slot])),
+            Some((Seg::Moe { phys, .. }, Some(app))) => (&self.hw.layers[phys].ffn_post_conv, Some(&mut self.ffn_hist[app.slot])),
+            _ => (&[], None),
+        };
+        // An attention output at the start of a block: the residual becomes a block state.
+        let push = matches!(done, Some((Seg::Attn { phys, .. }, _)) if phys % c.block == 0);
+        if push {
+            f.normed.push(vec![0.; len]);
+        }
+        // The loop core's first segment: the first pass keeps the prelude's output; later ones take the previous
+        // pass's bank (its block after the first core block, and its output) and restart from the prelude.
+        let pass_start = match next {
+            Some((Seg::Attn { phys, .. }, Some(app))) if phys == c.core_start => Some(app.pass > 0),
+            _ => None,
+        };
+        match pass_start {
+            Some(false) => f.prelude = (vec![0.; len], f.normed.len()),
+            Some(true) => {
+                f.bank[0] = std::mem::take(&mut f.normed[f.prelude.1 + 1]);
+                f.bank[1].resize(len, 0.);
+                f.normed.truncate(f.prelude.1);
             }
-            Seg::Moe { phys, controlled } => {
-                let l = &self.hw.layers[phys];
-                let cur_n = rows_rms(&f.cur, d);
-                let mut states: Vec<&[f32]> = f.normed.iter().map(Vec::as_slice).collect();
-                states.push(&cur_n);
-                let mut input = vec![0f32; if controlled { 2 * len } else { len }];
-                mix_rows_into(&states, &l.ffn_query, d, &mut input[..len]);
-                if controlled {
-                    input[len..].copy_from_slice(&f.messages[phys - c.core_start][3]);
-                }
-                self.seconds.host_mix += h0.elapsed().as_secs_f64();
-                self.write_inputs(f.mb, &input);
+            None => {}
+        }
+        let layer = |seg: Seg| match seg {
+            Seg::Attn { phys, .. } | Seg::Moe { phys, .. } => Some(&self.hw.layers[phys]),
+            Seg::Head { .. } => None,
+        };
+        let pass = Pass {
+            d,
+            n,
+            eps: c.eps,
+            done: done.map(|x| x.0).filter(|_| hist.is_some()),
+            sum: &self.sum[..len],
+            remote: addend.then_some(&self.remote[..len]),
+            hist: hist.as_deref().map_or(&[], |h| h.as_slice()),
+            taps,
+            push,
+            pass_start,
+            next: next.map(|x| x.0),
+            swa: matches!(next, Some((Seg::Attn { phys, .. }, _)) if c.swa(phys)),
+            layer: next.and_then(|x| layer(x.0)),
+            out_query: &self.hw.out_query,
+            out_norm: &self.hw.out_norm,
+            cur: SendPtr(f.cur.as_mut_ptr()),
+            normed: f.normed.iter_mut().map(|v| SendPtr(v.as_mut_ptr())).collect(),
+            prelude: SendPtr(f.prelude.0.as_mut_ptr()),
+            bank: [SendPtr(f.bank[0].as_mut_ptr()), SendPtr(f.bank[1].as_mut_ptr())],
+            hin: self.shards.iter().map(|s| SendPtr(s.hin(f.mb, 6 * len).as_mut_ptr())).collect(),
+        };
+        // SAFETY: every task takes its own rows of the flow's state and of `hin`; `sum`, `remote` and the history are
+        // only read.
+        if n < POOL_MIN {
+            unsafe { pass.rows(0, n) };
+        } else {
+            let tasks = HOST_THREADS.min(n / 4);
+            let per = n.div_ceil(tasks);
+            self.pool.run(tasks, |i| unsafe { pass.rows((i * per).min(n), ((i + 1) * per).min(n)) });
+        }
+        // The history becomes the last three outputs before the convolution.
+        if hist.is_some() {
+            let mut last = vec![0f32; 3 * d];
+            for (k, row) in last.chunks_exact_mut(d).enumerate() {
+                pass.load_y(n as isize - 3 + k as isize, row);
             }
-            Seg::Head { rows } => {
-                // The last row, or every row of the batch.
-                ensure!(rows <= 16 && (rows == 1 || rows == n), "at most 16 scored rows");
-                let cur_n = rows_rms(&f.cur, d);
-                let mut h = vec![0f32; rows * d];
-                for i in 0..rows {
-                    let t = n - rows + i;
-                    let states: Vec<&[f32]> = f.normed.iter().map(|b| &b[t * d..(t + 1) * d]).chain([&cur_n[t * d..(t + 1) * d]]).collect();
-                    let mut m = vec![0.; d];
-                    mix(&states, &self.hw.out_query, &mut m);
-                    rms_into(&m, Some(&self.hw.out_norm), c.eps, &mut h[i * d..(i + 1) * d]);
-                }
-                if let Some(r) = reference {
-                    if rows == 1 && r.dir.join("result_norm.f32").exists() {
-                        r.check("result_norm", &mut h, false)?;
-                    }
-                }
-                self.write_inputs(f.mb, &h);
-            }
+            drop(pass);
+            hist.unwrap().copy_from_slice(&last);
         }
         self.seconds.host_in += h0.elapsed().as_secs_f64();
-        Ok(())
     }
 
-    /// Take the all-reduced output of segment `j` of `f` (in `self.sum`) into the flow's residual.
-    fn absorb(&mut self, f: &mut Flow, j: usize, reference: Option<&mut Reference>) -> Result<()> {
-        let h0 = Instant::now();
-        let len = f.n * self.c.d;
-        match f.plan[j] {
-            Seg::Attn { slot, phys, .. } => {
-                let mut attn = vec![0f32; len];
-                conv_rows(&self.sum[..len], &mut self.attn_hist[slot], &self.hw.layers[phys].attn_post_conv, &mut attn);
-                if phys % self.c.block == 0 {
-                    f.normed.push(rows_rms(&f.cur, self.c.d));
-                    f.cur = attn;
-                } else {
-                    for (x, a) in f.cur.iter_mut().zip(&attn) {
-                        *x += a;
-                    }
-                }
-                f.ffn_inp = f.cur.clone();
-            }
-            Seg::Moe { phys, .. } => {
-                let slot = self.sched[j / 2].slot;
-                let mut out = vec![0f32; len];
-                conv_rows(&self.sum[..len], &mut self.ffn_hist[slot], &self.hw.layers[phys].ffn_post_conv, &mut out);
-                for (x, (a, o)) in f.cur.iter_mut().zip(f.ffn_inp.iter().zip(&out)) {
-                    *x = a + o;
-                }
-                if let Some(r) = reference {
-                    r.check(&format!("l_out-{slot}"), &mut f.cur, true)?;
-                }
-            }
-            Seg::Head { .. } => {}
-        }
-        let dt = h0.elapsed().as_secs_f64();
-        self.seconds.host_conv += dt;
-        self.seconds.host_in += dt;
-        Ok(())
-    }
-
-    /// Add the local ranks' partials of micro-batch `mb` (rank order), all-reduce with the other machines; the total
-    /// in `self.sum`.
-    fn allreduce(&mut self, mb: usize, len: usize) -> Result<()> {
+    /// Add the local ranks' partials of micro-batch `mb` (rank order) into `self.sum` and all-reduce with the other
+    /// machines. Returns whether `self.remote` holds an addend still to be added to `self.sum`.
+    fn allreduce(&mut self, mb: usize, len: usize) -> Result<bool> {
         let ts = Instant::now();
         let sum = &mut self.sum[..len];
-        sum.copy_from_slice(self.shards[0].part(mb, len));
-        for s in &self.shards[1..] {
-            for (a, b) in sum.iter_mut().zip(s.part(mb, len)) {
-                *a += b;
+        let parts: Vec<&[f32]> = self.shards.iter().map(|s| s.part(mb, len)).collect();
+        let add = |at: usize, out: &mut [f32]| {
+            if let [a, b] = parts[..] {
+                // Two local ranks: one pass over both partials.
+                for ((o, x), y) in out.iter_mut().zip(&a[at..]).zip(&b[at..]) {
+                    *o = x + y;
+                }
+                return;
             }
-        }
-        self.seconds.host_sum += ts.elapsed().as_secs_f64();
-        if let Some(m) = self.mesh.as_mut() {
-            let e = Instant::now();
-            let last = m.all_reduce(sum, &mut self.remote[..len], Duration::from_secs(5), 1, self.c.d)?;
-            if last {
-                for (a, b) in sum.iter_mut().zip(&self.remote[..len]) {
+            out.copy_from_slice(&parts[0][at..at + out.len()]);
+            for p in &parts[1..] {
+                for (a, b) in out.iter_mut().zip(&p[at..]) {
                     *a += b;
                 }
             }
+        };
+        if len < POOL_MIN * self.c.d {
+            add(0, sum);
+        } else {
+            let per = len.div_ceil(SUM_THREADS).next_multiple_of(16);
+            let out = SendPtr(sum.as_mut_ptr());
+            // SAFETY: the tasks write disjoint ranges of `sum`.
+            self.pool.run(len.div_ceil(per), |i| add(i * per, unsafe { std::slice::from_raw_parts_mut(out.at(i * per), per.min(len - i * per)) }));
+        }
+        self.seconds.host_sum += ts.elapsed().as_secs_f64();
+        let mut addend = false;
+        if let Some(m) = self.mesh.as_mut() {
+            let e = Instant::now();
+            addend = m.all_reduce(&mut self.sum[..len], &mut self.remote[..len], Duration::from_secs(5), 1, self.c.d)?;
             self.seconds.exchange += e.elapsed().as_secs_f64();
         }
-        Ok(())
+        Ok(addend)
     }
 
     /// The best TOP_K candidates of each of `rows` scored rows: softcapped logits of the real vocabulary from every
@@ -702,92 +668,294 @@ fn parse_score(s: &str) -> Result<Score> {
     })
 }
 
-/// Host threads for batches of rows (prefill); single rows run on the calling thread.
+/// Host threads for batches of rows (prefill), and for adding the local ranks' partials.
 const HOST_THREADS: usize = 12;
+const SUM_THREADS: usize = 4;
+/// Batches of fewer rows run on the calling thread.
+const POOL_MIN: usize = 16;
 
-/// Run `f(t, row)` over the `d`-rows of `out`, spread over threads for batches of 16 or more rows.
-fn par_rows<F: Fn(usize, &mut [f32]) + Sync>(out: &mut [f32], d: usize, f: F) {
-    let n = out.len() / d;
-    let threads = if n >= 16 { HOST_THREADS.min(n / 4) } else { 1 };
-    if threads <= 1 {
-        out.chunks_exact_mut(d).enumerate().for_each(|(t, o)| f(t, o));
-        return;
-    }
-    let per = n.div_ceil(threads);
-    std::thread::scope(|s| {
-        for (i, chunk) in out.chunks_mut(per * d).enumerate() {
-            let f = &f;
-            s.spawn(move || chunk.chunks_exact_mut(d).enumerate().for_each(|(j, o)| f(i * per + j, o)));
-        }
-    });
-}
-
-/// RMS-normed copies (no weight) of each `d`-row of `x`, as the residual mixes read them.
-fn rows_rms(x: &[f32], d: usize) -> Vec<f32> {
-    let mut o = vec![0f32; x.len()];
-    par_rows(&mut o, d, |t, row| rms_into(&x[t * d..(t + 1) * d], None, 1e-6, row));
-    o
-}
-
-/// The residual mix of every row: `states` are RMS-normed state matrices of the same rows.
-fn mix_rows_into(states: &[&[f32]], query: &[f32], d: usize, out: &mut [f32]) {
-    par_rows(out, d, |t, row| {
-        let s: Vec<&[f32]> = states.iter().map(|m| &m[t * d..(t + 1) * d]).collect();
-        mix(&s, query, row);
-    });
-}
-
-fn mix_rows(states: &[&[f32]], query: &[f32], n: usize, d: usize) -> Vec<f32> {
-    let mut o = vec![0f32; n * d];
-    mix_rows_into(states, query, d, &mut o);
-    o
-}
-
-/// The sublayer-output convolution of `n` rows `y` (oldest first) with history `hist`: each channel runs through the
-/// rows in order, so batches split the channels over threads.
-fn conv_rows(y: &[f32], hist: &mut [f32], w: &[f32], out: &mut [f32]) {
-    let d = hist.len() / 3;
-    let n = y.len() / d;
-    if n == 1 {
-        super::conv_step(y, hist, w, out);
-        return;
-    }
-    let threads = if n >= 16 { HOST_THREADS } else { 1 };
-    let per = d.div_ceil(threads).next_multiple_of(8);
-    let scale = 1.0 / 5f32.sqrt();
-    let outp = SendPtr(out.as_mut_ptr());
-    let histp = SendPtr(hist.as_mut_ptr());
-    std::thread::scope(|s| {
-        for c0 in (0..d).step_by(per) {
-            let (outp, histp) = (outp, histp);
-            s.spawn(move || {
-                let (outp, histp) = (outp, histp);
-                for c in c0..(c0 + per).min(d) {
-                    let wc = &w[c * 4..c * 4 + 4];
-                    // SAFETY: each thread owns channels c0..c0 + per of every row and of the history.
-                    let h = unsafe { [*histp.0.add(c), *histp.0.add(d + c), *histp.0.add(2 * d + c)] };
-                    let (mut a, mut b, mut cc) = (h[0], h[1], h[2]);
-                    for t in 0..n {
-                        let x = y[t * d + c];
-                        let conv = wc[0] * a + wc[1] * b + wc[2] * cc + wc[3] * x;
-                        unsafe { *outp.0.add(t * d + c) = (x + conv) * scale };
-                        (a, b, cc) = (b, cc, x);
-                    }
-                    unsafe {
-                        *histp.0.add(c) = a;
-                        *histp.0.add(d + c) = b;
-                        *histp.0.add(2 * d + c) = cc;
-                    }
-                }
-            });
-        }
-    });
-}
-
+/// A pointer several threads use for disjoint rows.
 #[derive(Clone, Copy)]
 struct SendPtr(*mut f32);
 unsafe impl Send for SendPtr {}
 unsafe impl Sync for SendPtr {}
+
+impl SendPtr {
+    fn at(self, i: usize) -> *mut f32 {
+        // SAFETY: the callers stay inside the allocation.
+        unsafe { self.0.add(i) }
+    }
+}
+
+/// One pass over the rows of a flow (`Group::advance`), every row on its own, so that a row stays in the first-level
+/// cache from the all-reduced output to the next segment's inputs: the output's convolution, the residual update,
+/// the loop's pass boundary, then the residual mixes (and the loop messages) of the next segment, written into
+/// `hin` of every local rank. The arithmetic is the reference's, in a fixed order per element, so every machine
+/// keeps the same bits.
+struct Pass<'a> {
+    d: usize,
+    n: usize,
+    eps: f32,
+    /// The segment whose all-reduced output is `sum` (plus `remote`, when it is still to be added).
+    done: Option<Seg>,
+    sum: &'a [f32],
+    remote: Option<&'a [f32]>,
+    /// The three outputs before the batch (oldest first) and the convolution's weights by tap.
+    hist: &'a [f32],
+    taps: &'a [f32],
+    /// The output starts a block: the residual becomes the newest block state (the last of `normed`).
+    push: bool,
+    /// The next segment starts a pass of the loop core: false keeps the residual as the prelude's output; true
+    /// makes the residual the bank's output and restarts from the prelude.
+    pass_start: Option<bool>,
+    /// The segment to prepare, its physical layer's weights, and whether that layer has one residual mix.
+    next: Option<Seg>,
+    layer: Option<&'a HostLayer>,
+    swa: bool,
+    out_query: &'a [f32],
+    out_norm: &'a [f32],
+    cur: SendPtr,
+    /// The RMS-normed block states, the prelude's output and the bank (RMS-normed block and output).
+    normed: Vec<SendPtr>,
+    prelude: SendPtr,
+    bank: [SendPtr; 2],
+    /// Every local rank's input rows.
+    hin: Vec<SendPtr>,
+}
+
+impl Pass<'_> {
+    /// Output row `t` before the convolution (a negative `t` reads the history).
+    #[inline(always)]
+    fn load_y(&self, t: isize, out: &mut [f32]) {
+        let d = self.d;
+        if t < 0 {
+            out.copy_from_slice(&self.hist[(3 + t) as usize * d..][..d]);
+            return;
+        }
+        let s = &self.sum[t as usize * d..][..d];
+        match self.remote {
+            Some(r) => out.iter_mut().zip(s).zip(&r[t as usize * d..][..d]).for_each(|((o, a), b)| *o = a + b),
+            None => out.copy_from_slice(s),
+        }
+    }
+
+    /// Write `row` as input row `at` of every local rank.
+    #[inline(always)]
+    unsafe fn write(&self, at: usize, row: &[f32]) {
+        for h in &self.hin {
+            std::ptr::copy_nonoverlapping(row.as_ptr(), h.at(at * self.d), self.d);
+        }
+    }
+
+    unsafe fn rows(&self, t0: usize, t1: usize) {
+        #[cfg(target_arch = "x86_64")]
+        if std::is_x86_feature_detected!("avx") {
+            return self.rows_avx(t0, t1);
+        }
+        self.rows_any(t0, t1)
+    }
+
+    /// `rows_any` compiled for AVX (the Mac Pros' Xeons; the build targets plain x86-64).
+    #[cfg(target_arch = "x86_64")]
+    #[target_feature(enable = "avx")]
+    unsafe fn rows_avx(&self, t0: usize, t1: usize) {
+        self.rows_any(t0, t1)
+    }
+
+    /// Rows `t0..t1`. SAFETY: no other thread touches these rows of the flow's state or of `hin`.
+    #[inline(always)]
+    unsafe fn rows_any(&self, t0: usize, t1: usize) {
+        let (d, n) = (self.d, self.n);
+        if t0 >= t1 {
+            return;
+        }
+        let row = |p: SendPtr, t: usize| std::slice::from_raw_parts_mut(p.at(t * d), d);
+        let mut scratch = vec![0f32; 7 * d];
+        let (ring, rest) = scratch.split_at_mut(4 * d);
+        let (out, rest) = rest.split_at_mut(d);
+        let (cur_n, u) = rest.split_at_mut(d);
+        // The ring holds the outputs t - 3 .. t before the convolution, row t at `(t - t0 + 3) % 4`.
+        if self.done.is_some() {
+            for k in 0..3 {
+                self.load_y(t0 as isize - 3 + k as isize, &mut ring[k * d..(k + 1) * d]);
+            }
+        }
+        for t in t0..t1 {
+            let cur = row(self.cur, t);
+            if let Some(seg) = self.done {
+                let at = (t - t0 + 3) % 4;
+                self.load_y(t as isize, &mut ring[at * d..(at + 1) * d]);
+                let r = |k: usize| &ring[(at + 1 + k) % 4 * d..][..d];
+                conv_row(r(3), [r(0), r(1), r(2)], self.taps, out);
+                match seg {
+                    Seg::Attn { .. } if self.push => {
+                        rms_into(cur, None, 1e-6, row(*self.normed.last().unwrap(), t));
+                        cur.copy_from_slice(out);
+                    }
+                    Seg::Attn { .. } | Seg::Moe { .. } => cur.iter_mut().zip(out.iter()).for_each(|(x, a)| *x += a),
+                    Seg::Head { .. } => {}
+                }
+            }
+            match self.pass_start {
+                Some(false) => row(self.prelude, t).copy_from_slice(cur),
+                Some(true) => {
+                    rms_into(cur, None, 1e-6, row(self.bank[1], t));
+                    cur.copy_from_slice(row(self.prelude, t));
+                }
+                None => {}
+            }
+            let Some(next) = self.next else { continue };
+            if matches!(next, Seg::Head { rows } if t + rows < n) {
+                continue;
+            }
+            // The mixes take the block states and the residual, all RMS-normed.
+            rms_into(cur, None, 1e-6, cur_n);
+            let mut states: [&[f32]; MIX_STATES] = [&[]; MIX_STATES];
+            let count = self.normed.len() + 1;
+            for (s, p) in states.iter_mut().zip(&self.normed) {
+                *s = row(*p, t);
+            }
+            states[count - 1] = cur_n;
+            let states = &states[..count];
+            // The loop messages of a controlled segment mix the bank's two states.
+            let bank = || -> [&[f32]; 2] { [row(self.bank[0], t), row(self.bank[1], t)] };
+            match next {
+                Seg::Attn { kinds, controlled, .. } => {
+                    let l = self.layer.unwrap();
+                    match &l.attn_query {
+                        // One mix on sliding-window layers (their q, k and v inputs differ only by the messages),
+                        // three on global ones.
+                        Some(q) => {
+                            for k in 0..kinds {
+                                if k == 0 || !self.swa {
+                                    mix(states, &q[k], u);
+                                }
+                                self.write(k * n + t, u);
+                            }
+                        }
+                        None => self.write(t, cur),
+                    }
+                    if controlled {
+                        let q = l.msg.as_ref().unwrap();
+                        for k in 0..3 {
+                            mix(&bank(), &q[k], u);
+                            self.write((3 + k) * n + t, u);
+                        }
+                    }
+                }
+                Seg::Moe { controlled, .. } => {
+                    let l = self.layer.unwrap();
+                    mix(states, &l.ffn_query, u);
+                    self.write(t, u);
+                    if controlled {
+                        mix(&bank(), &l.msg.as_ref().unwrap()[3], u);
+                        self.write(n + t, u);
+                    }
+                }
+                Seg::Head { rows } => {
+                    mix(states, self.out_query, u);
+                    rms_into(u, Some(self.out_norm), self.eps, out);
+                    self.write(t + rows - n, out);
+                }
+            }
+        }
+    }
+}
+
+/// Worker threads for the host's passes over batches of rows. They sleep between passes.
+struct Pool {
+    shared: Arc<PoolShared>,
+    workers: Vec<std::thread::JoinHandle<()>>,
+}
+
+struct PoolShared {
+    state: Mutex<PoolState>,
+    wake: Condvar,
+    done: Condvar,
+}
+
+struct PoolState {
+    /// The pass in progress: its task function, the next task and the number of tasks.
+    job: Option<&'static (dyn Fn(usize) + Sync)>,
+    next: usize,
+    tasks: usize,
+    /// Tasks of the pass that have not finished.
+    pending: usize,
+    quit: bool,
+}
+
+impl Pool {
+    fn new(threads: usize) -> Self {
+        let shared = Arc::new(PoolShared { state: Mutex::new(PoolState { job: None, next: 0, tasks: 0, pending: 0, quit: false }), wake: Condvar::new(), done: Condvar::new() });
+        let workers = (0..threads)
+            .map(|_| {
+                let shared = shared.clone();
+                std::thread::spawn(move || {
+                    let mut st = shared.state.lock().unwrap();
+                    loop {
+                        if st.quit {
+                            return;
+                        }
+                        match st.job {
+                            Some(f) if st.next < st.tasks => {
+                                let i = st.next;
+                                st.next += 1;
+                                drop(st);
+                                f(i);
+                                st = shared.state.lock().unwrap();
+                                st.pending -= 1;
+                                if st.pending == 0 {
+                                    shared.done.notify_all();
+                                }
+                            }
+                            _ => st = shared.wake.wait(st).unwrap(),
+                        }
+                    }
+                })
+            })
+            .collect();
+        Self { shared, workers }
+    }
+
+    /// Run `f(0) .. f(tasks - 1)` on the workers and the calling thread, and return when all have finished.
+    fn run<F: Fn(usize) + Sync>(&self, tasks: usize, f: F) {
+        if tasks <= 1 {
+            return (0..tasks).for_each(f);
+        }
+        let f: &(dyn Fn(usize) + Sync) = &f;
+        // SAFETY: the workers call `f` only for tasks counted in `pending`, and this function returns only once
+        // `pending` is zero and the job is cleared, so the borrow outlives every use.
+        let f: &'static (dyn Fn(usize) + Sync) = unsafe { std::mem::transmute(f) };
+        let mut st = self.shared.state.lock().unwrap();
+        (st.job, st.next, st.tasks, st.pending) = (Some(f), 0, tasks, tasks);
+        self.shared.wake.notify_all();
+        loop {
+            if st.next < st.tasks {
+                let i = st.next;
+                st.next += 1;
+                drop(st);
+                f(i);
+                st = self.shared.state.lock().unwrap();
+                st.pending -= 1;
+            } else if st.pending > 0 {
+                st = self.shared.done.wait(st).unwrap();
+            } else {
+                break;
+            }
+        }
+        st.job = None;
+    }
+}
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        self.shared.state.lock().unwrap().quit = true;
+        self.shared.wake.notify_all();
+        for w in self.workers.drain(..) {
+            let _ = w.join();
+        }
+    }
+}
 
 fn best(c: &mut Candidates) {
     c.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));

@@ -190,10 +190,13 @@ pub fn run(cmd: Cmd) -> Result<()> {
         Cmd::Bench { model, run, pp, tg, reps } => {
             let mut group = run.group(&model)?;
             for rep in 0..reps {
-                let row = bench(&mut group, pp, tg)?;
+                let (row, profiles) = bench(&mut group, pp, tg)?;
                 println!("{}", json!({"rep": rep, "pp": pp, "tg": tg, "mib": group.device_mib(), "ranks": group.ranks, "result": row}));
-                for (k, n, ms) in group.profile() {
-                    println!("profile\t{k}\t{n}\t{ms:.3}");
+                // GPU milliseconds per kernel on the first rank: per prefill batch of 256 tokens, and per decoded token.
+                for (phase, per, profile) in [("pp", pp as f64 / 256., &profiles[0]), ("tg", tg as f64, &profiles[1])] {
+                    for (k, n, ms) in profile {
+                        println!("profile\t{phase}\t{k}\t{:.1}\t{:.3}", *n as f64 / per, ms / per);
+                    }
                 }
             }
             Ok(())
@@ -263,15 +266,18 @@ fn validate(model: &Path, reference: &Path, run: &Run, ids: &Path, greedy: usize
     Ok(())
 }
 
-/// Prefill `pp` tokens, then decode `tg` greedily; tokens per second of each.
-pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<Value> {
+/// Prefill `pp` tokens, then decode `tg` greedily; tokens per second of each, and with profiling the GPU time per
+/// kernel of each phase.
+pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<(Value, [Vec<(String, u64, f64)>; 2])> {
     group.reset()?;
+    group.take_profile();
     let prompt: Vec<u32> = (0..pp).map(|i| 1000 + (i as u32 * 7919) % 150000).collect();
     let s0 = group.seconds;
     let t = Instant::now();
     let top = group.forward(&prompt, Score::Last, None)?;
     let pp_s = t.elapsed().as_secs_f64();
     let s1 = group.seconds;
+    let pp_profile = group.take_profile();
     let mut tok = top[0][0].1;
     let before = group.seconds;
     let t = Instant::now();
@@ -281,14 +287,11 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<Value> {
     let tg_s = t.elapsed().as_secs_f64();
     let after = group.seconds;
     let per = |a: f64, b: f64| (a - b) / tg as f64 * 1e3;
-    Ok(json!({
+    let row = json!({
         "pp_tok_s": pp as f64 / pp_s,
         "pp_gpu_s": s1.gpu - s0.gpu,
         "pp_exchange_s": s1.exchange - s0.exchange,
         "pp_host_math_s": s1.host_in - s0.host_in,
-        "pp_host_mix_s": s1.host_mix - s0.host_mix,
-        "pp_host_write_s": s1.host_write - s0.host_write,
-        "pp_host_conv_s": s1.host_conv - s0.host_conv,
         "pp_host_sum_s": s1.host_sum - s0.host_sum,
         "pp_host_s": s1.host - s0.host,
         "tg_tok_s": tg as f64 / tg_s,
@@ -299,7 +302,8 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<Value> {
         "tg_moe_wait_ms": per(after.gpu_moe, before.gpu_moe),
         "tg_host_math_ms": per(after.host_in, before.host_in),
         "tg_host_ms": per(after.host, before.host) - per(after.gpu, before.gpu) - per(after.exchange, before.exchange),
-    }))
+    });
+    Ok((row, [pp_profile, group.take_profile()]))
 }
 
 #[allow(clippy::too_many_arguments)]
