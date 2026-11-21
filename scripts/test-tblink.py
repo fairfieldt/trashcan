@@ -38,13 +38,14 @@ MOCKS = {
              '  n=$(cat "$MOCK_ROOT/next-index" 2>/dev/null || echo 0); echo $((n + 1)) > "$MOCK_ROOT/next-index"\n'
              '  h=0; [ -n "${MOCK_AUTOCONFIG:-}" ] && h=15\n'
              '  echo "$n" > "$d/index"; echo $h > "$d/in_hopid"; echo $h > "$d/out_hopid"; echo 256 > "$d/ring_size"\n'
+             '  echo 0 > "$d/busy_poll"\n'
              '  if [ -n "${MOCK_AUTOCONFIG:-}" ]; then chmod 444 "$d/in_hopid" "$d/out_hopid"; fi\n'
              'fi\n'
              'exit 0\n',
     # configfs: removing a stream directory takes its attributes along.
     'rmdir': '#!/bin/bash\n'
              'for d in "$@"; do [[ $d == */kernel/config/thunderbolt/stream/*/trashcan ]] && '
-             'rm -f "$d/index" "$d/in_hopid" "$d/out_hopid" "$d/ring_size"; done\n'
+             'rm -f "$d/index" "$d/in_hopid" "$d/out_hopid" "$d/ring_size" "$d/busy_poll"; done\n'
              'exec /bin/rmdir "$@"\n',
 }
 
@@ -137,6 +138,26 @@ class Tblink(unittest.TestCase):
         log = self.run_pass()
         self.assertNotIn('stream 0-3', log)
         self.assertEqual(self.cfg(), ['0-3.1', '0-3.1/trashcan'])
+
+    def test_busy_poll_follows_its_setting(self):
+        self.link()
+        d = self.root / 'sys/kernel/config/thunderbolt/stream/0-3.1/trashcan'
+        log = self.run_pass()
+        self.assertEqual((d / 'busy_poll').read_text().strip(), '0', log)
+        self.assertNotIn('busy_poll', log)
+        (self.root / 'etc/tblink/busy_poll').write_text('1\n')
+        log = self.run_pass()
+        self.assertEqual((d / 'busy_poll').read_text().strip(), '1', log)
+        self.assertIn('stream 0-3.1/trashcan busy_poll 1', log)
+        # An open device refuses the write (read-only here): nothing is said, and the next pass sets it.
+        (self.root / 'etc/tblink/busy_poll').write_text('0\n')
+        (d / 'busy_poll').chmod(0o444)
+        log = self.run_pass()
+        self.assertEqual((d / 'busy_poll').read_text().strip(), '1', log)
+        self.assertNotIn('busy_poll 0', log)
+        (d / 'busy_poll').chmod(0o644)
+        log = self.run_pass()
+        self.assertEqual((d / 'busy_poll').read_text().strip(), '0', log)
 
     def test_loads_the_module_when_missing(self):
         self.link()
