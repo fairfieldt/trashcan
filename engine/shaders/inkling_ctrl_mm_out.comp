@@ -7,7 +7,11 @@
 // 140 registers, which leaves one wave per SIMD: 18.4 ms per 256 tokens against 9.3 this way (44 registers), with
 // the same sums in the same order.
 // Weights (set 0): gains [ctrl][p.n][D] f32 (rank-major, so the lanes of a wave load neighbouring weights), then
-// forgets from word p.stride, controller p.offset + j.
+// forgets from word p.stride, controller p.offset + j. BF16 (specialization constant) 1: the same matrix as the
+// upper halves of the f32 values (u16, forgets from element p.stride), which are exact for the release's weights:
+// at f32 the kernel read its weights at 196 GB/s.
+layout(constant_id=0) const uint BF16=0;
+float weight(uint i){return BF16!=0?uintBitsToFloat(uint(wh.halves[i])<<16):uintBitsToFloat(ww.words[i]);}
 // a: u' [j][t][D], b: the sublayer's inputs: u rows [p.cap][t][D] (one set for all controllers with p.cap 1), then
 // m rows [p.m][t][D]; d: z [t][p.m][p.n]. p.k = D, p.n = 64.
 #define COLS 16
@@ -24,7 +28,7 @@ uint zb[COLS];float g[COLS],f[COLS];
 for(uint r=0;r<16;r++){
     vec4 wg,wf;
     [[unroll]]for(uint x=0;x<4;x++){
-        wg[x]=uintBitsToFloat(ww.words[wo+(4*r+x)*D]);wf[x]=uintBitsToFloat(ww.words[p.stride+wo+(4*r+x)*D]);}
+        wg[x]=weight(wo+(4*r+x)*D);wf[x]=weight(p.stride+wo+(4*r+x)*D);}
     [[unroll]]for(uint t=0;t<COLS;t++){vec4 z=zrow.v[zb[t]+r];
         DOT4(g[t],wg,z) DOT4(f[t],wf,z)}
 }

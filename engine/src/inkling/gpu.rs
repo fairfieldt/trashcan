@@ -176,9 +176,12 @@ pub struct Layer {
     tapw: Option<(Buffer, Buffer)>,
     relb: Buffer,
     router: Buffer,
-    /// Prefill copies in bf16 (`upload_bf16`) of the router and of the controllers' down matrices.
+    /// The router in bf16 (`upload_bf16`), on shards that run prefill batches.
     router16: Option<Buffer>,
-    ctrl16: Option<Buffer>,
+    /// The controllers' matrices in bf16, when both are exact: the down matrices [4][rank][2d] and the gains and
+    /// forgets [4][rank][d] each (forgets from element `ctrl`'s stride), u16 in the order of the f32 buffers of
+    /// `ctrl`. The prefill kernels read these.
+    ctrl16: Option<(Buffer, Buffer)>,
     bias: Buffer,
     gu: Matrix,
     down: Matrix,
@@ -424,8 +427,8 @@ impl Shard {
                 }
                 let stride = gain.len();
                 gain.extend(forget);
-                if prefill {
-                    ctrl16 = upload_bf16(&gpu, &down)?;
+                if let (Some(down16), Some(gf16)) = (upload_bf16(&gpu, &down)?, upload_bf16(&gpu, &gain)?) {
+                    ctrl16 = Some((down16, gf16));
                 }
                 Some((upload_f32(&gpu, &down)?, upload_f32(&gpu, &gain)?, stride))
             } else {
@@ -900,13 +903,16 @@ impl Shard {
             // 8 tokens per workgroup in the first half, 16 in the second.
             let p = self.push([0, raw, 0, self.z.address, 0, 0], 0, u).defer_barrier(true);
             match &l.ctrl16 {
-                Some(down16) => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z_bf16", p, kinds as u32, n.div_ceil(8) as u32, down16)?,
+                Some((down16, _)) => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z_bf16", p, kinds as u32, n.div_ceil(8) as u32, down16)?,
                 None => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z", p, kinds as u32, n.div_ceil(8) as u32, down)?,
             }
             self.carry_then_barrier(cmd);
             u[3] = *stride as u32;
             let p = self.push([self.xin.address, raw, 0, self.z.address, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(16)) as u32, gf)?;
+            match &l.ctrl16 {
+                Some((_, gf16)) => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out_bf16", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(16)) as u32, gf16)?,
+                None => self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(16)) as u32, gf)?,
+            }
         } else {
             let m = raw + (mixes * n * d * 4) as u64;
             let p = self.push([0, raw, m, self.z.address, 0, 0], 0, u);
