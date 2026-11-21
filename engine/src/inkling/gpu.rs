@@ -980,7 +980,14 @@ impl Shard {
             self.part_out(cmd, n);
             return Ok(());
         }
-        let (gu_name, down_name) = if q8 { ("inkling_moe_gu_q8", "inkling_moe_down_q8") } else { ("inkling_moe_gu", "inkling_moe_down") };
+        // One token: a row pair per wave (8 rows per workgroup instead of 16).
+        let (gu_name, down_name) = match (q8, n == 1) {
+            (false, false) => ("inkling_moe_gu", "inkling_moe_down"),
+            (false, true) => ("inkling_moe_gu_r1", "inkling_moe_down"),
+            (true, false) => ("inkling_moe_gu_q8", "inkling_moe_down_q8"),
+            (true, true) => ("inkling_moe_gu_q8_r1", "inkling_moe_down_q8"),
+        };
+        let gu_rows = if n == 1 { 4 } else { 8 };
         let mut u = [0u32; 16];
         u[0] = self.f as u32;
         u[1] = d as u32;
@@ -989,7 +996,7 @@ impl Shard {
         u[12] = c.situ_beta.to_bits();
         u[13] = c.situ_linear.to_bits();
         let p = self.push([0, self.xin.address, self.act.address, self.ids.address, 0, 0], l.sgu.address, u);
-        self.gpu.dispatch_matrix(cmd, gu_name, p, self.f.div_ceil(8) as u32, (n * c.used) as u32, &l.gu.buf)?;
+        self.gpu.dispatch_matrix(cmd, gu_name, p, self.f.div_ceil(gu_rows) as u32, (n * c.used) as u32, &l.gu.buf)?;
         let mut u = [0u32; 16];
         u[0] = d as u32;
         u[1] = self.f as u32;

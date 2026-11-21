@@ -8,8 +8,11 @@
 // then p.n up rows, each p.k weights. Four lanes per block, 16 blocks per wave step, ROWS row pairs per wave.
 // b: x [t][p.k], c: act [t][p.m][p.n], d: ids [t][p.m] (u32), extra: per-expert scales (f32).
 // SITU: beta p.r0, linear beta p.r1 (float bits).
-layout(constant_id=0) const uint FMT=4;
-#define ROWS 2
+// Specialization 6 and 7 are formats 4 and 5 with one row pair per wave instead of two: a single token's eight
+// pairs then take 59 against 65.5 us per layer (twice the waves, each half as long), four tokens' 196 against 186.
+layout(constant_id=0) const uint SPEC=4;
+const uint FMT=SPEC>=6u?SPEC-2u:SPEC;
+const uint ROWS=SPEC>=6u?1u:2u;
 layout(local_size_x=256) in;
 shared float NV[16];
 const float NVC[16]=float[16](0.,1.,2.,3.,4.,6.,8.,12.,0.,-1.,-2.,-3.,-4.,-6.,-8.,-12.);
@@ -34,7 +37,7 @@ barrier();
 uint lane=gl_SubgroupInvocationID,part=lane%4,bl=lane/4,w=gl_SubgroupID,tk=gl_WorkGroupID.y,t=tk/p.m;
 if(t>=batch())return;
 uint e=d_u.v[tk],first=gl_WorkGroupID.x*(4*ROWS)+w*ROWS,blocks=p.k/32,xb=t*(p.k/4);
-float g[ROWS],u[ROWS];
+float g[2],u[2];
 [[unroll]]for(uint r=0;r<ROWS;r++){g[r]=0;u[r]=0;}
 for(uint b=bl;b<blocks;b+=16){
     [[unroll]]for(uint r=0;r<ROWS;r++){
