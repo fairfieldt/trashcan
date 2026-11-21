@@ -1,0 +1,20 @@
+#version 460
+#include "common.glsl"
+// One wave merges a query's partition softmax sums. Each lane owns two output dimensions.
+layout(local_size_x=64) in;
+void main() {
+    uint row = gl_WorkGroupID.x, lane = gl_LocalInvocationID.x;
+    uint base = row * p.m * 132u;
+    float maximum = -1e30;
+    for (uint i = 0u; i < p.m; i++) maximum = max(maximum, b_f.v[base + i*132u + 128u]);
+    vec2 weighted = vec2(0.0);
+    float sum = 0.0;
+    for (uint i = 0u; i < p.m; i++) {
+        uint off = base + i*132u;
+        float scale = exp(b_f.v[off + 128u] - maximum);
+        sum += scale * b_f.v[off + 129u];
+        weighted += scale * vec2(b_f.v[off + 2u*lane], b_f.v[off + 2u*lane + 1u]);
+    }
+    a_f.v[row*128u + 2u*lane] = weighted.x / sum;
+    a_f.v[row*128u + 2u*lane + 1u] = weighted.y / sum;
+}

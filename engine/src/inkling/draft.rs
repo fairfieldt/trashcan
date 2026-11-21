@@ -18,6 +18,11 @@ use std::rc::Rc;
 
 pub const BLOCK: usize = 8;
 
+/// Number of key partitions across the context and block, capped to bound scratch space.
+fn attention_parts(keys: usize) -> usize {
+    keys.div_ceil(128).min(64)
+}
+
 /// A submitted command buffer: the group launches every rank's work, then waits for all of it.
 pub struct Pending {
     gpu: Rc<Device>,
@@ -174,15 +179,15 @@ pub struct DraftRank {
     k: Buffer,
     v: Buffer,
     att: Buffer,
+    att_parts: Buffer,
     f1: Buffer,
     f2: Buffer,
-    base: Buffer,
     jin: Buffer,
     jout: Buffer,
     state: Buffer,
     latent: Buffer,
     corr: Buffer,
-    bias: Buffer,
+    logits: Buffer,
     ctx: Buffer,
 }
 
@@ -255,9 +260,10 @@ impl DraftRank {
         let fb = |n: usize| gpu.buffer(n * 4, false, false, None);
         let hb = |n: usize| gpu.buffer(n * 4, true, false, None);
         let ff = layers[0].gate.rows;
+        let heads = g.get_u64("dflash.attention.head_count")? as usize;
         Ok(Self {
             d,
-            heads: g.get_u64("dflash.attention.head_count")? as usize,
+            heads,
             kv_heads: g.get_u64("dflash.attention.head_count_kv")? as usize,
             eps: g.get_f64("dflash.attention.layer_norm_rms_epsilon")? as f32,
             rope: g.get_f64("dflash.rope.freq_base")? as f32,
@@ -281,15 +287,15 @@ impl DraftRank {
             k: fb(64 * 1024)?,
             v: fb(64 * 1024)?,
             att: fb(BLOCK * 3072)?,
+            att_parts: fb(BLOCK * heads * attention_parts(context + BLOCK) * 132)?,
             f1: fb(BLOCK * ff)?,
             f2: fb(BLOCK * ff)?,
-            base: fb(BLOCK * vn)?,
             jin: fb(2 * rank + 2 * d)?,
             jout: fb(3 * rank)?,
             state: fb(rank)?,
             latent: fb(rank)?,
             corr: fb(d)?,
-            bias: fb(vn)?,
+            logits: fb(vn)?,
             ctx: fb(d)?,
             layers,
             gpu,
@@ -342,20 +348,14 @@ impl DraftRank {
         self.gpu.dispatch_matrix(cmd, "inkling_norm", p, n as u32, 1, w)
     }
 
-    fn ops(&self, cmd: vk::CommandBuffer, mode: u32, a: u64, b: u64, w: Option<&Buffer>, n: usize, k: usize) -> Result<()> {
+    fn ops(&self, cmd: vk::CommandBuffer, mode: u32, a: u64, b: u64, n: usize, k: usize) {
         let mut u = [0u32; 16];
         u[0] = n as u32;
         u[1] = k as u32;
         u[11] = mode;
         let p = self.push([a, b, 0, 0, 0, 0], u);
         let groups = (n * k).div_ceil(256) as u32;
-        match w {
-            Some(w) => self.gpu.dispatch_matrix(cmd, "vit_ops", p, groups, 1, w),
-            None => {
-                self.gpu.dispatch(cmd, "vit_ops", p, groups, 1);
-                Ok(())
-            }
-        }
+        self.gpu.dispatch(cmd, "vit_ops", p, groups, 1);
     }
 
     /// Per-head norm, NeoX RoPE at positions `pos..pos + n`, and with `cache` the store of K (from `x`) and V
@@ -409,10 +409,9 @@ impl DraftRank {
         Pending::launch(&self.gpu, cmd)
     }
 
-    /// Run the block (`rows`: [8][d] input rows, at positions `pos..pos + 8`) through the layers, the output norm and
-    /// this rank's head rows (the base logits), reset the recurrent head with context `rnn` ([d]), and take the
-    /// first recurrent step after `prev` (the block's anchor token): read it with `top`.
-    pub fn block(&self, rows: &[f32], pos: usize, rnn: &[f32], prev: u32) -> Result<Pending> {
+    /// Run the eight block rows through the layers and output norm, then take the
+    /// first recurrent step from `rnn` and the anchor token `prev`. Read its result with `top`.
+    pub fn block(&self, rows: &[f32], pos: usize, rnn: &[f32], prev: u32, drafts: usize) -> Result<Pending> {
         let d = self.d;
         let n = BLOCK;
         let tail = (64 * self.layers.len()).max(BLOCK) * d * 4;
@@ -424,7 +423,7 @@ impl DraftRank {
         self.gpu.host_barrier(cmd, false);
         self.gpu.copy(cmd, &self.hin, 0, &self.x, 0, n * d * 4);
         self.gpu.barrier(cmd);
-        for l in &self.layers {
+        for (index, l) in self.layers.iter().enumerate() {
             self.norm(cmd, &l.norms, 0, self.x.address, self.n.address, n)?;
             self.mm(cmd, &l.q, self.n.address, self.q.address, n)?;
             self.mm(cmd, &l.k, self.n.address, self.k.address, n)?;
@@ -437,20 +436,30 @@ impl DraftRank {
             u[7] = l.cap as u32;
             u[8] = l.window as u32;
             u[10] = pos as u32;
-            let p = self.push([self.att.address, self.q.address, self.k.address, self.v.address, l.kc.address, l.vc.address], u);
-            self.gpu.dispatch(cmd, "dspark_attn", p, (n * self.heads) as u32, 1);
+            let cached = if l.window == 0 { pos } else { pos.min(l.window - 1) };
+            let parts = attention_parts(cached + n);
+            u[2] = parts as u32;
+            let output = if parts == 1 { self.att.address } else { self.att_parts.address };
+            let p = self.push([output, self.q.address, self.k.address, self.v.address, l.kc.address, l.vc.address], u);
+            self.gpu.dispatch(cmd, "dspark_attn", p, parts as u32, self.heads as u32);
+            if parts > 1 {
+                let p = self.push([self.att.address, self.att_parts.address, 0, 0, 0, 0], u);
+                self.gpu.dispatch(cmd, "dspark_attn_merge", p, (n * self.heads) as u32, 1);
+            }
+            // The final attention still uses all eight block keys and values. Its output
+            // projection and MLP are row-local, and only rows through `drafts` reach the head.
+            let n = if index + 1 == self.layers.len() { drafts + 1 } else { BLOCK };
             self.mm(cmd, &l.o, self.att.address, self.n.address, n)?;
-            self.ops(cmd, 4, self.x.address, self.n.address, None, n, d)?;
+            self.ops(cmd, 4, self.x.address, self.n.address, n, d);
             self.norm(cmd, &l.norms, 1, self.x.address, self.n.address, n)?;
             self.mm(cmd, &l.gate, self.n.address, self.f1.address, n)?;
             self.mm(cmd, &l.up, self.n.address, self.f2.address, n)?;
-            self.ops(cmd, 5, self.f1.address, self.f2.address, None, n, l.gate.rows)?;
+            self.ops(cmd, 5, self.f1.address, self.f2.address, n, l.gate.rows);
             self.mm(cmd, &l.down, self.f1.address, self.n.address, n)?;
-            self.ops(cmd, 4, self.x.address, self.n.address, None, n, d)?;
+            self.ops(cmd, 4, self.x.address, self.n.address, n, d);
         }
-        // The hidden rows stay in n (normed), the base logits in base.
-        self.norm(cmd, &self.out_norm, 0, self.x.address, self.n.address, n)?;
-        self.mm(cmd, &self.head, self.n.address, self.base.address, n)?;
+        // Keep the normalized block rows for the recurrent steps.
+        self.norm(cmd, &self.out_norm, 0, self.x.address, self.n.address, drafts + 1)?;
         self.gpu.copy(cmd, &self.hin, tail, &self.state, 0, self.rank * 4);
         self.gpu.copy(cmd, &self.hin, tail + self.rank * 4, &self.ctx, 0, d * 4);
         self.gpu.barrier(cmd);
@@ -474,15 +483,17 @@ impl DraftRank {
         let p = self.push([self.state.address, self.jout.address, self.latent.address, 0, 0, 0], u);
         self.gpu.dispatch_matrix(cmd, "dspark_markov", p, r.div_ceil(256) as u32, 1, &self.joint_b)?;
         self.mf(cmd, &self.hidden, d, r, self.latent.address, self.corr.address)?;
-        self.ops(cmd, 0, self.corr.address, 0, Some(&self.hidden_b), 1, d)?;
-        self.mm(cmd, &self.head, self.corr.address, self.bias.address, 1)?;
+        u[1] = d as u32;
+        u[2] = row as u32;
+        let p = self.push([self.corr.address, self.n.address, 0, 0, 0, 0], u);
+        self.gpu.dispatch_matrix(cmd, "dspark_head_input", p, d.div_ceil(256) as u32, 1, &self.hidden_b)?;
+        self.mm(cmd, &self.head, self.corr.address, self.logits.address, 1)?;
         let mut u = [0u32; 16];
         u[0] = self.vn as u32;
         u[1] = self.vocab as u32;
-        u[2] = row as u32;
         u[10] = self.v0 as u32;
         u[12] = self.softcap.to_bits();
-        let p = self.push([self.top.address, self.base.address, self.bias.address, 0, 0, 0], u);
+        let p = self.push([self.top.address, self.logits.address, 0, 0, 0, 0], u);
         self.gpu.dispatch(cmd, "dspark_argmax", p, 1, 1);
         self.gpu.host_barrier(cmd, true);
         Ok(())

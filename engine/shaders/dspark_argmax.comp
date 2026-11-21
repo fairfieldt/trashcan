@@ -1,8 +1,6 @@
 #version 460
 #include "common.glsl"
-// Inkling DSpark: the first maximum of this rank's softcapped logits cap tanh((base + bias) / cap) over its p.n
-// vocabulary rows (rows at or beyond p.k, the padding, are skipped; ids from p.offset): base row p.m of b ([rows][p.n]),
-// bias c ([p.n]); writes (value, id as float bits) into a. One workgroup.
+// First maximum of the softcapped local vocabulary logits, skipping padded rows.
 layout(local_size_x=256) in;
 shared float bv[256];
 shared uint bi[256];
@@ -11,7 +9,7 @@ uint tid=gl_LocalInvocationID.x;
 float cap=uintBitsToFloat(p.r0),best=-1e30;uint id=0xffffffffu;
 for(uint i=tid;i<p.n;i+=256){
     if(p.offset+i>=p.k)break;
-    float v=cap*tanh((b_f.v[p.m*p.n+i]+c_f.v[i])/cap);
+    float v=cap*tanh(b_f.v[i]/cap);
     if(v>best){best=v;id=i;}
 }
 bv[tid]=best;bi[tid]=id;
