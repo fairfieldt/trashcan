@@ -39,14 +39,15 @@ pub struct Run {
 }
 
 impl Run {
-    fn group(&self, model: &Path, forced_rows: usize) -> Result<Group> {
+    /// The group of a command; `exact` for comparisons with references (exact f32 all-reduces).
+    fn group(&self, model: &Path, forced_rows: usize, exact: bool) -> Result<Group> {
         crate::validate_draft(self.draft.as_ref(), self.draft_tokens, self.batch)?;
         let gpus = match &self.gpus {
             Some(g) => g.clone(),
             None => (0..crate::gpu::Instance::new()?.amd_gpus()?.len()).collect(),
         };
         let mesh = tp::mesh(&self.tp_connect, &self.tp_peer)?;
-        let mut g = Group::new(model, &gpus, mesh, self.context, self.batch, forced_rows)?;
+        let mut g = Group::new(model, &gpus, mesh, self.context, self.batch, forced_rows, exact)?;
         if let Some(d) = &self.draft {
             g.enable_draft(d)?;
         }
@@ -179,7 +180,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
         Cmd::Validate { model, reference, run, ids, greedy, free } => validate(&model, &reference, &run, &ids, greedy, free),
         Cmd::Logits { model, ids, out, run, ctx, chunks } => logits(&model, &ids, &out, &run, ctx, chunks),
         Cmd::Chat { model, prompt, run, system, effort, max_tokens, temperature, top_k, top_p, seed, mmproj, image } => {
-            let mut group = run.group(&model, 0)?;
+            let mut group = run.group(&model, 0, false)?;
             let t = Tokenizer::new(&group.gguf)?;
             let mut sampler = Sampler::new(temperature, top_k, top_p, seed)?;
             let images = if image.is_empty() {
@@ -221,7 +222,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::Bench { model, run, pp, tg, reps, prompt } => {
-            let mut group = run.group(&model, 0)?;
+            let mut group = run.group(&model, 0, false)?;
             for rep in 0..reps {
                 let ids = match &prompt {
                     Some(p) => {
@@ -262,7 +263,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
 
 fn validate(model: &Path, reference: &Path, run: &Run, ids: &Path, greedy: usize, free: bool) -> Result<()> {
     let tokens = read_ids(ids)?;
-    let mut group = run.group(model, if free { 0 } else { tokens.len() })?;
+    let mut group = run.group(model, if free { 0 } else { tokens.len() }, true)?;
     if !free {
     let mut r = Reference::new(reference);
     let t = Instant::now();
@@ -326,7 +327,7 @@ fn logits(model: &Path, ids: &Path, out: &Path, run: &Run, ctx: usize, chunks: O
     ensure!(chunks.iter().all(|&c| c < count), "{} tokens make {count} chunks of {ctx}", tokens.len());
     ensure!(ctx <= run.context, "--ctx {ctx} exceeds --context {}", run.context);
     std::fs::create_dir_all(out)?;
-    let mut group = run.group(model, 0)?;
+    let mut group = run.group(model, 0, true)?;
     let vocab = group.c.vocab;
     std::fs::write(
         out.join("meta.tsv"),

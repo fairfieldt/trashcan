@@ -199,7 +199,7 @@ fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context
 
 impl Group {
     /// The driver: its `gpus` take the first ranks; with `mesh` the other machines' GPUs take the rest in machine order.
-    pub fn new(model: &Path, gpus: &[usize], mut mesh: Option<Mesh>, context: usize, max_batch: usize, forced_rows: usize) -> Result<Self> {
+    pub fn new(model: &Path, gpus: &[usize], mut mesh: Option<Mesh>, context: usize, max_batch: usize, forced_rows: usize, exact: bool) -> Result<Self> {
         ensure!(max_batch > 0, "--batch must be positive");
         ensure!(forced_rows <= max_batch, "the teacher-forced prompt must fit one batch (--batch)");
         // Each segment uses one micro-batch. Short forwards and teacher-forced prompts run whole.
@@ -215,8 +215,17 @@ impl Group {
             ensure!(counts.keys().copied().eq(0..counts.len()), "machines {:?} answered the probe", counts.keys().collect::<Vec<_>>());
             m.full = tp::fully_cabled(&cabled, counts.len());
             m.join(counts.len())?;
-            // Validation needs exact sums; the compact payload is the opt-in (TRASHCAN_TP_WIRE=f16).
-            m.wire = if std::env::var("TRASHCAN_TP_WIRE").as_deref() == Ok("f16") { Wire::F16 } else { Wire::F32 };
+            // All-reduces of decode and verification batches go in f16, each machine rounding its partial sums (as
+            // the Qwen groups' do): over 14,329 positions the engine's KLD from an f32 reference is the same with
+            // either wire (0.00130 against 0.00128, standard errors 0.00004; docs/inkling.md), and decode is 2 to 3%
+            // faster. Comparisons with references (`exact`) keep exact f32 sums. TRASHCAN_TP_WIRE=f32 or f16 decides
+            // for every command.
+            m.wire = match std::env::var("TRASHCAN_TP_WIRE").as_deref() {
+                Ok("f16") => Wire::F16,
+                Ok("f32") => Wire::F32,
+                _ if exact => Wire::F32,
+                _ => Wire::F16,
+            };
         }
         let firsts: Vec<usize> = counts.values().scan(0, |at, &n| { *at += n; Some(*at - n) }).collect();
         let ranks: usize = counts.values().sum();

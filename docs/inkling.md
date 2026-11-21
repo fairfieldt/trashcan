@@ -330,6 +330,23 @@ exact arithmetic is not measured. The table also cannot say which of the engine'
 It shares the f16 K/V cache with the CPU backend, which is one reason their errors are correlated. The raw outputs and
 commands are archived in `results/inkling/kld-69c26fab` on Pinkerton.
 
+**The f16 wire.** Decode and verification all-reduces (fewer than 65,536 values) can carry each machine's partial
+sums rounded to f16 instead of exact f32 sums. Prefill-sized all-reduces stay f32, so this was measured with
+`--batch 1`, every token a single-row forward, on the seven f32-reference chunks (14,329 positions, `bee58366` on
+invite and indite):
+
+| P | Q | mean KLD | median | p99 | same top token |
+|---|---|---:|---:|---:|---:|
+| f32 reference | engine, batch 1, f32 wire | 0.00128 ± 0.00004 | 0.00013 | 0.017 | 98.72% |
+| f32 reference | engine, batch 1, f16 wire | 0.00130 ± 0.00004 | 0.00014 | 0.017 | 98.80% |
+| engine, batch 1, f32 wire | engine, batch 1, f16 wire | 0.00087 ± 0.00003 | 0.00008 | 0.012 | 99.13% |
+| engine, batch 512, f32 wire | engine, batch 1, f32 wire | 0.00055 ± 0.00002 | 0.00002 | 0.009 | 99.41% |
+
+The f16 wire moves the output about as much as running the single-row kernels instead of the batch kernels does,
+and no further from the reference: paired by position, its distance from the f32 reference is 0.000016 ± 0.000026
+above the f32 wire's. It is therefore the default outside `validate` and `logits` (see [Running](#running)); the raw
+outputs are in `results/inkling/kld-wire-bee58366` on Pinkerton.
+
 ## Performance
 
 On incite and enlight (four D700s over Thunderbolt), `inkling bench MODEL --pp 1024 --tg 64 --reps 3` at batch
@@ -513,6 +530,7 @@ off; the model still reasons briefly), tool calls and tool results by name, and 
 the tokens already processed. `scripts/test-server.py` passes with a larger output budget for its sampled request
 (32 tokens are spent on reasoning).
 
-`TRASHCAN_INKLING_PROFILE=1` adds GPU time per kernel to `bench`. The all-reduces carry exact f32 sums;
-`TRASHCAN_TP_WIRE=f16` on the driver selects the compact payload of the Qwen groups.
+`TRASHCAN_INKLING_PROFILE=1` adds GPU time per kernel to `bench`. The all-reduces of decode and verification
+batches carry f16 partial sums, as the Qwen groups' do; `validate` and `logits` use exact f32 sums, and
+`TRASHCAN_TP_WIRE=f32` or `f16` on the driver chooses for any command. The startup line names the wire in use.
 

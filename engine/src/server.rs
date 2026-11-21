@@ -602,7 +602,7 @@ fn serve_inner(mut options: Options) -> Result<()> {
         let mesh = qwen::tp::mesh(&options.tp_connect, &options.tp_peer)?;
         let batch = options.batch.min(1024);
         crate::validate_draft(options.draft.as_ref(), options.draft_tokens.unwrap_or(3), batch)?;
-        let mut group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, batch, 0)?;
+        let mut group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, batch, 0, false)?;
         if let Some(d) = &options.draft {
             group.enable_draft(d)?;
         }
