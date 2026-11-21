@@ -633,6 +633,12 @@ the host's passes between segments. What changed, each measured against the buil
 - **f16 wire** for all-reduces of decode and verification batches, see [KL divergence](#kl-divergence): 3.30 to
   2.88 ms of exchanges per token.
 - **16-bit controllers** in the decode kernels: 24.4 to 23.0 and 18.3 to 15.9 us per controlled segment.
+- **Push frames.** The links measure what each direction of a cable holds back and write only that many frames
+  after a send instead of always three ([kernel.md](kernel.md)); the incite-enlight cable, like invite-indite,
+  holds none. After `deffddc9`, alternated on incite and enlight: decode after 1,024 tokens 39.3-39.4 to 40.5-40.7
+  tok/s (exchanges 2.7 to 2.4 ms per token), three drafts on the code prompt 51.7-52.7 to 52.2-52.7. With
+  `busy_poll` set on the stream at both ends (off by default, `/etc/tblink/busy_poll`): 41.0 tok/s (exchanges
+  2.14 ms) and 53.8-54.0 with three drafts (a four-row verification forward 45.7 ms). Prefill is unchanged.
 
 | incite and enlight, `51aa4c75` against `deffddc9` | before | after |
 |---|---:|---:|
