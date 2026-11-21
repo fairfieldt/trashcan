@@ -9,6 +9,8 @@
 //! block states, the residual mixes, the sublayer-output convolutions and the loop controllers (`group`).
 pub mod chat;
 pub mod cli;
+pub mod draft;
+pub mod spec;
 pub mod gpu;
 pub mod group;
 pub mod vision;

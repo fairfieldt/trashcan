@@ -341,9 +341,30 @@ impl Backend for Inkling {
         let mut out = crate::inkling::chat::Output::new(self.specials);
         let budget = p.max_tokens.min(g.context - g.pos);
         let (mut generated, mut stopped, mut reasoning_tokens) = (0, false, 0);
+        let draft_k = options.draft_tokens.unwrap_or(3);
+        let mut sampled = sampler.sample(top.first().context("missing candidates")?);
+        let mut queue: std::collections::VecDeque<u32> = std::collections::VecDeque::new();
         while generated < budget {
             ensure!(!crate::server_control::stopping(), "server stopping");
-            let tok = sampler.sample(top.first().context("missing candidates")?);
+            // The next token: an accepted draft, else the latest sample, fed to the model here.
+            let tok = match queue.pop_front() {
+                Some(t) => t,
+                None => {
+                    let t = sampled;
+                    // The history holds exactly the tokens fed to the model.
+                    if g.drafting() && generated + 1 < budget {
+                        let (toks, next) = crate::inkling::spec::step(g, &mut sampler, sampled, draft_k)?;
+                        self.history.extend_from_slice(&toks);
+                        queue.extend(toks.into_iter().skip(1));
+                        sampled = next;
+                    } else if generated + 1 < budget {
+                        top = g.forward(&[sampled], Score::Last, None)?;
+                        self.history.push(t);
+                        sampled = sampler.sample(top.first().context("missing candidates")?);
+                    }
+                    t
+                }
+            };
             generated += 1;
             if out.part == crate::inkling::chat::Part::Thinking {
                 reasoning_tokens += 1;
@@ -361,8 +382,6 @@ impl Backend for Inkling {
             if generated == budget {
                 break;
             }
-            top = g.forward(&[tok], Score::Last, None)?;
-            self.history.push(tok);
         }
         output.finish(ids.len(), cached, generated, reasoning_tokens, !stopped)
     }
@@ -586,7 +605,10 @@ fn serve_inner(mut options: Options) -> Result<()> {
             None => (0..crate::gpu::Instance::new()?.amd_gpus()?.len()).collect(),
         };
         let mesh = qwen::tp::mesh(&options.tp_connect, &options.tp_peer)?;
-        let group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, options.batch.min(256))?;
+        let mut group = crate::inkling::group::Group::new(&options.model, &gpus, mesh, options.context, options.batch.min(256))?;
+        if let Some(d) = &options.draft {
+            group.enable_draft(d)?;
+        }
         let tokenizer = Tokenizer::new(&group.gguf)?;
         let specials = crate::inkling::chat::Specials::new(&tokenizer)?;
         let vision = options.mmproj.as_ref().map(|m| crate::inkling::vision::Vision::new(group.first_gpu(), m)).transpose()?;

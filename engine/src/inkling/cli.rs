@@ -30,6 +30,12 @@ pub struct Run {
     /// Tokens per prefill batch.
     #[arg(long, default_value_t = 256)]
     pub batch: usize,
+    /// The DSpark drafter GGUF (dspark-*.gguf): speculative decoding (the same path on every machine).
+    #[arg(long)]
+    pub draft: Option<PathBuf>,
+    /// Tokens drafted per round (at most 7).
+    #[arg(long, default_value_t = 3)]
+    pub draft_tokens: usize,
 }
 
 impl Run {
@@ -39,7 +45,11 @@ impl Run {
             None => (0..crate::gpu::Instance::new()?.amd_gpus()?.len()).collect(),
         };
         let mesh = tp::mesh(&self.tp_connect, &self.tp_peer)?;
-        Group::new(model, &gpus, mesh, self.context, self.batch)
+        let mut g = Group::new(model, &gpus, mesh, self.context, self.batch)?;
+        if let Some(d) = &self.draft {
+            g.enable_draft(d)?;
+        }
+        Ok(g)
     }
 }
 
@@ -102,6 +112,10 @@ pub enum Cmd {
         tg: usize,
         #[arg(long, default_value_t = 1)]
         reps: usize,
+        /// A chat prompt (one user message, thinking effort low) instead of synthetic tokens; with --draft the
+        /// acceptance then reflects real text.
+        #[arg(long)]
+        prompt: Option<String>,
     },
     /// Serve this machine's ranks of a tensor-parallel group (every machine but the driver).
     Node {
@@ -163,7 +177,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
                 }
                 out
             };
-            chat_loop(&mut group, &t, prompt, system, effort_value(&effort), max_tokens, &mut sampler, images)
+            chat_loop(&mut group, &t, prompt, system, effort_value(&effort), max_tokens, &mut sampler, images, run.draft_tokens)
         }
         Cmd::VisionCheck { mmproj, image, reference, gpu } => {
             let inst = std::rc::Rc::new(crate::gpu::Instance::new()?);
@@ -187,10 +201,17 @@ pub fn run(cmd: Cmd) -> Result<()> {
             }
             Ok(())
         }
-        Cmd::Bench { model, run, pp, tg, reps } => {
+        Cmd::Bench { model, run, pp, tg, reps, prompt } => {
             let mut group = run.group(&model)?;
             for rep in 0..reps {
-                let (row, profiles) = bench(&mut group, pp, tg)?;
+                let ids = match &prompt {
+                    Some(p) => {
+                        let t = Tokenizer::new(&group.gguf)?;
+                        t.encode(&chat::render(&[json!({"role": "user", "content": p})], &[], Some(&json!("low")))?, false, true)
+                    }
+                    None => Vec::new(),
+                };
+                let (row, profiles) = bench(&mut group, pp, tg, &ids, run.draft_tokens)?;
                 println!("{}", json!({"rep": rep, "pp": pp, "tg": tg, "mib": group.device_mib(), "ranks": group.ranks, "result": row}));
                 // GPU milliseconds per kernel on the first rank: per prefill batch of 256 tokens, and per decoded token.
                 for (phase, per, profile) in [("pp", pp as f64 / 256., &profiles[0]), ("tg", tg as f64, &profiles[1])] {
@@ -268,10 +289,11 @@ fn validate(model: &Path, reference: &Path, run: &Run, ids: &Path, greedy: usize
 
 /// Prefill `pp` tokens, then decode `tg` greedily; tokens per second of each, and with profiling the GPU time per
 /// kernel of each phase.
-pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<(Value, [Vec<(String, u64, f64)>; 2])> {
+pub fn bench(group: &mut Group, pp: usize, tg: usize, ids: &[u32], draft_k: usize) -> Result<(Value, [Vec<(String, u64, f64)>; 2])> {
     group.reset()?;
     group.take_profile();
-    let prompt: Vec<u32> = (0..pp).map(|i| 1000 + (i as u32 * 7919) % 150000).collect();
+    let prompt: Vec<u32> = if ids.is_empty() { (0..pp).map(|i| 1000 + (i as u32 * 7919) % 150000).collect() } else { ids.to_vec() };
+    let pp = prompt.len();
     let s0 = group.seconds;
     let t = Instant::now();
     let top = group.forward(&prompt, Score::Last, None)?;
@@ -281,9 +303,22 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<(Value, [Vec<(St
     let mut tok = top[0][0].1;
     let before = group.seconds;
     let t = Instant::now();
-    for _ in 0..tg {
-        tok = group.forward(&[tok], Score::Last, None)?[0][0].1;
+    let (mut produced, mut rounds) = (0, 0);
+    if group.drafting() {
+        let mut greedy = Sampler::new(0., 1, 1., 1)?;
+        while produced < tg {
+            let (toks, next) = super::spec::step(group, &mut greedy, tok, draft_k)?;
+            produced += toks.len();
+            rounds += 1;
+            tok = next;
+        }
+    } else {
+        for _ in 0..tg {
+            tok = group.forward(&[tok], Score::Last, None)?[0][0].1;
+        }
+        produced = tg;
     }
+    let tg = produced;
     let tg_s = t.elapsed().as_secs_f64();
     let after = group.seconds;
     let per = |a: f64, b: f64| (a - b) / tg as f64 * 1e3;
@@ -295,6 +330,7 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<(Value, [Vec<(St
         "pp_host_sum_s": s1.host_sum - s0.host_sum,
         "pp_host_s": s1.host - s0.host,
         "tg_tok_s": tg as f64 / tg_s,
+        "tg_tokens_per_round": if rounds > 0 { tg as f64 / rounds as f64 } else { 1.0 },
         "tg_ms": tg_s / tg as f64 * 1e3,
         "tg_gpu_wait_ms": per(after.gpu, before.gpu),
         "tg_exchange_ms": per(after.exchange, before.exchange),
@@ -307,7 +343,7 @@ pub fn bench(group: &mut Group, pp: usize, tg: usize) -> Result<(Value, [Vec<(St
 }
 
 #[allow(clippy::too_many_arguments)]
-fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: Option<String>, effort: Option<Value>, max_tokens: usize, sampler: &mut Sampler, images: Vec<Vec<f32>>) -> Result<()> {
+fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: Option<String>, effort: Option<Value>, max_tokens: usize, sampler: &mut Sampler, images: Vec<Vec<f32>>, draft_k: usize) -> Result<()> {
     let placeholder = t.id(chat::IMAGE_PLACEHOLDER).context("missing the image placeholder token")?;
     let d = group.c.d;
     // Rows of every image of the conversation so far, in order, and each image's row count.
@@ -366,14 +402,31 @@ fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: O
         }
         group.reset()?;
         let start = Instant::now();
-        let mut top = group.forward_rows(&ids, &all_rows, Score::Last, None)?;
+        let top = group.forward_rows(&ids, &all_rows, Score::Last, None)?;
         let prefill = start.elapsed().as_secs_f64();
         let mut out = Output::new(sp);
         let start = Instant::now();
         let mut n = 0;
         let mut in_thinking = false;
+        let mut sampled = sampler.sample(&top[0]);
+        let mut queue: std::collections::VecDeque<u32> = std::collections::VecDeque::new();
         while n < max_tokens {
-            let tok = sampler.sample(&top[0]);
+            // The next token to show: an accepted draft, else the latest sample (fed to the model here).
+            let tok = match queue.pop_front() {
+                Some(t) => t,
+                None => {
+                    let t = sampled;
+                    if group.drafting() {
+                        let (toks, next) = super::spec::step(group, sampler, sampled, draft_k)?;
+                        queue.extend(toks.into_iter().skip(1));
+                        sampled = next;
+                    } else {
+                        let top = group.forward(&[sampled], Score::Last, None)?;
+                        sampled = sampler.sample(&top[0]);
+                    }
+                    t
+                }
+            };
             n += 1;
             match out.token(tok, &t.decode_bytes(tok, false)) {
                 Some(Event::Thinking(s)) => {
@@ -397,7 +450,6 @@ fn chat_loop(group: &mut Group, t: &Tokenizer, prompt: Option<String>, system: O
             if out.done || group.pos + 1 >= group.context {
                 break;
             }
-            top = group.forward(&[tok], Score::Last, None)?;
         }
         let dt = start.elapsed().as_secs_f64();
         println!("\x1b[0m");

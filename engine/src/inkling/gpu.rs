@@ -184,6 +184,10 @@ struct Slot {
     v: Buffer,
     hist: Buffer,
     cap: usize,
+    /// Verification batches (2..=GATED_MAX tokens) keep the history from before the batch and the batch's K and V
+    /// pre-convolution rows, so `rollback` can rebuild the history at any accepted row.
+    hist_save: Buffer,
+    rows_save: Buffer,
 }
 
 pub struct Shard {
@@ -418,6 +422,8 @@ impl Shard {
                 v: gpu.buffer(kvb, false, false, None)?,
                 hist: gpu.upload(&vec![0u8; 2 * 3 * hk * 128 * 4])?,
                 cap,
+                hist_save: gpu.buffer(2 * 3 * hk * 128 * 4, false, false, None)?,
+                rows_save: gpu.buffer(2 * GATED_MAX * hk * 128 * 4, false, false, None)?,
             }));
         }
         slots.sort_by_key(|s| s.0);
@@ -826,6 +832,13 @@ impl Shard {
         let p = self.push([self.qgr.address, xq, self.kpre.address, self.vpre.address, s.hist.address, s.k.address], s.v.address, u);
         self.gpu.dispatch_matrix(cmd, "inkling_prep", p, (n * 2 * hk + n * hq) as u32, 1, &l.small)?;
         if n > 1 {
+            if n <= GATED_MAX {
+                // A verification batch: keep what `rollback` needs.
+                self.gpu.copy(cmd, &s.hist, 0, &s.hist_save, 0, 2 * 3 * ch * 4);
+                self.gpu.copy(cmd, &self.kpre, 0, &s.rows_save, 0, n * ch * 4);
+                self.gpu.copy(cmd, &self.vpre, 0, &s.rows_save, GATED_MAX * ch * 4, n * ch * 4);
+                self.gpu.barrier(cmd);
+            }
             let mut u = [0u32; 16];
             u[1] = ch as u32;
             let p = self.push([0, self.kpre.address, self.vpre.address, s.hist.address, 0, 0], 0, u);
@@ -951,6 +964,22 @@ impl Shard {
         self.gpu.copy(cmd, self.hin_buf(), 0, &self.xin, 0, rows * d * 4);
         self.gpu.barrier(cmd);
         self.matrix_rows(cmd, &self.head, self.xin.address, self.logits.address, rows)
+    }
+
+    /// After a verification batch, keep its first `keep` rows: every slot's K and V convolution history goes back to
+    /// what it was after them (the K/V cache needs nothing: later rows overwrite the rejected positions first).
+    pub fn rollback(&mut self, keep: usize) -> Result<()> {
+        let ch = self.hk * 128;
+        let cmd = self.gpu.begin()?;
+        for s in &self.slots {
+            let mut u = [0u32; 16];
+            u[0] = keep as u32;
+            u[1] = ch as u32;
+            let p = self.push([s.hist.address, s.hist_save.address, s.rows_save.address, 0, 0, 0], 0, u);
+            self.gpu.dispatch(cmd, "inkling_hist_restore", p, (2 * ch).div_ceil(256) as u32, 1);
+        }
+        self.gpu.finish(cmd)?;
+        self.gpu.run(cmd)
     }
 
     /// Clear every slot's convolution history (a new sequence).
