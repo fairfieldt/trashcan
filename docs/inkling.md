@@ -610,6 +610,50 @@ Build commands, runner scripts, candidate sources, clocks and raw outputs are ar
 `results/inkling/decode-8e9561`. The release build and all 112 engine tests ran CPU-only on Voyage with
 `cargo build --release --offline -p trashcan` and `cargo test --release --offline -p trashcan`.
 
+### Decode between the weight reads
+
+Where a decoded token's 25.7 ms went on `51aa4c75` (incite and enlight, after a 64-token prompt): 18.0 ms inside
+674 kernel dispatches, 0.9 ms between them, 0.8 ms at the segments' gates, 3.3 ms in the 96 exchanges and 3.1 ms in
+the host's passes between segments. What changed, each measured against the build before it with alternated runs:
+
+- **Host pass.** The pass between two segments was bound by memory traffic (about 30 GB/s through L2), not by
+  arithmetic: it zeroed 64 KB of scratch, copied history rows in and out and made a pass over the output row per
+  block state of every mix. It now works a 1 KB block at a time with the same arithmetic per element (unit tests
+  compare the bits): 2.68 to 1.87 ms per token. A verification batch's rows keep one task each, on workers that
+  poll for 2 ms instead of sleeping; running them on the calling thread was slower (48.4 against 49.2 tok/s).
+- **Routing.** A subgroup reduction costs a wave about 0.65 us on Tahiti (five `ds_swizzle`), and the routing
+  kernel took three per selected expert. With one maximum per selection, the index from ballots and the sigmoid
+  from LDS, it takes 14.7 instead of 24.4 us per layer. Ranking all 128 experts through LDS took 45.5 us.
+- **Gate/up for one token.** One row pair per wave instead of two: 59.2 against 65.5 us per layer. Four tokens'
+  pairs are slower that way (196 against 186 us), as is the down kernel at either size, so only single-token
+  forwards use it. Four row pairs per wave took 73.9 us; decoding the NVFP4 codes arithmetically instead of
+  through the LDS table 96.4, and through a table per byte 59.9 (down: 62.4 and 43.0 against 45.4).
+- **Grouped attention.** The V rows' cache positions follow from a turn's first row instead of coming back from
+  LDS: 68.7 to 63.6 us per sliding-window layer at 1,024 positions, and 26.9 to 25.8 ms per 256 prefill tokens.
+- **f16 wire** for all-reduces of decode and verification batches, see [KL divergence](#kl-divergence): 3.30 to
+  2.88 ms of exchanges per token.
+- **16-bit controllers** in the decode kernels: 24.4 to 23.0 and 18.3 to 15.9 us per controlled segment.
+
+| incite and enlight, `51aa4c75` against `deffddc9` | before | after |
+|---|---:|---:|
+| Decode after 64 tokens | 38.7–38.9 tok/s | 41.7–41.9 tok/s |
+| Decode after 1,024 tokens | 36.5 tok/s | 40.0–40.1 tok/s |
+| Code prompt, three drafts | 49.1–49.2 tok/s | 52.2–52.4 tok/s |
+| Verification forward of four rows | 51.0 ms | 47.3 ms |
+| Prefill of 1,024 tokens | 464–470 tok/s | 572–575 tok/s |
+
+`validate` prints the same 48 layer errors, logits and greedy tokens as `51aa4c75` on the chat, tool and long
+fixtures, plain and with three drafts. With `--draft` the long prompt's top logit differs in its last digit from run
+to run on either build (25.974316 or 25.974318): something in a drafted prefill depends on timing, not found yet.
+
+Measured and dropped: light barriers after every decode dispatch (the Qwen graphs' mode, here with every kernel
+allowed behind them as a ceiling) moved the segments from 19.34 to 19.14 ms; the stream rings' interrupt throttle
+at 0 instead of 8192 ns left the exchanges at 3.3 to 3.6 ms; preparing the next pass's loop messages and block-state
+dots on the host while the GPUs run a segment took the pass from 1.87 to 1.69 ms and the token nowhere (25.2 ms
+either way). The exchange is 34 us for one row on both machines, 17 of them until the three data frames and the
+three push frames are sent. `TRASHCAN_INKLING_PHASES=1` prints a machine's totals per forward when its group ends,
+to compare the machines of a group.
+
 ## Order of work
 
 1. Reference: build, dumps for the fixture prompts (text and images), KLD baselines and the attribution runs above.
