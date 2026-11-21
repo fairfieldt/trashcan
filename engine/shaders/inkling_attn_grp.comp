@@ -25,7 +25,6 @@ layout(set=2,binding=4,std430) readonly restrict buffer VWords { uint v[]; } vwo
 // accumulators of waves 1 to 3 ([wave - 1][head][64 lanes], 2 dims each), which wave 0 adds to its own.
 shared vec4 buf[4u*64u];
 shared vec2 mo[3u*G*64u];
-shared uint skey[4u*64u];
 shared float sm[4u*G],sl[4u*G];
 void main(){
 uint kh=gl_WorkGroupID.x,part=0u,t=gl_WorkGroupID.y,lane=gl_SubgroupInvocationID,w=gl_SubgroupID;
@@ -72,13 +71,14 @@ for(uint c=w;c<turns;c+=4u){
         L[h]=L[h]*r+e[h];M[h]=mn;o[h]*=r;
     }
     buf[w*64u+lane]=e;
-    skey[w*64u+lane]=valid?key:0u;
     subgroupMemoryBarrierShared();subgroupBarrier();
     // Positions past the end of the last turn have probability 0 and row 0, so the loop runs whole groups of 8.
-    uint cnt=min(64u,(total-c*64u+7u)&~7u);
+    // The turn's cache rows follow from its first one (the same for every lane: no LDS for them).
+    uint cnt=min(64u,(total-c*64u+7u)&~7u),k0=(lo+c*64u)%p.cap,left=total-c*64u;
     for(uint j0=0u;j0<cnt;j0+=8u){
         vec2 v[8];
-        [[unroll]]for(uint x=0u;x<8u;x++)v[x]=unpackHalf2x16(vword.v[(skey[w*64u+j0+x]*p.kvheads+kh)*64u+lane]);
+        [[unroll]]for(uint x=0u;x<8u;x++){uint kk=k0+j0+x;kk=kk>=p.cap?kk-p.cap:kk;kk=j0+x<left?kk:0u;
+            v[x]=unpackHalf2x16(vword.v[(kk*p.kvheads+kh)*64u+lane]);}
         [[unroll]]for(uint x=0u;x<8u;x++){vec4 pq=buf[w*64u+j0+x];
             o[0]=fma(vec2(pq.x),v[x],o[0]);o[1]=fma(vec2(pq.y),v[x],o[1]);o[2]=fma(vec2(pq.z),v[x],o[2]);}
     }
