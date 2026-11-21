@@ -900,6 +900,26 @@ impl Device {
     ) -> Result<Buffer> {
         self.buffer_impl(size, host, external, import)
     }
+    /// A host-mapped buffer in VRAM (the 256 MiB the PCI BAR shows): the host writes it through a write-combining
+    /// mapping and shaders read it at VRAM speed, with no copy. Reading it from the host is slow.
+    pub fn buffer_mapped_vram(self: &Rc<Self>, size: usize) -> Result<Buffer> {
+        let size = size.max(4).next_multiple_of(4);
+        let ci = vk::BufferCreateInfo::default().size(size as u64).usage(
+            vk::BufferUsageFlags::STORAGE_BUFFER | vk::BufferUsageFlags::TRANSFER_SRC | vk::BufferUsageFlags::TRANSFER_DST,
+        );
+        let buf = unsafe { self.dev.create_buffer(&ci, None)? };
+        let req = unsafe { self.dev.get_buffer_memory_requirements(buf) };
+        let flags = vk::MemoryPropertyFlags::DEVICE_LOCAL | vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT;
+        let ty = self.memory_type(req.memory_type_bits, flags)?;
+        let memory = unsafe { self.dev.allocate_memory(&vk::MemoryAllocateInfo::default().allocation_size(req.size).memory_type_index(ty), None)? };
+        unsafe { self.dev.bind_buffer_memory(buf, memory, 0)? };
+        let ptr = unsafe { self.dev.map_memory(memory, 0, size as u64, vk::MemoryMapFlags::empty())? }.cast();
+        let id = self.next_buffer.get();
+        self.next_buffer.set(id + 1);
+        self.buffers.borrow_mut().insert(id, (buf, size));
+        self.device_bytes.set(self.device_bytes.get() + req.size);
+        Ok(Buffer { gpu: self.clone(), buf, memory, address: id << 32, size, ptr, device_bytes: req.size, owned: true })
+    }
     fn buffer_impl(
         self: &Rc<Self>,
         size: usize,

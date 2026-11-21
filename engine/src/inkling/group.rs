@@ -772,7 +772,8 @@ impl Group {
             normed: f.normed.iter_mut().map(|v| SendPtr(v.as_mut_ptr())).collect(),
             prelude: SendPtr(f.prelude.0.as_mut_ptr()),
             bank: [SendPtr(f.bank[0].as_mut_ptr()), SendPtr(f.bank[1].as_mut_ptr())],
-            hin: self.shards.iter().map(|s| SendPtr(s.hin(f.mb, 6 * len + 6 * n).as_mut_ptr())).collect(),
+            hin: self.shards.iter().map(|s| SendPtr(s.inputs_mut(f.mb, n, 6 * len + 6 * n).0.as_mut_ptr())).collect(),
+            fence: self.shards.iter().any(|s| s.inputs_mut(f.mb, n, 0).1),
         };
         // SAFETY: every task takes its own rows of the flow's state and of `hin`; `sum`, `remote` and the history are
         // only read.
@@ -1120,6 +1121,9 @@ struct Pass<'a> {
     bank: [SendPtr; 2],
     /// Every local rank's input rows.
     hin: Vec<SendPtr>,
+    /// The input rows are write-combining memory (prefill inputs in VRAM): every thread ends its rows with a store
+    /// fence, so nothing it wrote is still in a write-combining buffer when the segment is submitted.
+    fence: bool,
 }
 
 impl Pass<'_> {
@@ -1277,6 +1281,10 @@ impl Pass<'_> {
                     self.write(t + rows - n, out);
                 }
             }
+        }
+        #[cfg(target_arch = "x86_64")]
+        if self.fence {
+            std::arch::x86_64::_mm_sfence();
         }
     }
 }

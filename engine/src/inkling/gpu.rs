@@ -205,6 +205,10 @@ pub struct Shard {
     qgr_w: usize,
     // Host-visible: input rows, partial outputs and params of each micro-batch, head logits.
     hin: [Buffer; MICRO],
+    /// Prefill batches (more than `GATED_MAX` tokens) take their input rows in host-mapped VRAM instead of `hin`:
+    /// the host's threads push the rows over PCIe while the GPU runs the other micro-batch, and the kernels read
+    /// them without a copy (the copy from host memory took 7% of a prefill batch's GPU time).
+    vin: Option<[Buffer; MICRO]>,
     part: [Buffer; MICRO],
     logits: Buffer,
     params: [Buffer; MICRO],
@@ -449,8 +453,21 @@ impl Shard {
         } else {
             None
         };
+        let vin = if nb > GATED_MAX {
+            let vb = || gpu.buffer_mapped_vram(6 * nb * (d + 1) * 4);
+            match (vb(), vb()) {
+                (Ok(a), Ok(b)) => Some([a, b]),
+                _ => {
+                    eprintln!("inkling: no host-mapped VRAM for the prefill inputs; they go through host memory");
+                    None
+                }
+            }
+        } else {
+            None
+        };
         Ok(Self {
             hin: [hb(6 * nb * (d + 1))?, hb(6 * nb * (d + 1))?],
+            vin,
             raw: fb(6 * nb * (d + 1))?,
             z: fb(nb * 3 * c.gate_rank)?,
             part: [hb(nb * d)?, hb(nb * d)?],
@@ -513,6 +530,17 @@ impl Shard {
         assert!(len <= self.hin[mb].size / 4);
         unsafe { std::slice::from_raw_parts_mut(self.hin[mb].ptr.cast::<f32>(), len) }
     }
+    /// `hin` of a batch of `n` tokens, and whether it is write-combining memory (`vin`): the host may only write
+    /// it, in whole rows, and each thread ends its writes with a store fence before the segment is submitted.
+    pub fn inputs_mut(&self, mb: usize, n: usize, len: usize) -> (&mut [f32], bool) {
+        match &self.vin {
+            Some(v) if n > GATED_MAX => {
+                assert!(len <= v[mb].size / 4);
+                (unsafe { std::slice::from_raw_parts_mut(v[mb].ptr.cast::<f32>(), len) }, true)
+            }
+            _ => (self.hin(mb, len), false),
+        }
+    }
     /// This rank's partial output of micro-batch `mb`'s last attention or MoE segment (`n * d` floats).
     pub fn part(&self, mb: usize, len: usize) -> &[f32] {
         assert!(len <= self.part[mb].size / 4);
@@ -534,9 +562,12 @@ impl Shard {
     fn push(&self, ptr: [u64; 6], extra: u64, u: [u32; 16]) -> Push {
         Push { ptr: [ptr[0], ptr[1], ptr[2], ptr[3], ptr[4], ptr[5], self.params[self.mb.get()].address, extra], u }.defer_barrier(self.defer.get())
     }
-    /// The input rows and the partial output of the micro-batch being recorded.
-    fn hin_buf(&self) -> &Buffer {
-        &self.hin[self.mb.get()]
+    /// The input rows (of a batch of `n` tokens) and the partial output of the micro-batch being recorded.
+    fn hin_buf(&self, n: usize) -> &Buffer {
+        match &self.vin {
+            Some(v) if n > GATED_MAX => &v[self.mb.get()],
+            _ => &self.hin[self.mb.get()],
+        }
     }
     fn part_buf(&self) -> &Buffer {
         &self.part[self.mb.get()]
@@ -618,7 +649,7 @@ impl Shard {
         match seg {
             Seg::Attn { slot, phys, kinds, controlled, wide } => self.rec_attention(cmd, slot, phys, n, kinds, controlled, wide)?,
             Seg::Moe { phys, controlled } => self.rec_moe(cmd, phys, n, controlled)?,
-            Seg::Head { rows } => self.rec_head(cmd, rows)?,
+            Seg::Head { rows } => self.rec_head(cmd, rows, n)?,
         }
         self.gpu.stamp(cmd, true, || "(segment)".into());
         Ok(())
@@ -775,11 +806,17 @@ impl Shard {
         };
         let Some(first) = ctrl else {
             ensure!(mixes == kinds, "a sublayer without controllers takes its own row sets");
-            return normed(self.hin_buf().address);
+            return normed(self.hin_buf(n).address);
         };
-        // The controllers read their rows from many workgroups: copy them (and the inverse RMS table) to VRAM first.
-        self.gpu.copy(cmd, self.hin_buf(), 0, &self.raw, 0, ((mixes + kinds) * n * d + kinds * n * 2) * 4);
-        self.gpu.barrier(cmd);
+        // The controllers read their rows from many workgroups: copy them (and the inverse RMS table) to VRAM first,
+        // unless the host wrote them there.
+        let raw = if self.vin.is_some() && n > GATED_MAX {
+            self.hin_buf(n).address
+        } else {
+            self.gpu.copy(cmd, self.hin_buf(n), 0, &self.raw, 0, ((mixes + kinds) * n * d + kinds * n * 2) * 4);
+            self.gpu.barrier(cmd);
+            self.raw.address
+        };
         let (down, gf, stride) = l.ctrl.as_ref().context("controllers of a layer outside the loop")?;
         let mut u = [0u32; 16];
         u[0] = c.gate_rank as u32;
@@ -789,17 +826,17 @@ impl Shard {
         u[10] = first as u32;
         if n > GATED_MAX {
             // 8 tokens per workgroup in the first half, 32 in the second.
-            let p = self.push([0, self.raw.address, 0, self.z.address, 0, 0], 0, u);
+            let p = self.push([0, raw, 0, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_z", p, kinds as u32, n.div_ceil(8) as u32, down)?;
             u[3] = *stride as u32;
-            let p = self.push([self.xin.address, self.raw.address, 0, self.z.address, 0, 0], 0, u);
+            let p = self.push([self.xin.address, raw, 0, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_mm_out", p, d.div_ceil(64) as u32, (kinds * n.div_ceil(32)) as u32, gf)?;
         } else {
-            let m = self.raw.address + (mixes * n * d * 4) as u64;
-            let p = self.push([0, self.raw.address, m, self.z.address, 0, 0], 0, u);
+            let m = raw + (mixes * n * d * 4) as u64;
+            let p = self.push([0, raw, m, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_z", p, c.gate_rank as u32, (n.div_ceil(8) * kinds) as u32, down)?;
             u[3] = *stride as u32;
-            let p = self.push([self.xin.address, self.raw.address, m, self.z.address, 0, 0], 0, u);
+            let p = self.push([self.xin.address, raw, m, self.z.address, 0, 0], 0, u);
             self.gpu.dispatch_matrix(cmd, "inkling_ctrl_out", p, d.div_ceil(64) as u32, (n.div_ceil(8) * kinds) as u32, gf)?;
         }
         // The gated rows are in `xin`: norm them in place.
@@ -1023,10 +1060,10 @@ impl Shard {
 
     /// Record the head over `rows` normed rows the host wrote into `hin`: this rank's logits (before the softcap)
     /// land in `logits`.
-    fn rec_head(&self, cmd: vk::CommandBuffer, rows: usize) -> Result<()> {
+    fn rec_head(&self, cmd: vk::CommandBuffer, rows: usize, n: usize) -> Result<()> {
         ensure!(rows <= 16, "at most 16 head rows");
         let d = self.c.d;
-        self.gpu.copy(cmd, self.hin_buf(), 0, &self.xin, 0, rows * d * 4);
+        self.gpu.copy(cmd, self.hin_buf(n), 0, &self.xin, 0, rows * d * 4);
         self.gpu.barrier(cmd);
         self.matrix_rows(cmd, &self.head, self.xin.address, self.logits.address, rows)
     }
