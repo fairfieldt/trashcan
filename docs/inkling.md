@@ -6,13 +6,15 @@ ViT image encoder, and a 3-layer block drafter for speculative decoding. This do
 reference for running it on Mac Pros: the layer math, the weights and the chosen quant, the machine layout, the
 vision path, the drafter and the order of work.
 
-Status: text generation runs tensor-parallel on two Mac Pros (TP4, `engine/src/inkling/`, shaders
-`engine/shaders/inkling_*.comp`) from Unsloth's UD-Q4_K_XL as published. Checked against llama.cpp `29b52d398` (CPU,
-same GGUF): teacher-forced per-layer residual errors of 0.2-3% over all 48 applications on a 25- and a 109-token prompt,
-the same top token, and the reference's greedy tokens (16 of 16 on both prompts, 24 of 24 after a 2,761-token
-document). Decode 33 tok/s on two Macs over one cable; prefill is not optimized yet. Vision and the drafter are not
-implemented yet. Every number below was read from the GGUFs of `unsloth/Inkling-2-Mini-GGUF`, from the original
-safetensors header of `thinkingmachines/Inkling-2-Mini`, or from llama.cpp at `29b52d398`.
+Status: text and image prompts run tensor-parallel on two Mac Pros (TP4, `engine/src/inkling/`, shaders
+`engine/shaders/inkling_*.comp` and `vit_*.comp`) from Unsloth's UD-Q4_K_XL and BF16 vision projector as published,
+through `inkling chat`, `inkling bench` and the Responses server (`serve`; deploy recipe `2-inkling`). Checked
+against llama.cpp `29b52d398` (CPU, same GGUF): teacher-forced per-layer residual errors of 0.2-3% over all 48
+applications on a 25- and a 109-token prompt, the same top token, and the reference's greedy tokens (16 of 16 on both
+prompts, 24 of 24 after a 2,761-token document); the vision projector's output agrees with mtmd's to 2.1%. Decode 33
+tok/s and prefill about 120 tok/s on two Macs over one cable (being optimized). The DSpark drafter is not implemented.
+Every number below was read from the GGUFs of `unsloth/Inkling-2-Mini-GGUF`, from the original safetensors header of
+`thinkingmachines/Inkling-2-Mini`, or from llama.cpp at `29b52d398`.
 
 | | |
 |---|---|
