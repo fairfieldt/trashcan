@@ -224,7 +224,8 @@ impl Group {
             let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "wire": m.wire.name(), "full": m.full});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
-        eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}", counts.len(), counts.values().collect::<Vec<_>>());
+        let wire = mesh.as_ref().map_or("none", |m| m.wire.name());
+        eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}, small all-reduces in {wire}", counts.len(), counts.values().collect::<Vec<_>>());
         let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows)?;
         if let Some(m) = mesh.as_mut() {
             for reply in m.children_replies(Some(Duration::from_secs(10 * 60))).context("waiting for the other machines to load")? {
