@@ -379,6 +379,8 @@ this document and output length. Five drafts took longer overall.
 
 ### Prefill batch size
 
+This section describes `f3ca631d`; the defaults and numbers after the later prefill work are in
+[the next one](#prefill-inputs-in-vram-four-micro-batches-and-16-bit-controllers).
 Inkling chat, bench and the Responses server default to 512 prompt tokens per batch. A full batch runs as
 two 256-row micro-batches. Each GPU reserves scratch space and sliding-window cache headroom for the largest
 micro-batch it executes. Prompts below 64 tokens run whole, as do teacher-forced comparisons. At 32K context capacity
@@ -416,6 +418,117 @@ With DSpark and the BF16 projector loaded, a 2,770-token Responses request with 
 and zero cached input tokens took 7.39 s on the published server, 6.71 s at batch 512 and 6.38 s
 at batch 1024. During the document, image and tool checks, peak sampled driver VRAM was
 6,086 MiB on the projector GPU and 5,573 MiB on the other GPU at all three settings.
+
+### Prefill inputs in VRAM, four micro-batches and 16-bit controllers
+
+This section describes `4837aacb`; the batch sizes and numbers of the section above are those of `f3ca631d`.
+`inkling chat`, `bench` and `validate` now default to 1,024 prompt tokens per batch (the Responses server keeps its
+`--batch` default of 512, and the two-Mac recipe passes `--batch 1024`). A batch runs as up to four micro-batches
+of at most 256 tokens: two up to 512 tokens, three up to 768, four up to 1,024, and above that four of a quarter
+of the batch each. The GPUs hold scratch for the largest micro-batch, so batch 1024 has the kernel scratch that
+batch 512 had.
+
+At 1,024 synthetic tokens and batch 512 the starting point (`51aa4c75`) spent 562 ms of GPU time per 256 tokens on
+the driver's first rank and 569 ms of wall time, so the GPUs were busy 98.7% of the time, while the host thread
+waited for them during 41% of it (0.94 s of 2.28 s; 0.90 s in exchanges, 0.36 s in its passes over the rows,
+0.07 s adding the local ranks). The GPU time was 264 ms in the expert kernels, 118 ms in the Q8_0 projections,
+38 ms copying inputs from host memory, 22 ms copying outputs to it, 48 ms in the loop controllers, 32 ms in
+attention, 17 ms in the input norm, 10 ms in the router and 11 ms in the small kernels. The 2,770-token document
+took 622 ms per 256 tokens: its experts cost 13% more (real text fills the expert tiles less evenly, and its last
+batch is short) and its attention 57 ms instead of 32. A 64-token prompt took 1,050 ms per 256 tokens, 95% of the
+wall time, with every kernel two to three times less efficient on 32-token micro-batches.
+
+What changed, with the tok/s at 1,024 tokens on inflight and alight after each step:
+
+| Step | tok/s | GPU ms per 256 tokens |
+|---|---:|---:|
+| `51aa4c75`, batch 512 | 449.9 | 562 |
+| Prefill inputs written by the host straight into BAR-mapped VRAM | 485.2 | 513 |
+| MoE outputs copied to host memory under the next submission's kernels | 488.5 | |
+| Four micro-batches (batch 1024), every output's copy deferred | 516.3 | 492 |
+| Controllers and router read from 16-bit copies; second controller kernel rewritten | 545.5 | 465 |
+
+- **Inputs in VRAM.** Prefill batches take their input rows in a buffer of the 256 MiB VRAM heap that the PCI BAR
+  maps. Twelve host threads write it at 8 GB/s per GPU (two GPUs at once; one thread reaches 4.4 GB/s, and reading
+  it back from the host runs at 0.04 to 0.37 GB/s, so outputs still leave through a copy). The controllers and
+  the norm read it in place: the copy from host memory is gone and the norm fell from 17 to 4 ms. The host's
+  passes rose from 0.36 to 0.41 s per 1,024 tokens. Every host thread ends its rows with a store fence.
+- **Deferred output copies.** A segment leaves its partial output in VRAM, and the next submission, which is
+  another micro-batch's segment and already queued, copies it to host memory right after its first long dispatch.
+  The command processor then copies while the shader cores work. The copy ends with a mark behind the output that
+  the host polls. With two micro-batches only the MoE outputs can wait: deferring the attention outputs as well
+  gave 485.3 tok/s against 485.4 without any deferral, because the host is late with the carrying submission.
+- **Four micro-batches.** Once the input copy was gone, the host's work on a segment (about 2.5 ms of exchange
+  for 2.36 MB each way at the cable's rate and 1 ms for its pass) no longer fitted behind the other micro-batch's
+  attention segment (about 3.2 ms by the kernel times), and the GPUs idled. With three other micro-batches in flight it does. At batch 1024
+  without deferred copies the result was 495.3 tok/s. Three micro-batches of 342 tokens gave 511.6.
+- **16-bit controllers and router.** The loop controllers' matrices and the router are f32 tensors whose lower
+  16 bits are zero. The prefill kernels read 16-bit copies and rebuild the same values: the first controller
+  kernel went from 29.1 to 14.2 ms per 256 tokens and the router from 10.2 to 6.0, both having run at the
+  bandwidth of their weights. The second controller kernel held 128 weights per lane in 140 registers, which
+  leaves one wave per SIMD; walking them four ranks at a time for 16 tokens needs 44 registers and took it from
+  18.4 to 9.3 ms. The results are bit-identical. `Layer::ctrl16` holds both controller matrices in 16 bits on
+  every shard, so that the decode kernels can move to them and the f32 copies can go.
+- **DSpark context.** After a prefill batch the drafter's context took 114 ms per 1,024 tokens: 13 ms for the
+  rows' final hidden states and 6.4 ms per 64-token chunk, of which recording and running the GPU work took
+  2.4 ms and one host thread mixing features the rest. Those loops now run on the host pool: document prefill
+  with three drafts went from 463.9 to 478.5 tok/s, against 490.1 without the drafter.
+
+Final numbers on inflight and alight, `4837aacb` at its default batch against `c2924857` (the base it is rebased on)
+at its default of 512, alternated in one session, UD-Q4_K_XL, f32 exchanges, 32K context, performance governor,
+0 µs CPU latency request, 850/1370 MHz on all four D700s, warm medians of three repetitions with 32 decoded tokens:
+
+| Prompt | `c2924857` (s, tok/s) | `4837aacb` (s, tok/s) | Decode tok/s, before / after |
+|---|---:|---:|---:|
+| 64 tokens | 0.266, 240.8 | 0.252, 254.0 | 41.1 / 41.1 |
+| 1,024 tokens | 2.273, 450.6 | 1.875, 546.2 | 38.7 / 38.6 |
+| 2,770-token document | 6.759, 409.8 | 5.641, 491.0 | 38.6 / 37.7; 38.0 / 38.0 over 64 tokens |
+| Document, three drafts | 7.075, 391.5 | 5.778, 479.4 | 54.9–56.3 / 56.0–56.4 |
+
+Before the rebase, 4,096 tokens went from 427.0 to 509.9 tok/s. At `--batch 512` the new build measured 508.2 tok/s
+at 1,024 tokens and 465.4 on the document; at `--batch 2048` (four 512-token micro-batches) 522.3 on the document.
+The decode GPU time after the document is 19.98 ms per token on both builds.
+
+This pair is slower than incite and enlight on the same binary (450 against 470 tok/s at 1,024 tokens on
+`51aa4c75`), and inflight sets its pace: its D700s take 562 ms per 256 tokens where alight's take 534. The
+difference is in the kernels that read the most weight bytes (the Q8_0 q/gate/r projection 88.7 against 78.2 ms,
+the Q8_0 experts 28.8 against 23.6). Inflight's cards carry another revision of Hynix GDDR5 (`MC_SEQ_MISC0`
+0x500056a9 against 0x500066aa) and run looser memory timings at the same 1370 MHz (`MC_ARB_DRAM_TIMING`
+0x1a17090c against 0x14110709 under load). A tensor-parallel group waits for its slowest GPU at every segment.
+
+Memory at 32K context: 4,962 MiB per rank at batch 1024, 4,930 at batch 512 and 5,065 at batch 2048, against
+4,846 before: 57 MiB of input buffers in the BAR heap (28 at batch 512), 7 MiB more of per-micro-batch outputs,
+69 MiB of 16-bit copies, less 14 MiB of controller scratch. The device arena grows in 256 MiB chunks, so near a chunk
+boundary a small increase costs a whole chunk: with the drafter loaded a GPU uses 5,883 MiB at batch 1024 against
+5,573 before, and the BF16 projector then no longer fits on its GPU (the kernel moves buffers to host memory;
+the 108-token image encode took 0.65 s instead of 0.30 s, text speeds were unchanged). With the drafter and the
+projector together, `--batch 512` fits (6,113 MiB on the projector GPU against 6,086 before) until the decode
+kernels read the 16-bit controller matrices and the f32 copies (112 MiB) are dropped.
+
+Validation of `4837aacb`: all 48 teacher-forced layer errors of the chat and tool fixtures equal the published
+ones (worst 0.02983 and 0.02864), 16/16 greedy tokens each and 24/24 after the 2,761-token prompt, with and
+without three drafts; the printed top logits of the plain runs are unchanged to the last digit.
+
+Tried and dropped, in GPU ms per 256 tokens at 1,024 tokens:
+
+- A Q8_0 GEMM whose waves each walk whole rows without shared memory (64 or 48 registers, four or five waves per
+  SIMD): 115 and 108 for the q/gate/r projection against 89.5.
+- The gate/up expert kernel loading a block (16 bytes) or two per row at a time instead of a 64-byte line (48 and
+  64 registers instead of 84): 451 and 250 against 155. The waves of a compute unit evict each other's lines, so
+  a line is fetched again for every load that touches it.
+- The same kernel loading its scales for 16 blocks at once (128 registers, two waves per SIMD): 168 against 155.
+- The first controller kernel with 16 tokens per workgroup on the 16-bit weights: 21.2 against 14.2.
+
+Where the time is now (465 ms per 256 tokens at 1,024, GPUs 99% busy): experts 264 ms, Q8_0 projections 119,
+attention 31, controllers 23, router 6, small kernels 15. With its scale loads removed the q/gate/r projection
+takes 75.7 ms instead of 89.6, and with constant inputs 81.3 (both give wrong results; they bound what those
+loads cost). The host thread is 80% busy (1.04 s of exchanges, 0.38 s of passes and 0.06 s of sums in 1.875 s),
+so at this exchange rate the host caps two Macs near 690 tok/s. The exchange runs at the cable's rate (9.6 Gb/s
+per direction on one cable, [hardware.md](hardware.md)); a second cable between the pair should about halve it
+(not tried).
+
+Scripts, logs, clocks, VRAM traces and the dropped candidates' sources are in `results/inkling/prefill-4837aacb`
+on Pinkerton.
 
 ### Small verification batches
 
