@@ -761,12 +761,13 @@ impl Group {
         };
         // SAFETY: every task takes its own rows of the flow's state and of `hin`; `sum`, `remote` and the history are
         // only read.
-        if n < POOL_MIN {
-            unsafe { pass.rows(0, n) };
-        } else {
-            let tasks = HOST_THREADS.min(n / 4);
+        if (2..=GATED_MAX).contains(&n) || n >= POOL_MIN {
+            // Verification batches use one task per row. Prefill gives each worker several rows.
+            let tasks = if n <= GATED_MAX { n } else { HOST_THREADS.min(n / 4) };
             let per = n.div_ceil(tasks);
             self.pool.run(tasks, |i| unsafe { pass.rows((i * per).min(n), ((i + 1) * per).min(n)) });
+        } else {
+            unsafe { pass.rows(0, n) };
         }
         // The history becomes the last three outputs before the convolution.
         if hist.is_some() {
@@ -834,26 +835,30 @@ impl Group {
     /// The best TOP_K candidates of each of `rows` scored rows: softcapped logits of the real vocabulary from every
     /// local rank, merged, then merged with the other machines' in the all-reduce rounds.
     fn candidates(&mut self, rows: usize) -> Result<Vec<Candidates>> {
-        let cap = self.c.softcap;
-        let vocab = self.c.vocab;
-        let mut cols: Vec<Candidates> = vec![Vec::new(); rows];
-        for s in &self.shards {
-            let (v0, vn) = s.vocab_rows();
-            let logits = s.logits(rows);
-            for (r, col) in cols.iter_mut().enumerate() {
-                // The softcap keeps the order, so only the selected logits take it.
-                let row = &logits[r * vn..r * vn + vn.min(vocab.saturating_sub(v0))];
-                let mut top: Candidates = row.iter().enumerate().map(|(i, &x)| (x, (v0 + i) as u32)).collect();
-                let k = TOP_K.min(top.len());
-                if k > 0 {
-                    top.select_nth_unstable_by(k - 1, |a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
-                }
-                top.truncate(k);
-                if cap > 0. {
-                    top.iter_mut().for_each(|e| e.0 = cap * (e.0 / cap).tanh());
-                }
-                col.extend(top);
+        let (cap, vocab) = (self.c.softcap, self.c.vocab);
+        // Every local rank's best of every row, several rows at a time on the pool.
+        let ranks = self.shards.len();
+        let tops: Vec<Mutex<Candidates>> = (0..ranks * rows).map(|_| Mutex::new(Vec::new())).collect();
+        let logits: Vec<_> = self.shards.iter().map(|s| (s.vocab_rows(), s.logits(rows))).collect();
+        let job = |i: usize| {
+            let (((v0, vn), logits), r) = (logits[i / rows], i % rows);
+            let start = r * vn;
+            let row = &logits[start..start + vn.min(vocab.saturating_sub(v0))];
+            let mut top = top_k(row, v0);
+            // The softcap keeps the order, so only the selected logits take it.
+            if cap > 0. {
+                top.iter_mut().for_each(|e| e.0 = cap * (e.0 / cap).tanh());
             }
+            *tops[i].lock().unwrap() = top;
+        };
+        if rows == 1 {
+            (0..ranks).for_each(job);
+        } else {
+            self.pool.run(ranks * rows, job);
+        }
+        let mut cols: Vec<Candidates> = vec![Vec::new(); rows];
+        for (i, top) in tops.into_iter().enumerate() {
+            cols[i % rows].extend(top.into_inner().unwrap());
         }
         cols.iter_mut().for_each(best);
         if let Some(m) = self.mesh.as_mut() {
@@ -945,7 +950,7 @@ fn parse_score(s: &str) -> Result<Score> {
 /// Host threads for batches of rows (prefill), and for adding the local ranks' partials.
 const HOST_THREADS: usize = 12;
 const SUM_THREADS: usize = 4;
-/// Batches of fewer rows run on the calling thread.
+/// Row threshold for prefill tasks and for parallel addition of rank partials.
 const POOL_MIN: usize = 16;
 
 /// A pointer several threads use for disjoint rows.
@@ -1244,9 +1249,57 @@ impl Drop for Pool {
     }
 }
 
+/// The TOP_K highest of `row` (the logits of ids `v0..`), ties to the lower id, unordered: one scan that keeps what
+/// reaches the K-th best so far, instead of a selection over the whole row.
+fn top_k(row: &[f32], v0: usize) -> Candidates {
+    let order = |a: &(f32, u32), b: &(f32, u32)| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1));
+    let mut keep: Candidates = Vec::with_capacity(4 * TOP_K);
+    // The lowest value under total_cmp, including negative NaNs.
+    let mut floor = f32::from_bits(u32::MAX);
+    for (i, &x) in row.iter().enumerate() {
+        if x.total_cmp(&floor).is_ge() {
+            keep.push((x, (v0 + i) as u32));
+            if keep.len() == 4 * TOP_K {
+                keep.select_nth_unstable_by(TOP_K - 1, order);
+                keep.truncate(TOP_K);
+                floor = keep[TOP_K - 1].0;
+            }
+        }
+    }
+    if keep.len() > TOP_K {
+        keep.select_nth_unstable_by(TOP_K - 1, order);
+        keep.truncate(TOP_K);
+    }
+    keep
+}
+
 fn best(c: &mut Candidates) {
     c.sort_unstable_by(|a, b| b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)));
     c.truncate(TOP_K);
+}
+
+#[cfg(test)]
+mod candidate_tests {
+    use super::{best, top_k, Candidates, TOP_K};
+
+    #[test]
+    fn threshold_selection_matches_full_sort() {
+        let values = [
+            f32::from_bits(u32::MAX), f32::NEG_INFINITY, -1., -0., 0., 1.,
+            f32::INFINITY, f32::NAN, f32::from_bits(f32::NAN.to_bits() + 1),
+        ];
+        let logits: Vec<_> = (0..1024).map(|i| values[i % values.len()]).collect();
+        let base = 100_512;
+        for n in [0, 1, TOP_K, logits.len()] {
+            let row = &logits[..n];
+            let mut want: Candidates = row.iter().enumerate().map(|(i, &x)| (x, (base + i) as u32)).collect();
+            let mut got = top_k(row, base);
+            best(&mut want);
+            best(&mut got);
+            let as_bits = |c: Candidates| c.into_iter().map(|(x, id)| (x.to_bits(), id)).collect::<Vec<_>>();
+            assert_eq!(as_bits(got), as_bits(want));
+        }
+    }
 }
 
 fn encode(columns: &[Candidates]) -> Vec<u8> {

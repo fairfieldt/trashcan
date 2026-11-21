@@ -559,7 +559,8 @@ impl Shard {
         u[0] = m.rows as u32;
         u[1] = m.k as u32;
         u[3] = m.stride as u32;
-        if n <= 4 {
+        if n <= GATED_MAX {
+            // Up to four columns per workgroup row. Batches of five to eight use two workgroup rows.
             let wide = m.rows >= 4096;
             let names = if wide {
                 ["qwen4_q8_mvw4_r4", "qwen4_q8_mvw4_r4_c2", "qwen4_q8_mvw4_r4_c3", "qwen4_q8_mvw4_r4_c4"]
@@ -568,7 +569,7 @@ impl Shard {
             };
             let rpw = if wide { 16 } else { 8 };
             let p = self.push([0, x, y, 0, 0, 0], 0, u);
-            self.gpu.dispatch_matrix(cmd, names[n - 1], p, m.rows.div_ceil(rpw) as u32, 1, &m.buf)
+            self.gpu.dispatch_matrix(cmd, names[n.min(4) - 1], p, m.rows.div_ceil(rpw) as u32, n.div_ceil(4) as u32, &m.buf)
         } else {
             // 128 rows and 8 columns per workgroup.
             let p = self.push([0, x, y, 0, 0, 0], 0, u);
@@ -585,6 +586,16 @@ impl Shard {
         match n {
             1 => self.gpu.dispatch_matrix(cmd, "qwen4_matf32", p, rows.div_ceil(4) as u32, 1, w),
             2..=4 => self.gpu.dispatch_matrix(cmd, "qwen4_matf32_c4", p, rows.div_ceil(4) as u32, 1, w),
+            5..=GATED_MAX => {
+                // The four-column kernel twice: columns 0 to 3, then the rest (with their own batch size).
+                let mut first = p;
+                first.u[15] = 4;
+                self.gpu.dispatch_matrix(cmd, "qwen4_matf32_c4", first.defer_barrier(true), rows.div_ceil(4) as u32, 1, w)?;
+                let mut u = p.u;
+                u[15] = (n - 4) as u32;
+                let rest = self.push([0, x + (4 * k * 4) as u64, y + (4 * rows * 4) as u64, 0, 0, 0], 0, u);
+                self.gpu.dispatch_matrix(cmd, "qwen4_matf32_c4", rest, rows.div_ceil(4) as u32, 1, w)
+            }
             _ => self.gpu.dispatch_matrix(cmd, "inkling_f32_gemm", p, rows.div_ceil(64) as u32, n.div_ceil(8) as u32, w),
         }
     }
