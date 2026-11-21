@@ -101,7 +101,7 @@ pub struct Group {
     sched: Vec<App>,
     pub pos: usize,
     pub context: usize,
-    pub max_batch: usize,
+    max_batch: usize,
     attn_hist: Vec<Vec<f32>>,
     ffn_hist: Vec<Vec<f32>>,
     sum: Vec<f32>,
@@ -151,7 +151,7 @@ struct Spec {
 const FEATURE_VISITS: [usize; 3] = [5, 23, 41];
 
 /// Batches of at least this many tokens run as two micro-batches (`Group::drive`).
-const MICRO_MIN: usize = 128;
+const MICRO_MIN: usize = 64;
 
 /// The host state of one micro-batch of a forward: `n` rows of the batch with their own input and output buffers
 /// on every rank (`mb`).
@@ -198,7 +198,11 @@ fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context
 
 impl Group {
     /// The driver: its `gpus` take the first ranks; with `mesh` the other machines' GPUs take the rest in machine order.
-    pub fn new(model: &Path, gpus: &[usize], mut mesh: Option<Mesh>, context: usize, max_batch: usize) -> Result<Self> {
+    pub fn new(model: &Path, gpus: &[usize], mut mesh: Option<Mesh>, context: usize, max_batch: usize, forced_rows: usize) -> Result<Self> {
+        ensure!(max_batch > 0, "--batch must be positive");
+        ensure!(forced_rows <= max_batch, "the teacher-forced prompt must fit one batch (--batch)");
+        // Each segment uses one micro-batch. Short forwards and teacher-forced prompts run whole.
+        let shard_rows = max_batch.div_ceil(MICRO).max(max_batch.min(MICRO_MIN - 1)).max(forced_rows);
         let mut counts = BTreeMap::from([(0usize, gpus.len())]);
         if let Some(m) = mesh.as_mut() {
             m.tell_children(&message(json!({"probe": true}))?)?;
@@ -216,11 +220,11 @@ impl Group {
         let firsts: Vec<usize> = counts.values().scan(0, |at, &n| { *at += n; Some(*at - n) }).collect();
         let ranks: usize = counts.values().sum();
         if let Some(m) = mesh.as_mut() {
-            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": max_batch, "wire": m.wire.name(), "full": m.full});
+            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "wire": m.wire.name(), "full": m.full});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
         eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}", counts.len(), counts.values().collect::<Vec<_>>());
-        let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, max_batch)?;
+        let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows)?;
         if let Some(m) = mesh.as_mut() {
             for reply in m.children_replies(Some(Duration::from_secs(10 * 60))).context("waiting for the other machines to load")? {
                 ensure!(reply.get("ok").is_some(), "another machine failed: {}", reply["error"]);

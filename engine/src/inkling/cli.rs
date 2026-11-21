@@ -28,7 +28,7 @@ pub struct Run {
     #[arg(long, default_value_t = 32768)]
     pub context: usize,
     /// Tokens per prefill batch.
-    #[arg(long, default_value_t = 256)]
+    #[arg(long, default_value_t = 512)]
     pub batch: usize,
     /// The DSpark drafter GGUF (dspark-*.gguf): speculative decoding (the same path on every machine).
     #[arg(long)]
@@ -39,14 +39,14 @@ pub struct Run {
 }
 
 impl Run {
-    pub fn group(&self, model: &Path) -> Result<Group> {
+    fn group(&self, model: &Path, forced_rows: usize) -> Result<Group> {
         crate::validate_draft(self.draft.as_ref(), self.draft_tokens, self.batch)?;
         let gpus = match &self.gpus {
             Some(g) => g.clone(),
             None => (0..crate::gpu::Instance::new()?.amd_gpus()?.len()).collect(),
         };
         let mesh = tp::mesh(&self.tp_connect, &self.tp_peer)?;
-        let mut g = Group::new(model, &gpus, mesh, self.context, self.batch)?;
+        let mut g = Group::new(model, &gpus, mesh, self.context, self.batch, forced_rows)?;
         if let Some(d) = &self.draft {
             g.enable_draft(d)?;
         }
@@ -161,7 +161,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
     match cmd {
         Cmd::Validate { model, reference, run, ids, greedy, free } => validate(&model, &reference, &run, &ids, greedy, free),
         Cmd::Chat { model, prompt, run, system, effort, max_tokens, temperature, top_k, top_p, seed, mmproj, image } => {
-            let mut group = run.group(&model)?;
+            let mut group = run.group(&model, 0)?;
             let t = Tokenizer::new(&group.gguf)?;
             let mut sampler = Sampler::new(temperature, top_k, top_p, seed)?;
             let images = if image.is_empty() {
@@ -203,7 +203,7 @@ pub fn run(cmd: Cmd) -> Result<()> {
             Ok(())
         }
         Cmd::Bench { model, run, pp, tg, reps, prompt } => {
-            let mut group = run.group(&model)?;
+            let mut group = run.group(&model, 0)?;
             for rep in 0..reps {
                 let ids = match &prompt {
                     Some(p) => {
@@ -244,9 +244,8 @@ pub fn run(cmd: Cmd) -> Result<()> {
 
 fn validate(model: &Path, reference: &Path, run: &Run, ids: &Path, greedy: usize, free: bool) -> Result<()> {
     let tokens = read_ids(ids)?;
-    let mut group = run.group(model)?;
+    let mut group = run.group(model, if free { 0 } else { tokens.len() })?;
     if !free {
-    ensure!(tokens.len() <= group.max_batch, "the prompt must fit one batch (--batch)");
     let mut r = Reference::new(reference);
     let t = Instant::now();
     let top = group.forward(&tokens, Score::Last, Some(&mut r))?;
