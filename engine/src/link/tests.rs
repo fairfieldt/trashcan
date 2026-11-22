@@ -153,20 +153,22 @@ fn a_stream_that_dies_ends_the_link_and_delivers_nothing_wrong() {
         p.set_faults(Faults { hold: 3, ..Default::default() });
         let (a, b) = link_pair(Some(&p), 256, fast());
         wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
-        let start = Instant::now();
-        let (ea, eb) = thread::scope(|s| {
+        let (ea, eb, took) = thread::scope(|s| {
             let ra = s.spawn(|| until_error(&a, 0));
             let rb = s.spawn(|| until_error(&b, 1));
-            thread::sleep(Duration::from_millis(30));
+            // Mid-transfer: once the stream has carried data both ways. (Before that a stream that fails is an epoch
+            // that never carried data, which the link tries again, and this test then never ends.)
+            wait_for("data both ways on the stream", Duration::from_secs(5), || a.stats().got_stream > 0 && b.stats().got_stream > 0);
+            let start = Instant::now();
             match how {
                 0 => p.set_faults(Faults { dead: true, ..Default::default() }),
                 1 => p.close_from(1),
                 2 => a.give_up_stream("test"),
                 _ => b.give_up_stream("test"),
             }
-            (ra.join().unwrap(), rb.join().unwrap())
+            (ra.join().unwrap(), rb.join().unwrap(), start.elapsed())
         });
-        assert!(start.elapsed() < Duration::from_secs(2), "case {how}: {:?}", start.elapsed());
+        assert!(took < Duration::from_secs(2), "case {how}: {took:?}");
         for e in [&ea, &eb] {
             assert!(!e.contains("differ"), "case {how}: {e}");
         }
