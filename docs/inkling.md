@@ -649,8 +649,13 @@ the host's passes between segments. What changed, each measured against the buil
 | Prefill of 1,024 tokens | 464–470 tok/s | 572–575 tok/s |
 
 `validate` prints the same 48 layer errors, logits and greedy tokens as `51aa4c75` on the chat, tool and long
-fixtures, plain and with three drafts. With `--draft` the long prompt's top logit differs in its last digit from run
-to run on either build (25.974316 or 25.974318): something in a drafted prefill depends on timing, not found yet.
+fixtures, plain and with three drafts. One thing is unexplained: on the morning of the measurements the drafted
+long prompt's top logit came out as 25.974318 instead of 25.974316 (the plain run's value) in 5 of 9 validations,
+on four builds including `51aa4c75`, and the drafted tool prompt's as 25.303038 instead of 25.30304 in 2 of 9, with
+every greedy token unchanged. In 42 drafted runs that afternoon on the same binaries and Macs, after the same
+preceding workloads and with warmed-up GPUs, it did not happen once, so it is not a property of a build.
+`TRASHCAN_INKLING_TRACE=FILE` (on any machine of the group) writes a hash of every segment's all-reduced sums and
+of the residual after it; two traces show the first segment where two runs part. The 12 traced runs are identical.
 
 Measured and dropped: light barriers after every decode dispatch (the Qwen graphs' mode, here with every kernel
 allowed behind them as a ceiling) moved the segments from 19.34 to 19.14 ms; the stream rings' interrupt throttle

@@ -107,6 +107,8 @@ pub struct Group {
     sum: Vec<f32>,
     remote: Vec<f32>,
     pool: Pool,
+    /// (Diagnostic) TRASHCAN_INKLING_TRACE=FILE: a hash of every segment's sums and of the residual after it.
+    trace: Vec<String>,
     pub seconds: Phases,
     /// GPUs on every machine, for reports.
     pub ranks: usize,
@@ -268,6 +270,7 @@ impl Group {
             sum: vec![0.; max_batch * d],
             remote: vec![0.; max_batch * d],
             pool: Pool::new(HOST_THREADS - 1),
+            trace: Vec::new(),
             driver: mesh.as_ref().is_none_or(|m| m.machine == 0),
             gguf,
             hw,
@@ -685,6 +688,11 @@ impl Group {
                 self.wait(f, j, gated)?;
                 let head = matches!(f.plan[j], Seg::Head { .. });
                 let addend = !head && self.allreduce(f.mb, f.n * d)?;
+                if trace_on() {
+                    let len = f.n * d;
+                    let (hs, hr) = (bits_hash(&self.sum[..len]), if addend { bits_hash(&self.remote[..len]) } else { 0 });
+                    self.trace.push(format!("{} mb{} n{} seg{} sum {:016x} remote {:016x}", self.seconds.forwards, f.mb, f.n, j, hs, hr));
+                }
                 let next = (j + 1 < f.plan.len()).then_some(j + 1);
                 match reference.as_deref_mut() {
                     // Teacher forcing: the residual after an application is compared and replaced before the next
@@ -697,6 +705,9 @@ impl Group {
                         self.advance(f, None, next, false);
                     }
                     None => self.advance(f, Some(j), next, addend),
+                }
+                if trace_on() {
+                    self.trace.push(format!("{} mb{} n{} seg{} cur {:016x}", self.seconds.forwards, f.mb, f.n, j, bits_hash(&f.cur)));
                 }
                 // The drafter reads the residual entering some applications.
                 if self.drafter.is_some() {
@@ -1086,6 +1097,9 @@ impl Group {
 
 impl Drop for Group {
     fn drop(&mut self) {
+        if let Some(path) = std::env::var_os("TRASHCAN_INKLING_TRACE") {
+            let _ = std::fs::write(path, self.trace.join("\n") + "\n");
+        }
         // TRASHCAN_INKLING_PHASES=1: this machine's totals per forward, to compare the machines of a group.
         if std::env::var_os("TRASHCAN_INKLING_PHASES").is_some() {
             let (p, f) = (self.seconds, self.seconds.forwards.max(1) as f64);
@@ -1121,6 +1135,16 @@ const HOST_THREADS: usize = 12;
 const SUM_THREADS: usize = 4;
 /// Row threshold for prefill tasks and for parallel addition of rank partials.
 const POOL_MIN: usize = 16;
+
+fn trace_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("TRASHCAN_INKLING_TRACE").is_some())
+}
+
+/// FNV-1a over the bits of `v`.
+fn bits_hash(v: &[f32]) -> u64 {
+    v.iter().fold(0xcbf29ce484222325u64, |h, x| (h ^ x.to_bits() as u64).wrapping_mul(0x100000001b3))
+}
 
 /// A pointer several threads use for disjoint rows.
 #[derive(Clone, Copy)]
