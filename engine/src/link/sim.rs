@@ -60,6 +60,8 @@ pub struct Counts {
     pub dropped: u64,
     pub damaged: u64,
     pub overrun: u64,
+    /// Of those, frames that carried a probe (which does not wait for credits: `stream_control`).
+    pub overrun_probes: u64,
 }
 
 pub struct Wire {
@@ -246,6 +248,9 @@ impl Frames for End {
                 d.ring.push_back(Frame::Data(frame));
             } else {
                 w.counts.overrun += 1;
+                if super::record::Header::decode(&frame).is_some_and(|h| h.kind == super::record::kind::PROBE) {
+                    w.counts.overrun_probes += 1;
+                }
             }
             taken += chunk.len();
         }

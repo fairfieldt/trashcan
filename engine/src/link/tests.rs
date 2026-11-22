@@ -112,7 +112,8 @@ fn stream_link_moves_data_on_the_stream() {
     both_ways(&a, &b, 24 << 20);
     let (sa, sb) = (a.stats(), b.stats());
     assert!(sa.got_stream > 20 << 20 && sb.got_stream > 20 << 20, "{sa:?} {sb:?}");
-    assert_eq!(p.counts().overrun, 0, "credits must keep the ring from overflowing");
+    let c = p.counts();
+    assert_eq!(c.overrun - c.overrun_probes, 0, "credits must keep the ring from overflowing: {c:?}");
     assert_eq!(sa.fallbacks + sb.fallbacks, 0);
 }
 
@@ -138,10 +139,15 @@ fn lost_damaged_and_cut_frames_are_sent_again() {
 
 #[test]
 fn credits_hold_with_a_small_ring() {
+    // Data and acknowledgements stay within the other side's ring. Probes do not wait for room (an epoch must come
+    // up whatever the frame counters of a device that opened late say): on voyage under eight loops of these tests,
+    // one run in twenty lost a few to a ring that the other side, opened but starved, had not read for some 25 ms
+    // while the epoch opened. Those, and only those, are allowed.
     let p = Pair::new(32);
     let (a, b) = link_pair(Some(&p), 32, Tuning { margin: 4, ..fast() });
     both_ways(&a, &b, 4 << 20);
-    assert_eq!(p.counts().overrun, 0);
+    let c = p.counts();
+    assert_eq!(c.overrun - c.overrun_probes, 0, "{c:?}");
 }
 
 #[test]
