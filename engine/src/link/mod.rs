@@ -640,7 +640,7 @@ impl Link {
                 if filled == buf.len() || (!exact && filled > 0) {
                     return Ok(filled);
                 }
-                let mut sink = Sink { buf: &mut buf[filled..], filled: 0 };
+                let mut sink = Sink { buf: &mut buf[filled..], filled: 0, begun: filled > 0 };
                 let r = st.pump(Instant::now(), &mut sink);
                 let got = sink.filled;
                 filled += got;
@@ -1014,7 +1014,7 @@ fn drive(parts: &mut [Part], start: Instant, stall: Duration, failed: &std::sync
                 p.sent = true;
                 false
             } else {
-                let mut sink = Sink { buf: &mut p.inp[p.got..], filled: 0 };
+                let mut sink = Sink { buf: &mut p.inp[p.got..], filled: 0, begun: p.got > 0 };
                 let r = st.pump(Instant::now(), &mut sink);
                 p.got += sink.filled;
                 p.sent = st.unsent() == 0;

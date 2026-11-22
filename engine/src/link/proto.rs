@@ -23,7 +23,9 @@
 //! it sends `PUSH` frames. Between probes the estimate follows the frame counters every record carries
 //! (`hold_sample`): the frames written here less the frames the other side says it has read are never fewer than
 //! the hold, so a smaller number lowers it; and an acknowledgement says for how long its sender had found nothing
-//! to read, so the frames written here before that and still unread were held, and their number raises it. A wrong
+//! to read, so the frames written here before that and still unread were held, and their number raises it (a side
+//! whose reader has waited `ack_delay` for the rest of what it reads says so once, a dry report, even with
+//! nothing to acknowledge). A wrong
 //! estimate costs time, never data: a side whose data stays unacknowledged while nothing moves writes one more
 //! frame, a ping (a nudge, after `Tuning::nudge`, long before the retransmission timer). The estimate goes up only
 //! on a second sign of held frames soon after a first: a frame that sticks once in ten thousand (interrupt-driven
@@ -161,8 +163,9 @@ const HOLD_STICK_MAX: Duration = Duration::from_secs(256);
 const SIGNS: u32 = 2;
 const SIGN_FRAMES: u32 = 64;
 
-/// Flag of a stream record written without a read just before (`send_now`) when the last read was longer ago than
-/// `STALE_AFTER`: its `rx` may miss frames that have arrived since, so it says nothing about what is held.
+/// Flag of a stream record written longer than `STALE_AFTER` after its side last read the device (a send without a
+/// read first after a pause, `send_now`, or a thread that lost its core between the two): its `rx` may miss frames
+/// that have arrived since, so it says nothing about what is held.
 pub const STALE: u8 = 8;
 const STALE_AFTER: Duration = Duration::from_micros(200);
 
@@ -280,6 +283,8 @@ pub struct Stats {
     /// unacknowledged or a hold probe unanswered (`Tuning::nudge`).
     pub hold_raises: u64,
     pub nudges: u64,
+    /// Acknowledgements written only to say that nothing more was readable (`dry_report`).
+    pub dry_reports: u64,
     /// With `Tuning::profile`: calls of the device's read and write, reads that found nothing, and the time in them.
     pub reads: u64,
     pub reads_empty: u64,
@@ -358,11 +363,13 @@ impl Buf {
 pub struct Sink<'a> {
     pub buf: &'a mut [u8],
     pub filled: usize,
+    /// The reader already has the first part of what it waits for (the rest goes to `buf`).
+    pub begun: bool,
 }
 
 impl Sink<'_> {
     pub fn none() -> Sink<'static> {
-        Sink { buf: &mut [], filled: 0 }
+        Sink { buf: &mut [], filled: 0, begun: false }
     }
 }
 
@@ -515,10 +522,9 @@ pub struct StreamPath {
     sign_tx: u32,
     resolved: Option<(u32, bool)>,
     hold_went_up: bool,
-    /// When the device was last read (a turn began), whether the frames of this turn are written without a read
-    /// after a pause (`STALE`), and how late a frame may show on this device (`Frames::late`).
+    /// When the device was last read (a turn began; a record written `STALE_AFTER` later is `STALE`), and how late
+    /// a frame may show on this device (`Frames::late`).
     turn_at: Instant,
-    stale: bool,
     late: Duration,
     /// A hold probe under way: the other side's `rx` that shows its ping read, and whether another frame of ours
     /// followed the ping at once (then the reading says nothing about a frame written alone).
@@ -542,6 +548,10 @@ pub struct StreamPath {
     /// for how long nothing has been readable: since `read_at`, when a read last returned frames.
     dry: Option<Instant>,
     read_at: Instant,
+    /// Whether data has arrived since the last dry report, and whether this turn's reader has part of what it
+    /// waits for (`dry_report`).
+    report_due: bool,
+    midway: bool,
     /// The last writes of the epoch: the number of their first frame, when the write began and when it returned.
     txlog: std::collections::VecDeque<(u32, Instant, Instant)>,
     /// The other side has measured its direction.
@@ -613,7 +623,6 @@ impl StreamPath {
             resolved: None,
             hold_went_up: false,
             turn_at: now,
-            stale: false,
             late: Duration::ZERO,
             probe: None,
             probe_spoiled: false,
@@ -626,6 +635,8 @@ impl StreamPath {
             exact_seen: None,
             dry: None,
             read_at: now,
+            report_due: false,
+            midway: false,
             txlog: std::collections::VecDeque::with_capacity(TX_LOG),
             peer_measured: false,
         }
@@ -659,7 +670,6 @@ impl StreamPath {
         self.resolved = None;
         self.hold_went_up = false;
         self.turn_at = now;
-        self.stale = false;
         self.probe = None;
         self.probe_spoiled = false;
         self.probe_at = now;
@@ -669,6 +679,8 @@ impl StreamPath {
         self.exact_seen = None;
         self.dry = None;
         self.read_at = now;
+        self.report_due = false;
+        self.midway = false;
         self.txlog.clear();
         self.peer_measured = false;
     }
@@ -947,10 +959,9 @@ impl State {
             return Err(e);
         }
         if self.stream.phase == Phase::Up {
-            // Nothing was read in this turn: its records do not say that nothing was readable, and after a pause
-            // their `rx` is old.
+            // Nothing was read in this turn: its records do not say that nothing was readable (and after a pause
+            // their `rx` is old: `STALE`).
             self.stream.dry = None;
-            self.stream.stale = now.saturating_duration_since(self.stream.turn_at) > STALE_AFTER;
             self.send(now);
             if let Some(e) = self.error() {
                 return Err(e);
@@ -1007,7 +1018,9 @@ impl State {
         if let Some(e) = self.error() {
             return Err(e);
         }
+        self.stream.midway = (sink.begun || sink.filled > 0) && sink.filled < sink.buf.len();
         progress |= self.send(now);
+        self.stream.midway = false;
         self.check_tcp(now);
         if let Some(e) = self.error() {
             return Err(e);
@@ -1053,6 +1066,7 @@ impl State {
             self.expected = end;
             self.ack_due.get_or_insert(now);
             self.stream.nak = None;
+            self.stream.report_due |= stream;
         } else if end <= self.expected {
             self.stats.duplicates += 1;
             self.ack_due.get_or_insert(now);
@@ -1230,7 +1244,6 @@ impl State {
 
     fn read_stream(&mut self, now: Instant, sink: &mut Sink) -> bool {
         self.stream.dry = None;
-        self.stream.stale = false;
         self.stream.turn_at = now;
         if self.full || !matches!(self.stream.phase, Phase::Probing | Phase::Up) {
             return false;
@@ -1303,8 +1316,9 @@ impl State {
     /// - the answer to a hold probe (a ping written alone and nothing else until it is answered) is the hold
     ///   exactly, and so is a record for which the two numbers above agree: the accepting side's first estimate
     ///   comes from the connecting side's probe pings that way;
-    /// - when data of ours was acknowledged only after nudges, by a record that still did not show the last nudge
-    ///   read (and was not `STALE`), the frames it had not read up to that nudge are what was held: a sign too.
+    /// - when data of ours was acknowledged only after nudges (or a dry report of ours, which is one sooner), by a
+    ///   record that still did not show the last of them read (and was not `STALE`), the frames it had not read up
+    ///   to there are what was held, and at least one more than the estimate: a sign too.
     ///
     /// `SIGNS` signs close to one another raise the estimate to the fewest frames any of them showed held.
     fn hold_sample(&mut self, now: Instant) {
@@ -1972,10 +1986,11 @@ impl State {
         if self.stream.phase == Phase::Up {
             if keepalive {
                 // Alone: nothing follows it.
-            } else if self.stream.tx != tx0 {
+            } else if self.stream.tx != tx0 || self.dry_report(now) {
                 // The last frames to arrive are not read on these NHIs until as many more as the direction holds
                 // follow them (the module documentation): every write on the stream ends with that many more,
                 // acknowledgements.
+                let report = self.stream.tx == tx0 + 1 && self.stream.nudge_tx == self.stream.tx;
                 if self.stream.probe.is_some() {
                     self.stream.probe_spoiled = true;
                 }
@@ -1985,9 +2000,18 @@ impl State {
                     }
                     self.stats.pushes += 1;
                 }
-            } else if !self.nudge(now) && self.connector && self.stream.hold_probes < HOLD_PROBES && self.hold_probe_fits(now) {
-                // Nothing to send: measure the hold of this direction while the link is quiet. (One side probes:
-                // the answer to a ping would follow the other side's own ping, which would no longer be alone.)
+                if report {
+                    // A dry report that stood in for a nudge: the stall's frames end with its pushes.
+                    self.stream.nudge_tx = self.stream.tx;
+                }
+            } else if !self.nudge(now)
+                && (self.connector || (self.stream.peer_measured && self.stream.hold.is_none()))
+                && self.stream.hold_probes < HOLD_PROBES
+                && self.hold_probe_fits(now)
+            {
+                // Nothing to send: measure the hold of this direction while the link is quiet. One side at a time
+                // (the answer to a ping would follow the other side's own ping, which would no longer be alone):
+                // the connecting side first, then the accepting side if those pings did not tell it its own.
                 self.hold_probe(now);
             }
         }
@@ -2040,6 +2064,39 @@ impl State {
             s.last_ping = now;
             self.ping_due = false;
         }
+    }
+
+    /// The reader has the first part of what it waits for, and nothing more has been readable for `ack_delay`: say
+    /// so once, with an acknowledgement (which carries for how long, `stream_control`). If the sender's last frames
+    /// are held here it learns how many from that (`hold_sample`); nothing else would tell it when this side's own
+    /// frames went out, with the acknowledgement of what had arrived, before the wait began (an exchange whose last
+    /// frame only the next exchange's frames release costs a round trip each time and no nudge). A reader between
+    /// two messages writes none (a server that waits for its next request would write one per request), nor does
+    /// the maintenance thread, which reads for nobody. Returns whether it wrote.
+    fn dry_report(&mut self, now: Instant) -> bool {
+        let s = &self.stream;
+        let waited = now.saturating_duration_since(s.read_at) >= self.tune.ack_delay;
+        if !s.report_due || !s.midway || self.tune.push.is_some() || s.dry.is_none() || !waited {
+            return false;
+        }
+        if !self.stream_control(kind::ACK, 0, 0) {
+            return false;
+        }
+        self.stream.report_due = false;
+        self.stats.dry_reports += 1;
+        // With data of ours unacknowledged this frame is also what a nudge would be, sooner: if the data is
+        // acknowledged only now, the frames written up to here that the other side had not read were held
+        // (`hold_sample`).
+        let written = self.written();
+        let s = &mut self.stream;
+        if self.acked < written && !self.full && !self.peer_full && s.probe.is_none() {
+            if s.nudges == 0 {
+                s.nudge_mark = written;
+            }
+            s.nudges += 1;
+            s.nudge_tx = s.tx;
+        }
+        true
     }
 
     /// With data unacknowledged (or a hold probe unanswered), nothing written and nothing heard for `Tuning::nudge`:
@@ -2117,7 +2174,7 @@ impl State {
             Some(dry) if k == kind::ACK && s.rx_last > 0 => 1 + dry.saturating_duration_since(s.read_at).saturating_sub(s.late).as_micros() as u64,
             _ => seq,
         };
-        let stale = if s.stale { STALE } else { 0 };
+        let stale = if t.saturating_duration_since(s.turn_at) > STALE_AFTER { STALE } else { 0 };
         let h = Header {
             kind: k,
             flags: flags | measured | stale,
@@ -2157,7 +2214,8 @@ impl State {
     fn send_stream_data(&mut self, now: Instant) -> bool {
         let mut progress = false;
         let written = self.written();
-        let measured = if self.measured() { MEASURED } else { 0 } | if self.stream.stale { STALE } else { 0 };
+        let stale = Instant::now().saturating_duration_since(self.stream.turn_at) > STALE_AFTER;
+        let measured = if self.measured() { MEASURED } else { 0 } | if stale { STALE } else { 0 };
         while self.stream.next < written && self.stream.phase == Phase::Up && !self.peer_full {
             let s = &mut self.stream;
             let window = self.tune.window(s.peer_ring);
