@@ -19,6 +19,13 @@
 //! `--push N` (on `serve` and on `run`, each for its own direction) writes N frames after every write on the stream
 //! instead of measuring what the direction holds back; `--profile` times the device's reads and writes.
 //!
+//! `link-test mesh` is one machine of a group in which every machine exchanges with every other at once, as a
+//! full-mesh all-reduce does (`qwen::tp::Mesh`): run it on each machine with its number and the others' addresses
+//! as `inkling node` takes them. Every round each machine waits `--gap-us` plus its own share of `--stagger-us`
+//! (machines whose GPUs finish at different times), then makes `--steps` exchanges of `--size` bytes with every
+//! peer from one thread. It reports the rounds in which it entered last apart: only those time the links, the
+//! others also wait for the last machine.
+//!
 //! `link-test churn` runs sessions back to back, each a client process of its own, with normal exits, killed
 //! clients and server crashes mixed (`--server-exits`; run the server in a loop that restarts it): every session's
 //! stream must come up within `--within-ms` of its link's start, with no failed epoch. A server started with
@@ -54,6 +61,8 @@ pub enum Cmd {
     /// Sessions back to back against `link-test serve`, one process each, with kills and server exits mixed; one
     /// JSON line per session and a summary. Fails unless every stream came up in time with no failed epoch.
     Churn(Churn),
+    /// One machine of a full mesh: exchanges with every other machine at once (run on each; prints one JSON line).
+    Mesh(MeshRun),
     /// CRC32C throughput on this CPU.
     Crc {
         #[arg(long, default_value_t = 40960)]
@@ -206,6 +215,123 @@ pub struct Test {
     #[arg(long, default_value_t = 0)]
     #[serde(default)]
     gap_us: u64,
+}
+
+#[derive(clap::Args)]
+pub struct MeshRun {
+    /// This machine's number in the group, from 0.
+    #[arg(long)]
+    machine: usize,
+    /// Lower machines connect here.
+    #[arg(long, default_value = "0.0.0.0:7075")]
+    listen: String,
+    /// Every other machine: `MACHINE` for a lower one, `MACHINE=HOST:PORT[,HOST:PORT...]` (one address per cable)
+    /// for a higher one, which this machine connects to.
+    #[arg(long = "peer", required = true)]
+    peers: Vec<String>,
+    /// Bytes to and from each peer in a step (a multiple of 4).
+    #[arg(long, default_value_t = 18432)]
+    size: usize,
+    /// Exchanges per round, back to back (2: as a reduce-scatter and an all-gather).
+    #[arg(long, default_value_t = 1)]
+    steps: usize,
+    #[arg(long, default_value_t = 10000)]
+    count: usize,
+    /// Every machine waits this long before each round without touching its links.
+    #[arg(long, default_value_t = 0)]
+    gap_us: u64,
+    /// On top of the gap, each machine waits up to this long, a different time each round (the same seed everywhere
+    /// tells every machine which one enters last).
+    #[arg(long, default_value_t = 0)]
+    stagger_us: u64,
+    #[arg(long, default_value_t = 1)]
+    seed: u64,
+    /// A name for the result line.
+    #[arg(long, default_value = "")]
+    label: String,
+}
+
+/// How long machine `m` of a mesh waits on top of the gap before round `r`.
+fn stagger(seed: u64, m: usize, r: usize, limit: u64) -> u64 {
+    if limit == 0 {
+        0
+    } else {
+        splitmix(seed ^ (r as u64) << 8 ^ m as u64) % (limit + 1)
+    }
+}
+
+fn mesh(a: &MeshRun) -> Result<()> {
+    use crate::qwen::tp::{parse_peers, Mesh};
+    ensure!(a.size.is_multiple_of(4) && a.size <= LARGEST && a.steps >= 1, "sizes are multiples of 4 up to {LARGEST}");
+    let peers = parse_peers(&a.peers)?;
+    let machines = peers.len() + 1;
+    let listener = if peers.iter().any(|p| p.0 < a.machine) { Some(TcpListener::bind(&a.listen).with_context(|| format!("listening on {}", a.listen))?) } else { None };
+    let t0 = Instant::now();
+    let mut mesh = Mesh::open(a.machine, listener.as_ref(), &peers)?;
+    let setup_ms = t0.elapsed().as_secs_f64() * 1e3;
+    mesh.links.sort_by_key(|l| l.0);
+    let order: Vec<usize> = mesh.links.iter().map(|l| l.0).collect();
+    eprintln!("link-test: machine {} of {machines}, lanes to machines {order:?} over {:?}", a.machine, mesh.links.iter().map(|l| l.1.kind()).collect::<Vec<_>>());
+    let pat = Pattern::new(a.seed);
+    let key = |from: usize, to: usize, i: usize| Pattern::key(from as u64, 16 + to as u64, i as u64);
+    // One buffer per peer and step each way, filled and checked outside the timed part.
+    let mut outs = vec![vec![vec![0u8; a.size]; a.steps]; order.len()];
+    let mut ins = vec![vec![vec![0u8; a.size]; a.steps]; order.len()];
+    let (mut lat, mut last, mut sent, mut first) = (Lat::default(), Lat::default(), Lat::default(), Lat::default());
+    let mut checked = 0u64;
+    let start = Instant::now();
+    for r in 0..a.count {
+        for (k, &peer) in order.iter().enumerate() {
+            for step in 0..a.steps {
+                pat.fill(&mut outs[k][step], key(a.machine, peer, r * a.steps + step));
+            }
+        }
+        let mine = stagger(a.seed, a.machine, r, a.stagger_us);
+        // The last to enter waits for nobody: its time is the links'. (Ties: the lowest machine.)
+        let entered_last = (0..machines).all(|m| {
+            let other = stagger(a.seed, m, r, a.stagger_us);
+            other < mine || (other == mine && m >= a.machine)
+        });
+        let wait = Duration::from_micros(a.gap_us + mine);
+        let t = Instant::now();
+        while t.elapsed() < wait {
+            std::hint::spin_loop();
+        }
+        // The other machines may still be starting when the first round begins.
+        let stall = if r == 0 { Duration::from_secs(60) } else { Duration::from_secs(10) };
+        let t = Instant::now();
+        for step in 0..a.steps {
+            let mut jobs: Vec<(&mut Lanes, &[u8], &mut [u8])> =
+                mesh.links.iter_mut().zip(&outs).zip(ins.iter_mut()).map(|((l, o), i)| (&mut l.1, &o[step][..], &mut i[step][..])).collect();
+            let trip = link::exchange_all(&mut jobs, stall).with_context(|| format!("round {r} step {step}"))?;
+            sent.add(trip.sent);
+            first.add(trip.first);
+        }
+        let d = t.elapsed();
+        if r > 0 {
+            lat.add(d);
+            if entered_last {
+                last.add(d);
+            }
+        }
+        for (k, &peer) in order.iter().enumerate() {
+            for step in 0..a.steps {
+                if let Some(at) = pat.check(&ins[k][step], key(peer, a.machine, r * a.steps + step)) {
+                    bail!("round {r} step {step} from machine {peer}: byte {at} of {} differs", a.size);
+                }
+                checked += a.size as u64;
+            }
+        }
+    }
+    let links: Vec<Value> = mesh.links.iter().map(|(m, l)| json!({"machine": m, "path": l.kind(), "stats": l.links().iter().map(Link::stats).collect::<Vec<_>>()})).collect();
+    println!(
+        "{}",
+        json!({"label": a.label, "machine": a.machine, "machines": machines, "size": a.size, "steps": a.steps, "count": a.count,
+            "gap_us": a.gap_us, "stagger_us": a.stagger_us, "setup_ms": setup_ms, "elapsed_s": start.elapsed().as_secs_f64(),
+            "checked_bytes": checked, "round_us": lat.summary(), "round_entered_last_us": last.summary(),
+            "step_sent_us": sent.summary(), "step_first_us": first.summary(), "links": links})
+    );
+    Ok(())
 }
 
 fn unix_now() -> f64 {
@@ -883,6 +1009,7 @@ pub fn main(cmd: &Cmd) -> Result<()> {
         Cmd::Serve { listen, load, link } => serve(listen, *load, *link),
         Cmd::Run(r) => run(r),
         Cmd::Churn(c) => churn(c),
+        Cmd::Mesh(m) => mesh(m),
         Cmd::Crc { size, iters } => {
             crc_speed(*size, *iters);
             Ok(())
