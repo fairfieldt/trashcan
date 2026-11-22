@@ -187,11 +187,12 @@ end needs the other's values; it loads `thunderbolt_stream` when needed, creates
 missing (after a module reload, a controller reset, a reconnect) or sits under a service name that is no longer the
 stream service (the `.0`/`.1` index follows discovery order), and removes the streams of links that went away. The
 engine moves each link's data to its stream by itself and falls back to TCP without it (`engine/src/link`).
-`/etc/udev/rules.d/70-tbstream.rules` gives the devices to `render` (mode 0660). With `1` in `/etc/tblink/busy_poll`
-(not there by default) tblink sets the streams' `busy_poll`, at its next pass on a stream nothing has open: the
-rings then run without interrupts, which takes the interrupt and its work item out of every frame's way
-([docs/kernel.md](../../docs/kernel.md#thunderbolt) has the numbers), and the engine's idle links sleep in short naps
-instead of in `poll()`. Each end of a cable has its own setting. `tblink reload` removes the streams
+`/etc/udev/rules.d/70-tbstream.rules` gives the devices to `render` (mode 0660). tblink sets the streams'
+`busy_poll`, at its next pass on a stream nothing has open: the rings run without interrupts, which takes the
+interrupt and its work item out of every frame's way ([docs/kernel.md](../../docs/kernel.md#thunderbolt) has the
+numbers: among four Macs it is the difference between 39 and 61 tok/s), and the engine's idle links sleep in short
+naps instead of in `poll()`. `0` in `/etc/tblink/busy_poll` keeps a node's streams on interrupts; each end of a
+cable has its own setting. `tblink reload` removes the streams
 before it unloads the modules (a process with a stream open keeps `thunderbolt_stream` loaded: stop it first), and
 `scripts/tb-reset.sh` stops tblink on the Macs it resets and starts it again afterwards.
 

@@ -17,9 +17,10 @@
 # other's: the engine's links find it from the TCP connection's interface and move their data to it (engine/src/
 # link). The stream is created again whenever it is missing (module reload, controller reset, reconnect) or sits
 # under a service name that is no longer the stream service (the .0/.1 index follows discovery order).
-# With `1` in /etc/tblink/busy_poll the streams' rings are busy-polled (docs/kernel.md: a frame is read without
-# waiting for an interrupt, and the engine's idle links sleep in short naps); without the file, or with 0, they
-# run on interrupts. The setting takes effect on a stream the next time nothing has its device open.
+# The streams' rings are busy-polled (docs/kernel.md: a frame is read without waiting for its interrupt and the
+# ring's work item, which a machine whose other threads spin delays by milliseconds; the engine's idle links sleep
+# in short naps); with `0` in /etc/tblink/busy_poll they run on interrupts. The setting takes effect on a stream
+# the next time nothing has its device open.
 #
 # usage: tblink run      (tblink.service)
 #        tblink status   (for people)
@@ -104,7 +105,7 @@ ensure_stream() {
     done
     [ "$new" = 1 ] && log "$xd: stream $svc/$STREAM, /dev/tbstream$(cat "$d/index"), HopIDs $HOPID/$HOPID" >&2
     # Busy polling as configured. The driver refuses the write while the device is open; the next pass tries again.
-    a=0; [ "$(cat "$BUSY_POLL" 2>/dev/null)" = 1 ] && a=1
+    a=1; [ "$(cat "$BUSY_POLL" 2>/dev/null)" = 0 ] && a=0
     if [ -e "$d/busy_poll" ] && [ "$(cat "$d/busy_poll" 2>/dev/null)" != "$a" ]; then
         echo "$a" > "$d/busy_poll" 2>/dev/null && log "$xd: stream $svc/$STREAM busy_poll $a" >&2
     fi

@@ -142,13 +142,12 @@ class Tblink(unittest.TestCase):
     def test_busy_poll_follows_its_setting(self):
         self.link()
         d = self.root / 'sys/kernel/config/thunderbolt/stream/0-3.1/trashcan'
-        log = self.run_pass()
-        self.assertEqual((d / 'busy_poll').read_text().strip(), '0', log)
-        self.assertNotIn('busy_poll', log)
-        (self.root / 'etc/tblink/busy_poll').write_text('1\n')
+        # Busy-polled unless the node says otherwise.
         log = self.run_pass()
         self.assertEqual((d / 'busy_poll').read_text().strip(), '1', log)
         self.assertIn('stream 0-3.1/trashcan busy_poll 1', log)
+        log = self.run_pass()
+        self.assertNotIn('busy_poll', log)
         # An open device refuses the write (read-only here): nothing is said, and the next pass sets it.
         (self.root / 'etc/tblink/busy_poll').write_text('0\n')
         (d / 'busy_poll').chmod(0o444)
@@ -158,6 +157,10 @@ class Tblink(unittest.TestCase):
         (d / 'busy_poll').chmod(0o644)
         log = self.run_pass()
         self.assertEqual((d / 'busy_poll').read_text().strip(), '0', log)
+        self.assertIn('stream 0-3.1/trashcan busy_poll 0', log)
+        (self.root / 'etc/tblink/busy_poll').write_text('1\n')
+        log = self.run_pass()
+        self.assertEqual((d / 'busy_poll').read_text().strip(), '1', log)
 
     def test_loads_the_module_when_missing(self):
         self.link()

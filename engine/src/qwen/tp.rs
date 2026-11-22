@@ -477,10 +477,9 @@ impl Mesh {
     /// which the caller adds while it writes the total; otherwise `sum` holds the total.
     pub(crate) fn all_reduce(&mut self, sum: &mut [f32], remote: &mut [f32], stall: Duration, threads: usize, width: usize) -> Result<bool> {
         if self.full {
-            // (Diagnostic) TRASHCAN_TP_SMALL_ONCE=1: batches under the compact payload's limit go whole to every
-            // machine in one step instead of two steps of quarters.
-            let small_once = self.compact(sum.len()) && std::env::var_os("TRASHCAN_TP_SMALL_ONCE").is_some();
-            if sum.len() > width && !small_once && self.direct(sum, stall, threads, width)? {
+            // A batch of rows in two steps of quarters. (A four-row batch whole to every machine in one step is no
+            // faster: 61.0 and 61.2 against 61.1-61.4 tok/s drafted, docs/inkling.md.)
+            if sum.len() > width && self.direct(sum, stall, threads, width)? {
                 return Ok(false);
             }
             return self.once(sum, remote, stall, threads, width);

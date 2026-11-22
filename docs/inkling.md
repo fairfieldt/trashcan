@@ -168,12 +168,16 @@ variants for rows of four and five blocks. It runs with the driver's `--tp-peer`
 teacher-forced layer errors, and the reference's greedy tokens (16 of 16 twice, 24 of 24 after the long prompt, plain
 and drafted). Plain decode is 45.1 tok/s after 64 tokens and 42.7 after 1,024 (41.8 and 40.5 with two Macs): a
 token's GPU segments fall from 19.8 to 16.8 ms, the attention and controller kernels not at all, and its exchanges
-rise from 2.4 to 4.3 ms. Drafted decode and prefill are slower than with two Macs for now (code prompt with three
-drafts 38-40 tok/s against 52.3; 1,024 tokens at 493-498 tok/s against 575): an all-reduce of a four-row batch
-takes 250-500 us among four machines against 42 us between two, with this morning's link layer as with the measured
-push frames, and each link's hold estimate rises and decays many times a run (`TRASHCAN_INKLING_PHASES=1` prints the
-links' holds, pushes and nudges). Sending a small batch whole to every machine in one step
-(`TRASHCAN_TP_SMALL_ONCE=1`, a diagnostic) instead of two steps of quarters gives 45-47 tok/s. Open.
+rise from 2.4 to 4.3 ms. With the streams on interrupts, drafted decode was slower than with two Macs (code prompt
+with three drafts 38-40 tok/s against 52.3): an all-reduce of a four-row batch took 250-500 us among four machines
+against 42 us between two, because one all-reduce in ten waited a millisecond or more for the work item that
+completes a received frame while the engine's other threads spin ([kernel.md](kernel.md#thunderbolt)), and each
+link's hold estimate rose on those waits. With the streams busy-polled (tblink's default since) the same run gives
+61.1-61.4 tok/s (a round of three tokens 48.9 ms, 8.0 of them in exchanges against 33.7-35.2) and plain decode
+43.1-43.2 after 1,024 tokens; two Macs busy-polled give 53.9 and 40.7. A four-row batch whole to every machine in
+one step instead of two steps of quarters is no faster (61.0 and 61.2). Prefill of 1,024 tokens is 531-537 tok/s
+against 575 with two Macs (493-498 before a prefill-sized exchange moved its three cables on a thread each): 1.34 of
+its 1.92 s are exchanges, and each cable carries about 0.75 GB/s each way whatever the threads do.
 
 ## Vision
 
@@ -648,7 +652,7 @@ the host's passes between segments. What changed, each measured against the buil
   after a send instead of always three ([kernel.md](kernel.md)); the incite-enlight cable, like invite-indite,
   holds none. After `deffddc9`, alternated on incite and enlight: decode after 1,024 tokens 39.3-39.4 to 40.5-40.7
   tok/s (exchanges 2.7 to 2.4 ms per token), three drafts on the code prompt 51.7-52.7 to 52.2-52.7. With
-  `busy_poll` set on the stream at both ends (off by default, `/etc/tblink/busy_poll`): 41.0 tok/s (exchanges
+  `busy_poll` set on the stream at both ends (tblink's default since, `/etc/tblink/busy_poll`): 41.0 tok/s (exchanges
   2.14 ms) and 53.8-54.0 with three drafts (a four-row verification forward 45.7 ms). Prefill is unchanged.
 
 | incite and enlight, `51aa4c75` against `deffddc9` | before | after |

@@ -152,8 +152,8 @@ cleanly either way. After a reboot, the Mac's Thunderbolt links to other Macs ca
   `index` in each directory gives the `/dev/tbstreamX` number. Each group also has `ring_size`, `throttling` (the
   rings' interrupt throttle, 8192 ns by default, separate from `thunderbolt_net`'s) and, new in 7.3, `busy_poll`
   (0 by default): set while nothing has the stream open, it runs the stream's rings without interrupts, `read()`
-  and `write()` poll them, and `poll()` returns `EPOLLERR`. `tblink` sets it on its streams when
-  `/etc/tblink/busy_poll` holds `1` (no node has that by default); each end of a cable has its own setting. The
+  and `write()` poll them, and `poll()` returns `EPOLLERR`. `tblink` sets it on its streams unless
+  `/etc/tblink/busy_poll` holds `0`; each end of a cable has its own setting. The
   engine's links (`engine/src/link`) find a link's stream from the TCP connection's interface and move their data
   to it, with their own sequence numbers, acknowledgements, CRC32C, credits and retransmission, falling back to
   TCP; on a busy-polled stream an idle link sleeps in 50 us naps (1 ms once nothing has come for 200 ms) where it
@@ -216,6 +216,34 @@ cleanly either way. After a reboot, the Mac's Thunderbolt links to other Macs ca
   such waits for a hold only when two come in close succession: with interrupts that happened once in 500,000
   round trips after a pause (one push after every write for a second, then none again), with `busy_poll` never in
   1.5 million.
+- Why the streams are busy-polled. With interrupts a received frame is readable only once the ring's work item
+  has run, on the CPU that took the interrupt, and a thread that spins there keeps it waiting for up to a
+  scheduler tick. The engine's GPU waits and worker pool spin, and a machine of a full mesh needs a frame from
+  each of three peers before it can go on, so one late work item anywhere holds all four. Four Macs, six cables,
+  `link-test mesh` (every machine exchanges with the three others at once from one thread, CPU latency request 0
+  as in the model runs, 300 us of pause and up to 100 us of stagger before each round, the range over the four
+  machines; rounds over 1 ms per 10,000):
+
+  | us | interrupts, p50 / p90 / p99 | over 1 ms | `busy_poll`, p50 / p90 / p99 | over 1 ms |
+  |---|---|---|---|---|
+  | 4,608 B, two steps | 128-135 / 175-185 / 245-258 | 9-11 | 63-75 / 109-123 / 135-148 | 0 |
+  | 18,432 B, one step | 103-117 / 155-171 / 572-664 | 77-81 | 58-70 / 95-118 / 126-147 | 0 |
+  | 4,608 B, two steps, 12 other threads spinning on each Mac | 91-103 / 671-704 / 2,639-2,709 | 890-898 | 80-83 / 130-132 / 153-156 | 2 |
+  | 18,432 B, one step, 12 threads spinning | 82-101 / 142-171 / 2,699-2,752 | 552-568 | 71-76 / 119-123 / 147-153 | 2 |
+
+  The machine that enters a round last waits for nobody: busy-polled, its 4,608 B in two steps take 40-53 us and
+  its 18,432 B in one 42-56. Inkling at eight ranks on the four Macs ([inkling.md](inkling.md)): drafted decode
+  39.2-40.0 tok/s with interrupts (33.7-35.2 ms of a three-token round in exchanges, hundreds of nudges and 6-36
+  rises of the hold estimate per link) and 61.1-61.4 busy-polled (8.0 ms, at most 18 nudges, no rise); plain
+  decode 42.6 and 43.1-43.2; at four ranks on two Macs 52.0 and 53.9 drafted, 40.0 and 40.7 plain. All twelve
+  directions of the six cables hold nothing. Busy-polled soak: 820,000 mesh rounds of 4,608 to 589,824 B per
+  peer, 377 GB checked, no retransmission, 1 to 3 rounds in 300,000 over a millisecond; 120 of 120 sessions with
+  kills and server exits on their stream within 55 ms.
+- A prefill-sized exchange (128 KiB or more on a link) moves each link on a thread of its own: 589,824 B to and
+  from three peers twice (an eight-rank prefill all-reduce of 256 tokens) takes 1.82-2.34 ms against 2.34-2.89
+  on one thread, and prefill of 1,024 tokens 531-537 tok/s against 495-501. A cable then carries about 0.75 GB/s
+  each way (a 5 MiB transfer, busy-polled); the sender spends five reads in six waiting for credits and the
+  receiver gets one frame per read, so the cable, not either thread, sets that.
 - The same links on 7.2.9 with three frames after every write, six Macs (2026-10-14): a 64 B ping-pong took 32-47
   us p50 on a stream against 40-95 us over TCP, a 40 KiB exchange 79-88 us against 169-219, a chain token 121-160
   us against 283-351, and 5 MiB one way ran at 556-604 MB/s against 292-470. End to end on six Macs, Flash-Next
