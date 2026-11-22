@@ -551,7 +551,9 @@ fn an_epoch_that_carries_one_way_is_given_up_at_once() {
     wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
     let s = a.stats();
     assert_eq!(s.failed_epochs, 1, "{s:?}");
-    assert!(s.first_up_ms.is_some_and(|ms| (50. ..250.).contains(&ms)), "{s:?}");
+    // Given up on the evidence, after ONE_WAY: not at `probe_timeout`, 3 s. (Some 60 ms here; on a loaded machine
+    // up to 450 ms has been seen, so the bound is the middle of that gap rather than a guess at the load.)
+    assert!(s.first_up_ms.is_some_and(|ms| (50. ..1500.).contains(&ms)), "{s:?}");
 }
 
 #[test]
@@ -626,7 +628,8 @@ fn an_epoch_whose_other_side_is_not_heard_is_given_up_on_its_reports() {
     wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
     let s = a.stats();
     assert_eq!(s.failed_epochs, 1, "{s:?}");
-    assert!(s.first_up_ms.is_some_and(|ms| (50. ..300.).contains(&ms)), "{s:?}");
+    // (After ONE_WAY, not at `probe_timeout`: see above.)
+    assert!(s.first_up_ms.is_some_and(|ms| (50. ..1500.).contains(&ms)), "{s:?}");
 }
 
 #[test]
