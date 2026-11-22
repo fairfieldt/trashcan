@@ -160,9 +160,20 @@ keeps the three passes off Thunderbolt (two hops per token) and suits prefill, b
 GPUs' bandwidth (an estimated 17-18 ms per token) and it needs a pipeline of TP groups that the engine doesn't have.
 It is the fallback if exchanges dominate TP4.
 
-**Four Macs, TP8:** 3 Q heads and 1 KV head per GPU, 144 expert rows. Mainly more context (256K with f16 K/V) or
-room for the lossless build; the decode gain will be smaller than the 27B's (+43%), because each GPU's share of a
-layer becomes very small.
+**Four Macs, TP8:** 3 Q heads and 1 KV head per GPU. An eighth of an expert's 1,152 rows is four and a half of the
+weights' 32-row blocks, so the GPUs take 128 and 160 rows alternately (`Split::ff`), and the prefill down kernel has
+variants for rows of four and five blocks. It runs with the driver's `--tp-peer` and the nodes' `--machine` and
+`--peer` as the 27B's does ([qwen.md](qwen.md)), fully cabled. Measured on incite, enlight, invite and alight on
+2026-11-21 (`tp8` branch): 2,293 and 2,746 MiB per GPU at 32K context against 4,854 with two Macs, the same 48
+teacher-forced layer errors, and the reference's greedy tokens (16 of 16 twice, 24 of 24 after the long prompt, plain
+and drafted). Plain decode is 45.1 tok/s after 64 tokens and 42.7 after 1,024 (41.8 and 40.5 with two Macs): a
+token's GPU segments fall from 19.8 to 16.8 ms, the attention and controller kernels not at all, and its exchanges
+rise from 2.4 to 4.3 ms. Drafted decode and prefill are slower than with two Macs for now (code prompt with three
+drafts 38-40 tok/s against 52.3; 1,024 tokens at 493-498 tok/s against 575): an all-reduce of a four-row batch
+takes 250-500 us among four machines against 42 us between two, with this morning's link layer as with the measured
+push frames, and each link's hold estimate rises and decays many times a run (`TRASHCAN_INKLING_PHASES=1` prints the
+links' holds, pushes and nudges). Sending a small batch whole to every machine in one step
+(`TRASHCAN_TP_SMALL_ONCE=1`, a diagnostic) instead of two steps of quarters gives 45-47 tok/s. Open.
 
 ## Vision
 

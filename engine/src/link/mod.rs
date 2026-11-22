@@ -471,7 +471,8 @@ impl Link {
         let transport = st.path();
         json!({"to": st.peer, "transport": transport, "stream_at_both_ends": st.expects_stream,
             "first_up_ms": s.first_up_ms, "epochs": s.epochs, "failed_epochs": s.failed_epochs,
-            "fallbacks": s.fallbacks, "sent_stream": s.sent_stream, "sent_tcp": s.sent_tcp})
+            "fallbacks": s.fallbacks, "sent_stream": s.sent_stream, "sent_tcp": s.sent_tcp,
+            "hold": s.hold, "hold_raises": s.hold_raises, "pushes": s.pushes, "nudges": s.nudges})
     }
 
     /// The protocol state, for messages.
@@ -692,6 +693,13 @@ pub struct Trip {
 /// The links to one neighbouring machine, one per cable, in an order both machines agree on.
 pub struct Lanes {
     lanes: Vec<Link>,
+}
+
+impl Lanes {
+    /// Every lane's `Link::report`, for run reports and diagnostics.
+    pub fn reports(&self) -> Vec<Value> {
+        self.lanes.iter().map(|l| l.report()).collect()
+    }
 }
 
 /// Tag of lane `i` of `n` of group `group` (what `Lanes::accept_groups` sorts by).

@@ -5,7 +5,8 @@
 // same for every lane (scalar loads); the four waves' sums meet in shared memory at the end. A lane loads two blocks
 // (a 64-byte line) of a row at a time. Workgroup x covers 64 * ROWS rows, y covers COLS columns. Weights: f16 scales
 // per 32-weight block, then 32-byte blocks from word p.stride (quant::Kind::Q8h); p.n rows of p.k weights, p.k a
-// multiple of 256. b: x [t][p.k], c: y [t][p.n].
+// multiple of 64: the waves' shares are whole lines, equal when p.k is a multiple of 256 (2304 and 768 with four
+// ranks; an eighth rank's 384 columns of W_o are 12 blocks, in shares of 2, 4, 2 and 4). b: x [t][p.k], c: y [t][p.n].
 #define ROWS 2
 #define COLS 8
 layout(local_size_x=256) in;
@@ -16,13 +17,13 @@ vec4 i8(uint w){return vec4(ivec4(w<<24,w<<16,w<<8,w)>>24);}
 void main(){
 uint nb=batch(),t0=gl_WorkGroupID.y*COLS,lane=gl_SubgroupInvocationID,wv=gl_SubgroupID;
 if(t0>=nb)return;
-uint first=(gl_WorkGroupID.x*64+lane)*ROWS,blocks=p.k/32,quarter=blocks/4;
+uint first=(gl_WorkGroupID.x*64+lane)*ROWS,blocks=p.k/32,lines=blocks/2;
 uint xb[COLS],rb[ROWS];
 [[unroll]]for(uint t=0;t<COLS;t++)xb[t]=min(t0+t,nb-1)*(p.k/4);
 [[unroll]]for(uint r=0;r<ROWS;r++)rb[r]=min(first+r,p.n-1)*blocks;
 float acc[ROWS][COLS];
 [[unroll]]for(uint r=0;r<ROWS;r++)[[unroll]]for(uint t=0;t<COLS;t++)acc[r][t]=0;
-for(uint b=wv*quarter;b<(wv+1)*quarter;b+=2){
+for(uint b=lines*wv/4*2;b<lines*(wv+1)/4*2;b+=2){
     uvec4 q[ROWS][4];uint sc[ROWS];
     [[unroll]]for(uint r=0;r<ROWS;r++){uint a=p.stride/4+(rb[r]+b)*2;
         q[r][0]=wq.q[a];q[r][1]=wq.q[a+1];q[r][2]=wq.q[a+2];q[r][3]=wq.q[a+3];sc[r]=ww.words[(rb[r]+b)/2];}

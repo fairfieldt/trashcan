@@ -1104,6 +1104,9 @@ impl Drop for Group {
         if std::env::var_os("TRASHCAN_INKLING_PHASES").is_some() {
             let (p, f) = (self.seconds, self.seconds.forwards.max(1) as f64);
             let st = self.mesh.as_ref().map(|m| (m.stats.sent, m.stats.first, m.stats.wire)).unwrap_or_default();
+            for (m, reports) in self.mesh.as_ref().map(|m| m.link_reports()).unwrap_or_default() {
+                eprintln!("inkling phases: links to machine {m}: {}", serde_json::to_string(&reports).unwrap_or_default());
+            }
             eprintln!(
                 "inkling phases: forwards {} ms per forward: gpu {:.3} exchange {:.3} (sent {:.3} first {:.3} wire {:.3}) host_math {:.3} host_sum {:.3} host {:.3}",
                 p.forwards, p.gpu / f * 1e3, p.exchange / f * 1e3, st.0 / f * 1e3, st.1 / f * 1e3, st.2 / f * 1e3, p.host_in / f * 1e3, p.host_sum / f * 1e3, p.host / f * 1e3

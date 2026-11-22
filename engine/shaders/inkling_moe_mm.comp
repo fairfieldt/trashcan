@@ -14,6 +14,9 @@
 // (token << 16 | pair), extra: per-expert scales. SITU: beta p.r0, linear beta p.r1 (float bits).
 layout(constant_id=0) const uint SPEC=4;
 const uint FMT=SPEC%16,MODE=SPEC/16;
+// The down walk loads RUN blocks of a row at once, and p.k / 32 is a multiple of it: MODE 1 nine (a rank's 288 of an
+// expert's rows with four ranks), MODE 2 five and MODE 3 four (160 and 128 rows with eight).
+const uint RUN=MODE==2u?5u:MODE==3u?4u:9u;
 #define TILE 8
 layout(local_size_x=64) in;
 layout(binding=0,std430) readonly restrict buffer WeightQuads { uvec4 q[]; } wq;
@@ -83,11 +86,11 @@ void walk_down(const uint C,uint r){
     float acc[TILE];
     [[unroll]]for(uint t=0;t<C;t++)acc[t]=0;
     if(FMT==4){
-        for(uint b0=0;b0<blocks;b0+=9){
+        for(uint b0=0;b0<blocks;b0+=RUN){
             uvec4 q[9];uint h[9];
-            [[unroll]]for(uint i=0;i<9;i++)q[i]=wq.q[p.stride/4+r+b0+i];
-            [[unroll]]for(uint i=0;i<9;i++)h[i]=ww.words[r+b0+i];
-            [[unroll]]for(uint i=0;i<9;i++){
+            [[unroll]]for(uint i=0;i<RUN;i++)q[i]=wq.q[p.stride/4+r+b0+i];
+            [[unroll]]for(uint i=0;i<RUN;i++)h[i]=ww.words[r+b0+i];
+            [[unroll]]for(uint i=0;i<RUN;i++){
                 vec2 s=unpackHalf2x16(h[i]);
                 [[unroll]]for(uint w=0;w<4;w++){
                     vec4 lo=nlo(q[i][w])*s.x,hi=nhi(q[i][w])*s.y;

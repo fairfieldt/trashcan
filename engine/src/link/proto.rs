@@ -113,7 +113,8 @@ impl Default for Tuning {
             // that was not needed costs a frame each way, and one that was costs this wait once, after which the
             // estimate covers it.
             nudge: Duration::from_micros(1500),
-            push: None,
+            // (Diagnostic) TRASHCAN_LINK_PUSH=N: a fixed number of push frames instead of the measured hold.
+            push: std::env::var("TRASHCAN_LINK_PUSH").ok().and_then(|v| v.parse().ok()),
             profile: false,
         }
     }

@@ -34,9 +34,10 @@ impl Split {
         let n = c.kv_heads / self.ranks;
         (self.rank * n, n)
     }
+    /// This rank's rows of an expert, in whole blocks of 32 (the weights' unit): equal shares when the ranks divide
+    /// the blocks (4 ranks: 9 blocks each), else the nearest whole blocks (8 ranks: 4 and 5 alternately).
     pub fn ff(&self, c: &Config) -> (usize, usize) {
-        let n = c.ff / self.ranks;
-        (self.rank * n, n)
+        ff_share(c.ff, self.rank, self.ranks)
     }
     pub fn vocab(&self, c: &Config) -> (usize, usize) {
         let n = c.vocab_padded / self.ranks;
@@ -44,13 +45,19 @@ impl Split {
     }
     pub fn check(&self, c: &Config) -> Result<()> {
         ensure!(
-            c.heads % self.ranks == 0 && c.kv_heads % self.ranks == 0 && c.heads == 3 * c.kv_heads && (c.ff / self.ranks) % (9 * 32) == 0
-                && c.vocab_padded % self.ranks == 0 && c.ff % self.ranks == 0,
-            "inkling: {} ranks do not divide the heads (three per KV head), KV heads, expert rows (in runs of 9 blocks of 32) and vocabulary",
+            c.heads % self.ranks == 0 && c.kv_heads % self.ranks == 0 && c.heads == 3 * c.kv_heads && c.ff % 32 == 0
+                && matches!(self.ff(c).1 / 32, 4 | 5 | 9) && c.vocab_padded % self.ranks == 0,
+            "inkling: {} ranks do not divide the heads (three per KV head), KV heads and vocabulary, or leave a rank other than 4, 5 or 9 blocks of an expert's rows",
             self.ranks
         );
         Ok(())
     }
+}
+
+/// Rank `rank` of `ranks`' share of `ff` expert rows: its first row and its count, in whole blocks of 32.
+fn ff_share(ff: usize, rank: usize, ranks: usize) -> (usize, usize) {
+    let at = |r: usize| ff / 32 * r / ranks * 32;
+    (at(rank), at(rank + 1) - at(rank))
 }
 
 /// Bytes of one engine block (32 weights) in the head and body planes of a repacked matrix.
@@ -1113,7 +1120,13 @@ impl Shard {
             u[1] = self.f as u32;
             u[3] = l.down.stride as u32;
             let p = self.push([0, self.act.address, self.ypair.address, self.tiles.address, self.list.address, self.wts.address], l.sd.address, u);
-            let name = if q8 { "inkling_moe_mm_down_q8" } else { "inkling_moe_mm_down" };
+            // The NVFP4 walk loads a row's blocks at once: a variant per row length.
+            let name = match (q8, self.f / 32) {
+                (true, _) => "inkling_moe_mm_down_q8",
+                (false, 5) => "inkling_moe_mm_down_b5",
+                (false, 4) => "inkling_moe_mm_down_b4",
+                (false, _) => "inkling_moe_mm_down",
+            };
             self.gpu.dispatch_matrix(cmd, name, p, d.div_ceil(64) as u32, tiles as u32, &l.down.buf)?;
             let mut u = [0u32; 16];
             u[0] = d as u32;
@@ -1236,6 +1249,13 @@ impl Shard {
 mod tests {
     use super::*;
     use crate::quant::nvfp4_block;
+    #[test]
+    fn expert_rows_are_shared_in_whole_blocks() {
+        assert_eq!((0..4).map(|r| ff_share(1152, r, 4)).collect::<Vec<_>>(), [(0, 288), (288, 288), (576, 288), (864, 288)]);
+        let eight: Vec<_> = (0..8).map(|r| ff_share(1152, r, 8)).collect();
+        assert_eq!(eight, [(0, 128), (128, 160), (288, 128), (416, 160), (576, 128), (704, 160), (864, 128), (992, 160)]);
+        assert_eq!(eight.iter().map(|s| s.1).sum::<usize>(), 1152);
+    }
     #[test]
     fn nvfp4_engine_blocks_match_ggml() {
         let mut x = 0x9e3779b97f4a7c15u64;

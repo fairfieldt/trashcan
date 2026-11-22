@@ -740,7 +740,7 @@ impl Device {
                 ],
                 "inkling_qkv" => &[("inkling_qkv", Some(1)), ("inkling_qkv_c2", Some(2)), ("inkling_qkv_c3", Some(3)), ("inkling_qkv_c4", Some(4))],
                 "inkling_attn_grp" => &[("inkling_attn_grp", Some(0)), ("inkling_attn_grp_parts", Some(1))],
-                "inkling_moe_mm" => &[("inkling_moe_mm_gu", Some(4)), ("inkling_moe_mm_gu_q8", Some(5)), ("inkling_moe_mm_down", Some(20)), ("inkling_moe_mm_down_q8", Some(21))],
+                "inkling_moe_mm" => &[("inkling_moe_mm_gu", Some(4)), ("inkling_moe_mm_gu_q8", Some(5)), ("inkling_moe_mm_down", Some(20)), ("inkling_moe_mm_down_q8", Some(21)), ("inkling_moe_mm_down_b5", Some(36)), ("inkling_moe_mm_down_b4", Some(52))],
                 "inkling_ctrl_z" => &[("inkling_ctrl_z", Some(0)), ("inkling_ctrl_z_bf16", Some(1))],
                 "inkling_ctrl_out" => &[("inkling_ctrl_out", Some(0)), ("inkling_ctrl_out_bf16", Some(1))],
                 "inkling_ctrl_mm_z" => &[("inkling_ctrl_mm_z", Some(0)), ("inkling_ctrl_mm_z_bf16", Some(1))],
