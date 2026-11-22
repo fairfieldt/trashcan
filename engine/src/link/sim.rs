@@ -7,7 +7,9 @@
 //! - faults: drop, damage or cut one frame in N (at random: a fixed period can line up with the sender's
 //!   retransmissions and hit the same record every time), lose everything (`dead`), refuse to open, and `hold`: the last
 //!   `hold` frames to arrive are not read until more follow them (a direction of a cable between Mac Pros holds up
-//!   to three, docs/kernel.md); `hold_at` gives each receiving end its own.
+//!   to three, docs/kernel.md); `hold_at` gives each receiving end its own;
+//! - an end opened while the same end is still open is turned away at once (`AddrInUse`), as the kernel device's
+//!   `flock` and tbd do.
 use super::device::{Found, Frames, Streams};
 use std::{
     collections::VecDeque,
@@ -28,6 +30,9 @@ pub struct Faults {
     pub hold_at: [usize; 2],
     /// Opening this side's end waits this long (as an open waits for an earlier close of the device).
     pub slow_open: Option<(usize, std::time::Duration)>,
+    /// Closing this side's end takes this long to begin: the end stays open meanwhile (a link closes its device on a
+    /// thread of its own, which a busy machine can run late).
+    pub slow_close: Option<(usize, std::time::Duration)>,
     /// This side's first open reads nothing of what the other side writes (one direction of an epoch dead, as seen
     /// on the Mac Pros); its next open works.
     pub deaf_once: Option<usize>,
@@ -253,6 +258,10 @@ impl Frames for End {
 
 impl Drop for End {
     fn drop(&mut self) {
+        let slow = self.pair.0.lock().unwrap().faults.slow_close.filter(|(s, _)| *s == self.side);
+        if let Some((_, wait)) = slow {
+            std::thread::sleep(wait);
+        }
         let mut w = self.pair.0.lock().unwrap();
         w.open[self.side] = false;
         let peer = 1 - self.side;

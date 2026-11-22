@@ -153,20 +153,22 @@ fn a_stream_that_dies_ends_the_link_and_delivers_nothing_wrong() {
         p.set_faults(Faults { hold: 3, ..Default::default() });
         let (a, b) = link_pair(Some(&p), 256, fast());
         wait_for("both on the stream", Duration::from_secs(2), || b.path() == "stream");
-        let start = Instant::now();
-        let (ea, eb) = thread::scope(|s| {
+        let (ea, eb, took) = thread::scope(|s| {
             let ra = s.spawn(|| until_error(&a, 0));
             let rb = s.spawn(|| until_error(&b, 1));
-            thread::sleep(Duration::from_millis(30));
+            // Mid-transfer: once the stream has carried data both ways. (Before that a stream that fails is an epoch
+            // that never carried data, which the link tries again, and this test then never ends.)
+            wait_for("data both ways on the stream", Duration::from_secs(5), || a.stats().got_stream > 0 && b.stats().got_stream > 0);
+            let start = Instant::now();
             match how {
                 0 => p.set_faults(Faults { dead: true, ..Default::default() }),
                 1 => p.close_from(1),
                 2 => a.give_up_stream("test"),
                 _ => b.give_up_stream("test"),
             }
-            (ra.join().unwrap(), rb.join().unwrap())
+            (ra.join().unwrap(), rb.join().unwrap(), start.elapsed())
         });
-        assert!(start.elapsed() < Duration::from_secs(2), "case {how}: {:?}", start.elapsed());
+        assert!(took < Duration::from_secs(2), "case {how}: {took:?}");
         for e in [&ea, &eb] {
             assert!(!e.contains("differ"), "case {how}: {e}");
         }
@@ -255,8 +257,7 @@ fn a_stream_that_does_not_come_up_fails_the_connection() {
     assert_eq!(a.path(), "stream");
     both_ways(&a, &b, 1 << 20);
     assert_eq!(a.report()["transport"], "stream");
-    // (Two when the next open finds the device still closing: the sim's close runs on a thread of its own.)
-    assert!((1..=2).contains(&a.stats().failed_epochs), "{:?}", a.stats());
+    assert_eq!(a.stats().failed_epochs, 1, "{:?}", a.stats());
 }
 
 #[test]
@@ -550,7 +551,27 @@ fn an_epoch_that_carries_one_way_is_given_up_at_once() {
     wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
     let s = a.stats();
     assert_eq!(s.failed_epochs, 1, "{s:?}");
-    assert!(s.first_up_ms.is_some_and(|ms| (50. ..250.).contains(&ms)), "{s:?}");
+    // Given up on the evidence, after ONE_WAY: not at `probe_timeout`, 3 s. (Some 60 ms here; on a loaded machine
+    // up to 450 ms has been seen, so the bound is the middle of that gap rather than a guess at the load.)
+    assert!(s.first_up_ms.is_some_and(|ms| (50. ..1500.).contains(&ms)), "{s:?}");
+}
+
+#[test]
+fn a_new_epoch_waits_for_the_close_of_the_last() {
+    // As above, but the failed epoch's device is still open on one side when the next epoch asks for it (its close
+    // runs on a thread of its own, here 100 ms late): the open waits for that close instead of being turned away,
+    // which failed a second epoch and put the third off by `backoff_min`.
+    for side in [0, 1] {
+        let p = Pair::new(256);
+        let late = Duration::from_millis(100);
+        p.set_faults(Faults { deaf_once: Some(1), hold: 3, slow_close: Some((side, late)), ..Default::default() });
+        let (a, b) = link_pair(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() });
+        wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
+        let (sa, sb) = (a.stats(), b.stats());
+        assert_eq!((sa.failed_epochs, sb.failed_epochs), (1, 1), "side {side}: {sa:?}\n{sb:?}");
+        // Up after the one-way epoch (ONE_WAY and its evidence) and the late close.
+        assert!(sa.first_up_ms.is_some_and(|ms| ms > 150.), "side {side}: {sa:?}");
+    }
 }
 
 #[test]
@@ -606,9 +627,9 @@ fn an_epoch_whose_other_side_is_not_heard_is_given_up_on_its_reports() {
     let (a, b) = link_pair(Some(&p), 256, Tuning { probe_timeout: Duration::from_secs(3), ..fast() });
     wait_for("both on the stream", Duration::from_secs(2), || a.path() == "stream" && b.path() == "stream");
     let s = a.stats();
-    // (Two when the retry finds the device still closing: the sim's close runs on a thread of its own.)
-    assert!((1..=2).contains(&s.failed_epochs), "{s:?}");
-    assert!(s.first_up_ms.is_some_and(|ms| (50. ..300.).contains(&ms)), "{s:?}");
+    assert_eq!(s.failed_epochs, 1, "{s:?}");
+    // (After ONE_WAY, not at `probe_timeout`: see above.)
+    assert!(s.first_up_ms.is_some_and(|ms| (50. ..1500.).contains(&ms)), "{s:?}");
 }
 
 #[test]
