@@ -868,18 +868,26 @@ impl Lanes {
     }
 }
 
+/// An exchange moves its links on a thread each when the largest carries this much or more each way. One thread
+/// moves about 1.2 GB/s each way over three cables (checksums, copies and the device's system calls), which is what
+/// a prefill all-reduce among four machines waited for; starting the threads costs about 0.1 ms.
+const EXCHANGE_THREADS_FROM: usize = 128 << 10;
+
+/// One link's share of an exchange.
+struct Part<'a> {
+    link: &'a Link,
+    inp: &'a mut [u8],
+    got: usize,
+    sent: bool,
+}
+
 /// Several `exchange`s at once, each with the peer of its lanes, polled together from the calling thread so that the
-/// cables to different machines carry their slices at the same time. Every send is queued first; the links' credits
-/// keep each stream within the other side's receive ring.
+/// cables to different machines carry their slices at the same time (large ones on a thread per link, see
+/// `EXCHANGE_THREADS_FROM`). Every send is queued first; the links' credits keep each stream within the other side's
+/// receive ring.
 pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration) -> Result<Trip> {
     for (_, out, inp) in jobs.iter() {
         ensure!(out.len() == inp.len() && out.len().is_multiple_of(4), "exchange sizes must match and align to 4 bytes");
-    }
-    struct Part<'a> {
-        link: &'a Link,
-        inp: &'a mut [u8],
-        got: usize,
-        sent: bool,
     }
     let start = Instant::now();
     let mut parts = Vec::new();
@@ -893,11 +901,37 @@ pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration
             let mut st = link.lock();
             st.queue(&out[cuts[i]..cuts[i + 1]])?;
             // The frames go before anything is read: the other side's exchange waits for them, and the turn that
-            // follows in the loop below reads.
+            // follows in `drive` reads.
             st.send_now(Instant::now()).with_context(|| format!("lane {i} to {}", st.label))?;
             parts.push(Part { link, inp: chunk, got: 0, sent: false });
         }
     }
+    let failed = std::sync::atomic::AtomicBool::new(false);
+    if parts.len() < 2 || parts.iter().all(|p| p.inp.len() < EXCHANGE_THREADS_FROM) {
+        return drive(&mut parts, start, stall, &failed);
+    }
+    let trips: Vec<Result<Trip>> = std::thread::scope(|s| {
+        let failed = &failed;
+        let (mine, others) = parts.split_last_mut().expect("two parts or more");
+        let threads: Vec<_> = others.iter_mut().map(|p| s.spawn(move || drive(std::slice::from_mut(p), start, stall, failed))).collect();
+        let mut trips = vec![drive(std::slice::from_mut(mine), start, stall, failed)];
+        trips.extend(threads.into_iter().map(|t| t.join().unwrap_or_else(|_| Err(anyhow::anyhow!("an exchange thread panicked")))));
+        trips
+    });
+    let mut all = Trip { first: Duration::MAX, ..Trip::default() };
+    for t in trips {
+        let t = t?;
+        all.sent = all.sent.max(t.sent);
+        all.first = all.first.min(t.first);
+        all.total = all.total.max(t.total);
+    }
+    Ok(all)
+}
+
+/// Move `parts` until each has handed its bytes to its path and received as many. `failed` ends the wait when
+/// another thread's link of the same exchange has failed (and is set when one of these does).
+fn drive(parts: &mut [Part], start: Instant, stall: Duration, failed: &std::sync::atomic::AtomicBool) -> Result<Trip> {
+    use std::sync::atomic::Ordering::Relaxed;
     let mut trip = Trip::default();
     let mut last = start;
     let (mut all_sent, mut any_read) = (false, false);
@@ -922,7 +956,10 @@ pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration
                 match r {
                     Ok(m) => m,
                     Err(_) if p.got == p.inp.len() && p.sent => true,
-                    Err(e) => return Err(e).with_context(|| format!("exchange with {}", st.label)),
+                    Err(e) => {
+                        failed.store(true, Relaxed);
+                        return Err(e).with_context(|| format!("exchange with {}", st.label));
+                    }
                 }
             };
             busy |= moved || p.got > before;
@@ -945,8 +982,11 @@ pub fn exchange_all(jobs: &mut [(&mut Lanes, &[u8], &mut [u8])], stall: Duration
         if busy {
             last = now;
         } else if now - last > stall {
+            failed.store(true, Relaxed);
             let states: Vec<String> = parts.iter().map(|p| p.link.inner.lock().describe()).collect();
             bail!("lanes stalled for {stall:?}: {}", states.join("; "));
+        } else if failed.load(Relaxed) {
+            bail!("another lane of the exchange failed");
         } else {
             std::hint::spin_loop();
         }
