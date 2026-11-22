@@ -179,6 +179,13 @@ one step instead of two steps of quarters is no faster (61.0 and 61.2). Prefill 
 against 575 with two Macs (493-498 before a prefill-sized exchange moved its three cables on a thread each): 1.34 of
 its 1.92 s are exchanges, and each cable carries about 0.75 GB/s each way whatever the threads do.
 
+Served from the four (`trashcan serve MODEL --tp-peer 1=... --tp-peer 2=... --tp-peer 3=...` on the driver, `trashcan
+inkling node MODEL --machine N --peer ...` on the others) with `--context 131072`, the drafter and the projector, a
+GPU uses 3.9 to 4.2 GB of its 6 (2,677 and 3,130 MiB for the target alone): a 128K context with the drafter fits,
+which two Macs cannot hold. A 33-token coding request with reasoning returned 262 tokens in 4.4 s end to end.
+Nothing longer than 32K has been run; on two Macs a global layer's attention costs a decoded token about 12 us per
+thousand positions (35.9 tok/s at 32K against 40.5 at 1K) and a prefill 384 tok/s on average over a 32K prompt.
+
 ## Vision
 
 The projector (`mmproj-BF16.gguf`, 318M parameters, 0.64 GB) is a ViT run once per image:
