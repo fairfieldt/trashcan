@@ -241,15 +241,19 @@ impl Group {
                 _ if exact => Wire::F32,
                 _ => Wire::F16,
             };
+            // Prefill's all-reduces too: over 14,329 positions on four Macs the KLD from the f32 reference is 0.00130
+            // against 0.00127 with f32 prefill (paired difference 0.000025 +- 0.000030), and prefill is about 25%
+            // faster (docs/inkling.md).
+            m.prefill_compact = m.wire == Wire::F16;
         }
         let firsts: Vec<usize> = counts.values().scan(0, |at, &n| { *at += n; Some(*at - n) }).collect();
         let ranks: usize = counts.values().sum();
         if let Some(m) = mesh.as_mut() {
-            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "flows": flows, "wire": m.wire.name(), "full": m.full});
+            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "flows": flows, "wire": m.wire.name(), "prefill_compact": m.prefill_compact, "full": m.full});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
         let wire = mesh.as_ref().map_or("none", |m| m.wire.name());
-        eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}, small all-reduces in {wire}", counts.len(), counts.values().collect::<Vec<_>>());
+        eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}, all-reduces in {wire}", counts.len(), counts.values().collect::<Vec<_>>());
         let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows, flows)?;
         if let Some(m) = mesh.as_mut() {
             for reply in m.children_replies(Some(Duration::from_secs(10 * 60))).context("waiting for the other machines to load")? {
@@ -1647,6 +1651,7 @@ fn session(model: &Path, gpus: &[usize], mut mesh: Mesh) -> Result<()> {
             mesh.full = s["full"].as_bool().unwrap_or(false);
             mesh.join(num("machines")?)?;
             mesh.wire = Wire::parse(s["wire"].as_str().unwrap_or("f32"))?;
+            mesh.prefill_compact = s["prefill_compact"].as_bool().unwrap_or(false);
             load_shards(model, gpus, first, num("ranks")?, num("context")?, num("batch")?, num("flows")?)
         })();
         let (gguf, c, shards) = match loaded {

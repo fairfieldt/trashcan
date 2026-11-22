@@ -175,7 +175,9 @@ completes a received frame while the engine's other threads spin ([kernel.md](ke
 link's hold estimate rose on those waits. With the streams busy-polled (tblink's default since) the same run gives
 61.1-61.4 tok/s (a round of three tokens 48.9 ms, 8.0 of them in exchanges against 33.7-35.2) and plain decode
 43.1-43.2 after 1,024 tokens; two Macs busy-polled give 53.9 and 40.7. A four-row batch whole to every machine in
-one step instead of two steps of quarters is no faster (61.0 and 61.2). Prefill of 1,024 tokens is 531-537 tok/s
+one step instead of two steps of quarters is no faster (61.0 and 61.2). With prefill's all-reduces in f16 (the default since 2026-11-22, no KLD cost, see [KL divergence](#kl-divergence))
+1,024 tokens take 658-685 tok/s and 4,096 tokens 677-683, exchanges 0.93-0.97 s per 1,024 tokens against
+1.29-1.32. With f32 prefill all-reduces, prefill of 1,024 tokens is 531-537 tok/s
 against 575 with two Macs (493-498 before a prefill-sized exchange moved its three cables on a thread each): 1.34 of
 its 1.92 s are exchanges, and each cable carries about 0.75 GB/s each way whatever the threads do.
 
@@ -368,6 +370,21 @@ The f16 wire moves the output about as much as running the single-row kernels in
 and no further from the reference: paired by position, its distance from the f32 reference is 0.000016 ± 0.000026
 above the f32 wire's. It is therefore the default outside `validate` and `logits` (see [Running](#running)); the raw
 outputs are in `results/inkling/kld-wire-bee58366` on Pinkerton.
+
+Prefill's all-reduces go in the same compact payload whenever the wire is f16 (since 2026-11-22). Measured on four
+Macs (eight ranks, batch 1024, the same 14,329 positions, `inkling logits` with `TRASHCAN_TP_WIRE=f16` and the
+compact prefill payload against exact f32):
+
+| P | Q | mean KLD | median | p99 | same top token |
+|---|---|---:|---:|---:|---:|
+| f32 reference | engine, eight ranks, f32 | 0.00127 ± 0.00004 | 0.00013 | 0.017 | 98.76% |
+| f32 reference | engine, eight ranks, f16 prefill | 0.00130 ± 0.00004 | 0.00013 | 0.017 | 98.97% |
+| engine, eight ranks, f32 | engine, eight ranks, f16 prefill | 0.00097 ± 0.00003 | 0.00009 | 0.013 | 99.13% |
+| engine, four ranks, batch 512, f32 | engine, eight ranks, f32 | 0.00059 ± 0.00003 | 0.00003 | 0.009 | 99.36% |
+
+Paired by position, f16 prefill is 0.000025 ± 0.000030 further from the reference than f32, and eight ranks
+0.000013 ± 0.000023 further than four: neither is measurable. The fixtures' greedy tokens are unchanged with it (16
+of 16 twice, 24 of 24 after the long prompt, plain and drafted).
 
 ## Performance
 

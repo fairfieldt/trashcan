@@ -323,6 +323,8 @@ pub struct Mesh {
     /// Payload format of the all-reduces of fewer than PARALLEL_MIN values (decode, verification and draft steps;
     /// prefill stays f32): the driver's choice, passed to the others at setup (`wire`).
     pub(crate) wire: Wire,
+    /// With the f16 wire, prefill-sized all-reduces in the compact payload too (Inkling: no KLD cost, docs/inkling.md).
+    pub(crate) prefill_compact: bool,
     /// Full-mesh all-reduces: set by the driver when every machine is cabled to every other (`fully_cabled`) and passed
     /// on at setup. A single row (decode and draft steps) takes `once`, a batch of rows (verification, prefill) `direct`.
     pub(crate) full: bool,
@@ -414,7 +416,7 @@ pub(crate) fn parent(m: usize) -> usize {
 
 impl Mesh {
     pub(crate) fn new(machine: usize, links: Vec<(usize, Lanes)>) -> Self {
-        Self { machine, machines: 0, links, wire: Wire::F32, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new(), stats: Stats::default() }
+        Self { machine, machines: 0, links, wire: Wire::F32, prefill_compact: false, full: false, sent: Vec::new(), got: Vec::new(), vecs: Vec::new(), stats: Stats::default() }
     }
 
     /// Open the lanes to every machine in `peers` (machine, addresses of its cables). Lower machines connect to this
@@ -825,7 +827,7 @@ impl Mesh {
     /// Whether an all-reduce of `len` values uses the compact payload: below prefill sizes. Prefill's all-reduces in
     /// f16 took 2.25 instead of 2.0 s per 512-token prompt (results/qwen/tp8-opt-20261008).
     fn compact(&self, len: usize) -> bool {
-        self.wire == Wire::F16 && len < PARALLEL_MIN
+        self.wire == Wire::F16 && (len < PARALLEL_MIN || self.prefill_compact)
     }
 
     /// Room for `k` encoded slices each way.
