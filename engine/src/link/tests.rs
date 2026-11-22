@@ -766,9 +766,18 @@ fn a_hold_that_grows_costs_a_nudge_and_is_learnt() {
     // The link measured no hold; then the receivers start to hold frames back (the hold of a direction has differed
     // between opens of a device; within one it has not been seen to change, but nothing promises that). The first
     // messages wait for nudges (1 ms each here, not the 50 ms retransmission timer) or for the acknowledgements
-    // that say what is held, the estimates go up, and the rest run as before. Ping-pongs first, where a message is
-    // one frame and only nudges get it through, then exchanges with a pause between them, where both sides wait at
-    // once.
+    // that say what is held, and then nothing waits for them any more.
+    //
+    // Ping-pongs first: a message is one frame and only pushes and nudges release it, so every message shows an
+    // estimate that is low, and the estimates must reach the hold and stay. Then exchanges with a pause between
+    // them, where both sides wait at once: there a side's frames left behind are also released by its own
+    // acknowledgement of the reply, and by the other side's acknowledgement of that, so an estimate below the
+    // hold costs no nudge and need not show. After 300 exchanges on voyage the connecting side's estimate was
+    // sometimes one low and, in one run in 150, the other side's had not risen at all, and 300 exchanges took about
+    // as long (145 against 141 ms on a Mac). There the test asks only that every byte arrives, with no more than
+    // a stray retransmission.
+    // (Nudges are no measure in either half: on voyage under eight loops of these tests a thread that loses its
+    // core brings up to 170 in 300 rounds with every estimate at the hold.)
     let gap = Duration::from_micros(300);
     for exchange in [false, true] {
         let p = Pair::new(256);
@@ -779,15 +788,20 @@ fn a_hold_that_grows_costs_a_nudge_and_is_learnt() {
         let took = if exchange { exchanges(&a, &b, 300, 9216, gap) } else { ping_pongs(&a, &b, 300) };
         let (sa, sb) = (a.stats(), b.stats());
         assert!(took < Duration::from_secs(2), "exchange {exchange}: 300 rounds took {took:?}\n{sa:?}\n{sb:?}");
-        assert!(sa.hold_raises > 0 && sb.hold_raises > 0, "exchange {exchange}: {sa:?}\n{sb:?}");
-        assert!(sa.hold >= Some(3) && sb.hold >= Some(2), "exchange {exchange}: {sa:?}\n{sb:?}");
+        if !exchange {
+            // The connecting side (end 0) sends toward end 1, which holds 3; the other direction holds 2.
+            assert!(sa.hold_raises > 0 && sb.hold_raises > 0, "exchange {exchange}: {sa:?}\n{sb:?}");
+            assert!(sa.hold >= Some(3) && sb.hold >= Some(2), "exchange {exchange}: {sa:?}\n{sb:?}");
+        }
         assert!(sa.rewinds + sb.rewinds <= 2, "exchange {exchange}: {sa:?}\n{sb:?}");
-        // Once learnt, nothing waits, and the estimates stay.
+        // Once learnt, nothing waits for a retransmission (300 x 50 ms), and in ping-pongs the estimates stay.
         let raises = sa.hold_raises + sb.hold_raises;
         let took = if exchange { exchanges(&a, &b, 300, 9216, gap) } else { ping_pongs(&a, &b, 300) };
         let (sa, sb) = (a.stats(), b.stats());
         assert!(took < Duration::from_millis(600), "exchange {exchange}: 300 more rounds took {took:?}\n{sa:?}\n{sb:?}");
-        assert_eq!(sa.hold_raises + sb.hold_raises, raises, "exchange {exchange}: {sa:?}\n{sb:?}");
+        if !exchange {
+            assert_eq!(sa.hold_raises + sb.hold_raises, raises, "exchange {exchange}: {sa:?}\n{sb:?}");
+        }
         assert_eq!((a.path(), b.path()), ("stream", "stream"));
     }
 }
