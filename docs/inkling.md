@@ -717,8 +717,10 @@ model over the 14,329 standard corpus positions. Write-up (`report.html`), patch
   makes pass 2 act as the final pass: 2 passes go from KLD 0.698 to 0.048 (perplexity 3.21, +4.5%), at 36 instead of
   48 applications and 72 instead of 96 all-reduces. Distilling the message gates and learnable offsets
   (transformers, `tools/turbo.py`, 3M tokens) reaches 0.039 (perplexity 3.17, +3.3%) and levels off there; retraining
-  routers adds nothing. In the engine this is one vector add on the host's pass-2 message plus a second gate set;
-  DSpark's capture point 41 doesn't exist at 2 passes.
+  routers adds nothing. In the engine this is one vector add on the host's pass-2 message plus a second gate set.
+  DSpark still works on turbo with its capture points remapped from 5, 23, 41, 48 to 5, 23, 29, 36 (`target_layers`
+  is GGUF metadata): llama-server from the DSpark pull request, 8 greedy prompts, three drafts accept 53.8% of drafts
+  and 2.60 tokens per round against 52.1% and 2.55 at 3 passes (5, 11, 29, 36: 52.9%, 2.57).
 - **Thinking Machines' variable-pass model** (`TML-d24-varloop-research`, Mini's shape, trained with 1-5 passes)
   degrades smoothly: KLD from its own 3 passes 0.062 / 0.028 at 1 / 2 passes (perplexity +4.9 / +2.3%), and 4-6
   passes are slightly better than 3. At 3 passes it is a different model from Mini (KLD 0.112).
