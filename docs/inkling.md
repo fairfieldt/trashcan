@@ -706,12 +706,24 @@ to compare the machines of a group.
 
 ## Changing the model: loop count and parallel layers
 
-Measured on 2026-11-24 with llama.cpp on voyage (the reference plus experiment switches). KLD is from the unmodified
+Measured on 2026-11-24 and 25 with llama.cpp (the reference plus experiment switches) and transformers on voyage. KLD is from the unmodified
 model over the 14,329 standard corpus positions. Write-up (`report.html`), patches and data:
 `results/inkling/loop-par-20261124` on Pinkerton; the experiment worktree and loopx directory are on voyage.
 
-- **The loop count is fixed at 3.** 1, 2, 4 and 5 passes give KLD 0.78, 0.70, 0.43 and 0.35 (perplexity 3.07 ->
-  6.6, 6.2, 4.6, 4.2). Neither fewer passes for speed nor more passes for quality works without retraining.
+- **The loop count alone is fixed at 3.** 1, 2, 4 and 5 passes give KLD 0.78, 0.70, 0.43 and 0.35 (perplexity
+  3.07 -> 6.6, 6.2, 4.6, 4.2).
+- **A 2-pass turbo works with one vector** (2026-11-25). Adding a fixed 2304-vector (the token mean of the pass
+  output's change from pass 1 to pass 2, `res/vectors.f32` vector 2) to the pass output that pass 2's message reads
+  makes pass 2 act as the final pass: 2 passes go from KLD 0.698 to 0.048 (perplexity 3.21, +4.5%), at 36 instead of
+  48 applications and 72 instead of 96 all-reduces. Distilling the message gates and learnable offsets
+  (transformers, `tools/turbo.py`, 3M tokens) reaches 0.039 (perplexity 3.17, +3.3%) and levels off there; retraining
+  routers adds nothing. In the engine this is one vector add on the host's pass-2 message plus a second gate set;
+  DSpark's capture point 41 doesn't exist at 2 passes.
+- **Thinking Machines' variable-pass model** (`TML-d24-varloop-research`, Mini's shape, trained with 1-5 passes)
+  degrades smoothly: KLD from its own 3 passes 0.062 / 0.028 at 1 / 2 passes (perplexity +4.9 / +2.3%), and 4-6
+  passes are slightly better than 3. At 3 passes it is a different model from Mini (KLD 0.112).
+- **The detailed loop state is sensitive:** a 1% push on a message grows to about 4% in that pass and levels off at
+  10-15%, the band the 3-cycle wanders in. This is why the model amplifies small numerical differences.
 - **The loop is a 3-cycle.** Every multiple of 3 lands near the release (6, 9, 12, 24 passes: KLD 0.049, 0.062,
   0.071, 0.087), and other counts don't. Channel 2027 of the pass output reads about +170, +142, -32 on passes 1-3
   and keeps cycling. Core layer 17 writes the flip: in the final pass its attention and MoE turn negative, and its
