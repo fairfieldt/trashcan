@@ -704,6 +704,26 @@ either way). The exchange is 34 us for one row on both machines, 17 of them unti
 three push frames are sent. `TRASHCAN_INKLING_PHASES=1` prints a machine's totals per forward when its group ends,
 to compare the machines of a group.
 
+## Changing the model: loop count and parallel layers
+
+Measured on 2026-11-24 with llama.cpp on voyage (the reference plus experiment switches). KLD is from the unmodified
+model over the 14,329 standard corpus positions. Write-up (`report.html`), patches and data:
+`results/inkling/loop-par-20261124` on Pinkerton; the experiment worktree and loopx directory are on voyage.
+
+- **The loop count is fixed at 3.** 1, 2, 4 and 5 passes give KLD 0.78, 0.70, 0.43 and 0.35 (perplexity 3.07 ->
+  6.6, 6.2, 4.6, 4.2). Neither fewer passes for speed nor more passes for quality works without retraining.
+- **The loop is a 3-cycle.** Every multiple of 3 lands near the release (6, 9, 12, 24 passes: KLD 0.049, 0.062,
+  0.071, 0.087), and other counts don't. Channel 2027 of the pass output reads about +170, +142, -32 on passes 1-3
+  and keeps cycling. Core layer 17 writes the flip: in the final pass its attention and MoE turn negative, and its
+  router drops expert 124, which serves every token in passes 1-2. Editing that channel (and 2230, 378) in a pass's
+  message doesn't change the pass's phase, so the pass count is carried by most of the message, not by the spike.
+  The drafter's capture points (applications 5, 23, 41, 48) assume exactly 3 passes.
+- **Parallel layer pairs aren't worth building for Inkling.** Running applications a and a + 1 on the same input
+  (both updates added) costs KLD 0.003-0.006 per pair inside the loop. Pairs at block starts and at the model's
+  edges cost 0.013-0.058. Costs add up a little under linearly: 4 / 8 / 16 pairs give KLD 0.015 / 0.037 / 0.111
+  (perplexity +1.1 / +2.4 / +10%), and the 24-pair pattern 0.90. Under TP8 a pair saves two of the 96 sync points of a
+  decoded token (about 75 us each), so 8 pairs buy about 5% for +2.4% perplexity.
+
 ## Order of work
 
 1. Reference: build, dumps for the fixture prompts (text and images), KLD baselines and the attribution runs above.
