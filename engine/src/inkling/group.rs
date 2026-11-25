@@ -118,6 +118,11 @@ pub struct Group {
     /// Keep every row's head input (`hidden`) after each forward, for `logits_all` (`inkling logits`).
     keep_logits: bool,
     hidden: Vec<f32>,
+    /// Turbo (`TRASHCAN_INKLING_TURBO`): the steering vector added to the previous pass's output before the last pass
+    /// reads it as its message, so that a 2-pass loop's second pass acts as the final one.
+    steer: Option<Vec<f32>>,
+    /// The applications whose input residual the drafter reads (`feature_visits`).
+    feature_visits: [usize; 3],
 }
 
 /// The drafter on this machine's ranks, and the recurrent head's context of the latest committed positions.
@@ -150,8 +155,21 @@ struct Spec {
     rounds: usize,
 }
 
-/// The applications whose input residual the drafter reads (execution order), then the final hidden state.
-const FEATURE_VISITS: [usize; 3] = [5, 23, 41];
+/// The applications whose input residual the drafter reads (execution order), then the final hidden state: the
+/// prelude's last layer, layer 11 of the second pass and layer 17 of the last pass (5, 23, 41 with the release's 3
+/// passes; 5, 23, 29 in turbo's 2, where DSpark accepts as many drafts as at 3 passes, docs/inkling.md).
+fn feature_visits(core_start: usize, core: usize, passes: usize) -> [usize; 3] {
+    [core_start - 1, core_start + core + core / 2 - 1, core_start + (passes - 1) * core + core - 1]
+}
+
+/// Turbo: `TRASHCAN_INKLING_TURBO=FILE` on the driver runs the loop core twice instead of three times and adds
+/// FILE (d raw f32: the token mean of the pass output's change from pass 1 to pass 2) to the output of pass 1 before
+/// pass 2 reads it as its message. The driver sends the path to every machine (the same path everywhere).
+fn turbo_steer(path: &str, d: usize) -> Result<Vec<f32>> {
+    let b = std::fs::read(path).with_context(|| format!("turbo vector {path}"))?;
+    ensure!(b.len() == 4 * d, "turbo vector {path}: {} bytes, expected {}", b.len(), 4 * d);
+    Ok(b.chunks_exact(4).map(|x| f32::from_le_bytes(x.try_into().unwrap())).collect())
+}
 
 /// Batches of at least this many tokens run as micro-batches (`Group::drive`): two, or as many of up to
 /// `MICRO_ROWS` tokens as the batch fills, at most `MICRO`. With three or four in flight the host's work on one
@@ -193,9 +211,14 @@ fn message(v: Value) -> Result<Vec<u8>> {
     tp::message(v)
 }
 
-fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usize, max_batch: usize, flows: usize) -> Result<(Gguf, Config, Vec<Shard>)> {
+#[allow(clippy::too_many_arguments)]
+fn load_shards(model: &Path, gpus: &[usize], first: usize, ranks: usize, context: usize, max_batch: usize, flows: usize, turbo: bool) -> Result<(Gguf, Config, Vec<Shard>)> {
     let gguf = Gguf::open(model)?;
-    let c = Config::new(&gguf)?;
+    let mut c = Config::new(&gguf)?;
+    if turbo {
+        // Turbo: two passes of the loop core (the slots, graphs and caches follow the pass count).
+        c.passes = 2;
+    }
     let inst = Rc::new(Instance::new()?);
     let all = inst.amd_gpus()?;
     let mut shards = Vec::new();
@@ -246,24 +269,33 @@ impl Group {
             // faster (docs/inkling.md).
             m.prefill_compact = m.wire == Wire::F16;
         }
+        let turbo = std::env::var("TRASHCAN_INKLING_TURBO").ok().filter(|p| !p.is_empty());
         let firsts: Vec<usize> = counts.values().scan(0, |at, &n| { *at += n; Some(*at - n) }).collect();
         let ranks: usize = counts.values().sum();
         if let Some(m) = mesh.as_mut() {
-            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "flows": flows, "wire": m.wire.name(), "prefill_compact": m.prefill_compact, "full": m.full});
+            let setup = json!({"firsts": firsts, "machines": counts.len(), "ranks": ranks, "context": context, "batch": shard_rows, "flows": flows, "wire": m.wire.name(), "prefill_compact": m.prefill_compact, "full": m.full, "turbo": turbo});
             m.tell_children(&message(json!({ "setup": setup }))?)?;
         }
         let wire = mesh.as_ref().map_or("none", |m| m.wire.name());
         eprintln!("inkling: {ranks} ranks over {} machine(s), GPUs per machine {:?}, all-reduces in {wire}", counts.len(), counts.values().collect::<Vec<_>>());
-        let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows, flows)?;
+        let steer = turbo.as_deref().map(|p| turbo_steer(p, 2304)).transpose()?;
+        if let Some(p) = &turbo {
+            eprintln!("inkling: turbo, 2 passes of the loop core, steering vector {p}");
+        }
+        let (gguf, c, shards) = load_shards(model, gpus, 0, ranks, context, shard_rows, flows, steer.is_some())?;
         if let Some(m) = mesh.as_mut() {
             for reply in m.children_replies(Some(Duration::from_secs(10 * 60))).context("waiting for the other machines to load")? {
                 ensure!(reply.get("ok").is_some(), "another machine failed: {}", reply["error"]);
             }
         }
-        Self::assemble(gguf, c, shards, mesh, context, max_batch, ranks)
+        Self::assemble(gguf, c, shards, mesh, context, max_batch, ranks, steer)
     }
 
-    fn assemble(gguf: Gguf, c: Config, shards: Vec<Shard>, mesh: Option<Mesh>, context: usize, max_batch: usize, ranks: usize) -> Result<Self> {
+    #[allow(clippy::too_many_arguments)]
+    fn assemble(gguf: Gguf, c: Config, shards: Vec<Shard>, mesh: Option<Mesh>, context: usize, max_batch: usize, ranks: usize, steer: Option<Vec<f32>>) -> Result<Self> {
+        if let Some(s) = &steer {
+            ensure!(s.len() == c.d, "turbo vector of {} values for a model of width {}", s.len(), c.d);
+        }
         let hw = HostWeights::load(&gguf, &c)?;
         let slots = c.slots();
         let d = c.d;
@@ -289,6 +321,8 @@ impl Group {
             spec: Spec::default(),
             keep_logits: false,
             hidden: Vec::new(),
+            steer,
+            feature_visits: feature_visits(c.core_start, c.core(), c.passes),
             c,
         })
     }
@@ -717,7 +751,7 @@ impl Group {
                 if self.drafter.is_some() {
                     if let Some(nj) = next {
                         if nj % 2 == 0 {
-                            if let Some(k) = FEATURE_VISITS.iter().position(|&v| v == nj / 2) {
+                            if let Some(k) = self.feature_visits.iter().position(|&v| v == nj / 2) {
                                 for t in 0..f.n {
                                     let at = ((f.row0 + t) * 4 + k) * d;
                                     self.spec.features[at..at + d].copy_from_slice(&f.cur[t * d..(t + 1) * d]);
@@ -811,6 +845,11 @@ impl Group {
             }
             None => {}
         }
+        // Turbo: the previous pass's output is steered before the last pass reads it.
+        let steer = match next {
+            Some((Seg::Attn { phys, .. }, Some(app))) if phys == c.core_start && app.pass > 0 && app.pass + 1 == c.passes => self.steer.as_deref(),
+            _ => None,
+        };
         let layer = |seg: Seg| match seg {
             Seg::Attn { phys, .. } | Seg::Moe { phys, .. } => Some(&self.hw.layers[phys]),
             Seg::Head { .. } => None,
@@ -826,6 +865,7 @@ impl Group {
             taps,
             push,
             pass_start,
+            steer,
             next: next.map(|x| x.0),
             swa: matches!(next, Some((Seg::Attn { phys, .. }, _)) if c.swa(phys)),
             layer: next.and_then(|x| layer(x.0)),
@@ -1187,6 +1227,8 @@ struct Pass<'a> {
     /// The next segment starts a pass of the loop core: false keeps the residual as the prelude's output; true
     /// makes the residual the bank's output and restarts from the prelude.
     pass_start: Option<bool>,
+    /// Turbo: added to the residual before it becomes the bank's output (the last pass's message).
+    steer: Option<&'a [f32]>,
     /// The segment to prepare, its physical layer's weights, and whether that layer has one residual mix.
     next: Option<Seg>,
     layer: Option<&'a HostLayer>,
@@ -1303,7 +1345,14 @@ impl Pass<'_> {
             match self.pass_start {
                 Some(false) => row(self.prelude, t).copy_from_slice(cur),
                 Some(true) => {
-                    rms_into(cur, None, 1e-6, row(self.bank[1], t));
+                    match self.steer {
+                        // `u` is scratch until the mixes below.
+                        Some(s) => {
+                            u.iter_mut().zip(cur.iter()).zip(s).for_each(|((o, &x), &v)| *o = x + v);
+                            rms_into(u, None, 1e-6, row(self.bank[1], t));
+                        }
+                        None => rms_into(cur, None, 1e-6, row(self.bank[1], t)),
+                    }
                     cur.copy_from_slice(row(self.prelude, t));
                 }
                 None => {}
@@ -1574,6 +1623,15 @@ fn best(c: &mut Candidates) {
 }
 
 #[cfg(test)]
+mod turbo_tests {
+    #[test]
+    fn drafter_reads_the_release_points_at_three_passes_and_the_final_pass_in_turbo() {
+        assert_eq!(super::feature_visits(6, 12, 3), [5, 23, 41]);
+        assert_eq!(super::feature_visits(6, 12, 2), [5, 23, 29]);
+    }
+}
+
+#[cfg(test)]
 mod candidate_tests {
     use super::{best, top_k, Candidates, TOP_K};
 
@@ -1652,9 +1710,11 @@ fn session(model: &Path, gpus: &[usize], mut mesh: Mesh) -> Result<()> {
             mesh.join(num("machines")?)?;
             mesh.wire = Wire::parse(s["wire"].as_str().unwrap_or("f32"))?;
             mesh.prefill_compact = s["prefill_compact"].as_bool().unwrap_or(false);
-            load_shards(model, gpus, first, num("ranks")?, num("context")?, num("batch")?, num("flows")?)
+            let steer = s["turbo"].as_str().map(|p| turbo_steer(p, 2304)).transpose()?;
+            let shards = load_shards(model, gpus, first, num("ranks")?, num("context")?, num("batch")?, num("flows")?, steer.is_some())?;
+            Ok::<_, anyhow::Error>((shards, steer))
         })();
-        let (gguf, c, shards) = match loaded {
+        let ((gguf, c, shards), steer) = match loaded {
             Ok(v) => v,
             Err(e) => {
                 mesh.tell_parent(json!({"error": format!("machine {me}: {e:#}")}))?;
@@ -1669,7 +1729,7 @@ fn session(model: &Path, gpus: &[usize], mut mesh: Mesh) -> Result<()> {
         }
         mesh.tell_parent(json!({"ok": true, "hosts": {me.to_string(): host_settings()}}))?;
         let ranks = num("ranks")?;
-        let mut group = Group::assemble(gguf, c, shards, Some(mesh), num("context")?, num("batch")?, ranks)?;
+        let mut group = Group::assemble(gguf, c, shards, Some(mesh), num("context")?, num("batch")?, ranks, steer)?;
         return group.follow();
     }
 }

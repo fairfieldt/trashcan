@@ -770,6 +770,16 @@ off; the model still reasons briefly), tool calls and tool results by name, and 
 the tokens already processed. `scripts/test-server.py` passes with a larger output budget for its sampled request
 (32 tokens are spent on reasoning).
 
+**Turbo (experimental, off by default).** `TRASHCAN_INKLING_TURBO=FILE` on the driver runs the loop core twice
+instead of three times: FILE is 2304 raw little-endian f32, the token mean of the pass output's change from pass 1
+to pass 2 (`results/inkling/loop-par-20261124/res/vectors.f32`, vector 2), added to pass 1's output before pass 2
+reads it as its message, so that pass 2 acts as the final pass. The driver sends the path to the other machines in the
+setup (the same path everywhere). A token takes 36 applications and 72 all-reduces instead of 48 and 96; on the
+standard corpus llama.cpp measures KLD 0.048 from the release (perplexity +4.5%). The drafter reads applications 5,
+23 and 29 then (`feature_visits`), where DSpark accepts as many drafts as at 3 passes. Not yet measured on the Mac
+Pros; turbo references for `validate` (llama.cpp CPU dumps of the fixtures at 2 passes with the vector) are in
+voyage's `~/src/inkling/ref/turbo`.
+
 `TRASHCAN_INKLING_PROFILE=1` adds GPU time per kernel to `bench`. The all-reduces of decode and verification
 batches carry f16 partial sums, as the Qwen groups' do; `validate` and `logits` use exact f32 sums, and
 `TRASHCAN_TP_WIRE=f32` or `f16` on the driver chooses for any command. The startup line names the wire in use.
